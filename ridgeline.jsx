@@ -1505,6 +1505,27 @@ function generateRoofingMaterials(m) {
 }
 
 /* ================================================================
+   AUTH ADAPTER
+   When the app is deployed with Supabase credentials, src/main.jsx
+   puts a real auth client on window.__AUTH__ and everything below
+   runs against it. With no backend present the app falls back to the
+   demo account picker so it still previews and demos.
+   ================================================================ */
+const AUTH = () => (typeof window !== "undefined" ? window.__AUTH__ : null);
+const liveAuth = () => !!AUTH();
+/* Map a database profile row onto the shape the UI already uses. */
+const fromProfile = (row) => ({
+  id: row.id, name: row.name, email: row.email, phone: row.phone || "",
+  role: row.role, title: row.title || "", active: row.active,
+  commissionRate: row.commission_rate != null ? Number(row.commission_rate) : 60,
+  addedAt: row.added_at || "",
+});
+const toProfile = (u) => ({
+  name: u.name, email: u.email, phone: u.phone || null, role: u.role,
+  title: u.title || null, commission_rate: u.commissionRate ?? 60, active: u.active,
+});
+
+/* ================================================================
    SHARED UI
    ================================================================ */
 const S = { ink: "#111827", sub: "#6B7280", line: "#E5E7EB", bg: "#F7F8FA", soft: "#F3F4F6" };
@@ -1839,8 +1860,32 @@ function SignaturePad({ open, onClose, title, onApply }) {
    ================================================================ */
 function Login({ brand, users, onLogin }) {
   const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
   const active = (users || []).filter((u) => u.active);
-  if (mode === "account") {
+  const live = liveAuth();
+
+  const submit = async () => {
+    setErr(""); setBusy(true);
+    try {
+      await AUTH().signIn(email.trim(), pw);
+      // The session listener in the root component takes it from here.
+    } catch (e) {
+      setErr(e && e.message ? e.message : "Could not sign in. Check the email and password.");
+      setBusy(false);
+    }
+  };
+  const reset = async () => {
+    setErr(""); setBusy(true);
+    try { await AUTH().resetPassword(email.trim()); setMode("sent"); }
+    catch (e) { setErr(e && e.message ? e.message : "Could not send the reset link."); }
+    setBusy(false);
+  };
+
+  /* Demo picker — only when no backend is configured. */
+  if (!live && mode === "account") {
     return (
       <div style={{ minHeight: "100vh", background: brand.primary, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
         <div style={{ width: "100%", maxWidth: 420 }}>
@@ -1864,7 +1909,7 @@ function Login({ brand, users, onLogin }) {
                   background: u.role === "admin" ? brand.primary : "#EAF2FD",
                   color: u.role === "admin" ? "#fff" : "#1B6DE0",
                   display: "grid", placeItems: "center", fontWeight: 800, fontSize: 14,
-                }}>{u.name.split(" ").map((p) => p[0]).join("")}</div>
+                }}>{u.name.split(" ").map((x) => x[0]).join("")}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{u.name}</div>
                   <div style={{ fontSize: 12.5, color: S.sub }}>{u.title}</div>
@@ -1876,12 +1921,13 @@ function Login({ brand, users, onLogin }) {
             ))}
           </Card>
           <div style={{ textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 14 }}>
-            Role decides what you see. Commission structure controls are admin-only.
+            Demo mode — no backend connected. Nothing you change here is saved.
           </div>
         </div>
       </div>
     );
   }
+
   return (
     <div style={{
       minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column",
@@ -1897,41 +1943,69 @@ function Login({ brand, users, onLogin }) {
           <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>{brand.company}</div>
           <div style={{ fontSize: 14, color: S.sub, marginTop: 6 }}>{brand.slogan}</div>
         </div>
+
         {mode === "login" && (
           <>
-            <Field label="Email"><input style={inputStyle} type="email" placeholder="you@supremebuildinggroup.com" /></Field>
-            <Field label="Password"><input style={inputStyle} type="password" placeholder="••••••••" /></Field>
-            <Btn onClick={() => setMode("account")} style={{ width: "100%", marginTop: 4 }}>Sign in</Btn>
-            <button onClick={() => setMode("forgot")} style={{
+            <Field label="Email">
+              <input style={inputStyle} type="email" autoComplete="username" value={email}
+                onChange={(e) => setEmail(e.target.value)} placeholder="you@supremebuildinggroup.com" />
+            </Field>
+            <Field label="Password">
+              <input style={inputStyle} type="password" autoComplete="current-password" value={pw}
+                onChange={(e) => setPw(e.target.value)} placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+                onKeyDown={(e) => { if (e.key === "Enter" && live && email && pw) submit(); }} />
+            </Field>
+            {err && <Callout label="Sign-in failed" tone="red">{err}</Callout>}
+            <Btn
+              onClick={live ? submit : () => setMode("account")}
+              disabled={busy || (live && (!email.trim() || !pw))}
+              style={{ width: "100%", marginTop: 4 }}>
+              {busy ? "Signing in\u2026" : "Sign in"}
+            </Btn>
+            <button onClick={() => { setErr(""); setMode("forgot"); }} style={{
               display: "block", margin: "16px auto 0", border: "none", background: "none",
               color: "#1B6DE0", fontWeight: 600, fontSize: 14, cursor: "pointer",
             }}>Forgot password?</button>
+            {!live && (
+              <div style={{ textAlign: "center", fontSize: 12, color: S.sub, marginTop: 18, lineHeight: 1.5 }}>
+                No backend connected — sign in opens the demo account picker.
+              </div>
+            )}
           </>
         )}
+
         {mode === "forgot" && (
           <>
             <div style={{ fontSize: 15, color: S.sub, marginBottom: 18 }}>
-              Enter your email and we'll send a link to reset your password.
+              Enter your email and we'll send a link to set a new password.
             </div>
-            <Field label="Email"><input style={inputStyle} type="email" placeholder="you@supremebuildinggroup.com" /></Field>
-            <Btn onClick={() => setMode("sent")} style={{ width: "100%" }}>Send reset link</Btn>
-            <button onClick={() => setMode("login")} style={{
+            <Field label="Email">
+              <input style={inputStyle} type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </Field>
+            {err && <Callout label="Could not send" tone="red">{err}</Callout>}
+            <Btn onClick={live ? reset : () => setMode("sent")} disabled={busy || !email.trim()} style={{ width: "100%" }}>
+              {busy ? "Sending\u2026" : "Send reset link"}
+            </Btn>
+            <button onClick={() => { setErr(""); setMode("login"); }} style={{
               display: "block", margin: "16px auto 0", border: "none", background: "none",
               color: S.sub, fontWeight: 600, fontSize: 14, cursor: "pointer",
             }}>Back to sign in</button>
           </>
         )}
+
         {mode === "sent" && (
           <div style={{ textAlign: "center" }}>
             <CheckCircle2 size={40} color="#177245" style={{ marginBottom: 12 }} />
-            <div style={{ fontSize: 16, fontWeight: 700, color: S.ink, marginBottom: 6 }}>Reset link sent</div>
-            <div style={{ fontSize: 14, color: S.sub, marginBottom: 20 }}>Check your inbox for a link to set a new password.</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: S.ink, marginBottom: 6 }}>Check your email</div>
+            <div style={{ fontSize: 14, color: S.sub, marginBottom: 20 }}>
+              If an account exists for {email || "that address"}, a reset link is on its way.
+            </div>
             <Btn kind="ghost" onClick={() => setMode("login")} style={{ width: "100%" }}>Back to sign in</Btn>
           </div>
         )}
       </div>
       <div style={{ position: "absolute", bottom: 20, fontSize: 12, color: "#9CA3AF" }}>
-        © {new Date().getFullYear()} {brand.company}
+        \u00A9 {new Date().getFullYear()} {brand.company}
       </div>
     </div>
   );
@@ -6182,20 +6256,49 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
   const emailTaken = users.some((u) => u.email.toLowerCase() === f.email.trim().toLowerCase() && u.id !== (editing !== "new" && editing ? editing.id : null));
   const valid = f.name.trim() && /\S+@\S+\.\S+/.test(f.email.trim()) && !emailTaken;
 
-  const save = () => {
-    if (editing === "new") {
-      const u = { ...f, id: uid("u"), email: f.email.trim(), name: f.name.trim(), addedAt: new Date().toISOString().slice(0, 10) };
-      setUsers([...users, u]);
-      toast(`Seat created — invite sent to ${u.email}`);
-    } else {
-      setUsers(users.map((u) => (u.id === editing.id ? { ...u, ...f, name: f.name.trim(), email: f.email.trim() } : u)));
-      toast("Seat updated");
+  const [saving, setSaving] = useState(false);
+  const [seatErr, setSeatErr] = useState("");
+
+  const save = async () => {
+    const auth = AUTH();
+    setSeatErr(""); setSaving(true);
+    try {
+      if (editing === "new") {
+        if (auth) {
+          await auth.inviteSeat({
+            name: f.name.trim(), email: f.email.trim(), role: f.role,
+            title: f.title, commission_rate: f.commissionRate,
+          });
+          const all = await auth.listProfiles();
+          setUsers(all.map(fromProfile));
+          toast(`Invite sent to ${f.email.trim()}`);
+        } else {
+          setUsers([...users, { ...f, id: uid("u"), email: f.email.trim(), name: f.name.trim(), addedAt: new Date().toISOString().slice(0, 10) }]);
+          toast("Seat created (demo mode — no invite sent)");
+        }
+      } else {
+        const next = { ...editing, ...f, name: f.name.trim(), email: f.email.trim() };
+        if (auth) await auth.updateProfile(editing.id, toProfile(next));
+        setUsers(users.map((u) => (u.id === editing.id ? next : u)));
+        toast("Seat updated");
+      }
+      setEditing(null);
+    } catch (e) {
+      setSeatErr(e && e.message ? e.message : "Could not save the seat.");
     }
-    setEditing(null);
+    setSaving(false);
   };
-  const toggleActive = (u) => {
-    setUsers(users.map((x) => (x.id === u.id ? { ...x, active: !x.active } : x)));
-    toast(u.active ? `${u.name} deactivated — login disabled` : `${u.name} reactivated`);
+
+  const toggleActive = async (u) => {
+    const auth = AUTH();
+    const next = { ...u, active: !u.active };
+    try {
+      if (auth) await auth.updateProfile(u.id, toProfile(next));
+      setUsers(users.map((x) => (x.id === u.id ? next : x)));
+      toast(u.active ? `${u.name} deactivated — login disabled` : `${u.name} reactivated`);
+    } catch (e) {
+      toast(e && e.message ? e.message : "Could not update the seat.");
+    }
   };
   const remove = (u) => {
     const assigned = jobs.filter((j) => j.assignee === u.name).length;
@@ -6240,8 +6343,9 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
         right={<Btn small onClick={() => open(null)}><Plus size={14} /> Add seat</Btn>} />
       <Card style={{ marginTop: 14 }}>
         <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
-          Every active seat is a login for {brand.company}. Adding a seat sends an email invite to set a password.
+          Every active seat is a login for {brand.company}. Adding a seat emails an invite to set a password.
           Deactivating keeps the person's job history intact but blocks sign-in immediately.
+          {!liveAuth() && " Demo mode — no backend connected, so invites are not actually sent."}
         </div>
         <div style={{ display: "flex", gap: 16, marginTop: 12 }}>
           <div><div style={{ fontSize: 20, fontWeight: 800 }}>{users.filter((u) => u.active).length}</div><div style={{ fontSize: 12, color: S.sub }}>Active seats</div></div>
@@ -6290,11 +6394,12 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
         footer={
           <div style={{ display: "flex", gap: 10 }}>
             <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setEditing(null)}>Cancel</Btn>
-            <Btn style={{ flex: 2 }} disabled={!valid} onClick={save}>
-              {editing === "new" ? "Create seat & send invite" : "Save changes"}
+            <Btn style={{ flex: 2 }} disabled={!valid || saving} onClick={save}>
+              {saving ? "Saving\u2026" : editing === "new" ? "Create seat & send invite" : "Save changes"}
             </Btn>
           </div>
         }>
+        {seatErr && <Callout label="Could not save" tone="red">{seatErr}</Callout>}
         <Field label="Full name *"><input style={inputStyle} value={f.name} onChange={set("name")} /></Field>
         <Field label="Work email *" hint={emailTaken ? "That email already has a seat." : "This is their login. An invite to set a password goes here."}>
           <input style={{ ...inputStyle, borderColor: emailTaken ? "#B42318" : S.line }} type="email" value={f.email} onChange={set("email")} />
@@ -6424,6 +6529,41 @@ function Inbox({ jobs, onOpenJob }) {
 export default function SupremeCRM() {
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState(SEED_USERS);
+  const [booting, setBooting] = useState(liveAuth());
+  const [authError, setAuthError] = useState("");
+
+  /* With a backend connected, restore the session on load and follow
+     sign-in / sign-out. Without one, this does nothing and the demo
+     account picker handles it. */
+  useEffect(() => {
+    const auth = AUTH();
+    if (!auth) return;
+    let alive = true;
+
+    const hydrate = async (session) => {
+      if (!alive) return;
+      if (!session) { setCurrentUser(null); setBooting(false); return; }
+      try {
+        const profile = await auth.loadProfile(session.user.id);
+        if (!alive) return;
+        setCurrentUser(fromProfile(profile));
+        try {
+          const all = await auth.listProfiles();
+          if (alive && all) setUsers(all.map(fromProfile));
+        } catch { /* rep-level accounts may not list everyone; not fatal */ }
+        setAuthError("");
+      } catch (e) {
+        if (!alive) return;
+        setAuthError("Signed in, but no profile exists for this account. An admin needs to create the seat.");
+        setCurrentUser(null);
+      }
+      setBooting(false);
+    };
+
+    auth.getSession().then(hydrate);
+    const off = auth.onChange(hydrate);
+    return () => { alive = false; if (off) off(); };
+  }, []);
   const [crews, setCrews] = useState(SEED_CREWS);
   const [templates, setTemplates] = useState(SEED_TEMPLATES);
   const [companyDocs, setCompanyDocs] = useState(SEED_COMPANY_DOCS);
@@ -6505,7 +6645,33 @@ export default function SupremeCRM() {
     setOpenJobId(id); setNav("jobs");
   };
 
-  if (!currentUser) return <Login brand={brand} users={users} onLogin={setCurrentUser} />;
+  if (booting) {
+    return (
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: 14, background: brand.primary, color: "#fff",
+            display: "grid", placeItems: "center", fontWeight: 800, margin: "0 auto 14px",
+          }}>{brand.short}</div>
+          <div style={{ fontSize: 14, color: S.sub }}>Loading\u2026</div>
+        </div>
+      </div>
+    );
+  }
+  if (!currentUser) {
+    return (
+      <>
+        <Login brand={brand} users={users} onLogin={setCurrentUser} />
+        {authError && (
+          <div style={{
+            position: "fixed", bottom: 20, left: 20, right: 20, maxWidth: 420, margin: "0 auto",
+            background: "#FDECEC", border: "1px solid #F3C7C3", borderRadius: 12, padding: "12px 14px",
+            fontSize: 13, color: "#B42318", lineHeight: 1.5, zIndex: 80,
+          }}>{authError}</div>
+        )}
+      </>
+    );
+  }
   const liveUser = users.find((u) => u.id === currentUser.id) || currentUser;
   if (!liveUser.active) {
     return (
@@ -6514,7 +6680,7 @@ export default function SupremeCRM() {
           <Lock size={28} color={S.sub} />
           <div style={{ fontSize: 16, fontWeight: 700, marginTop: 10 }}>This seat has been deactivated</div>
           <div style={{ fontSize: 14, color: S.sub, marginTop: 6 }}>Contact the office to restore access.</div>
-          <Btn kind="ghost" style={{ width: "100%", marginTop: 16 }} onClick={() => setCurrentUser(null)}>Back to sign in</Btn>
+          <Btn kind="ghost" style={{ width: "100%", marginTop: 16 }} onClick={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* ignore */ } } setCurrentUser(null); }}>Back to sign in</Btn>
         </Card>
       </div>
     );
@@ -6556,7 +6722,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "inbox" ? (
         <Inbox jobs={jobs} onOpenJob={openJobScreen} />
       ) : nav === "more" ? (
-        <MoreMenu brand={brand} onNav={setNav} onLogout={() => setCurrentUser(null)} currentUser={liveUser} />
+        <MoreMenu brand={brand} onNav={setNav} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
       ) : nav === "insurance" ? (
         <InsuranceHub jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} toast={toast} />
       ) : nav === "performance" ? (
