@@ -3973,7 +3973,8 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
     if (!consentOk(compose, audience)) { toast("No consent on file — cannot send"); return; }
     const addr = recipient(audience);
     if (!addr) { toast(audience === "Crew" ? "Assign a crew first" : "No contact on file"); return; }
-    const live = compose === "sms" ? integrations.sms.connected : integrations.gmail.connected;
+    const myGmail = (integrations.gmailByUser || {})[currentUser.id] || { connected: false };
+    const live = compose === "sms" ? integrations.sms.connected : myGmail.connected;
     mut((j) => ({
       ...j,
       messages: [...(j.messages || []), {
@@ -4004,7 +4005,9 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
           <Chip tone={job.consent.sms.granted ? "green" : "red"}>
             SMS {job.consent.sms.granted ? "consent" : "no consent"}
           </Chip>
-          {!integrations.gmail.connected && <Chip tone="amber">Gmail not connected</Chip>}
+          {!((integrations.gmailByUser || {})[currentUser.id] || {}).connected && (
+            <Chip tone="amber">Your Gmail isn't connected</Chip>
+          )}
           {!integrations.sms.connected && <Chip tone="amber">SMS not connected</Chip>}
         </div>
         {(!job.consent.email.granted || !job.consent.sms.granted) && (
@@ -6312,107 +6315,127 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
    client secret; the browser cannot hold it safely. This screen owns
    the connection state and is honest about what isn't live yet.
    ================================================================ */
-function Integrations({ integrations, setIntegrations, currentUser, onBack, toast }) {
+function Integrations({ integrations, setIntegrations, currentUser, users = [], onBack, toast }) {
   const isAdmin = currentUser.role === "admin";
-  const g = integrations.gmail;
+  const byUser = integrations.gmailByUser || {};
+  const mine = byUser[currentUser.id] || { connected: false };
   const sms = integrations.sms;
   const [connecting, setConnecting] = useState(null);
   const [addr, setAddr] = useState("");
 
-  if (!isAdmin) {
-    return (
-      <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
-        <SubHeader title="Integrations" onBack={onBack} />
-        <Card style={{ marginTop: 14 }}>
-          <div style={{ display: "flex", gap: 10 }}>
-            <Lock size={18} color={S.sub} style={{ flexShrink: 0, marginTop: 2 }} />
-            <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
-              Connected accounts are managed by the office. Messages you send go out from the company account.
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  const setMyGmail = (val) =>
+    setIntegrations({ ...integrations, gmailByUser: { ...byUser, [currentUser.id]: val } });
 
   return (
     <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
       <SubHeader title="Integrations" onBack={onBack} />
 
       <Card style={{ marginTop: 14 }}>
-        <CardTitle right={g.connected ? <Chip tone="green">Connected</Chip> : <Chip tone="gray">Not connected</Chip>}>
-          Gmail
+        <CardTitle right={mine.connected ? <Chip tone="green">Connected</Chip> : <Chip tone="gray">Not connected</Chip>}>
+          Your Gmail
         </CardTitle>
-        {g.connected ? (
+        {mine.connected ? (
           <>
-            <KV k="Account" v={g.email} />
-            <KV k="Connected" v={g.at} />
-            <KV k="Sends as" v={g.sendAs || g.email} />
+            <KV k="Account" v={mine.email} />
+            <KV k="Connected" v={mine.at} />
             <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 8 }}>
-              Emails sent from a job go out through this account and land in its Sent folder, so replies come back to
-              the same inbox the team already watches.
+              Emails you send from a job go out as you, from this mailbox, and replies come back to your inbox with
+              the thread intact. Every rep connects their own — there's no shared company sender.
             </div>
             <Btn kind="danger" small style={{ marginTop: 12 }}
-              onClick={() => { setIntegrations({ ...integrations, gmail: { connected: false, email: "", at: null } }); toast("Gmail disconnected"); }}>
+              onClick={() => { setMyGmail({ connected: false }); toast("Gmail disconnected"); }}>
               Disconnect
             </Btn>
           </>
         ) : (
           <>
             <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.55 }}>
-              Connect a Google Workspace account so email goes out under your own domain rather than a generic sender.
-              Replies land in that mailbox and threads stay intact.
+              Connect your own mailbox. Your customers get email from you, not a generic office address, and replies
+              land where you'll actually see them.
             </div>
             <Callout label="What this needs to go live">
-              Google OAuth requires a client secret, which cannot live in the browser. Create a Google Cloud project,
-              enable the Gmail API, add an OAuth consent screen, then run the token exchange in a Supabase Edge
-              Function. Until that's deployed, connecting here records the account and composes the message — it does
-              not put mail on the wire.
+              Google OAuth requires a client secret, which can't live in the browser. The company sets up one Google
+              Cloud project (consent screen + Gmail API) and one Supabase Edge Function for the token exchange — then
+              every rep's Connect button does the real Google sign-in. Until that function is deployed, connecting
+              here records your account so everything is configured and ready.
             </Callout>
             <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => setConnecting("gmail")}>
-              <Mail size={15} /> Connect Gmail
+              <Mail size={15} /> Connect my Gmail
             </Btn>
           </>
         )}
       </Card>
 
-      <Card style={{ marginTop: 12 }}>
-        <CardTitle right={sms.connected ? <Chip tone="green">Connected</Chip> : <Chip tone="gray">Not connected</Chip>}>
-          Text messaging
-        </CardTitle>
-        {sms.connected ? (
-          <>
-            <KV k="Provider" v={sms.provider} />
-            <KV k="Sending number" v={sms.number} />
-            <Btn kind="danger" small style={{ marginTop: 12 }}
-              onClick={() => { setIntegrations({ ...integrations, sms: { connected: false, provider: "", number: "" } }); toast("SMS disconnected"); }}>
-              Disconnect
-            </Btn>
-          </>
-        ) : (
-          <>
-            <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.55 }}>
-              A provider account (Twilio or similar) with a dedicated number. Consent is already tracked per customer,
-              and sends are blocked without it.
+      {isAdmin && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle>Team connections</CardTitle>
+          <div style={{ fontSize: 13, color: S.sub, marginBottom: 6 }}>
+            Who's connected their mailbox. Reps without a connection can compose but their email shows as queued.
+          </div>
+          {users.filter((u) => u.active !== false).map((u) => {
+            const g = byUser[u.id];
+            return (
+              <div key={u.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderTop: `1px solid ${S.line}` }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{u.name}</div>
+                  {g && g.connected && <div style={{ fontSize: 12, color: S.sub }}>{g.email}</div>}
+                </div>
+                {g && g.connected ? <Chip tone="green">Connected</Chip> : <Chip tone="gray">Not yet</Chip>}
+              </div>
+            );
+          })}
+        </Card>
+      )}
+
+      {isAdmin ? (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={sms.connected ? <Chip tone="green">Connected</Chip> : <Chip tone="gray">Not connected</Chip>}>
+            Text messaging (company-wide)
+          </CardTitle>
+          {sms.connected ? (
+            <>
+              <KV k="Provider" v={sms.provider} />
+              <KV k="Sending number" v={sms.number} />
+              <Btn kind="danger" small style={{ marginTop: 12 }}
+                onClick={() => { setIntegrations({ ...integrations, sms: { connected: false, provider: "", number: "" } }); toast("SMS disconnected"); }}>
+                Disconnect
+              </Btn>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.55 }}>
+                One provider account (Twilio or similar) with a dedicated number for the whole company — texting
+                registration is per business, so this one stays shared. Consent is tracked per customer and sends are
+                blocked without it.
+              </div>
+              <Callout label="Before your first send">
+                US carriers require 10DLC brand and campaign registration for business texting. Unregistered traffic
+                gets filtered or blocked outright. Registration takes a few days — start it before you need it.
+              </Callout>
+              <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => setConnecting("sms")}>
+                <MessageCircle size={15} /> Connect SMS provider
+              </Btn>
+            </>
+          )}
+        </Card>
+      ) : (
+        <Card style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", gap: 10 }}>
+            <Lock size={18} color={S.sub} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
+              Text messaging runs through one company number and is managed by the office.
             </div>
-            <Callout label="Before your first send">
-              US carriers require 10DLC brand and campaign registration for business texting. Unregistered traffic gets
-              filtered or blocked outright. Registration takes a few days — start it before you need it.
-            </Callout>
-            <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => setConnecting("sms")}>
-              <MessageCircle size={15} /> Connect SMS provider
-            </Btn>
-          </>
-        )}
-      </Card>
+          </div>
+        </Card>
+      )}
 
       <Sheet open={!!connecting} onClose={() => { setConnecting(null); setAddr(""); }}
-        title={connecting === "gmail" ? "Connect Gmail" : "Connect SMS"}
+        title={connecting === "gmail" ? "Connect your Gmail" : "Connect SMS"}
         footer={
           <Btn style={{ width: "100%" }} disabled={!addr.trim()} onClick={() => {
             if (connecting === "gmail") {
-              setIntegrations({ ...integrations, gmail: { connected: true, email: addr.trim(), at: new Date().toISOString().slice(0, 10), sendAs: addr.trim() } });
-              toast("Gmail account recorded");
+              setMyGmail({ connected: true, email: addr.trim(), at: new Date().toISOString().slice(0, 10) });
+              toast("Your Gmail account is recorded");
             } else {
               setIntegrations({ ...integrations, sms: { connected: true, provider: "Twilio", number: addr.trim() } });
               toast("SMS number recorded");
@@ -6422,12 +6445,12 @@ function Integrations({ integrations, setIntegrations, currentUser, onBack, toas
         }>
         {connecting === "gmail" ? (
           <>
-            <Field label="Google Workspace address" hint="The mailbox company email should send from and receive replies to.">
-              <input style={inputStyle} type="email" value={addr} onChange={(e) => setAddr(e.target.value)} placeholder="office@supremebuildinggroup.com" />
+            <Field label="Your email address" hint="The mailbox your customer emails should send from and receive replies to.">
+              <input style={inputStyle} type="email" value={addr} onChange={(e) => setAddr(e.target.value)} placeholder={currentUser.email || "you@supremebuildinggroup.com"} />
             </Field>
             <Callout label="This records the account only">
-              The real OAuth handshake runs server-side. This saves which account to use so the composer and templates
-              are configured and ready the moment the backend function is deployed.
+              The real Google sign-in runs server-side once the OAuth function is deployed. This saves which account
+              is yours so the composer is configured and ready the moment that lands.
             </Callout>
           </>
         ) : (
@@ -6986,7 +7009,10 @@ export default function SupremeCRM() {
   const [appointments, setAppointments] = useState([]);
   const [apptTypes, setApptTypes] = useState(["Inspection", "Adjuster meeting", "Estimate presentation", "Production start", "Final walkthrough"]);
   const [integrations, setIntegrations] = useState({
-    gmail: { connected: false, email: "", at: null },
+    /* Gmail is per-user: each rep connects their own mailbox so email
+       goes out under their name and replies land in their inbox.
+       SMS stays company-wide — 10DLC registration is per business. */
+    gmailByUser: {},
     sms: { connected: false, provider: "", number: "" },
   });
   const [brand, setBrand] = useState(DEFAULT_BRAND);
@@ -7187,7 +7213,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onBack={() => setNav("more")} toast={toast} />
       ) : nav === "integrations" ? (
         <Integrations integrations={integrations} setIntegrations={setIntegrations}
-          currentUser={liveUser} onBack={() => setNav("more")} toast={toast} />
+          currentUser={liveUser} users={users} onBack={() => setNav("more")} toast={toast} />
       ) : nav === "team" ? (
         <TeamManager users={users} setUsers={setUsers} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} brand={brand} />

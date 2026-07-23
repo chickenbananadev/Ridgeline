@@ -4705,7 +4705,8 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
       toast(audience === "Crew" ? "Assign a crew first" : "No contact on file");
       return;
     }
-    const live = compose === "sms" ? integrations.sms.connected : integrations.gmail.connected;
+    const myGmail = (integrations.gmailByUser || {})[currentUser.id] || { connected: false };
+    const live = compose === "sms" ? integrations.sms.connected : myGmail.connected;
     mut((j) => ({
       ...j,
       messages: [...j.messages || [], {
@@ -4746,7 +4747,7 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
           "SMS ",
           job.consent.sms.granted ? "consent" : "no consent"
         ] }),
-        !integrations.gmail.connected && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "Gmail not connected" }),
+        !((integrations.gmailByUser || {})[currentUser.id] || {}).connected && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "Your Gmail isn't connected" }),
         !integrations.sms.connected && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "SMS not connected" })
       ] }),
       (!job.consent.email.granted || !job.consent.sms.granted) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "Sending is blocked on any channel without consent on file. Consent is captured at intake and can be updated from the customer's contact record." })
@@ -7275,30 +7276,22 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
     )
   ] });
 }
-function Integrations({ integrations, setIntegrations, currentUser, onBack, toast }) {
+function Integrations({ integrations, setIntegrations, currentUser, users = [], onBack, toast }) {
   const isAdmin = currentUser.role === "admin";
-  const g = integrations.gmail;
+  const byUser = integrations.gmailByUser || {};
+  const mine = byUser[currentUser.id] || { connected: false };
   const sms = integrations.sms;
   const [connecting, setConnecting] = (0, import_react.useState)(null);
   const [addr, setAddr] = (0, import_react.useState)("");
-  if (!isAdmin) {
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Integrations", onBack }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Lock, { size: 18, color: S.sub, style: { flexShrink: 0, marginTop: 2 } }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: "Connected accounts are managed by the office. Messages you send go out from the company account." })
-      ] }) })
-    ] });
-  }
+  const setMyGmail = (val) => setIntegrations({ ...integrations, gmailByUser: { ...byUser, [currentUser.id]: val } });
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Integrations", onBack }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: g.connected ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Connected" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Not connected" }), children: "Gmail" }),
-      g.connected ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Account", v: g.email }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Connected", v: g.at }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Sends as", v: g.sendAs || g.email }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 8 }, children: "Emails sent from a job go out through this account and land in its Sent folder, so replies come back to the same inbox the team already watches." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: mine.connected ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Connected" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Not connected" }), children: "Your Gmail" }),
+      mine.connected ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Account", v: mine.email }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Connected", v: mine.at }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 8 }, children: "Emails you send from a job go out as you, from this mailbox, and replies come back to your inbox with the thread intact. Every rep connects their own \u2014 there's no shared company sender." }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           Btn,
           {
@@ -7306,23 +7299,37 @@ function Integrations({ integrations, setIntegrations, currentUser, onBack, toas
             small: true,
             style: { marginTop: 12 },
             onClick: () => {
-              setIntegrations({ ...integrations, gmail: { connected: false, email: "", at: null } });
+              setMyGmail({ connected: false });
               toast("Gmail disconnected");
             },
             children: "Disconnect"
           }
         )
       ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.55 }, children: "Connect a Google Workspace account so email goes out under your own domain rather than a generic sender. Replies land in that mailbox and threads stay intact." }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "What this needs to go live", children: "Google OAuth requires a client secret, which cannot live in the browser. Create a Google Cloud project, enable the Gmail API, add an OAuth consent screen, then run the token exchange in a Supabase Edge Function. Until that's deployed, connecting here records the account and composes the message \u2014 it does not put mail on the wire." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.55 }, children: "Connect your own mailbox. Your customers get email from you, not a generic office address, and replies land where you'll actually see them." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "What this needs to go live", children: "Google OAuth requires a client secret, which can't live in the browser. The company sets up one Google Cloud project (consent screen + Gmail API) and one Supabase Edge Function for the token exchange \u2014 then every rep's Connect button does the real Google sign-in. Until that function is deployed, connecting here records your account so everything is configured and ready." }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%", marginTop: 12 }, onClick: () => setConnecting("gmail"), children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Mail, { size: 15 }),
-          " Connect Gmail"
+          " Connect my Gmail"
         ] })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: sms.connected ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Connected" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Not connected" }), children: "Text messaging" }),
+    isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Team connections" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 6 }, children: "Who's connected their mailbox. Reps without a connection can compose but their email shows as queued." }),
+      users.filter((u) => u.active !== false).map((u) => {
+        const g = byUser[u.id];
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderTop: `1px solid ${S.line}` }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 600 }, children: u.name }),
+            g && g.connected && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: g.email })
+          ] }),
+          g && g.connected ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Connected" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Not yet" })
+        ] }, u.id);
+      })
+    ] }),
+    isAdmin ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: sms.connected ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Connected" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Not connected" }), children: "Text messaging (company-wide)" }),
       sms.connected ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Provider", v: sms.provider }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Sending number", v: sms.number }),
@@ -7340,14 +7347,17 @@ function Integrations({ integrations, setIntegrations, currentUser, onBack, toas
           }
         )
       ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.55 }, children: "A provider account (Twilio or similar) with a dedicated number. Consent is already tracked per customer, and sends are blocked without it." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.55 }, children: "One provider account (Twilio or similar) with a dedicated number for the whole company \u2014 texting registration is per business, so this one stays shared. Consent is tracked per customer and sends are blocked without it." }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Before your first send", children: "US carriers require 10DLC brand and campaign registration for business texting. Unregistered traffic gets filtered or blocked outright. Registration takes a few days \u2014 start it before you need it." }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%", marginTop: 12 }, onClick: () => setConnecting("sms"), children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MessageCircle, { size: 15 }),
           " Connect SMS provider"
         ] })
       ] })
-    ] }),
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Lock, { size: 18, color: S.sub, style: { flexShrink: 0, marginTop: 2 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: "Text messaging runs through one company number and is managed by the office." })
+    ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       Sheet,
       {
@@ -7356,11 +7366,11 @@ function Integrations({ integrations, setIntegrations, currentUser, onBack, toas
           setConnecting(null);
           setAddr("");
         },
-        title: connecting === "gmail" ? "Connect Gmail" : "Connect SMS",
+        title: connecting === "gmail" ? "Connect your Gmail" : "Connect SMS",
         footer: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, disabled: !addr.trim(), onClick: () => {
           if (connecting === "gmail") {
-            setIntegrations({ ...integrations, gmail: { connected: true, email: addr.trim(), at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), sendAs: addr.trim() } });
-            toast("Gmail account recorded");
+            setMyGmail({ connected: true, email: addr.trim(), at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) });
+            toast("Your Gmail account is recorded");
           } else {
             setIntegrations({ ...integrations, sms: { connected: true, provider: "Twilio", number: addr.trim() } });
             toast("SMS number recorded");
@@ -7369,8 +7379,8 @@ function Integrations({ integrations, setIntegrations, currentUser, onBack, toas
           setAddr("");
         }, children: "Save connection" }),
         children: connecting === "gmail" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Google Workspace address", hint: "The mailbox company email should send from and receive replies to.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: addr, onChange: (e) => setAddr(e.target.value), placeholder: "office@supremebuildinggroup.com" }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "This records the account only", children: "The real OAuth handshake runs server-side. This saves which account to use so the composer and templates are configured and ready the moment the backend function is deployed." })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Your email address", hint: "The mailbox your customer emails should send from and receive replies to.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: addr, onChange: (e) => setAddr(e.target.value), placeholder: currentUser.email || "you@supremebuildinggroup.com" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "This records the account only", children: "The real Google sign-in runs server-side once the OAuth function is deployed. This saves which account is yours so the composer is configured and ready the moment that lands." })
         ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Sending number", hint: "The number customers will see and can reply to.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: addr, onChange: (e) => setAddr(e.target.value), placeholder: "(847) 555-0100" }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Registration required", children: "This number must be 10DLC registered to your business before carriers will deliver to it reliably." })
@@ -7946,7 +7956,10 @@ function SupremeCRM() {
   const [appointments, setAppointments] = (0, import_react.useState)([]);
   const [apptTypes, setApptTypes] = (0, import_react.useState)(["Inspection", "Adjuster meeting", "Estimate presentation", "Production start", "Final walkthrough"]);
   const [integrations, setIntegrations] = (0, import_react.useState)({
-    gmail: { connected: false, email: "", at: null },
+    /* Gmail is per-user: each rep connects their own mailbox so email
+       goes out under their name and replies land in their inbox.
+       SMS stays company-wide — 10DLC registration is per business. */
+    gmailByUser: {},
     sms: { connected: false, provider: "", number: "" }
   });
   const [brand, setBrand] = (0, import_react.useState)(DEFAULT_BRAND);
@@ -8287,6 +8300,7 @@ function SupremeCRM() {
         integrations,
         setIntegrations,
         currentUser: liveUser,
+        users,
         onBack: () => setNav("more"),
         toast
       }
