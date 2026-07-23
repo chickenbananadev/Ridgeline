@@ -1,4 +1,4 @@
-# Supreme CRM — Update Module
+# Ridgeline — Update Module
 
 Commission structures (role-gated), Code Verify, and Insurance Resources for the Supreme Building Group CRM.
 
@@ -6,4 +6,4 @@ Commission structures (role-gated), Code Verify, and Insurance Resources for the
 - **Code Verify** — Zip lookup for adopted code, permit rules, and inspector info, with links to official sources (codes.ohio.gov, KY DHBC, ICC, Municode) and verification status.
 - **Insurance Resources** — Ohio Insurance Law, Policy Provisions, Documentation Checklist, Claim Tips, Do & Don't, Truck Cheat Sheet.
 
-Single React component (`supreme-update.jsx`), default export, styled inline. Merges into the master `supreme-crm.jsx`.
+Single React component (`ridgeline-update.jsx`), default export, styled inline. Merges into the master Ridgeline app file.
