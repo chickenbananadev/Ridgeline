@@ -818,14 +818,179 @@ const canManageSeats = (u) => u && u.role === "admin";
 const LEAD_SOURCES = ["Door knocking", "Customer referral", "Google", "Website", "Yard sign", "Facebook", "Call in", "Repeat customer", "Real-estate referral", "Billboard / print"];
 
 const DEFAULT_STAGES = [
-  { id: "s1", name: "New lead" },
-  { id: "s2", name: "Appointment scheduled" },
-  { id: "s3", name: "Estimate sent / Follow up" },
-  { id: "s4", name: "Claim filed" },
-  { id: "s5", name: "Job approved" },
-  { id: "s6", name: "Production" },
-  { id: "s7", name: "Invoicing / Cap out" },
-  { id: "s8", name: "Job completed" },
+  { id: "s1", name: "New lead", cat: "Incoming" },
+  { id: "s2", name: "Appointment scheduled", cat: "Qualified" },
+  { id: "s3", name: "Estimate sent / Follow up", cat: "Qualified" },
+  { id: "s4", name: "Claim filed", cat: "Qualified" },
+  { id: "s5", name: "Job approved", cat: "Won" },
+  { id: "s6", name: "Supplementing", cat: "Won" },
+  { id: "s7", name: "Deposit paid — job scheduled", cat: "Won" },
+  { id: "s8", name: "Production", cat: "Won" },
+  { id: "s9", name: "Payments / Invoicing / Cap out", cat: "Won" },
+  { id: "s10", name: "Job completed", cat: "Completed" },
+  { id: "s11", name: "Lost", cat: "Lost" },
+  { id: "s12", name: "Unqualified", cat: "Unqualified" },
+];
+const WON_STAGES = ["s5", "s6", "s7", "s8", "s9", "s10"];
+const DEAD_STAGES = ["s11", "s12"];
+
+
+/* ================================================================
+   CREWS — work orders are sent to a crew, not an individual.
+   ================================================================ */
+const SEED_CREWS = [
+  { id: "c1", name: "Hillwood Contractors", contact: "Luis Hernandez", phone: "(815) 555-0142", email: "info@hillwoodcontractors.com", trades: ["Roofing", "Gutters"], active: true },
+  { id: "c2", name: "Northgate Exteriors", contact: "Danny Pruitt", phone: "(847) 555-0188", email: "dispatch@northgateext.com", trades: ["Roofing", "Siding"], active: true },
+  { id: "c3", name: "Vasquez Sheet Metal", contact: "Ramon Vasquez", phone: "(606) 555-0175", email: "ramon@vasquezmetal.com", trades: ["Metal", "Flashing"], active: true },
+];
+
+/* ================================================================
+   MERGE FIELDS — shared by email and SMS templates.
+   ================================================================ */
+const MERGE_FIELDS = [
+  ["{{customer_name}}", "Customer's full name"],
+  ["{{customer_first}}", "Customer's first name"],
+  ["{{job_address}}", "Property address"],
+  ["{{rep_name}}", "Assigned rep"],
+  ["{{rep_phone}}", "Company phone"],
+  ["{{company}}", "Company name"],
+  ["{{crew_name}}", "Assigned crew"],
+  ["{{scheduled_date}}", "Scheduled production date"],
+  ["{{contract_total}}", "Contract amount"],
+  ["{{balance_due}}", "Outstanding balance"],
+  ["{{claim_number}}", "Insurance claim number"],
+  ["{{review_link}}", "Google review link"],
+];
+
+function mergeTemplate(text, ctx) {
+  if (!text) return "";
+  return text.replace(/\{\{(\w+)\}\}/g, (m, k) => (ctx[k] != null && ctx[k] !== "" ? String(ctx[k]) : m));
+}
+function templateContext(job, brand, crew) {
+  const pay = paymentsSummary(job);
+  const first = (job.name || "").split(" ")[0];
+  return {
+    customer_name: job.name, customer_first: first, job_address: job.address,
+    rep_name: job.assignee, rep_phone: brand.phone, company: brand.company,
+    crew_name: crew ? crew.name : "", scheduled_date: job.schedDate || "",
+    contract_total: pay.contract ? money(pay.contract) : "",
+    balance_due: pay.balance ? money(pay.balance) : "",
+    claim_number: job.insurance ? job.insurance.claim : "",
+    review_link: brand.googleReviewLink,
+  };
+}
+
+const SEED_TEMPLATES = [
+  { id: "t1", kind: "email", audience: "Customer", name: "Inspection scheduled",
+    subject: "Your roof inspection — {{scheduled_date}}",
+    body: `Hi {{customer_first}},
+
+You're on the schedule for {{scheduled_date}} at {{job_address}}. {{rep_name}} will be out to walk the roof, take measurements and photos, and check the attic if it's accessible.
+
+Plan on about an hour. You don't need to be home for the roof itself, but it helps if we can get a few minutes with you afterward to go over what we found.
+
+Questions before then, call or text {{rep_phone}}.
+
+{{rep_name}}
+{{company}}` },
+  { id: "t2", kind: "email", audience: "Customer", name: "Estimate sent — follow up",
+    subject: "Your estimate from {{company}}",
+    body: `Hi {{customer_first}},
+
+Your estimate for {{job_address}} is attached. It covers everything we found on the inspection, with each line tied to what the roof actually needs.
+
+A few things worth knowing:
+— The price holds for 30 days.
+— Anything we can't see until tear-off (decking, for example) is priced up front so there are no surprises.
+— If this is going through insurance, we'll handle the supplement paperwork with your carrier.
+
+Happy to walk through any line item. Call or text {{rep_phone}}.
+
+{{rep_name}}
+{{company}}` },
+  { id: "t3", kind: "email", audience: "Customer", name: "Production scheduled",
+    subject: "We're scheduled for {{scheduled_date}}",
+    body: `Hi {{customer_first}},
+
+{{job_address}} is scheduled for {{scheduled_date}}.
+
+Before the crew arrives:
+— Move vehicles out of the driveway.
+— Take down anything hanging on walls that share a roof line — vibration knocks pictures loose.
+— Keep pets inside for the day.
+— Cover anything in the attic you'd rather not get dusty.
+
+The crew starts early. We haul off all debris and run a magnet over the yard before we leave.
+
+{{rep_name}}
+{{company}} — {{rep_phone}}` },
+  { id: "t4", kind: "email", audience: "Customer", name: "Job complete — review request",
+    subject: "All finished at {{job_address}}",
+    body: `Hi {{customer_first}},
+
+We're wrapped up at {{job_address}}. Final walk-around is done, debris is hauled, and the yard has been swept with a magnet.
+
+Your workmanship warranty runs five years from today, and the manufacturer warranty covers the materials. Both documents are in your portal.
+
+If we earned it, a quick review helps us more than just about anything: {{review_link}}
+
+Thanks for trusting us with the house.
+
+{{rep_name}}
+{{company}}` },
+  { id: "t5", kind: "email", audience: "Crew", name: "New project assignment",
+    subject: "{{company}} — new project assignment",
+    body: `{{crew_name}},
+
+A new project has been assigned to your crew for {{job_address}} on {{scheduled_date}}.
+
+Attached is the full work order for this property. Please review the scope carefully before the crew rolls, and flag anything that doesn't match what you expect to find on site.
+
+Materials are scheduled to land ahead of the start date. Call {{rep_phone}} if anything is missing or the delivery is short.
+
+{{company}}` },
+  { id: "t6", kind: "sms", audience: "Customer", name: "Appointment reminder",
+    body: `{{company}}: Hi {{customer_first}}, reminder that {{rep_name}} is out to inspect {{job_address}} on {{scheduled_date}}. Questions? Call {{rep_phone}}. Reply STOP to opt out.` },
+  { id: "t7", kind: "sms", audience: "Customer", name: "Crew on the way",
+    body: `{{company}}: Our crew is headed to {{job_address}} this morning. Please move vehicles out of the driveway. Reply STOP to opt out.` },
+  { id: "t8", kind: "sms", audience: "Customer", name: "Review request",
+    body: `{{company}}: Thanks for letting us work on your home, {{customer_first}}. If we did right by you, a quick review means a lot: {{review_link}} Reply STOP to opt out.` },
+  { id: "t9", kind: "sms", audience: "Crew", name: "Schedule confirmation",
+    body: `{{company}}: {{crew_name}} — confirming {{job_address}} on {{scheduled_date}}. Work order is in your email. Reply to confirm.` },
+];
+
+/* ================================================================
+   COMPANY DOCUMENTS — not tied to a job. Contracts, insurance
+   certificates, licenses, warranties, safety, HR.
+   ================================================================ */
+const DOC_CATEGORIES = [
+  "Contracts & agreements", "Insurance & bonding", "Licenses & registrations",
+  "Warranties", "Safety & OSHA", "HR & onboarding", "Vendor & supplier", "Marketing", "Other",
+];
+const SEED_COMPANY_DOCS = [
+  { id: "d1", name: "Master service agreement — template.pdf", cat: "Contracts & agreements", size: "182 KB", at: "2026-01-12", by: "Jacob Henderson", pinned: true, expires: null },
+  { id: "d2", name: "General liability COI 2026.pdf", cat: "Insurance & bonding", size: "96 KB", at: "2026-01-04", by: "Jacob Henderson", pinned: true, expires: "2026-12-31" },
+  { id: "d3", name: "Workers comp certificate.pdf", cat: "Insurance & bonding", size: "88 KB", at: "2026-01-04", by: "Jacob Henderson", pinned: false, expires: "2026-11-30" },
+  { id: "d4", name: "Subcontractor agreement — blank.pdf", cat: "Contracts & agreements", size: "141 KB", at: "2026-02-20", by: "Jacob Henderson", pinned: false, expires: null },
+  { id: "d5", name: "GAF workmanship warranty terms.pdf", cat: "Warranties", size: "204 KB", at: "2026-03-08", by: "Steven Tatgenhorst", pinned: false, expires: null },
+  { id: "d6", name: "Fall protection plan.pdf", cat: "Safety & OSHA", size: "312 KB", at: "2026-02-02", by: "Jacob Henderson", pinned: false, expires: null },
+];
+
+/* ================================================================
+   MATERIAL PRICE LIST — imported from a supplier CSV.
+   Columns accepted: sku, item, unit, cost, price, supplier, category
+   ================================================================ */
+const SEED_PRICE_LIST = [
+  { id: "pl1", sku: "GAF-HDZ-BDL", item: "GAF Timberline HDZ — bundle", unit: "BDL", cost: 41.2, price: 58.0, supplier: "QXO", category: "Shingles" },
+  { id: "pl2", sku: "GAF-RIDGE", item: "GAF Seal-A-Ridge — bundle", unit: "BDL", cost: 62.5, price: 88.0, supplier: "QXO", category: "Shingles" },
+  { id: "pl3", sku: "SYN-UND-10", item: "Synthetic underlayment — 10 SQ roll", unit: "ROLL", cost: 96.0, price: 138.0, supplier: "QXO", category: "Underlayment" },
+  { id: "pl4", sku: "IWS-200", item: "Ice & water shield — 200 SF roll", unit: "ROLL", cost: 108.0, price: 152.0, supplier: "SRS", category: "Underlayment" },
+  { id: "pl5", sku: "DE-26-10", item: "Drip edge 26ga — 10 ft stick", unit: "EA", cost: 11.4, price: 17.5, supplier: "SRS", category: "Metal" },
+  { id: "pl6", sku: "RV-4", item: "Ridge vent — 4 ft section", unit: "EA", cost: 14.8, price: 22.0, supplier: "QXO", category: "Ventilation" },
+  { id: "pl7", sku: "PJ-3", item: 'Pipe jack 3"', unit: "EA", cost: 12.0, price: 24.0, supplier: "QXO", category: "Accessories" },
+  { id: "pl8", sku: "NAIL-114", item: 'Coil nails 1-1/4" — box', unit: "BOX", cost: 52.0, price: 72.0, supplier: "SRS", category: "Fasteners" },
+  { id: "pl9", sku: "OSB-716", item: '7/16" OSB sheathing 4x8', unit: "SHT", cost: 28.5, price: 48.0, supplier: "Menards", category: "Decking" },
+  { id: "pl10", sku: "STARTER", item: "Starter strip — roll", unit: "ROLL", cost: 48.0, price: 68.0, supplier: "QXO", category: "Shingles" },
 ];
 
 const BLANK_CHECKLIST = {
@@ -888,7 +1053,7 @@ const seedJobs = [
     files: [{ id: "f1", name: "Hail photos — insurer upload.zip", cat: "Photos", at: "Jul 9", by: "Jacob Henderson" }],
     payments: [],
     fin: { materials: [], labor: [], other: [], commissionRate: 60, reimbursements: [] },
-    portal: { estimate: false, contract: false, photos: false, invoice: false },
+    portal: { estimate: false, contract: false, photos: false, invoice: false }, crewId: null, messages: [], workOrder: null,
     review: { sent: false, clicked: false, posted: false },
   },
   {
@@ -926,12 +1091,12 @@ const seedJobs = [
     files: [{ id: "f1", name: "Measurement report.pdf", cat: "Measurements", at: "Jun 23", by: "Jacob Henderson" }],
     payments: [],
     fin: { materials: [], labor: [], other: [], commissionRate: 60, reimbursements: [] },
-    portal: { estimate: true, contract: false, photos: true, invoice: false },
+    portal: { estimate: true, contract: false, photos: true, invoice: false }, crewId: null, messages: [], workOrder: null,
     review: { sent: false, clicked: false, posted: false },
   },
   {
     id: "j3", name: "Roger Perry", address: "810 South College Avenue, Oxford, OH", zip: "45056", state: "OH",
-    value: 13031.16, stageId: "s7", assignee: "Jacob Henderson", leadSource: "Customer referral",
+    value: 13031.16, stageId: "s9", assignee: "Jacob Henderson", leadSource: "Customer referral",
     daysInStage: 4, updated: "2 days ago", claimType: "Insurance", schedDate: "2026-07-18",
     phone: "(513) 555-0187", email: "roger.p@example.com",
     consent: { sms: { granted: true, at: "2026-06-02 09:30", source: "New lead form" }, email: { granted: true, at: "2026-06-02 09:30", source: "New lead form" } },
@@ -999,7 +1164,7 @@ const seedJobs = [
         { id: "r2", label: "Lowes — out of pocket", amt: 167.48, status: "Needs paid" },
       ],
     },
-    portal: { estimate: true, contract: true, photos: true, invoice: true },
+    portal: { estimate: true, contract: true, photos: true, invoice: true }, crewId: "c1", messages: [], workOrder: { number: "WO-014", sentAt: "Jul 17, 8:02 AM", status: "Sent", notes: "Dumpster on the north side of the drive. Dog in the back yard — keep the gate shut." },
     review: { sent: false, clicked: false, posted: false },
   },
   {
@@ -1030,7 +1195,7 @@ const seedJobs = [
       other: [{ id: "o1", label: "Material dump", amt: 160.68, by: "Steven Tatgenhorst" }],
       commissionRate: 60, reimbursements: [],
     },
-    portal: { estimate: true, contract: true, photos: false, invoice: false },
+    portal: { estimate: true, contract: true, photos: false, invoice: false }, crewId: "c2", messages: [], workOrder: null,
     review: { sent: false, clicked: false, posted: false },
   },
   {
@@ -1047,12 +1212,12 @@ const seedJobs = [
     photos: [], tasks: [{ id: "t1", label: "Schedule inspection", done: false }],
     files: [], payments: [],
     fin: { materials: [], labor: [], other: [], commissionRate: 60, reimbursements: [] },
-    portal: { estimate: false, contract: false, photos: false, invoice: false },
+    portal: { estimate: false, contract: false, photos: false, invoice: false }, crewId: null, messages: [], workOrder: null,
     review: { sent: false, clicked: false, posted: false },
   },
   {
     id: "j6", name: "Dale Whitfield", address: "902 Ridgepoint Dr, Maysville, KY", zip: "41056", state: "KY",
-    value: 9420.0, stageId: "s8", assignee: "Stephen Klein", leadSource: "Repeat customer",
+    value: 9420.0, stageId: "s10", assignee: "Stephen Klein", leadSource: "Repeat customer",
     daysInStage: 3, updated: "yesterday", claimType: "Retail", schedDate: null,
     phone: "(606) 555-0161", email: "dale.w@example.com",
     consent: { sms: { granted: true, at: "2026-05-30 08:15", source: "New lead form" }, email: { granted: true, at: "2026-05-30 08:15", source: "New lead form" } },
@@ -1069,7 +1234,7 @@ const seedJobs = [
       labor: [{ id: "l1", label: "Crew labor", amt: 2480.0, by: "Stephen Klein" }],
       other: [], commissionRate: 55, reimbursements: [],
     },
-    portal: { estimate: true, contract: true, photos: true, invoice: true },
+    portal: { estimate: true, contract: true, photos: true, invoice: true }, crewId: "c1", messages: [], workOrder: { number: "WO-014", sentAt: "Jul 17, 8:02 AM", status: "Sent", notes: "Dumpster on the north side of the drive. Dog in the back yard — keep the gate shut." },
     review: { sent: true, clicked: true, posted: true },
   },
 ];
@@ -1776,9 +1941,9 @@ function Login({ brand, users, onLogin }) {
    DASHBOARD
    ================================================================ */
 function Dashboard({ jobs, stages, onOpenJob, userName, go }) {
-  const totalPipeline = jobs.filter((j) => j.stageId !== "s8").reduce((s, j) => s + j.value, 0);
-  const stale = jobs.filter((j) => j.daysInStage >= 14 && j.stageId !== "s8");
-  const approvedPlus = jobs.filter((j) => ["s5", "s6", "s7", "s8"].includes(j.stageId));
+  const totalPipeline = jobs.filter((j) => !DEAD_STAGES.includes(j.stageId) && j.stageId !== "s10").reduce((s, j) => s + j.value, 0);
+  const stale = jobs.filter((j) => j.daysInStage >= 14 && !["s10","s11","s12"].includes(j.stageId));
+  const approvedPlus = jobs.filter((j) => WON_STAGES.includes(j.stageId));
   const signedValue = approvedPlus.reduce((s, j) => s + (j.contract.price || j.value), 0);
   const byStage = stages.map((s) => ({
     ...s,
@@ -1887,71 +2052,315 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go }) {
 /* ================================================================
    PERFORMANCE — rep scoreboard + funnel, computed from live jobs
    ================================================================ */
-function Performance({ jobs, stages, onBack }) {
-  const reps = TEAM.map((name) => {
-    const mine = jobs.filter((j) => j.assignee === name);
-    const signed = mine.filter((j) => ["s5", "s6", "s7", "s8"].includes(j.stageId));
-    const signedValue = signed.reduce((s, j) => s + (j.contract.price || j.value), 0);
-    const completed = mine.filter((j) => j.stageId === "s8");
-    const commission = mine.reduce((s, j) => s + computeCapOut(j).commission, 0);
-    return { name, leads: mine.length, signed: signed.length, signedValue, completed: completed.length, commission };
-  }).sort((a, b) => b.signedValue - a.signedValue);
+function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast }) {
+  const [scope, setScope] = useState(isAdmin ? "company" : currentUser.name);
+  const [range, setRange] = useState("all");
+  const [tab, setTab] = useState("summary");
 
-  const funnel = stages.map((s) => ({ ...s, count: jobs.filter((j) => j.stageId === s.id).length }));
-  const max = Math.max(1, ...funnel.map((f) => f.count));
+  const scoped = useMemo(
+    () => (scope === "company" ? jobs : jobs.filter((j) => j.assignee === scope)),
+    [jobs, scope]);
+
+  const stat = useMemo(() => {
+    const won = scoped.filter((j) => WON_STAGES.includes(j.stageId));
+    const lost = scoped.filter((j) => j.stageId === "s11");
+    const unq = scoped.filter((j) => j.stageId === "s12");
+    const done = scoped.filter((j) => j.stageId === "s10");
+    const open = scoped.filter((j) => !WON_STAGES.includes(j.stageId) && !DEAD_STAGES.includes(j.stageId));
+    const caps = scoped.map((j) => computeCapOut(j));
+    const wonCaps = won.map((j) => computeCapOut(j));
+    const revenue = wonCaps.reduce((x, c) => x + c.contract, 0);
+    const cogs = wonCaps.reduce((x, c) => x + c.cogs, 0);
+    const gross = wonCaps.reduce((x, c) => x + c.gross, 0);
+    const commission = wonCaps.reduce((x, c) => x + c.commission, 0);
+    const reimb = wonCaps.reduce((x, c) => x + c.reimbTotal, 0);
+    const netCo = wonCaps.reduce((x, c) => x + c.netCompany, 0);
+    const decided = won.length + lost.length;
+    const pay = scoped.map((j) => paymentsSummary(j));
+    return {
+      total: scoped.length, won: won.length, lost: lost.length, unq: unq.length,
+      done: done.length, open: open.length,
+      openValue: open.reduce((x, j) => x + j.value, 0),
+      revenue, cogs, gross, commission, reimb, netCo,
+      payout: commission + reimb,
+      margin: revenue ? (gross / revenue) * 100 : 0,
+      closeRate: decided ? (won.length / decided) * 100 : 0,
+      avgJob: won.length ? revenue / won.length : 0,
+      ar: pay.reduce((x, p) => x + Math.max(0, p.balance), 0),
+      collected: pay.reduce((x, p) => x + p.received, 0),
+      insurance: scoped.filter((j) => j.claimType === "Insurance").length,
+      retail: scoped.filter((j) => j.claimType === "Retail").length,
+      reviews: scoped.filter((j) => j.review.posted).length,
+      reviewsSent: scoped.filter((j) => j.review.sent).length,
+      caps,
+    };
+  }, [scoped]);
+
+  const reps = useMemo(() => users.filter((u) => u.role !== "crew").map((u) => {
+    const mine = jobs.filter((j) => j.assignee === u.name);
+    const won = mine.filter((j) => WON_STAGES.includes(j.stageId));
+    const lost = mine.filter((j) => j.stageId === "s11");
+    const caps = won.map((j) => computeCapOut(j));
+    const decided = won.length + lost.length;
+    const revenue = caps.reduce((x, c) => x + c.contract, 0);
+    const gross = caps.reduce((x, c) => x + c.gross, 0);
+    const commission = caps.reduce((x, c) => x + c.commission, 0);
+    const reimb = caps.reduce((x, c) => x + c.reimbTotal, 0);
+    return {
+      name: u.name, leads: mine.length, won: won.length,
+      closeRate: decided ? (won.length / decided) * 100 : 0,
+      revenue, gross, commission, reimb, payout: commission + reimb,
+      margin: revenue ? (gross / revenue) * 100 : 0,
+      avgJob: won.length ? revenue / won.length : 0,
+    };
+  }).sort((a2, b2) => b2.revenue - a2.revenue), [jobs, users]);
+
+  const sourceRows = useMemo(() => {
+    const map = {};
+    scoped.forEach((j) => {
+      const k = j.leadSource || "Unattributed";
+      if (!map[k]) map[k] = { source: k, leads: 0, won: 0, revenue: 0 };
+      map[k].leads++;
+      if (WON_STAGES.includes(j.stageId)) { map[k].won++; map[k].revenue += computeCapOut(j).contract; }
+    });
+    return Object.values(map).sort((a2, b2) => b2.revenue - a2.revenue || b2.leads - a2.leads);
+  }, [scoped]);
+
+  const commissionRows = useMemo(() => scoped
+    .filter((j) => WON_STAGES.includes(j.stageId))
+    .map((j) => ({ job: j, cap: computeCapOut(j) }))
+    .sort((a2, b2) => b2.cap.payout - a2.cap.payout), [scoped]);
+
+  const Stat = ({ label, value, sub, tone }) => (
+    <Card pad={14}>
+      <div style={{ fontSize: 19, fontWeight: 800, color: tone || S.ink }}>{value}</div>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: S.ink, marginTop: 3 }}>{label}</div>
+      {sub && <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2 }}>{sub}</div>}
+    </Card>
+  );
+
+  const exportCommission = () => {
+    const rows = [
+      [`Commission report — ${scope === "company" ? "Company-wide" : scope}`],
+      [`Generated ${new Date().toLocaleDateString()}`], [],
+      ["Job", "Address", "Rep", "Stage", "Contract", "COGS", "Gross profit", "Margin %", "Structure", "Commission", "Reimbursements", "Total payout"],
+      ...commissionRows.map(({ job, cap }) => [
+        job.name, job.address, job.assignee,
+        (stages.find((x) => x.id === job.stageId) || {}).name || "",
+        cap.contract.toFixed(2), cap.cogs.toFixed(2), cap.gross.toFixed(2),
+        cap.grossMargin.toFixed(2), cap.structure,
+        cap.commission.toFixed(2), cap.reimbTotal.toFixed(2), cap.payout.toFixed(2),
+      ]),
+      [],
+      ["TOTALS", "", "", "",
+        stat.revenue.toFixed(2), stat.cogs.toFixed(2), stat.gross.toFixed(2),
+        stat.margin.toFixed(2), "",
+        stat.commission.toFixed(2), stat.reimb.toFixed(2), stat.payout.toFixed(2)],
+    ];
+    downloadCsv(`commission-${scope === "company" ? "company" : scope.split(" ")[0].toLowerCase()}.csv`, rows);
+    toast("Commission report exported");
+  };
 
   return (
     <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
       <SubHeader title="Performance" onBack={onBack} />
+
       <Card style={{ marginTop: 14 }}>
-        <CardTitle>Rep scoreboard</CardTitle>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 480 }}>
-            <thead>
-              <tr style={{ textAlign: "left", color: S.sub }}>
-                <th style={{ padding: "8px 6px" }}>Rep</th>
-                <th style={{ padding: "8px 6px" }}>Jobs</th>
-                <th style={{ padding: "8px 6px" }}>Signed</th>
-                <th style={{ padding: "8px 6px" }}>Signed value</th>
-                <th style={{ padding: "8px 6px" }}>Done</th>
-                <th style={{ padding: "8px 6px" }}>Commission</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reps.map((r) => (
-                <tr key={r.name} style={{ borderTop: `1px solid ${S.line}` }}>
-                  <td style={{ padding: "10px 6px", fontWeight: 700, color: S.ink }}>{r.name}</td>
-                  <td style={{ padding: "10px 6px" }}>{r.leads}</td>
-                  <td style={{ padding: "10px 6px" }}>{r.signed}</td>
-                  <td style={{ padding: "10px 6px", fontWeight: 700 }}>{money(r.signedValue)}</td>
-                  <td style={{ padding: "10px 6px" }}>{r.completed}</td>
-                  <td style={{ padding: "10px 6px" }}>{money(r.commission)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginBottom: 8 }}>VIEWING</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {isAdmin && (
+            <button onClick={() => setScope("company")} style={{
+              border: `1.5px solid ${scope === "company" ? "#1B6DE0" : S.line}`,
+              background: scope === "company" ? "#EAF2FD" : "#fff",
+              color: scope === "company" ? "#1B6DE0" : S.ink,
+              borderRadius: 999, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer",
+            }}>Company-wide</button>
+          )}
+          {users.filter((u) => u.role !== "crew" && (isAdmin || u.name === currentUser.name)).map((u) => (
+            <button key={u.id} onClick={() => setScope(u.name)} style={{
+              border: `1.5px solid ${scope === u.name ? "#1B6DE0" : S.line}`,
+              background: scope === u.name ? "#EAF2FD" : "#fff",
+              color: scope === u.name ? "#1B6DE0" : S.ink,
+              borderRadius: 999, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            }}>{u.name.split(" ")[0]}</button>
+          ))}
         </div>
       </Card>
-      <Card style={{ marginTop: 14 }}>
-        <CardTitle>Pipeline funnel</CardTitle>
-        {funnel.map((f) => (
-          <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
-            <div style={{ width: 150, fontSize: 12, color: S.sub, flexShrink: 0 }}>{f.name}</div>
-            <div style={{ flex: 1, height: 18, background: "#EEF1F4", borderRadius: 6, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${(f.count / max) * 100}%`, background: "#28373E", borderRadius: 6, minWidth: f.count ? 18 : 0 }} />
-            </div>
-            <div style={{ width: 22, fontSize: 13, fontWeight: 700, textAlign: "right" }}>{f.count}</div>
+
+      <div style={{ display: "flex", gap: 6, marginTop: 12, overflowX: "auto" }}>
+        {[["summary", "Summary"], ["commission", "Commission"], isAdmin && ["reps", "By rep"], ["sources", "Lead sources"], ["pipeline", "Pipeline"]]
+          .filter(Boolean).map(([id, label]) => (
+            <button key={id} onClick={() => setTab(id)} style={{
+              border: "none", background: tab === id ? "#28373E" : "#fff",
+              color: tab === id ? "#fff" : S.ink, borderRadius: 999,
+              padding: "9px 15px", fontSize: 13, fontWeight: 700, cursor: "pointer",
+              whiteSpace: "nowrap", flexShrink: 0,
+            }}>{label}</button>
+          ))}
+      </div>
+
+      {tab === "summary" && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <Stat label="Signed revenue" value={money(stat.revenue)} sub={`${stat.won} jobs won`} />
+            <Stat label="Gross profit" value={money(stat.gross)} sub={`${pct1(stat.margin)} margin`} tone="#177245" />
+            <Stat label="Close rate" value={pct1(stat.closeRate)} sub={`${stat.won} won / ${stat.lost} lost`} />
+            <Stat label="Average job" value={money(stat.avgJob)} sub="Signed jobs only" />
+            <Stat label="Open pipeline" value={money(stat.openValue)} sub={`${stat.open} active jobs`} />
+            <Stat label="Receivable" value={money(stat.ar)} sub={`${money(stat.collected)} collected`} tone={stat.ar > 0 ? "#B42318" : undefined} />
           </div>
-        ))}
-      </Card>
-      <Card style={{ marginTop: 14 }}>
-        <CardTitle>Lead sources</CardTitle>
-        {LEAD_SOURCES.map((src) => {
-          const c = jobs.filter((j) => j.leadSource === src).length;
-          if (!c) return null;
-          return <KV key={src} k={src} v={`${c} lead${c === 1 ? "" : "s"}`} />;
-        })}
-      </Card>
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle>Job mix</CardTitle>
+            <KV k="Insurance" v={`${stat.insurance} job${stat.insurance === 1 ? "" : "s"}`} />
+            <KV k="Retail" v={`${stat.retail} job${stat.retail === 1 ? "" : "s"}`} />
+            <KV k="Completed" v={String(stat.done)} />
+            <KV k="Lost" v={String(stat.lost)} />
+            <KV k="Unqualified" v={String(stat.unq)} />
+          </Card>
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle>Reviews</CardTitle>
+            <KV k="Requests sent" v={String(stat.reviewsSent)} />
+            <KV k="Reviews posted" v={String(stat.reviews)} />
+            <KV k="Conversion" v={stat.reviewsSent ? pct1((stat.reviews / stat.reviewsSent) * 100) : "—"} />
+          </Card>
+        </div>
+      )}
+
+      {tab === "commission" && (
+        <div style={{ marginTop: 12 }}>
+          <Card>
+            <CardTitle right={<Btn kind="ghost" small onClick={exportCommission}><Download size={13} /> CSV</Btn>}>
+              {scope === "company" ? "All reps combined" : scope}
+            </CardTitle>
+            <KV k="Jobs included" v={String(commissionRows.length)} />
+            <KV k="Contract revenue" v={money(stat.revenue)} />
+            <KV k="Total COGS" v={money(stat.cogs)} />
+            <KV k="Gross profit" v={money(stat.gross)} strong />
+            <KV k="Gross margin" v={pct1(stat.margin)} />
+            <div style={{ height: 1, background: S.line, margin: "10px 0" }} />
+            <KV k="Commission" v={money(stat.commission)} strong />
+            <KV k="Reimbursements" v={money(stat.reimb)} />
+            <div style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              background: "#EAF2FD", borderRadius: 10, padding: "12px 14px", marginTop: 10,
+            }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: "#28373E" }}>Total payout</span>
+              <span style={{ fontSize: 19, fontWeight: 800, color: "#1B6DE0" }}>{money(stat.payout)}</span>
+            </div>
+            {isAdmin && <KV k="Net to company" v={money(stat.netCo)} strong />}
+          </Card>
+
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, margin: "16px 0 8px" }}>PER JOB</div>
+          {commissionRows.map(({ job, cap }) => (
+            <Card key={job.id} pad={15} style={{ marginTop: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 700 }}>{job.name}</div>
+                  <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>{job.address}</div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: "#1B6DE0" }}>{money(cap.payout)}</div>
+                  <div style={{ fontSize: 11, color: S.sub }}>payout</div>
+                </div>
+              </div>
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${S.line}` }}>
+                <KV k="Contract" v={money(cap.contract)} />
+                <KV k="Gross profit" v={`${money(cap.gross)} · ${pct1(cap.grossMargin)}`} />
+                <KV k="Commission" v={money(cap.commission)} />
+                <KV k="Reimbursements" v={money(cap.reimbTotal)} />
+              </div>
+              {scope === "company" && (
+                <div style={{ marginTop: 8 }}><Chip tone="gray">{job.assignee}</Chip></div>
+              )}
+            </Card>
+          ))}
+          {commissionRows.length === 0 && (
+            <Card style={{ marginTop: 10 }}><div style={{ fontSize: 14, color: S.sub }}>No signed jobs in this view yet.</div></Card>
+          )}
+        </div>
+      )}
+
+      {tab === "reps" && isAdmin && (
+        <div style={{ marginTop: 12 }}>
+          {reps.map((r, i) => (
+            <Card key={r.name} pad={15} style={{ marginTop: i ? 10 : 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>{r.name}</div>
+                <div style={{ fontSize: 15, fontWeight: 800 }}>{money(r.revenue)}</div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 12 }}>
+                {[["Jobs", r.leads], ["Won", r.won], ["Close", pct1(r.closeRate)],
+                  ["Gross", money(r.gross)], ["Margin", pct1(r.margin)], ["Avg job", money(r.avgJob)]].map(([l, v]) => (
+                  <div key={l}>
+                    <div style={{ fontSize: 13.5, fontWeight: 800, color: S.ink }}>{v}</div>
+                    <div style={{ fontSize: 11, color: S.sub }}>{l}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{
+                display: "flex", justifyContent: "space-between", marginTop: 12, paddingTop: 10,
+                borderTop: `1px solid ${S.line}`,
+              }}>
+                <span style={{ fontSize: 13, color: S.sub }}>Commission {money(r.commission)} + reimb {money(r.reimb)}</span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: "#1B6DE0" }}>{money(r.payout)}</span>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {tab === "sources" && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle>Lead source performance</CardTitle>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 380 }}>
+              <thead>
+                <tr style={{ textAlign: "left", color: S.sub }}>
+                  <th style={{ padding: "8px 6px" }}>Source</th>
+                  <th style={{ padding: "8px 6px" }}>Leads</th>
+                  <th style={{ padding: "8px 6px" }}>Won</th>
+                  <th style={{ padding: "8px 6px" }}>Close</th>
+                  <th style={{ padding: "8px 6px" }}>Revenue</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sourceRows.map((r) => (
+                  <tr key={r.source} style={{ borderTop: `1px solid ${S.line}` }}>
+                    <td style={{ padding: "10px 6px", fontWeight: 700 }}>{r.source}</td>
+                    <td style={{ padding: "10px 6px" }}>{r.leads}</td>
+                    <td style={{ padding: "10px 6px" }}>{r.won}</td>
+                    <td style={{ padding: "10px 6px" }}>{r.leads ? pct1((r.won / r.leads) * 100) : "—"}</td>
+                    <td style={{ padding: "10px 6px", fontWeight: 700 }}>{money(r.revenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {tab === "pipeline" && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle>Stage distribution</CardTitle>
+          {stages.map((st) => {
+            const inStage = scoped.filter((j) => j.stageId === st.id);
+            const max = Math.max(1, ...stages.map((x) => scoped.filter((j) => j.stageId === x.id).length));
+            return (
+              <div key={st.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
+                <div style={{ width: 140, fontSize: 12, color: S.sub, flexShrink: 0 }}>{st.name}</div>
+                <div style={{ flex: 1, height: 18, background: "#EEF1F4", borderRadius: 6, overflow: "hidden" }}>
+                  <div style={{
+                    height: "100%", width: `${(inStage.length / max) * 100}%`,
+                    background: DEAD_STAGES.includes(st.id) ? "#B42318" : WON_STAGES.includes(st.id) ? "#177245" : "#28373E",
+                    borderRadius: 6, minWidth: inStage.length ? 18 : 0,
+                  }} />
+                </div>
+                <div style={{ width: 28, fontSize: 13, fontWeight: 700, textAlign: "right" }}>{inStage.length}</div>
+              </div>
+            );
+          })}
+        </Card>
+      )}
     </div>
   );
 }
@@ -2590,12 +2999,13 @@ const pill = {
 const JOB_TABS = [
   ["overview", "Overview"], ["checklist", "Checklist"], ["measure", "Measurements"],
   ["materials", "Materials"], ["estimate", "Estimate"], ["contract", "Contract"],
-  ["report", "Report"], ["photos", "Photos"], ["financials", "Financials"],
+  ["report", "Report"], ["messages", "Messages"],
+  ["photos", "Photos"], ["financials", "Financials"],
   ["payments", "Payments"], ["invoice", "Invoice"], ["workorder", "Work order"],
   ["tasks", "Tasks"], ["files", "Files"], ["portal", "Portal"],
 ];
 
-function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true }) {
+function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} } }) {
   const [tab, setTab] = useState("overview");
   const MONEY_TABS = ["estimate", "contract", "financials", "payments", "invoice"];
   const visibleTabs = JOB_TABS.filter(([id]) => showMoney || !MONEY_TABS.includes(id));
@@ -2645,11 +3055,14 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
         {tab === "estimate" && <TabEstimate job={job} brand={brand} mut={mut} toast={toast} />}
         {tab === "contract" && <TabContract job={job} brand={brand} mut={mut} toast={toast} />}
         {tab === "report" && <TabReport job={job} brand={brand} juris={juris} />}
+        {tab === "messages" && <TabMessages job={job} mut={mut} toast={toast} brand={brand}
+          templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} />}
         {tab === "photos" && <TabPhotos job={job} mut={mut} toast={toast} />}
         {tab === "financials" && <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} />}
         {tab === "payments" && <TabPayments job={job} mut={mut} toast={toast} />}
         {tab === "invoice" && <TabInvoice job={job} brand={brand} toast={toast} />}
-        {tab === "workorder" && <TabWorkOrder job={job} brand={brand} toast={toast} />}
+        {tab === "workorder" && <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
+          crews={crews} templates={templates} currentUser={currentUser} />} brand={brand} toast={toast} />}
         {tab === "tasks" && <TabTasks job={job} mut={mut} />}
         {tab === "files" && <TabFiles job={job} mut={mut} toast={toast} />}
         {tab === "portal" && <TabPortal job={job} brand={brand} mut={mut} toast={toast} />}
@@ -3353,6 +3766,155 @@ const SHOT_LIST = [
   "Granule loss close-up", "Hail impact w/ chalk circle", "Wind-creased tabs",
   "Flashing at walls / chimney", "Pipe boots", "Gutters — granules", "Attic — decking underside",
 ];
+/* ================================================================
+   MESSAGES — send email or SMS to the customer or crew from the job,
+   with the thread kept on the job record.
+   ================================================================ */
+function TabMessages({ job, mut, toast, brand, templates, crews, integrations, currentUser }) {
+  const [compose, setCompose] = useState(null); // 'email' | 'sms'
+  const [to, setTo] = useState("Customer");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const crew = crews.find((c) => c.id === job.crewId) || null;
+  const ctx = templateContext(job, brand, crew);
+  const thread = job.messages || [];
+
+  const consentOk = (channel, audience) => {
+    if (audience === "Crew") return true;
+    return channel === "sms" ? job.consent.sms.granted : job.consent.email.granted;
+  };
+  const recipient = (audience) => {
+    if (audience === "Crew") return crew ? (compose === "sms" ? crew.phone : crew.email) : "";
+    return compose === "sms" ? job.phone : job.email;
+  };
+
+  const openCompose = (kind) => {
+    setCompose(kind); setTo("Customer"); setSubject(""); setBody("");
+  };
+  const applyTemplate = (t) => {
+    setSubject(mergeTemplate(t.subject || "", ctx));
+    setBody(mergeTemplate(t.body, ctx));
+    setTo(t.audience);
+  };
+  const send = () => {
+    const audience = to;
+    if (!consentOk(compose, audience)) { toast("No consent on file — cannot send"); return; }
+    const addr = recipient(audience);
+    if (!addr) { toast(audience === "Crew" ? "Assign a crew first" : "No contact on file"); return; }
+    const live = compose === "sms" ? integrations.sms.connected : integrations.gmail.connected;
+    mut((j) => ({
+      ...j,
+      messages: [...(j.messages || []), {
+        id: uid("msg"), kind: compose, audience, to: addr,
+        subject: compose === "email" ? subject : "",
+        body, at: nowStamp(), by: currentUser.name,
+        status: live ? "Sent" : "Queued — no provider connected",
+      }],
+    }));
+    setCompose(null);
+    toast(live ? "Message sent" : "Saved to thread — connect a provider to deliver");
+  };
+
+  const available = templates.filter((t) => t.kind === compose);
+
+  return (
+    <>
+      <Card>
+        <CardTitle>Send a message</CardTitle>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn kind="ghost" style={{ flex: 1 }} onClick={() => openCompose("email")}><Mail size={15} /> Email</Btn>
+          <Btn kind="ghost" style={{ flex: 1 }} onClick={() => openCompose("sms")}><MessageCircle size={15} /> Text</Btn>
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+          <Chip tone={job.consent.email.granted ? "green" : "red"}>
+            Email {job.consent.email.granted ? "consent" : "no consent"}
+          </Chip>
+          <Chip tone={job.consent.sms.granted ? "green" : "red"}>
+            SMS {job.consent.sms.granted ? "consent" : "no consent"}
+          </Chip>
+          {!integrations.gmail.connected && <Chip tone="amber">Gmail not connected</Chip>}
+          {!integrations.sms.connected && <Chip tone="amber">SMS not connected</Chip>}
+        </div>
+        {(!job.consent.email.granted || !job.consent.sms.granted) && (
+          <div style={{ fontSize: 12.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
+            Sending is blocked on any channel without consent on file. Consent is captured at intake and can be
+            updated from the customer's contact record.
+          </div>
+        )}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={<Chip tone="blue">{thread.length}</Chip>}>Thread</CardTitle>
+        {thread.length === 0 && <div style={{ fontSize: 14, color: S.sub }}>Nothing sent on this job yet.</div>}
+        {thread.slice().reverse().map((m) => (
+          <div key={m.id} style={{ padding: "12px 0", borderTop: `1px solid ${S.line}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 7, alignItems: "center", minWidth: 0 }}>
+                {m.kind === "email" ? <Mail size={14} color="#1B6DE0" /> : <MessageCircle size={14} color="#1B6DE0" />}
+                <span style={{ fontSize: 13, fontWeight: 700, color: S.ink }}>{m.audience}</span>
+                <span style={{ fontSize: 12, color: S.sub, overflow: "hidden", textOverflow: "ellipsis" }}>{m.to}</span>
+              </div>
+              <Chip tone={m.status === "Sent" ? "green" : "amber"}>{m.status === "Sent" ? "Sent" : "Queued"}</Chip>
+            </div>
+            {m.subject && <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 6 }}>{m.subject}</div>}
+            <div style={{ fontSize: 13, color: S.sub, marginTop: 4, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.body}</div>
+            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 6 }}>{m.at} · {m.by}</div>
+          </div>
+        ))}
+      </Card>
+
+      <Sheet open={!!compose} onClose={() => setCompose(null)} wide
+        title={compose === "email" ? "New email" : "New text"}
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setCompose(null)}>Cancel</Btn>
+            <Btn style={{ flex: 2 }} disabled={!body.trim() || !consentOk(compose, to)} onClick={send}>
+              <Send size={14} /> {consentOk(compose, to) ? "Send" : "No consent"}
+            </Btn>
+          </div>
+        }>
+        <Field label="To">
+          <select style={selStyle} value={to} onChange={(e) => setTo(e.target.value)}>
+            <option>Customer</option><option>Crew</option>
+          </select>
+        </Field>
+        <div style={{ fontSize: 13, color: S.sub, marginTop: -8, marginBottom: 14 }}>
+          {recipient(to) || (to === "Crew" ? "No crew assigned to this job yet." : "No contact on file.")}
+        </div>
+        {!consentOk(compose, to) && (
+          <Callout label="Blocked" tone="red">
+            This customer has not given {compose === "sms" ? "text" : "email"} consent. Sending anyway is a legal
+            exposure, so the send button stays disabled.
+          </Callout>
+        )}
+        {available.length > 0 && (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "#28373E", margin: "8px 0" }}>START FROM A TEMPLATE</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
+              {available.map((t) => (
+                <button key={t.id} type="button" onClick={() => applyTemplate(t)} style={{
+                  border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
+                  padding: "7px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", color: S.ink,
+                }}>{t.name} <span style={{ color: S.sub }}>· {t.audience}</span></button>
+              ))}
+            </div>
+          </>
+        )}
+        {compose === "email" && (
+          <Field label="Subject"><input style={inputStyle} value={subject} onChange={(e) => setSubject(e.target.value)} /></Field>
+        )}
+        <Field label="Message">
+          <textarea style={{ ...inputStyle, minHeight: 180, resize: "vertical", fontFamily: "inherit" }}
+            value={body} onChange={(e) => setBody(e.target.value)} />
+        </Field>
+        {compose === "sms" && (
+          <div style={{ fontSize: 12, color: S.sub }}>{body.length} characters · {Math.max(1, Math.ceil(body.length / 160))} segment(s)</div>
+        )}
+      </Sheet>
+    </>
+  );
+}
+
 function TabPhotos({ job, mut, toast }) {
   const [custom, setCustom] = useState("");
   const [geo, setGeo] = useState(null);       // last fix
@@ -3780,52 +4342,163 @@ function TabInvoice({ job, brand, toast }) {
 }
 
 /* ---------- Work order — crew view, no pricing ---------- */
-function TabWorkOrder({ job, brand, toast }) {
-  const items = job.estimate.items;
+function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser }) {
+  const [picking, setPicking] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [notes, setNotes] = useState(job.workOrder ? job.workOrder.notes : "");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const crew = crews.find((c) => c.id === job.crewId) || null;
+  const m = job.measurements;
+  const mats = generateRoofingMaterials(m);
+  const wo = job.workOrder || { number: "", sentAt: null, status: "Draft", notes: "" };
+
+  const assign = (c) => {
+    mut((j) => ({ ...j, crewId: c.id }));
+    setPicking(false);
+    toast(`${c.name} assigned`);
+  };
+  const openSend = () => {
+    const ctx = templateContext(job, brand, crew);
+    const t = templates.find((x) => x.kind === "email" && x.audience === "Crew");
+    setSubject(t ? mergeTemplate(t.subject, ctx) : `${brand.company} — work order for ${job.address}`);
+    setBody(t ? mergeTemplate(t.body, ctx) : "");
+    setSending(true);
+  };
+  const send = () => {
+    const stamp = nowStamp();
+    mut((j) => ({
+      ...j,
+      workOrder: { ...wo, number: wo.number || `WO-${String(Math.floor(Math.random() * 900) + 100)}`, sentAt: stamp, status: "Sent", notes },
+      messages: [...(j.messages || []), {
+        id: uid("msg"), kind: "email", audience: "Crew", to: crew.email,
+        subject, body, at: stamp, by: currentUser.name, status: "Queued — no provider connected",
+      }],
+    }));
+    setSending(false);
+    toast("Work order sent to crew");
+  };
+
   return (
     <>
       <Card>
-        <CardTitle right={<Chip tone="slate">Crew copy — no pricing</Chip>}>Work order</CardTitle>
-        <KV k="Job" v={job.name} />
-        <KV k="Address" v={job.address} />
-        <KV k="Scheduled" v={job.schedDate || "Not scheduled"} />
-        <KV k="Contact on site" v={`${job.name} · ${job.phone}`} />
-      </Card>
-      <Card style={{ marginTop: 12 }}>
-        <CardTitle>Scope for crew</CardTitle>
-        {items.length === 0 ? (
-          <div style={{ fontSize: 14, color: S.sub }}>Scope appears once the estimate has line items.</div>
-        ) : (
-          items.map((it) => (
-            <div key={it.id} style={{ display: "flex", gap: 10, padding: "9px 0", borderBottom: `1px solid ${S.line}` }}>
-              <CheckCircle2 size={17} color="#C7CBD1" style={{ flexShrink: 0, marginTop: 1 }} />
-              <div style={{ fontSize: 14 }}>
-                <b>{it.desc}</b> <span style={{ color: S.sub }}>— {it.qty} {it.unit}</span>
-              </div>
+        <CardTitle right={wo.status === "Sent" ? <Chip tone="green">Sent {wo.sentAt}</Chip> : <Chip tone="gray">Draft</Chip>}>
+          Crew assignment
+        </CardTitle>
+        {crew ? (
+          <>
+            <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{crew.name}</div>
+            <div style={{ fontSize: 13, color: S.sub, marginTop: 3 }}>{crew.contact}</div>
+            <div style={{ display: "flex", gap: 14, marginTop: 8, flexWrap: "wrap", fontSize: 12.5, color: S.sub }}>
+              {crew.phone && <span style={{ display: "flex", gap: 5, alignItems: "center" }}><Phone size={12} /> {crew.phone}</span>}
+              {crew.email && <span style={{ display: "flex", gap: 5, alignItems: "center" }}><Mail size={12} /> {crew.email}</span>}
             </div>
-          ))
-        )}
-        {job.estimate.scope && (
-          <div style={{ fontSize: 13, color: S.sub, marginTop: 12, lineHeight: 1.6 }}>{job.estimate.scope}</div>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => setPicking(true)}>Change crew</Btn>
+              <Btn small style={{ flex: 2 }} disabled={!crew.email} onClick={openSend}>
+                <Send size={13} /> {wo.status === "Sent" ? "Resend work order" : "Send work order"}
+              </Btn>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.5 }}>
+              No crew assigned. Pick one to dispatch this work order.
+            </div>
+            <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => setPicking(true)}>
+              <HardHat size={15} /> Select crew
+            </Btn>
+          </>
         )}
       </Card>
+
       <Card style={{ marginTop: 12 }}>
-        <CardTitle>Site notes for crew</CardTitle>
-        <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.7 }}>
-          Protect landscaping and AC unit before tear-off. Magnetic sweep of lawn and drive on completion. Report any
-          decking or concealed conditions to the office with photos <b>before</b> covering — do not proceed on rot without
-          an approved change order.
+        <CardTitle right={<Chip tone="gray">No pricing</Chip>}>Work order — {wo.number || "unassigned"}</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
+          Everything the crew needs and nothing they don't. Pricing never appears on this document.
+        </div>
+        <KV k="Customer" v={job.name} />
+        <KV k="Address" v={job.address} />
+        <KV k="Customer phone" v={job.phone} />
+        <KV k="Scheduled" v={job.schedDate || "Not scheduled"} />
+        <KV k="Squares" v={m.squares || "—"} />
+        <KV k="Pitch" v={m.pitch || "—"} />
+        <KV k="Layers to remove" v={job.checklist.layers || "—"} />
+        <KV k="Decking" v={job.checklist.deckingType || "—"} />
+        <a href={directionsLink(job.address)} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+          <Btn kind="ghost" small style={{ width: "100%", marginTop: 10 }}><MapPin size={13} /> Directions to site</Btn>
+        </a>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Scope of work</CardTitle>
+        <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+          {job.estimate.scope || "No scope written yet — build the estimate first."}
         </div>
       </Card>
-      <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-        <Btn kind="ghost" style={{ flex: 1 }} onClick={() => toast("Work order PDF generated")}><Printer size={15} /> Print</Btn>
-        <Btn style={{ flex: 1 }} onClick={() => toast("Work order sent to crew lead")}><Send size={15} /> Send to crew</Btn>
-      </div>
+
+      {mats && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle>Materials on site</CardTitle>
+          {mats.map((x, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+              <span style={{ fontSize: 13, color: S.ink }}>{x.item}</span>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>{x.qty} {x.unit}</span>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Notes for the crew</CardTitle>
+        <textarea style={{ ...inputStyle, minHeight: 110, resize: "vertical", fontFamily: "inherit" }}
+          placeholder="Access notes, dog on site, where to stage the dumpster, anything the crew needs to know before they roll."
+          value={notes} onChange={(e) => setNotes(e.target.value)} />
+        <Btn kind="ghost" small style={{ marginTop: 10 }}
+          onClick={() => { mut((j) => ({ ...j, workOrder: { ...wo, notes } })); toast("Notes saved"); }}>
+          Save notes
+        </Btn>
+      </Card>
+
+      <Sheet open={picking} onClose={() => setPicking(false)} title="Select crew">
+        {crews.filter((c) => c.active).map((c, i) => (
+          <button key={c.id} onClick={() => assign(c)} style={{
+            width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer",
+            padding: "13px 4px", borderTop: i ? `1px solid ${S.line}` : "none",
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{c.name}</div>
+            <div style={{ fontSize: 12.5, color: S.sub, marginTop: 3 }}>{c.contact} · {c.phone}</div>
+            <div style={{ display: "flex", gap: 6, marginTop: 7, flexWrap: "wrap" }}>
+              {c.trades.map((t) => <Chip key={t} tone="gray">{t}</Chip>)}
+            </div>
+          </button>
+        ))}
+        {crews.filter((c) => c.active).length === 0 && (
+          <div style={{ fontSize: 14, color: S.sub }}>No active crews. Add one under More → Crews.</div>
+        )}
+      </Sheet>
+
+      <Sheet open={sending} onClose={() => setSending(false)} wide title="Email work order"
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setSending(false)}>Cancel</Btn>
+            <Btn style={{ flex: 2 }} disabled={!body.trim()} onClick={send}><Send size={14} /> Send</Btn>
+          </div>
+        }>
+        <Field label="To"><input style={inputStyle} value={crew ? crew.email : ""} readOnly /></Field>
+        <Field label="Subject"><input style={inputStyle} value={subject} onChange={(e) => setSubject(e.target.value)} /></Field>
+        <Field label="Message">
+          <textarea style={{ ...inputStyle, minHeight: 200, resize: "vertical", fontFamily: "inherit" }}
+            value={body} onChange={(e) => setBody(e.target.value)} />
+        </Field>
+        <Callout label="What gets attached">
+          The work order above — scope, measurements, materials, site notes, and directions. No pricing.
+        </Callout>
+      </Sheet>
     </>
   );
 }
 
-/* ---------- Tasks ---------- */
 function TabTasks({ job, mut }) {
   const [txt, setTxt] = useState("");
   return (
@@ -4683,6 +5356,819 @@ function BrandingEditor({ brand, setBrand, onBack }) {
 /* ================================================================
    TEAM & SEATS — admin adds users, each active seat is a login
    ================================================================ */
+/* ================================================================
+   COMPANY DOCUMENTS — company-wide file manager, not job files.
+   ================================================================ */
+function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
+  const [cat, setCat] = useState("All");
+  const [q, setQ] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [f, setF] = useState({ name: "", cat: DOC_CATEGORIES[0], expires: "" });
+  const fileRef = useRef(null);
+  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+
+  const today = new Date().toISOString().slice(0, 10);
+  const soon = new Date(Date.now() + 60 * 864e5).toISOString().slice(0, 10);
+  const expiring = docs.filter((d) => d.expires && d.expires <= soon);
+
+  const list = docs.filter((d) => {
+    if (cat !== "All" && d.cat !== cat) return false;
+    if (q && !(d.name + d.cat).toLowerCase().includes(q.toLowerCase())) return false;
+    return true;
+  }).sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.at.localeCompare(a.at));
+
+  const onFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setF({ name: file.name, cat: f.cat, expires: "" });
+    setAdding(true);
+    e.target.value = "";
+  };
+  const save = () => {
+    setDocs([...docs, {
+      id: uid("d"), name: f.name.trim(), cat: f.cat, size: "—",
+      at: today, by: currentUser.name, pinned: false, expires: f.expires || null,
+    }]);
+    setAdding(false); setF({ name: "", cat: DOC_CATEGORIES[0], expires: "" });
+    toast("Document added");
+  };
+
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <input ref={fileRef} type="file" onChange={onFile} style={{ display: "none" }} />
+      <SubHeader title="Documents" onBack={onBack}
+        right={canEdit && <Btn small onClick={() => fileRef.current && fileRef.current.click()}><Upload size={14} /> Upload</Btn>} />
+
+      {expiring.length > 0 && (
+        <Card style={{ marginTop: 14, borderLeft: "3px solid #92600A" }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: "#92600A", marginBottom: 6 }}>Expiring soon</div>
+          {expiring.map((d) => (
+            <div key={d.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "6px 0" }}>
+              <span style={{ fontSize: 13, color: S.ink }}>{d.name}</span>
+              <Chip tone={d.expires <= today ? "red" : "amber"}>{d.expires <= today ? "Expired" : d.expires}</Chip>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      <div style={{ marginTop: 14 }}>
+        <input style={inputStyle} placeholder="Search documents" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+      <div style={{ display: "flex", gap: 6, marginTop: 10, overflowX: "auto", paddingBottom: 4 }}>
+        {["All", ...DOC_CATEGORIES].map((c) => (
+          <button key={c} onClick={() => setCat(c)} style={{
+            border: `1.5px solid ${cat === c ? "#1B6DE0" : S.line}`,
+            background: cat === c ? "#EAF2FD" : "#fff", color: cat === c ? "#1B6DE0" : S.ink,
+            borderRadius: 999, padding: "7px 13px", fontSize: 13, fontWeight: 600,
+            cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+          }}>{c}</button>
+        ))}
+      </div>
+
+      {list.map((d) => (
+        <Card key={d.id} pad={15} style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <FileText size={20} color="#1B6DE0" style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{d.name}</div>
+              <div style={{ fontSize: 12, color: S.sub, marginTop: 3 }}>
+                {d.cat} · {d.size} · added {d.at} by {d.by.split(" ")[0]}
+              </div>
+              <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                {d.pinned && <Chip tone="blue">Pinned</Chip>}
+                {d.expires && <Chip tone={d.expires <= today ? "red" : d.expires <= soon ? "amber" : "gray"}>Expires {d.expires}</Chip>}
+              </div>
+            </div>
+          </div>
+          {canEdit && (
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <Btn kind="ghost" small style={{ flex: 1 }}
+                onClick={() => setDocs(docs.map((x) => (x.id === d.id ? { ...x, pinned: !x.pinned } : x)))}>
+                {d.pinned ? "Unpin" : "Pin"}
+              </Btn>
+              <Btn kind="danger" small onClick={() => { setDocs(docs.filter((x) => x.id !== d.id)); toast("Document removed"); }}>
+                <Trash2 size={13} />
+              </Btn>
+            </div>
+          )}
+        </Card>
+      ))}
+      {list.length === 0 && <Card style={{ marginTop: 10 }}><div style={{ fontSize: 14, color: S.sub }}>No documents here yet.</div></Card>}
+
+      <Sheet open={adding} onClose={() => setAdding(false)} title="Add document"
+        footer={<Btn style={{ width: "100%" }} disabled={!f.name.trim()} onClick={save}>Save document</Btn>}>
+        <Field label="File name"><input style={inputStyle} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+        <Field label="Category">
+          <select style={selStyle} value={f.cat} onChange={(e) => setF({ ...f, cat: e.target.value })}>
+            {DOC_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+          </select>
+        </Field>
+        <Field label="Expiration date" hint="Optional. Certificates and licenses get an expiry warning 60 days out.">
+          <input style={inputStyle} type="date" value={f.expires} onChange={(e) => setF({ ...f, expires: e.target.value })} />
+        </Field>
+      </Sheet>
+    </div>
+  );
+}
+
+/* ================================================================
+   MATERIAL PRICE LIST — CSV import, margin visible per line.
+   ================================================================ */
+function PriceListManager({ list, setList, currentUser, onBack, toast }) {
+  const [q, setQ] = useState("");
+  const [importing, setImporting] = useState(null);
+  const fileRef = useRef(null);
+  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+
+  const parseCsv = (text) => {
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    if (!lines.length) return { rows: [], error: "File is empty." };
+    const split = (l) => {
+      const out = []; let cur = "", inQ = false;
+      for (let i = 0; i < l.length; i++) {
+        const ch = l[i];
+        if (ch === '"') { if (inQ && l[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+        else if (ch === "," && !inQ) { out.push(cur); cur = ""; }
+        else cur += ch;
+      }
+      out.push(cur); return out.map((x) => x.trim());
+    };
+    const head = split(lines[0]).map((h) => h.toLowerCase().replace(/[^a-z]/g, ""));
+    const idx = (names) => { for (const n of names) { const k = head.indexOf(n); if (k >= 0) return k; } return -1; };
+    const cItem = idx(["item", "description", "product", "name"]);
+    if (cItem < 0) return { rows: [], error: "No item/description column found. Expected a header row with at least an item column." };
+    const cSku = idx(["sku", "code", "itemnumber", "partnumber"]);
+    const cUnit = idx(["unit", "uom"]);
+    const cCost = idx(["cost", "ourcost", "unitcost"]);
+    const cPrice = idx(["price", "sellprice", "retail", "unitprice"]);
+    const cSup = idx(["supplier", "vendor"]);
+    const cCat = idx(["category", "type", "group"]);
+    const rows = lines.slice(1).map((l) => {
+      const c = split(l);
+      return {
+        id: uid("pl"),
+        sku: cSku >= 0 ? c[cSku] : "",
+        item: c[cItem] || "",
+        unit: cUnit >= 0 ? c[cUnit] : "EA",
+        cost: cCost >= 0 ? num(String(c[cCost]).replace(/[$,]/g, "")) : 0,
+        price: cPrice >= 0 ? num(String(c[cPrice]).replace(/[$,]/g, "")) : 0,
+        supplier: cSup >= 0 ? c[cSup] : "",
+        category: cCat >= 0 ? c[cCat] : "Uncategorized",
+      };
+    }).filter((r) => r.item);
+    return { rows, error: rows.length ? null : "No data rows found below the header." };
+  };
+
+  const onFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setImporting({ ...parseCsv(String(reader.result)), fileName: file.name, mode: "replace" });
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const filtered = list.filter((r) =>
+    !q || (r.item + r.sku + r.supplier + r.category).toLowerCase().includes(q.toLowerCase()));
+  const margin = (r) => (r.price > 0 ? ((r.price - r.cost) / r.price) * 100 : 0);
+
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onFile} style={{ display: "none" }} />
+      <SubHeader title="Price list" onBack={onBack}
+        right={canEdit && <Btn small onClick={() => fileRef.current && fileRef.current.click()}><Upload size={14} /> Import CSV</Btn>} />
+
+      <Card style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
+          Import a supplier price list as CSV. The header row is matched loosely — <b>item</b> is required, and
+          <b> sku, unit, cost, price, supplier, category</b> are picked up if present. Column order doesn't matter.
+        </div>
+        <div style={{ display: "flex", gap: 16, marginTop: 12 }}>
+          <div><div style={{ fontSize: 20, fontWeight: 800 }}>{list.length}</div><div style={{ fontSize: 12, color: S.sub }}>Line items</div></div>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 800 }}>
+              {list.length ? pct1(list.reduce((s2, r) => s2 + margin(r), 0) / list.length) : "—"}
+            </div>
+            <div style={{ fontSize: 12, color: S.sub }}>Average margin</div>
+          </div>
+        </div>
+        {list.length > 0 && (
+          <Btn kind="ghost" small style={{ marginTop: 12 }} onClick={() => {
+            downloadCsv("price-list.csv", [
+              ["sku", "item", "unit", "cost", "price", "supplier", "category"],
+              ...list.map((r) => [r.sku, r.item, r.unit, r.cost, r.price, r.supplier, r.category]),
+            ]);
+            toast("Price list exported");
+          }}><Download size={13} /> Export CSV</Btn>
+        )}
+      </Card>
+
+      <div style={{ marginTop: 14 }}>
+        <input style={inputStyle} placeholder="Search items, SKU, supplier" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+
+      {filtered.map((r) => (
+        <Card key={r.id} pad={14} style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{r.item}</div>
+              <div style={{ fontSize: 12, color: S.sub, marginTop: 3 }}>
+                {[r.sku, r.supplier, r.category].filter(Boolean).join(" · ")}
+              </div>
+            </div>
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800 }}>{money(r.price)}</div>
+              <div style={{ fontSize: 11.5, color: S.sub }}>per {r.unit}</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 14, marginTop: 9, paddingTop: 9, borderTop: `1px solid ${S.line}` }}>
+            <span style={{ fontSize: 12, color: S.sub }}>Cost <b style={{ color: S.ink }}>{money(r.cost)}</b></span>
+            <span style={{ fontSize: 12, color: S.sub }}>Margin <b style={{ color: margin(r) < 25 ? "#B42318" : "#177245" }}>{pct1(margin(r))}</b></span>
+          </div>
+        </Card>
+      ))}
+      {filtered.length === 0 && <Card style={{ marginTop: 10 }}><div style={{ fontSize: 14, color: S.sub }}>No items match.</div></Card>}
+
+      <Sheet open={!!importing} onClose={() => setImporting(null)} title="Import price list"
+        footer={importing && !importing.error && (
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={() => { setList([...list, ...importing.rows]); setImporting(null); toast(`${importing.rows.length} items appended`); }}>
+              Append
+            </Btn>
+            <Btn style={{ flex: 1 }} onClick={() => { setList(importing.rows); setImporting(null); toast(`Price list replaced — ${importing.rows.length} items`); }}>
+              Replace list
+            </Btn>
+          </div>
+        )}>
+        {importing && importing.error && <Callout label="Could not read that file" tone="red">{importing.error}</Callout>}
+        {importing && !importing.error && (
+          <>
+            <div style={{ fontSize: 14, color: S.ink, marginBottom: 4 }}>
+              <b>{importing.fileName}</b>
+            </div>
+            <div style={{ fontSize: 13, color: S.sub, marginBottom: 12 }}>
+              {importing.rows.length} rows parsed. First five shown — check the columns landed in the right place before importing.
+            </div>
+            {importing.rows.slice(0, 5).map((r) => (
+              <div key={r.id} style={{ padding: "9px 0", borderTop: `1px solid ${S.line}` }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{r.item}</div>
+                <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>
+                  {r.sku && `${r.sku} · `}cost {money(r.cost)} · price {money(r.price)} · per {r.unit}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </Sheet>
+    </div>
+  );
+}
+
+/* ================================================================
+   TEMPLATE MANAGER — email + SMS, customer + crew, with merge fields
+   ================================================================ */
+function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, brand }) {
+  const [kind, setKind] = useState("email");
+  const [aud, setAud] = useState("All");
+  const [editing, setEditing] = useState(null);
+  const [f, setF] = useState({ kind: "email", audience: "Customer", name: "", subject: "", body: "" });
+  const fileRef = useRef(null);
+  const bodyRef = useRef(null);
+  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+
+  const list = templates.filter((t) => t.kind === kind && (aud === "All" || t.audience === aud));
+  const open = (t) => { setEditing(t || "new"); setF(t ? { ...t } : { kind, audience: aud === "All" ? "Customer" : aud, name: "", subject: "", body: "" }); };
+  const save = () => {
+    if (editing === "new") setTemplates([...templates, { ...f, id: uid("t") }]);
+    else setTemplates(templates.map((t) => (t.id === editing.id ? { ...t, ...f } : t)));
+    setEditing(null); toast("Template saved");
+  };
+  const insertField = (token) => {
+    setF((p2) => ({ ...p2, body: (p2.body || "") + token }));
+  };
+  const onFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result);
+      const name = file.name.replace(/\.[^.]+$/, "");
+      const lines = text.split(/\r?\n/);
+      let subject = "", body = text;
+      const m = lines[0] && lines[0].match(/^subject\s*:\s*(.+)$/i);
+      if (m) { subject = m[1].trim(); body = lines.slice(1).join("\n").trim(); }
+      setEditing("new");
+      setF({ kind, audience: "Customer", name, subject, body });
+      toast("Template loaded — review and save");
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <input ref={fileRef} type="file" accept=".txt,.md,.html,text/plain" onChange={onFile} style={{ display: "none" }} />
+      <SubHeader title="Message templates" onBack={onBack}
+        right={canEdit && <Btn small onClick={() => open(null)}><Plus size={14} /> New</Btn>} />
+
+      <Card style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
+          Templates fill themselves in from the job when you send. Every SMS template to a customer must keep the
+          STOP opt-out line — it's a legal requirement, not a style choice.
+        </div>
+        {canEdit && (
+          <Btn kind="ghost" small style={{ marginTop: 12 }} onClick={() => fileRef.current && fileRef.current.click()}>
+            <Upload size={13} /> Upload a .txt template
+          </Btn>
+        )}
+      </Card>
+
+      <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
+        {[["email", "Email"], ["sms", "Text"]].map(([k, l]) => (
+          <button key={k} onClick={() => setKind(k)} style={{
+            flex: 1, border: `1.5px solid ${kind === k ? "#1B6DE0" : S.line}`,
+            background: kind === k ? "#EAF2FD" : "#fff", color: kind === k ? "#1B6DE0" : S.ink,
+            borderRadius: 10, padding: "10px 0", fontSize: 14, fontWeight: 700, cursor: "pointer",
+          }}>{l}</button>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+        {["All", "Customer", "Crew"].map((a) => (
+          <button key={a} onClick={() => setAud(a)} style={{
+            border: `1.5px solid ${aud === a ? "#1B6DE0" : S.line}`,
+            background: aud === a ? "#EAF2FD" : "#fff", color: aud === a ? "#1B6DE0" : S.ink,
+            borderRadius: 999, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+          }}>{a}</button>
+        ))}
+      </div>
+
+      {list.map((t) => (
+        <Card key={t.id} pad={15} style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{t.name}</div>
+              {t.subject && <div style={{ fontSize: 12.5, color: S.sub, marginTop: 3 }}>{t.subject}</div>}
+            </div>
+            <Chip tone={t.audience === "Crew" ? "slate" : "blue"}>{t.audience}</Chip>
+          </div>
+          <div style={{
+            fontSize: 12.5, color: S.sub, marginTop: 9, lineHeight: 1.5,
+            display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden",
+          }}>{t.body}</div>
+          {canEdit && (
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => open(t)}><Pencil size={13} /> Edit</Btn>
+              <Btn kind="danger" small onClick={() => { setTemplates(templates.filter((x) => x.id !== t.id)); toast("Template deleted"); }}>
+                <Trash2 size={13} />
+              </Btn>
+            </div>
+          )}
+        </Card>
+      ))}
+      {list.length === 0 && <Card style={{ marginTop: 10 }}><div style={{ fontSize: 14, color: S.sub }}>No templates in this group yet.</div></Card>}
+
+      <Sheet open={!!editing} onClose={() => setEditing(null)} wide
+        title={editing === "new" ? "New template" : "Edit template"}
+        footer={<Btn style={{ width: "100%" }} disabled={!f.name.trim() || !f.body.trim()} onClick={save}>Save template</Btn>}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Type">
+            <select style={selStyle} value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
+              <option value="email">Email</option><option value="sms">Text</option>
+            </select>
+          </Field>
+          <Field label="Audience">
+            <select style={selStyle} value={f.audience} onChange={(e) => setF({ ...f, audience: e.target.value })}>
+              <option>Customer</option><option>Crew</option>
+            </select>
+          </Field>
+        </div>
+        <Field label="Template name"><input style={inputStyle} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+        {f.kind === "email" && (
+          <Field label="Subject"><input style={inputStyle} value={f.subject} onChange={(e) => setF({ ...f, subject: e.target.value })} /></Field>
+        )}
+        <Field label="Message">
+          <textarea ref={bodyRef} style={{ ...inputStyle, minHeight: 200, resize: "vertical", fontFamily: "inherit" }}
+            value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} />
+        </Field>
+        {f.kind === "sms" && f.audience === "Customer" && !/stop/i.test(f.body) && (
+          <Callout label="Missing opt-out" tone="red">
+            Customer texts need a visible opt-out. Add "Reply STOP to opt out." before saving.
+          </Callout>
+        )}
+        {f.kind === "sms" && (
+          <div style={{ fontSize: 12, color: S.sub, marginBottom: 12 }}>
+            {f.body.length} characters — texts over 160 send as multiple segments.
+          </div>
+        )}
+        <div style={{ fontSize: 13, fontWeight: 800, color: "#28373E", marginBottom: 8 }}>INSERT A MERGE FIELD</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {MERGE_FIELDS.map(([token, label]) => (
+            <button key={token} type="button" title={label} onClick={() => insertField(token)} style={{
+              border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
+              padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#1B6DE0",
+            }}>{token}</button>
+          ))}
+        </div>
+      </Sheet>
+    </div>
+  );
+}
+
+/* ================================================================
+   CREWS — the directory work orders are dispatched to.
+   ================================================================ */
+function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
+  const [editing, setEditing] = useState(null);
+  const blank = { name: "", contact: "", phone: "", email: "", trades: [], active: true };
+  const [f, setF] = useState(blank);
+  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const TRADES = ["Roofing", "Siding", "Gutters", "Metal", "Flashing", "Windows", "Carpentry"];
+  const open = (c) => { setEditing(c || "new"); setF(c ? { ...c } : blank); };
+  const save = () => {
+    if (editing === "new") setCrews([...crews, { ...f, id: uid("c") }]);
+    else setCrews(crews.map((c) => (c.id === editing.id ? { ...c, ...f } : c)));
+    setEditing(null); toast("Crew saved");
+  };
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Crews" onBack={onBack}
+        right={canEdit && <Btn small onClick={() => open(null)}><Plus size={14} /> Add crew</Btn>} />
+      {crews.map((c) => {
+        const assigned = jobs.filter((j) => j.crewId === c.id).length;
+        return (
+          <Card key={c.id} pad={15} style={{ marginTop: 10, opacity: c.active ? 1 : 0.6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>{c.name}</div>
+                <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>{c.contact}</div>
+              </div>
+              {!c.active && <Chip tone="gray">Inactive</Chip>}
+            </div>
+            <div style={{ display: "flex", gap: 14, marginTop: 9, flexWrap: "wrap", fontSize: 12.5, color: S.sub }}>
+              {c.phone && <span style={{ display: "flex", gap: 5, alignItems: "center" }}><Phone size={12} /> {c.phone}</span>}
+              {c.email && <span style={{ display: "flex", gap: 5, alignItems: "center" }}><Mail size={12} /> {c.email}</span>}
+            </div>
+            <div style={{ display: "flex", gap: 6, marginTop: 9, flexWrap: "wrap" }}>
+              {c.trades.map((t) => <Chip key={t} tone="gray">{t}</Chip>)}
+              <Chip tone="blue">{assigned} job{assigned === 1 ? "" : "s"}</Chip>
+            </div>
+            {canEdit && (
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => open(c)}><Pencil size={13} /> Edit</Btn>
+                <Btn kind="ghost" small style={{ flex: 1 }}
+                  onClick={() => setCrews(crews.map((x) => (x.id === c.id ? { ...x, active: !x.active } : x)))}>
+                  {c.active ? "Deactivate" : "Reactivate"}
+                </Btn>
+              </div>
+            )}
+          </Card>
+        );
+      })}
+      <Sheet open={!!editing} onClose={() => setEditing(null)} title={editing === "new" ? "Add crew" : "Edit crew"}
+        footer={<Btn style={{ width: "100%" }} disabled={!f.name.trim()} onClick={save}>Save crew</Btn>}>
+        <Field label="Crew / company name *"><input style={inputStyle} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+        <Field label="Primary contact"><input style={inputStyle} value={f.contact} onChange={(e) => setF({ ...f, contact: e.target.value })} /></Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Phone"><input style={inputStyle} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
+          <Field label="Email"><input style={inputStyle} type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
+        </div>
+        <Field label="Trades">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+            {TRADES.map((t) => {
+              const on = f.trades.includes(t);
+              return (
+                <button key={t} type="button" onClick={() => setF({ ...f, trades: on ? f.trades.filter((x) => x !== t) : [...f.trades, t] })}
+                  style={{
+                    border: `1.5px solid ${on ? "#1B6DE0" : S.line}`, background: on ? "#EAF2FD" : "#fff",
+                    color: on ? "#1B6DE0" : S.ink, borderRadius: 999, padding: "7px 13px",
+                    fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  }}>{on ? "\u2713 " : ""}{t}</button>
+              );
+            })}
+          </div>
+        </Field>
+      </Sheet>
+    </div>
+  );
+}
+
+/* ================================================================
+   INTEGRATIONS — Gmail / SMS provider connection.
+   Sending real mail requires OAuth against a backend that holds the
+   client secret; the browser cannot hold it safely. This screen owns
+   the connection state and is honest about what isn't live yet.
+   ================================================================ */
+function Integrations({ integrations, setIntegrations, currentUser, onBack, toast }) {
+  const isAdmin = currentUser.role === "admin";
+  const g = integrations.gmail;
+  const sms = integrations.sms;
+  const [connecting, setConnecting] = useState(null);
+  const [addr, setAddr] = useState("");
+
+  if (!isAdmin) {
+    return (
+      <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+        <SubHeader title="Integrations" onBack={onBack} />
+        <Card style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 10 }}>
+            <Lock size={18} color={S.sub} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
+              Connected accounts are managed by the office. Messages you send go out from the company account.
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Integrations" onBack={onBack} />
+
+      <Card style={{ marginTop: 14 }}>
+        <CardTitle right={g.connected ? <Chip tone="green">Connected</Chip> : <Chip tone="gray">Not connected</Chip>}>
+          Gmail
+        </CardTitle>
+        {g.connected ? (
+          <>
+            <KV k="Account" v={g.email} />
+            <KV k="Connected" v={g.at} />
+            <KV k="Sends as" v={g.sendAs || g.email} />
+            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 8 }}>
+              Emails sent from a job go out through this account and land in its Sent folder, so replies come back to
+              the same inbox the team already watches.
+            </div>
+            <Btn kind="danger" small style={{ marginTop: 12 }}
+              onClick={() => { setIntegrations({ ...integrations, gmail: { connected: false, email: "", at: null } }); toast("Gmail disconnected"); }}>
+              Disconnect
+            </Btn>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.55 }}>
+              Connect a Google Workspace account so email goes out under your own domain rather than a generic sender.
+              Replies land in that mailbox and threads stay intact.
+            </div>
+            <Callout label="What this needs to go live">
+              Google OAuth requires a client secret, which cannot live in the browser. Create a Google Cloud project,
+              enable the Gmail API, add an OAuth consent screen, then run the token exchange in a Supabase Edge
+              Function. Until that's deployed, connecting here records the account and composes the message — it does
+              not put mail on the wire.
+            </Callout>
+            <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => setConnecting("gmail")}>
+              <Mail size={15} /> Connect Gmail
+            </Btn>
+          </>
+        )}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={sms.connected ? <Chip tone="green">Connected</Chip> : <Chip tone="gray">Not connected</Chip>}>
+          Text messaging
+        </CardTitle>
+        {sms.connected ? (
+          <>
+            <KV k="Provider" v={sms.provider} />
+            <KV k="Sending number" v={sms.number} />
+            <Btn kind="danger" small style={{ marginTop: 12 }}
+              onClick={() => { setIntegrations({ ...integrations, sms: { connected: false, provider: "", number: "" } }); toast("SMS disconnected"); }}>
+              Disconnect
+            </Btn>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.55 }}>
+              A provider account (Twilio or similar) with a dedicated number. Consent is already tracked per customer,
+              and sends are blocked without it.
+            </div>
+            <Callout label="Before your first send">
+              US carriers require 10DLC brand and campaign registration for business texting. Unregistered traffic gets
+              filtered or blocked outright. Registration takes a few days — start it before you need it.
+            </Callout>
+            <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => setConnecting("sms")}>
+              <MessageCircle size={15} /> Connect SMS provider
+            </Btn>
+          </>
+        )}
+      </Card>
+
+      <Sheet open={!!connecting} onClose={() => { setConnecting(null); setAddr(""); }}
+        title={connecting === "gmail" ? "Connect Gmail" : "Connect SMS"}
+        footer={
+          <Btn style={{ width: "100%" }} disabled={!addr.trim()} onClick={() => {
+            if (connecting === "gmail") {
+              setIntegrations({ ...integrations, gmail: { connected: true, email: addr.trim(), at: new Date().toISOString().slice(0, 10), sendAs: addr.trim() } });
+              toast("Gmail account recorded");
+            } else {
+              setIntegrations({ ...integrations, sms: { connected: true, provider: "Twilio", number: addr.trim() } });
+              toast("SMS number recorded");
+            }
+            setConnecting(null); setAddr("");
+          }}>Save connection</Btn>
+        }>
+        {connecting === "gmail" ? (
+          <>
+            <Field label="Google Workspace address" hint="The mailbox company email should send from and receive replies to.">
+              <input style={inputStyle} type="email" value={addr} onChange={(e) => setAddr(e.target.value)} placeholder="office@supremebuildinggroup.com" />
+            </Field>
+            <Callout label="This records the account only">
+              The real OAuth handshake runs server-side. This saves which account to use so the composer and templates
+              are configured and ready the moment the backend function is deployed.
+            </Callout>
+          </>
+        ) : (
+          <>
+            <Field label="Sending number" hint="The number customers will see and can reply to.">
+              <input style={inputStyle} value={addr} onChange={(e) => setAddr(e.target.value)} placeholder="(847) 555-0100" />
+            </Field>
+            <Callout label="Registration required">
+              This number must be 10DLC registered to your business before carriers will deliver to it reliably.
+            </Callout>
+          </>
+        )}
+      </Sheet>
+    </div>
+  );
+}
+
+/* ================================================================
+   JOB IMPORT — bring an existing pipeline in from a CSV export.
+   Maps the Roofr job report columns; unmatched stages fall back to
+   the first stage rather than dropping the row.
+   ================================================================ */
+function JobImport({ jobs, setJobs, stages, users, onBack, toast, currentUser }) {
+  const [parsed, setParsed] = useState(null);
+  const fileRef = useRef(null);
+  const isAdmin = currentUser.role === "admin";
+
+  const splitLine = (l) => {
+    const out = []; let cur = "", inQ = false;
+    for (let i2 = 0; i2 < l.length; i2++) {
+      const ch = l[i2];
+      if (ch === '"') { if (inQ && l[i2 + 1] === '"') { cur += '"'; i2++; } else inQ = !inQ; }
+      else if (ch === "," && !inQ) { out.push(cur); cur = ""; }
+      else cur += ch;
+    }
+    out.push(cur); return out.map((x) => x.trim());
+  };
+
+  const matchStage = (stageName, category) => {
+    const n = (stageName || "").toLowerCase();
+    const hit = stages.find((st) => st.name.toLowerCase() === n)
+      || stages.find((st) => n && st.name.toLowerCase().includes(n.split(" ")[0]));
+    if (hit) return hit.id;
+    const cat = (category || "").toLowerCase();
+    if (cat === "lost") return "s11";
+    if (cat === "unqualified") return "s12";
+    if (cat === "completed") return "s10";
+    if (cat === "won") return "s5";
+    return stages[0].id;
+  };
+
+  const parse = (text, fileName) => {
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) return { error: "That file has no data rows." };
+    const head = splitLine(lines[0]).map((h) => h.toLowerCase().replace(/[^a-z]/g, ""));
+    const col = (names) => { for (const n of names) { const k = head.indexOf(n); if (k >= 0) return k; } return -1; };
+    const cAddr = col(["jobaddress", "address", "propertyaddress"]);
+    if (cAddr < 0) return { error: "No job address column found. Expected a header row containing a job address column." };
+    const cName = col(["customername", "customer", "name"]);
+    const cZip = col(["zipcode", "zip", "postalcode"]);
+    const cOwner = col(["jobowner", "owner", "assignee", "salesrep"]);
+    const cValue = col(["jobvalue", "value", "amount"]);
+    const cStage = col(["stage"]);
+    const cCat = col(["stagecategory", "category"]);
+    const cSource = col(["leadsource", "source"]);
+    const cEmail = col(["customeremail", "email"]);
+    const cPhone = col(["customerphone", "phone"]);
+    const cCreated = col(["datecreated", "created"]);
+
+    const known = users.map((u) => u.name);
+    const rows = lines.slice(1).map((l) => {
+      const c = splitLine(l);
+      const addr = c[cAddr] || "";
+      if (!addr) return null;
+      const owner = cOwner >= 0 ? c[cOwner] : "";
+      const zip = cZip >= 0 ? String(c[cZip]).padStart(5, "0").slice(0, 5) : "";
+      const j = jurisdictionForZip(zip);
+      return {
+        name: (cName >= 0 && c[cName]) ? c[cName] : "(no customer name)",
+        address: addr,
+        zip,
+        state: j ? j.state : "",
+        assignee: known.includes(owner) ? owner : (known[0] || ""),
+        ownerRaw: owner,
+        value: cValue >= 0 ? num(String(c[cValue]).replace(/[$,]/g, "")) : 0,
+        stageId: matchStage(cStage >= 0 ? c[cStage] : "", cCat >= 0 ? c[cCat] : ""),
+        leadSource: cSource >= 0 ? c[cSource] : "",
+        email: cEmail >= 0 ? c[cEmail] : "",
+        phone: cPhone >= 0 ? c[cPhone] : "",
+        created: cCreated >= 0 ? c[cCreated] : "",
+      };
+    }).filter(Boolean);
+
+    const dupes = rows.filter((r) => jobs.some((j) => j.address.toLowerCase() === r.address.toLowerCase()));
+    const unknownOwners = Array.from(new Set(rows.filter((r) => r.ownerRaw && !known.includes(r.ownerRaw)).map((r) => r.ownerRaw)));
+    return { rows, dupes: dupes.length, unknownOwners, fileName };
+  };
+
+  const onFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => setParsed(parse(String(r.result), file.name));
+    r.readAsText(file);
+    e.target.value = "";
+  };
+
+  const doImport = (skipDupes) => {
+    const rows = skipDupes
+      ? parsed.rows.filter((r) => !jobs.some((j) => j.address.toLowerCase() === r.address.toLowerCase()))
+      : parsed.rows;
+    const built = rows.map((r) => ({
+      id: uid("j"), name: r.name, address: r.address, zip: r.zip, state: r.state,
+      lat: null, lng: null,
+      value: r.value, stageId: r.stageId, assignee: r.assignee, leadSource: r.leadSource,
+      daysInStage: 0, updated: "imported", claimType: "Unknown", schedDate: null,
+      phone: r.phone, email: r.email,
+      consent: { sms: { granted: false, at: null, source: null }, email: { granted: false, at: null, source: null } },
+      insurance: null, checklist: { ...BLANK_CHECKLIST }, measurements: { ...BLANK_MEASURE },
+      estimate: mkEstimate(), contract: mkContract(),
+      photos: [], tasks: [], files: [], payments: [], messages: [], crewId: null, workOrder: null,
+      fin: { materials: [], labor: [], other: [], commissionRate: 60, structure: "grossProfit", overheadPct: 10, reimbursements: [] },
+      portal: { estimate: false, contract: false, photos: false, invoice: false },
+      review: { sent: false, clicked: false, posted: false },
+    }));
+    setJobs([...jobs, ...built]);
+    setParsed(null);
+    toast(`${built.length} jobs imported`);
+  };
+
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onFile} style={{ display: "none" }} />
+      <SubHeader title="Import jobs" onBack={onBack} />
+      <Card style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.55 }}>
+          Bring an existing pipeline in from a CSV export. The header row is matched loosely — a
+          <b> job address</b> column is required; customer name, zip, job owner, job value, stage, lead source,
+          email, and phone are picked up when present.
+        </div>
+        <Callout label="What imports and what doesn't">
+          Contact details, stage, value, and lead source come across. Consent does not — imported customers start with
+          no SMS or email consent on file, because consent has to be collected, not inherited. Photos, estimates, and
+          financials also stay behind; those live in whatever system produced the export.
+        </Callout>
+        {isAdmin && (
+          <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => fileRef.current && fileRef.current.click()}>
+            <Upload size={15} /> Choose CSV
+          </Btn>
+        )}
+        {!isAdmin && <div style={{ fontSize: 13, color: S.sub, marginTop: 12 }}>Importing is admin-only.</div>}
+      </Card>
+
+      <Sheet open={!!parsed} onClose={() => setParsed(null)} title="Review import"
+        footer={parsed && !parsed.error && (
+          <div style={{ display: "flex", gap: 10 }}>
+            {parsed.dupes > 0 && (
+              <Btn kind="ghost" style={{ flex: 1 }} onClick={() => doImport(true)}>Skip {parsed.dupes} dupes</Btn>
+            )}
+            <Btn style={{ flex: 1 }} onClick={() => doImport(false)}>Import all {parsed.rows.length}</Btn>
+          </div>
+        )}>
+        {parsed && parsed.error && <Callout label="Could not read that file" tone="red">{parsed.error}</Callout>}
+        {parsed && !parsed.error && (
+          <>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>{parsed.fileName}</div>
+            <div style={{ fontSize: 13, color: S.sub, marginBottom: 12 }}>
+              {parsed.rows.length} rows parsed{parsed.dupes > 0 ? `, ${parsed.dupes} match an address already in the system` : ""}.
+            </div>
+            {parsed.unknownOwners.length > 0 && (
+              <Callout label="Unrecognized job owners">
+                {parsed.unknownOwners.join(", ")} {parsed.unknownOwners.length === 1 ? "does" : "do"} not match a seat.
+                Those jobs will be assigned to {users[0] ? users[0].name : "the first seat"} — add the seats first if
+                you want the assignments to land correctly.
+              </Callout>
+            )}
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, margin: "14px 0 6px" }}>FIRST FIVE ROWS</div>
+            {parsed.rows.slice(0, 5).map((r, i2) => (
+              <div key={i2} style={{ padding: "9px 0", borderTop: `1px solid ${S.line}` }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{r.name}</div>
+                <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>{r.address}</div>
+                <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                  <Chip tone="gray">{(stages.find((st) => st.id === r.stageId) || {}).name}</Chip>
+                  {r.value > 0 && <Chip tone="blue">{money(r.value)}</Chip>}
+                  <Chip tone="gray">{r.assignee.split(" ")[0]}</Chip>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </Sheet>
+    </div>
+  );
+}
+
 function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand }) {
   const [editing, setEditing] = useState(null); // user object or "new"
   const isAdmin = canManageSeats(currentUser);
@@ -4848,6 +6334,12 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
     ["calendar", CalIcon, "Calendar", "Schedule & material drops"],
     ["contacts", Users, "Contacts", "Every client, with consent status"],
     ["team", HardHat, "Team & seats", canManageSeats(currentUser) ? "Add users, roles, logins" : "Who's on the team"],
+    ["crews", Wrench, "Crews", "Dispatch directory for work orders"],
+    ["documents", FileText, "Documents", "Contracts, COIs, licenses, warranties"],
+    ["pricelist", Package, "Price list", "Material costs and margins — CSV import"],
+    ["templates", ScrollText, "Message templates", "Email and text, customer and crew"],
+    ["integrations", Share2, "Integrations", "Gmail and text messaging"],
+    ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
     ["reviews", Star, "Review automation", "Google review requests"],
     ["branding", Settings, "Company branding", "Name, colors, review link"],
   ];
@@ -4932,6 +6424,14 @@ function Inbox({ jobs, onOpenJob }) {
 export default function SupremeCRM() {
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState(SEED_USERS);
+  const [crews, setCrews] = useState(SEED_CREWS);
+  const [templates, setTemplates] = useState(SEED_TEMPLATES);
+  const [companyDocs, setCompanyDocs] = useState(SEED_COMPANY_DOCS);
+  const [priceList, setPriceList] = useState(SEED_PRICE_LIST);
+  const [integrations, setIntegrations] = useState({
+    gmail: { connected: false, email: "", at: null },
+    sms: { connected: false, provider: "", number: "" },
+  });
   const [brand, setBrand] = useState(DEFAULT_BRAND);
   const [stages, setStages] = useState(DEFAULT_STAGES);
   const [jobs, setJobs] = useState(seedJobs);
@@ -4998,7 +6498,7 @@ export default function SupremeCRM() {
       photos: [], tasks: [{ id: uid("t"), label: "Schedule inspection", done: false }],
       files: [], payments: [],
       fin: { materials: [], labor: [], other: [], commissionRate: rate, structure: "grossProfit", overheadPct: 10, reimbursements: [] },
-      portal: { estimate: false, contract: false, photos: false, invoice: false },
+      portal: { estimate: false, contract: false, photos: false, invoice: false }, crewId: null, messages: [], workOrder: null,
       review: { sent: false, clicked: false, posted: false },
     }, ...prev]);
     toast("Lead created");
@@ -5045,7 +6545,8 @@ export default function SupremeCRM() {
       {openJob ? (
         <JobDetail job={openJob} stages={stages} brand={brand} onBack={backToBoard}
           onMoveStage={moveStage} mut={mutJob(openJob.id)} toast={toast} reviewSettings={reviewSettings}
-          currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin} />
+currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
+          crews={crews} setCrews={setCrews} templates={templates} integrations={integrations} />
       ) : nav === "home" ? (
         <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav} />
       ) : nav === "jobs" ? (
@@ -5059,7 +6560,8 @@ export default function SupremeCRM() {
       ) : nav === "insurance" ? (
         <InsuranceHub jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} toast={toast} />
       ) : nav === "performance" ? (
-        <Performance jobs={jobs} stages={stages} onBack={() => setNav("more")} />
+        <Performance jobs={jobs} stages={stages} users={users} onBack={() => setNav("more")}
+          isAdmin={isAdmin} currentUser={liveUser} toast={toast} />
       ) : nav === "calendar" ? (
         <CalendarView jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
       ) : nav === "contacts" ? (
@@ -5067,6 +6569,24 @@ export default function SupremeCRM() {
       ) : nav === "reviews" ? (
         <ReviewSettings settings={reviewSettings} setSettings={setReviewSettings} jobs={jobs}
           onBack={() => setNav("more")} brand={brand} />
+      ) : nav === "import" ? (
+        <JobImport jobs={jobs} setJobs={setJobs} stages={stages} users={users}
+          onBack={() => setNav("more")} toast={toast} currentUser={liveUser} />
+      ) : nav === "documents" ? (
+        <CompanyDocs docs={companyDocs} setDocs={setCompanyDocs} currentUser={liveUser}
+          onBack={() => setNav("more")} toast={toast} />
+      ) : nav === "pricelist" ? (
+        <PriceListManager list={priceList} setList={setPriceList} currentUser={liveUser}
+          onBack={() => setNav("more")} toast={toast} />
+      ) : nav === "templates" ? (
+        <TemplateManager templates={templates} setTemplates={setTemplates} currentUser={liveUser}
+          onBack={() => setNav("more")} toast={toast} brand={brand} />
+      ) : nav === "crews" ? (
+        <CrewManager crews={crews} setCrews={setCrews} currentUser={liveUser} jobs={jobs}
+          onBack={() => setNav("more")} toast={toast} />
+      ) : nav === "integrations" ? (
+        <Integrations integrations={integrations} setIntegrations={setIntegrations}
+          currentUser={liveUser} onBack={() => setNav("more")} toast={toast} />
       ) : nav === "team" ? (
         <TeamManager users={users} setUsers={setUsers} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} brand={brand} />
