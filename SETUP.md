@@ -140,3 +140,13 @@ it is best done in stages — jobs first, then photos, then documents.
 
 Plan on the Supabase Pro upgrade before the crew depends on this daily. The
 project pausing on a Monday morning is not a failure mode you want.
+
+## Vercel deployment notes
+
+- Environment variables must be prefixed `VITE_` or Vite will not expose them
+  to the browser build: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`,
+  `VITE_GEOAPIFY_KEY`. Variables only apply to builds created after they are
+  added, so add them first and then redeploy.
+- Vercel blocks deployments whose git commit author email is not a real
+  address attached to a GitHub account. Commits must be authored with a
+  valid email or every build is marked "Blocked" before it starts.
