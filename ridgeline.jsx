@@ -747,15 +747,60 @@ function resolveJurisdiction(zip) {
   };
 }
 
-/* ================================================================
-   LOCATION / MAPS
-   Geolocation uses the browser API (real coordinates, real accuracy).
-   Reverse-geocoding and address autocomplete need a keyed provider —
-   GEO_PROVIDER is the single swap point. Until a key is supplied the
-   app degrades honestly: it stores true coordinates and says so,
-   rather than inventing a street address.
-   ================================================================ */
-const GEO_PROVIDER = { name: "none", apiKey: "" };
+/* Geoapify — address autocomplete + reverse geocoding.
+   Free tier: 3,000 requests/day, commercial use permitted, no attribution
+   required, results may be stored. Swap the key for an env var at deploy
+   and lock it to your domain under Allowed Origins in the Geoapify console. */
+const GEO_PROVIDER = {
+  name: "geoapify",
+  apiKey: "d4895cd9d44b4229af2885ffa85e343e",
+  base: "https://api.geoapify.com/v1/geocode",
+  countries: "us",
+};
+const geoReady = () => !!(GEO_PROVIDER.apiKey && GEO_PROVIDER.name === "geoapify");
+
+/* Type-ahead address suggestions. Returns [] on any failure so the form
+   always stays usable — a dead API must never block writing a lead. */
+async function geoAutocomplete(text, signal) {
+  if (!geoReady() || !text || text.trim().length < 3) return [];
+  const url = `${GEO_PROVIDER.base}/autocomplete?text=${encodeURIComponent(text)}`
+    + `&filter=countrycode:${GEO_PROVIDER.countries}&limit=6&format=json&apiKey=${GEO_PROVIDER.apiKey}`;
+  try {
+    const res = await fetch(url, { signal });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.results || []).map((r) => ({
+      id: r.place_id || `${r.lat},${r.lon}`,
+      formatted: r.formatted || "",
+      street: [r.housenumber, r.street].filter(Boolean).join(" ") || r.address_line1 || "",
+      city: r.city || r.town || r.village || r.county || "",
+      state: r.state_code || "",
+      zip: r.postcode || "",
+      lat: r.lat, lng: r.lon,
+    }));
+  } catch { return []; }
+}
+
+/* Coordinates -> street address. Used to stamp photos with a real address
+   alongside the GPS fix. */
+async function geoReverse(lat, lng) {
+  if (!geoReady() || lat == null || lng == null) return null;
+  const url = `${GEO_PROVIDER.base}/reverse?lat=${lat}&lon=${lng}&format=json&apiKey=${GEO_PROVIDER.apiKey}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const r = (data.results || [])[0];
+    if (!r) return null;
+    return {
+      formatted: r.formatted || "",
+      street: [r.housenumber, r.street].filter(Boolean).join(" ") || r.address_line1 || "",
+      city: r.city || r.town || r.village || "",
+      state: r.state_code || "",
+      zip: r.postcode || "",
+    };
+  } catch { return null; }
+}
 
 function captureLocation() {
   return new Promise((resolve) => {
@@ -1026,6 +1071,103 @@ function SourceLink({ srcId }) {
     }}>
       <ExternalLink size={13} /> {s.name}
     </a>
+  );
+}
+
+/* ================================================================
+   ADDRESS AUTOCOMPLETE — debounced Geoapify typeahead.
+   Degrades to a plain text field if the API is unreachable, so a
+   lead can always be written.
+   ================================================================ */
+function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
+  const [items, setItems] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [hi, setHi] = useState(-1);
+  const abortRef = useRef(null);
+  const timerRef = useRef(null);
+  const blurRef = useRef(null);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (abortRef.current) abortRef.current.abort();
+    if (blurRef.current) clearTimeout(blurRef.current);
+  }, []);
+
+  const query = (text) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (!geoReady() || text.trim().length < 3) { setItems([]); setOpen(false); return; }
+    timerRef.current = setTimeout(async () => {
+      if (abortRef.current) abortRef.current.abort();
+      const ctl = new AbortController();
+      abortRef.current = ctl;
+      setBusy(true);
+      const res = await geoAutocomplete(text, ctl.signal);
+      setBusy(false);
+      setItems(res); setHi(-1);
+      setOpen(res.length > 0);
+    }, 280);
+  };
+
+  const choose = (it) => {
+    setOpen(false); setItems([]);
+    onPick(it);
+  };
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div style={{ position: "relative" }}>
+        <input
+          style={{ ...inputStyle, paddingRight: 36 }}
+          value={value}
+          placeholder={placeholder}
+          autoComplete="off"
+          onChange={(e) => { onChange(e.target.value); query(e.target.value); }}
+          onFocus={() => items.length && setOpen(true)}
+          onBlur={() => { blurRef.current = setTimeout(() => setOpen(false), 160); }}
+          onKeyDown={(e) => {
+            if (!open || !items.length) return;
+            if (e.key === "ArrowDown") { e.preventDefault(); setHi((h) => (h + 1) % items.length); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setHi((h) => (h - 1 + items.length) % items.length); }
+            else if (e.key === "Enter" && hi >= 0) { e.preventDefault(); choose(items[hi]); }
+            else if (e.key === "Escape") setOpen(false);
+          }}
+        />
+        <span style={{ position: "absolute", right: 11, top: "50%", transform: "translateY(-50%)", display: "flex" }}>
+          {busy ? <RefreshCw size={15} color="#9CA3AF" /> : <MapPin size={15} color="#C7CBD1" />}
+        </span>
+      </div>
+      {open && items.length > 0 && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 30,
+          background: "#fff", border: `1px solid ${S.line}`, borderRadius: 12,
+          boxShadow: "0 10px 28px rgba(17,24,39,.14)", overflow: "hidden", maxHeight: 260, overflowY: "auto",
+        }}>
+          {items.map((it, i) => (
+            <button key={it.id} type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => choose(it)}
+              onMouseEnter={() => setHi(i)}
+              style={{
+                display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left",
+                border: "none", cursor: "pointer", padding: "11px 13px",
+                background: hi === i ? "#EAF2FD" : "#fff",
+                borderTop: i ? `1px solid ${S.line}` : "none",
+              }}>
+              <MapPin size={14} color="#1B6DE0" style={{ flexShrink: 0, marginTop: 2 }} />
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: S.ink }}>
+                  {it.street || it.formatted}
+                </span>
+                <span style={{ display: "block", fontSize: 12, color: S.sub, marginTop: 2 }}>
+                  {[it.city, it.state, it.zip].filter(Boolean).join(", ")}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1569,6 +1711,7 @@ function Contacts({ jobs, onBack, onOpenJob }) {
 function NewLeadSheet({ open, onClose, onCreate, brand }) {
   const blank = {
     first: "", last: "", phone: "", email: "", street: "", city: "", stateSel: "OH", zip: "",
+    lat: null, lng: null,
     leadSource: "", assignee: TEAM[0], claimType: "Insurance",
     carrier: "", policy: "", claim: "", adjusterName: "", adjusterPhone: "", deductible: "", coverage: "", oLaw: false,
     rps: false, cosmetic: false, windHailDed: false, acvRoof: false, matching: false,
@@ -1598,7 +1741,21 @@ function NewLeadSheet({ open, onClose, onCreate, brand }) {
       </div>
 
       <div style={{ fontSize: 13, fontWeight: 800, color: "#28373E", textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0" }}>Location</div>
-      <Field label="Street *"><input style={inputStyle} value={f.street} onChange={set("street")} placeholder="Start typing — address auto-completes" /></Field>
+      <Field label="Street *" hint={geoReady() ? "Start typing — pick a suggestion to fill city, state, and zip." : undefined}>
+        <AddressAutocomplete
+          value={f.street}
+          placeholder="123 Main St"
+          onChange={(v) => setF({ ...f, street: v })}
+          onPick={(it) => setF((p) => ({
+            ...p,
+            street: it.street || it.formatted,
+            city: it.city || p.city,
+            stateSel: ["OH", "KY", "IL"].includes(it.state) ? it.state : p.stateSel,
+            zip: it.zip || p.zip,
+            lat: it.lat, lng: it.lng,
+          }))}
+        />
+      </Field>
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12 }}>
         <Field label="City"><input style={inputStyle} value={f.city} onChange={set("city")} /></Field>
         <Field label="State">
@@ -2820,9 +2977,15 @@ function TabPhotos({ job, mut, toast }) {
   const getFix = async () => {
     setLocating(true); setGeoErr("");
     const r = await captureLocation();
+    if (r.ok) {
+      const addr = await geoReverse(r.lat, r.lng);
+      const fix = { ...r, address: addr ? addr.formatted : null };
+      setGeo(fix); setLocating(false);
+      toast(addr ? `Located — ${addr.street || addr.formatted}` : `Location locked — ±${r.accuracy}m`);
+      return fix;
+    }
     setLocating(false);
-    if (r.ok) { setGeo(r); toast(`Location locked — ±${r.accuracy}m`); }
-    else { setGeoErr(r.reason); }
+    setGeoErr(r.reason);
     return r;
   };
 
@@ -2838,6 +3001,7 @@ function TabPhotos({ job, mut, toast }) {
         fileName: file ? file.name : null,
         lat: fix ? fix.lat : null, lng: fix ? fix.lng : null,
         accuracy: fix ? fix.accuracy : null,
+        address: fix && fix.address ? fix.address : null,
       }],
     }));
     toast(fix ? "Photo stamped with time + location" : "Photo saved — no location fix");
@@ -2863,6 +3027,7 @@ function TabPhotos({ job, mut, toast }) {
           : <Chip tone="amber">No fix</Chip>}>Location</CardTitle>
         {geo ? (
           <>
+            {geo.address && <KV k="Address" v={geo.address} />}
             <KV k="Coordinates" v={fmtCoord(geo.lat, geo.lng)} />
             <KV k="Fix taken" v={fmtStamp(geo.at)} />
             <iframe title="Job site map" src={staticMapEmbed(geo.lat, geo.lng)}
@@ -2945,8 +3110,8 @@ function TabPhotos({ job, mut, toast }) {
         {job.photos.length > 0 && (
           <Btn kind="ghost" small style={{ marginTop: 12 }} onClick={() => {
             downloadCsv(`photo-log-${job.name.replace(/\s+/g, "-").toLowerCase()}.csv`, [
-              ["Label", "Timestamp", "Latitude", "Longitude", "Accuracy (m)", "File"],
-              ...job.photos.map((p) => [p.label, p.at, p.lat ?? "", p.lng ?? "", p.accuracy ?? "", p.fileName ?? ""]),
+              ["Label", "Timestamp", "Address", "Latitude", "Longitude", "Accuracy (m)", "File"],
+              ...job.photos.map((p) => [p.label, p.at, p.address ?? "", p.lat ?? "", p.lng ?? "", p.accuracy ?? "", p.fileName ?? ""]),
             ]);
             toast("Photo log exported");
           }}><Download size={13} /> Export photo log (CSV)</Btn>
@@ -4177,6 +4342,7 @@ export default function SupremeCRM() {
       id, name: `${f.first} ${f.last}`.trim(),
       address: [f.street, f.city, f.stateSel].filter(Boolean).join(", "),
       zip: f.zip.trim(), state: f.stateSel,
+      lat: f.lat ?? null, lng: f.lng ?? null,
       value: 0, stageId: stages[0].id, assignee: f.assignee, leadSource: f.leadSource || "—",
       daysInStage: 0, updated: "just now", claimType: f.claimType, schedDate: null,
       phone: f.phone, email: f.email,
