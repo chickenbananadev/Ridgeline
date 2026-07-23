@@ -1984,7 +1984,7 @@ function Login({ brand, users, onLogin }) {
             </Field>
             <Field label="Password">
               <input style={inputStyle} type="password" autoComplete="current-password" value={pw}
-                onChange={(e) => setPw(e.target.value)} placeholder="••••••••"
+                onChange={(e) => setPw(e.target.value)} placeholder="Enter your password"
                 onKeyDown={(e) => { if (e.key === "Enter" && live && email && pw) submit(); }} />
             </Field>
             {err && <Callout label="Sign-in failed" tone="red">{err}</Callout>}
