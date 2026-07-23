@@ -244,6 +244,14 @@ const POLICY_CARDS = [
     callout: { label: "Check for", text: "percentage of Coverage A dwelling amount (10%, 25%, 50%), or a flat dollar limit. Some policies exclude it entirely, some include it automatically. If absent, decking replacement and ventilation upgrades required by code become the homeowner's cost." } },
   { title: "RCV vs ACV Settlement", body: "Replacement Cost Value: carrier pays the full cost to replace with like kind and quality, minus deductible. Depreciation is initially withheld and released upon completion of the work. Actual Cash Value: carrier pays RCV minus depreciation. Depreciation is not recoverable.",
     callout: { label: "Common trap", text: "A roof-age endorsement can convert an otherwise-RCV policy to ACV on the roof specifically after a certain roof age (often 15 or 20 years). Homeowner may not know this. Read the endorsement pages, not just the declarations." } },
+  { title: "Roof Payment Schedule (RPS) endorsement", body: "An RPS (also sold as Roof Surface Payment Schedule, Roof Settlement Schedule, or Scheduled Roof Coverage) replaces normal RCV settlement on the roof with a fixed payout table based on roof age and material. A 15-year-old architectural shingle roof might settle at 50% or 40% of replacement cost — regardless of condition, regardless of how well it was maintained, and the shortfall is not recoverable depreciation. It is not depreciation and completing the work does not release it.",
+    callout: { label: "How to spot it and what to do", text: "Look for a schedule table in the endorsement pages — rows of roof ages against payout percentages. If it's there, tell the homeowner the number before you write the contract, not after the check arrives. Their out-of-pocket is the deductible PLUS the scheduled shortfall. Two things still move: the schedule usually applies only to the roof surface, so gutters, flashing, vents, siding, and interior damage should still settle at normal RCV; and Ordinance & Law is a separate coverage that is not subject to the schedule. Scope those separately so they don't get swept into the reduced roof number." } },
+  { title: "Cosmetic damage exclusion / cosmetic-only endorsement", body: "Excludes hail or wind damage that marks the surface without affecting the roof's ability to shed water. Increasingly common on renewals in hail-prone counties, and sometimes applied to metals (gutters, vents, caps) separately from shingles.",
+    callout: { label: "Check for", text: "\"cosmetic,\" \"appearance only,\" \"does not affect function\" in the endorsement schedule. The counter is functional evidence: fractured mat under the impact, granule displacement exposing asphalt, broken seal strips, reduced service life. Document function separately from appearance — a spatter photo alone plays into the exclusion." } },
+  { title: "Wind/hail deductible — percentage vs. flat", body: "A separate, higher deductible applying only to wind and hail losses, often expressed as a percentage of Coverage A rather than a flat dollar amount. On a $400,000 dwelling, a 2% wind/hail deductible is $8,000 — not the $1,000 all-perils figure the homeowner remembers.",
+    callout: { label: "Before you quote a job", text: "Read the deductible line on the dec page for a separate wind/hail entry and calculate the actual dollar figure off Coverage A. This is the single most common surprise that kills a signed job at check time. Never quote the homeowner's out-of-pocket from the all-perils deductible on a storm claim." } },
+  { title: "ACV-only roof endorsement (roof age trigger)", body: "Converts an otherwise-RCV policy to ACV settlement on the roof once the roof passes a set age, commonly 15 or 20 years. Distinct from an RPS: ACV uses conventional depreciation rather than a fixed schedule, but the practical effect is the same — a large non-recoverable gap.",
+    callout: { label: "Check for", text: "\"actual cash value roof,\" \"roof surfaces,\" or a roof-age condition in the endorsement pages. If the roof is near the trigger age, confirm the roof's documented age — an incorrect age on file has been corrected before with permit records or prior invoices." } },
   { title: "Matching Endorsement", body: "Some carriers offer an optional endorsement that expands the state matching regulation and explicitly requires uniform-appearance repairs including full replacement of undamaged sections when necessary. Others explicitly limit matching to a single slope or single side of a wall.",
     callout: { label: "Check for", text: "\"matching,\" \"uniform appearance,\" \"cosmetic\" language in the policy schedule and any endorsements. Some carriers add a cosmetic-damage exclusion that specifically strips matching for hail spatter without functional damage." } },
 ];
@@ -402,14 +410,24 @@ const RESOURCE_SECTIONS = [
    PIPELINE + SEED DATA
    ================================================================ */
 const TEAM = ["Jacob Henderson", "Drew Klass", "Stephen Klein", "Steven Tatgenhorst"];
-/* Merged from the Ridgeline repo: role drives what a signed-in user can see.
-   Only an admin can change how commission is calculated; reps see their payout. */
-const TEAM_ROLES = {
-  "Jacob Henderson": { role: "admin", title: "Owner / Admin" },
-  "Drew Klass": { role: "rep", title: "Sales Rep" },
-  "Stephen Klein": { role: "rep", title: "Sales Rep" },
-  "Steven Tatgenhorst": { role: "rep", title: "Sales Rep" },
-};
+/* Seats. Admins can add, edit, deactivate, and remove users; every active
+   seat is a login. Role drives what a signed-in user can see — only an
+   admin can change how commission is calculated. */
+const ROLES = [
+  { id: "admin", label: "Admin", blurb: "Full access: commission structures, company splits, seats, branding." },
+  { id: "manager", label: "Production manager", blurb: "All jobs and financials, but cannot change commission structures or seats." },
+  { id: "rep", label: "Sales rep", blurb: "Own jobs and payout figures. Cannot see company splits or structure controls." },
+  { id: "crew", label: "Crew / field", blurb: "Work orders, photos, and tasks only. No pricing, no financials." },
+];
+const SEED_USERS = [
+  { id: "u1", name: "Jacob Henderson", email: "jacob@supremebuildinggroup.com", phone: "(847) 757-9890", role: "admin", title: "Owner / Admin", active: true, commissionRate: 60, addedAt: "2026-01-04" },
+  { id: "u2", name: "Drew Klass", email: "drew@supremebuildinggroup.com", phone: "", role: "rep", title: "Sales Rep", active: true, commissionRate: 60, addedAt: "2026-02-11" },
+  { id: "u3", name: "Stephen Klein", email: "stephen@supremebuildinggroup.com", phone: "", role: "rep", title: "Sales Rep", active: true, commissionRate: 55, addedAt: "2026-03-02" },
+  { id: "u4", name: "Steven Tatgenhorst", email: "steven@supremebuildinggroup.com", phone: "", role: "rep", title: "Sales Rep", active: true, commissionRate: 60, addedAt: "2026-03-02" },
+];
+const canSeeMoney = (u) => u && u.role !== "crew";
+const canEditStructure = (u) => u && u.role === "admin";
+const canManageSeats = (u) => u && u.role === "admin";
 const LEAD_SOURCES = ["Door knocking", "Customer referral", "Google", "Website", "Yard sign", "Facebook", "Call in", "Repeat customer", "Real-estate referral", "Billboard / print"];
 
 const DEFAULT_STAGES = [
@@ -672,6 +690,109 @@ const seedJobs = [
 /* ================================================================
    HELPERS
    ================================================================ */
+/* ================================================================
+   ZIP → JURISDICTION RESOLUTION
+   Curated records above are authoritative (office-verified). Any other
+   zip falls back to a state-level record derived from the zip prefix,
+   so a lookup ALWAYS returns usable code guidance instead of a dead end.
+   Production: point resolveJurisdiction() at a live code-data service
+   (OneClickCode / county GIS) — the screen contract stays identical.
+   ================================================================ */
+const ZIP_PREFIX_STATE = [
+  { lo: 430, hi: 459, state: "OH" },
+  { lo: 400, hi: 427, state: "KY" },
+  { lo: 600, hi: 629, state: "IL" },
+];
+const STATE_DEFAULTS = {
+  OH: {
+    codeName: "Residential Code of Ohio (RCO)", codeEdition: "Current RCO — confirm edition",
+    adoption: "Statewide residential code (OAC 4101:8) — applies in all Ohio jurisdictions.",
+    permit: "Roofing permit generally required for full replacement. Confirm with the local building department.",
+    sources: ["RCO", "OAC3901"],
+  },
+  KY: {
+    codeName: "Kentucky Residential Code (KRC)", codeEdition: "Current KRC — confirm edition",
+    adoption: "Statewide residential code administered by KY DHBC — applies in all Kentucky jurisdictions.",
+    permit: "Permit handling varies by county/city. Confirm with the local building official before tear-off.",
+    sources: ["KYDHBC", "ICC"],
+  },
+  IL: {
+    codeName: "Locally adopted IRC", codeEdition: "Varies by municipality — confirm adopted edition",
+    adoption: "Illinois has NO statewide residential code. Each municipality adopts its own edition and amendments.",
+    permit: "Permit rules are municipal. You must confirm the adopting ordinance for this address.",
+    sources: ["MUNICODE", "ICC"],
+  },
+};
+function stateForZip(zip) {
+  const p = parseInt(String(zip).slice(0, 3), 10);
+  if (isNaN(p)) return null;
+  const hit = ZIP_PREFIX_STATE.find((r) => p >= r.lo && p <= r.hi);
+  return hit ? hit.state : null;
+}
+/* Returns { ...record, precision } — "verified" | "state" | null */
+function resolveJurisdiction(zip) {
+  const z = String(zip || "").trim();
+  if (z.length !== 5) return null;
+  const exact = JURISDICTIONS[z];
+  if (exact) return { ...exact, precision: "verified" };
+  const st = stateForZip(z);
+  if (!st) return null;
+  const d = STATE_DEFAULTS[st];
+  return {
+    zip: z, city: "", county: "", state: st,
+    codeName: d.codeName, codeEdition: d.codeEdition, adoption: d.adoption, permit: d.permit,
+    inspector: { office: "Local building department — not yet on file", phone: "", address: "" },
+    verified: false, sources: d.sources, verifiedDetail: { date: null, by: null },
+    precision: "state",
+  };
+}
+
+/* ================================================================
+   LOCATION / MAPS
+   Geolocation uses the browser API (real coordinates, real accuracy).
+   Reverse-geocoding and address autocomplete need a keyed provider —
+   GEO_PROVIDER is the single swap point. Until a key is supplied the
+   app degrades honestly: it stores true coordinates and says so,
+   rather than inventing a street address.
+   ================================================================ */
+const GEO_PROVIDER = { name: "none", apiKey: "" };
+
+function captureLocation() {
+  return new Promise((resolve) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      resolve({ ok: false, reason: "Geolocation not supported on this device." });
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({
+        ok: true,
+        lat: +pos.coords.latitude.toFixed(6),
+        lng: +pos.coords.longitude.toFixed(6),
+        accuracy: Math.round(pos.coords.accuracy),
+        at: new Date().toISOString(),
+      }),
+      (err) => resolve({ ok: false, reason: err.code === 1 ? "Location permission denied." : "Could not get a location fix." }),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  });
+}
+const fmtCoord = (lat, lng) => `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+/* Provider-neutral links — work with no API key, open in the user's map app. */
+const mapLinkForCoords = (lat, lng) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+const mapLinkForAddress = (addr) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
+const directionsLink = (addr) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`;
+const staticMapEmbed = (lat, lng) => {
+  const d = 0.004;
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${lng - d}%2C${lat - d}%2C${lng + d}%2C${lat + d}&layer=mapnik&marker=${lat}%2C${lng}`;
+};
+const fmtStamp = (iso) => {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+    });
+  } catch { return iso; }
+};
+
 const money = (n) =>
   (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pct1 = (n) => `${n.toFixed(2)}%`;
@@ -761,7 +882,7 @@ function downloadCsv(name, rows) {
   a.href = URL.createObjectURL(blob); a.download = name; a.click();
   URL.revokeObjectURL(a.href);
 }
-function jurisdictionForZip(zip) { return JURISDICTIONS[zip] || null; }
+function jurisdictionForZip(zip) { return resolveJurisdiction(zip); }
 function citeFor(state, topic) {
   return (CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic]) || CODE_PROVISIONS.OH[topic];
 }
@@ -1022,8 +1143,9 @@ function SignaturePad({ open, onClose, title, onApply }) {
 /* ================================================================
    LOGIN
    ================================================================ */
-function Login({ brand, onLogin }) {
+function Login({ brand, users, onLogin }) {
   const [mode, setMode] = useState("login");
+  const active = (users || []).filter((u) => u.active);
   if (mode === "account") {
     return (
       <div style={{ minHeight: "100vh", background: brand.primary, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
@@ -1037,30 +1159,27 @@ function Login({ brand, onLogin }) {
           </div>
           <Card style={{ padding: 14 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: S.sub, padding: "4px 6px 10px" }}>Continue as</div>
-            {TEAM.map((name, i) => {
-              const info = TEAM_ROLES[name];
-              return (
-                <button key={name} onClick={() => onLogin({ name, role: info.role, title: info.title })} style={{
-                  width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left",
-                  border: "none", background: "none", cursor: "pointer", padding: "12px 6px",
-                  borderTop: i ? `1px solid ${S.line}` : "none",
-                }}>
-                  <div style={{
-                    width: 38, height: 38, borderRadius: 999, flexShrink: 0,
-                    background: info.role === "admin" ? brand.primary : "#EAF2FD",
-                    color: info.role === "admin" ? "#fff" : "#1B6DE0",
-                    display: "grid", placeItems: "center", fontWeight: 800, fontSize: 14,
-                  }}>{name.split(" ").map((p) => p[0]).join("")}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{name}</div>
-                    <div style={{ fontSize: 12.5, color: S.sub }}>{info.title}</div>
-                  </div>
-                  {info.role === "admin"
-                    ? <Chip tone="gray"><Lock size={10} style={{ marginRight: 4, verticalAlign: -1 }} />Admin</Chip>
-                    : <ChevronRight size={16} color="#C7CBD1" />}
-                </button>
-              );
-            })}
+            {active.map((u, i) => (
+              <button key={u.id} onClick={() => onLogin(u)} style={{
+                width: "100%", display: "flex", alignItems: "center", gap: 12, textAlign: "left",
+                border: "none", background: "none", cursor: "pointer", padding: "12px 6px",
+                borderTop: i ? `1px solid ${S.line}` : "none",
+              }}>
+                <div style={{
+                  width: 38, height: 38, borderRadius: 999, flexShrink: 0,
+                  background: u.role === "admin" ? brand.primary : "#EAF2FD",
+                  color: u.role === "admin" ? "#fff" : "#1B6DE0",
+                  display: "grid", placeItems: "center", fontWeight: 800, fontSize: 14,
+                }}>{u.name.split(" ").map((p) => p[0]).join("")}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{u.name}</div>
+                  <div style={{ fontSize: 12.5, color: S.sub }}>{u.title}</div>
+                </div>
+                {u.role === "admin"
+                  ? <Chip tone="gray"><Lock size={10} style={{ marginRight: 4, verticalAlign: -1 }} />Admin</Chip>
+                  : <ChevronRight size={16} color="#C7CBD1" />}
+              </button>
+            ))}
           </Card>
           <div style={{ textAlign: "center", fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 14 }}>
             Role decides what you see. Commission structure controls are admin-only.
@@ -1452,6 +1571,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand }) {
     first: "", last: "", phone: "", email: "", street: "", city: "", stateSel: "OH", zip: "",
     leadSource: "", assignee: TEAM[0], claimType: "Insurance",
     carrier: "", policy: "", claim: "", adjusterName: "", adjusterPhone: "", deductible: "", coverage: "", oLaw: false,
+    rps: false, cosmetic: false, windHailDed: false, acvRoof: false, matching: false,
     smsConsent: false, emailConsent: false, notes: "",
   };
   const [f, setF] = useState(blank);
@@ -1491,10 +1611,11 @@ function NewLeadSheet({ open, onClose, onCreate, brand }) {
       {juris && (
         <div style={{ background: "#EAF2FD", borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#28373E" }}>
-            {juris.city}, {juris.state} — {juris.codeName}
+            {juris.city ? `${juris.city}, ${juris.state}` : juris.state} — {juris.codeName}
           </div>
           <div style={{ fontSize: 12, color: "#28373E", marginTop: 3 }}>
-            {juris.codeEdition} · {juris.inspector.office}
+            {juris.codeEdition}
+            {juris.precision === "verified" ? ` · ${juris.inspector.office}` : " · statewide default, confirm locally"}
           </div>
         </div>
       )}
@@ -1546,6 +1667,31 @@ function NewLeadSheet({ open, onClose, onCreate, brand }) {
             <input type="checkbox" checked={f.oLaw} onChange={set("oLaw")} style={{ width: 18, height: 18 }} />
             Ordinance & Law coverage present
           </label>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#28373E", margin: "14px 0 8px" }}>
+            ENDORSEMENTS FOUND ON THE DEC PAGE
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {[
+              ["rps", "Roof Payment Schedule (RPS)"],
+              ["cosmetic", "Cosmetic damage exclusion"],
+              ["windHailDed", "Separate wind/hail deductible"],
+              ["acvRoof", "ACV-only roof (age trigger)"],
+              ["matching", "Matching endorsement"],
+            ].map(([k, label]) => (
+              <button key={k} onClick={() => setF({ ...f, [k]: !f[k] })} style={{
+                border: `1.5px solid ${f[k] ? "#92600A" : S.line}`,
+                background: f[k] ? "#FDF4E3" : "#fff",
+                color: f[k] ? "#92600A" : S.ink,
+                borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+              }}>{f[k] ? "✓ " : ""}{label}</button>
+            ))}
+          </div>
+          {(f.rps || f.acvRoof || f.windHailDed) && (
+            <div style={{ background: "#FDF4E3", borderLeft: "3px solid #92600A", borderRadius: 8, padding: "11px 13px", marginTop: 10, fontSize: 13, color: S.ink, lineHeight: 1.5 }}>
+              Tell the homeowner their real out-of-pocket before writing the contract. See Insurance → Resources →
+              Policy Provisions for how each of these changes the settlement.
+            </div>
+          )}
         </div>
       )}
 
@@ -1905,8 +2051,13 @@ const JOB_TABS = [
   ["tasks", "Tasks"], ["files", "Files"], ["portal", "Portal"],
 ];
 
-function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin }) {
+function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true }) {
   const [tab, setTab] = useState("overview");
+  const MONEY_TABS = ["estimate", "contract", "financials", "payments", "invoice"];
+  const visibleTabs = JOB_TABS.filter(([id]) => showMoney || !MONEY_TABS.includes(id));
+  useEffect(() => {
+    if (!showMoney && MONEY_TABS.includes(tab)) setTab("overview");
+  }, [showMoney, tab]);
   const stage = stages.find((s) => s.id === job.stageId);
   const juris = jurisdictionForZip(job.zip);
   return (
@@ -1932,7 +2083,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           </div>
         </div>
         <div style={{ display: "flex", gap: 4, overflowX: "auto", padding: "0 12px" }}>
-          {JOB_TABS.map(([id, label]) => (
+          {visibleTabs.map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} style={{
               border: "none", background: "none", cursor: "pointer", whiteSpace: "nowrap",
               padding: "10px 12px", fontSize: 14, fontWeight: 700,
@@ -1988,17 +2139,52 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand }) {
           <KV k="Deductible" v={job.insurance.deductible ? money(num(job.insurance.deductible)) : "—"} />
           <KV k="Adjuster" v={job.insurance.adjusterName ? `${job.insurance.adjusterName} · ${job.insurance.adjusterPhone}` : "—"} />
           <KV k="Ordinance & Law" v={job.insurance.oLaw ? "Included" : "Not included"} />
+          {job.insurance.endorsements && Object.values(job.insurance.endorsements).some(Boolean) && (
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${S.line}` }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "#92600A", marginBottom: 7 }}>ENDORSEMENTS THAT REDUCE THE SETTLEMENT</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {job.insurance.endorsements.rps && <Chip tone="amber">Roof Payment Schedule</Chip>}
+                {job.insurance.endorsements.acvRoof && <Chip tone="amber">ACV-only roof</Chip>}
+                {job.insurance.endorsements.windHailDed && <Chip tone="amber">Wind/hail deductible</Chip>}
+                {job.insurance.endorsements.cosmetic && <Chip tone="amber">Cosmetic exclusion</Chip>}
+                {job.insurance.endorsements.matching && <Chip tone="green">Matching endorsement</Chip>}
+              </div>
+            </div>
+          )}
         </Card>
       )}
 
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={<Chip tone="slate">{job.zip}</Chip>}>Site location</CardTitle>
+        <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.5 }}>{job.address}</div>
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <a href={mapLinkForAddress(job.address)} target="_blank" rel="noreferrer" style={{ flex: 1, textDecoration: "none" }}>
+            <Btn kind="ghost" small style={{ width: "100%" }}><MapPin size={13} /> View map</Btn>
+          </a>
+          <a href={directionsLink(job.address)} target="_blank" rel="noreferrer" style={{ flex: 1, textDecoration: "none" }}>
+            <Btn kind="ghost" small style={{ width: "100%" }}><Send size={13} /> Directions</Btn>
+          </a>
+        </div>
+      </Card>
+
       {juris && (
         <Card style={{ marginTop: 12 }}>
-          <CardTitle right={!juris.verified && <Chip tone="amber">Verify</Chip>}>Jurisdiction — {juris.city}, {juris.state}</CardTitle>
+          <CardTitle right={juris.precision === "verified"
+            ? <Chip tone="green">Verified</Chip>
+            : <Chip tone="amber">State-level</Chip>}>
+            Jurisdiction — {juris.city ? `${juris.city}, ${juris.state}` : juris.state}
+          </CardTitle>
           <KV k="Building code" v={juris.codeName} />
           <KV k="Edition" v={juris.codeEdition} />
           <KV k="Permits" v={juris.permit} />
           <KV k="Inspector office" v={juris.inspector.office} />
-          <KV k="Office phone" v={juris.inspector.phone} />
+          {juris.inspector.phone && <KV k="Office phone" v={juris.inspector.phone} />}
+          {juris.precision === "state" && (
+            <Callout label="Statewide guidance only">
+              This zip isn't on file with a confirmed local record yet — the code shown is the {juris.state} default.
+              {juris.state === "IL" ? " Illinois adoption is municipal, so the local ordinance must be confirmed before this goes in a supplement." : " Confirm the local building department and any amendments before relying on it."}
+            </Callout>
+          )}
         </Card>
       )}
 
@@ -2625,51 +2811,146 @@ const SHOT_LIST = [
 ];
 function TabPhotos({ job, mut, toast }) {
   const [custom, setCustom] = useState("");
-  const addPhoto = (label) => {
-    mut((j) => ({ ...j, photos: [...j.photos, { id: uid("p"), label, at: nowStamp() }] }));
-    toast("Photo captured — stamped & saved to client");
+  const [geo, setGeo] = useState(null);       // last fix
+  const [locating, setLocating] = useState(false);
+  const [geoErr, setGeoErr] = useState("");
+  const fileRef = useRef(null);
+  const pendingLabel = useRef("");
+
+  const getFix = async () => {
+    setLocating(true); setGeoErr("");
+    const r = await captureLocation();
+    setLocating(false);
+    if (r.ok) { setGeo(r); toast(`Location locked — ±${r.accuracy}m`); }
+    else { setGeoErr(r.reason); }
+    return r;
   };
+
+  const addPhoto = async (label, file) => {
+    let fix = geo;
+    if (!fix) { const r = await getFix(); fix = r.ok ? r : null; }
+    const iso = new Date().toISOString();
+    const url = file ? URL.createObjectURL(file) : null;
+    mut((j) => ({
+      ...j,
+      photos: [...j.photos, {
+        id: uid("p"), label, at: fmtStamp(iso), iso, url,
+        fileName: file ? file.name : null,
+        lat: fix ? fix.lat : null, lng: fix ? fix.lng : null,
+        accuracy: fix ? fix.accuracy : null,
+      }],
+    }));
+    toast(fix ? "Photo stamped with time + location" : "Photo saved — no location fix");
+  };
+
+  const pickFile = (label) => { pendingLabel.current = label; fileRef.current && fileRef.current.click(); };
+  const onFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (file) addPhoto(pendingLabel.current || "Untitled shot", file);
+    e.target.value = "";
+  };
+
+  const shotsDone = new Set(job.photos.map((p) => p.label));
+
   return (
     <>
+      <input ref={fileRef} type="file" accept="image/*" capture="environment"
+        onChange={onFile} style={{ display: "none" }} />
+
       <Card>
-        <CardTitle>Quick inspection capture</CardTitle>
+        <CardTitle right={geo
+          ? <Chip tone="green">±{geo.accuracy}m</Chip>
+          : <Chip tone="amber">No fix</Chip>}>Location</CardTitle>
+        {geo ? (
+          <>
+            <KV k="Coordinates" v={fmtCoord(geo.lat, geo.lng)} />
+            <KV k="Fix taken" v={fmtStamp(geo.at)} />
+            <iframe title="Job site map" src={staticMapEmbed(geo.lat, geo.lng)}
+              style={{ width: "100%", height: 180, border: `1px solid ${S.line}`, borderRadius: 12, marginTop: 10 }} />
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <Btn kind="ghost" small style={{ flex: 1 }} onClick={getFix}><RefreshCw size={13} /> Re-fix</Btn>
+              <a href={mapLinkForCoords(geo.lat, geo.lng)} target="_blank" rel="noreferrer" style={{ flex: 1, textDecoration: "none" }}>
+                <Btn kind="ghost" small style={{ width: "100%" }}><MapPin size={13} /> Open in Maps</Btn>
+              </a>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+              Lock a GPS fix before shooting and every photo carries the same verified coordinates and timestamp —
+              that's what makes the album hold up in a claim file.
+            </div>
+            {geoErr && <Callout label="Location unavailable" tone="red">{geoErr} Photos will still save with a timestamp.</Callout>}
+            <Btn style={{ width: "100%", marginTop: 12 }} onClick={getFix} disabled={locating}>
+              <MapPin size={15} /> {locating ? "Locating…" : "Lock GPS location"}
+            </Btn>
+          </>
+        )}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={<Chip tone="gray">{shotsDone.size}/{SHOT_LIST.length}</Chip>}>Quick inspection capture</CardTitle>
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 12 }}>
-          Tap a suggested shot to capture. Photos are location/time stamped and land on this client's profile —
-          nothing lives in your camera roll.
+          Tap a shot to open the camera. Photos are time and location stamped and land on this client's profile.
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {SHOT_LIST.map((s) => (
-            <button key={s} onClick={() => addPhoto(s)} style={{
-              display: "flex", alignItems: "center", gap: 6,
-              border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
-              padding: "8px 13px", fontSize: 13, fontWeight: 600, cursor: "pointer", color: S.ink,
-            }}><Camera size={13} /> {s}</button>
-          ))}
+          {SHOT_LIST.map((s) => {
+            const done = shotsDone.has(s);
+            return (
+              <button key={s} onClick={() => pickFile(s)} style={{
+                display: "flex", alignItems: "center", gap: 6,
+                border: `1px solid ${done ? "#177245" : S.line}`,
+                background: done ? "#E8F6EE" : "#fff",
+                color: done ? "#177245" : S.ink,
+                borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+              }}>{done ? <Check size={13} /> : <Camera size={13} />} {s}</button>
+            );
+          })}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
           <input style={{ ...inputStyle, flex: 1 }} placeholder="Custom shot label" value={custom}
             onChange={(e) => setCustom(e.target.value)} />
-          <Btn small disabled={!custom.trim()} onClick={() => { addPhoto(custom.trim()); setCustom(""); }}>
+          <Btn small disabled={!custom.trim()} onClick={() => { pickFile(custom.trim()); setCustom(""); }}>
             <Camera size={14} /> Capture
           </Btn>
         </div>
       </Card>
+
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="blue">{job.photos.length}</Chip>}>Photo album</CardTitle>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {job.photos.map((p) => (
             <div key={p.id} style={{ border: `1px solid ${S.line}`, borderRadius: 12, overflow: "hidden" }}>
-              <div style={{ height: 86, background: "#EEF1F4", display: "grid", placeItems: "center" }}>
-                <ImageIcon size={24} color="#9CA3AF" />
+              <div style={{ height: 96, background: "#EEF1F4", display: "grid", placeItems: "center", overflow: "hidden" }}>
+                {p.url
+                  ? <img src={p.url} alt={p.label} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <ImageIcon size={24} color="#9CA3AF" />}
               </div>
               <div style={{ padding: "8px 10px" }}>
                 <div style={{ fontSize: 12, fontWeight: 700 }}>{p.label}</div>
                 <div style={{ fontSize: 11, color: S.sub, marginTop: 2 }}>{p.at}</div>
+                {p.lat != null ? (
+                  <a href={mapLinkForCoords(p.lat, p.lng)} target="_blank" rel="noreferrer" style={{
+                    display: "inline-flex", alignItems: "center", gap: 4, marginTop: 5,
+                    fontSize: 10.5, fontWeight: 700, color: "#1B6DE0", textDecoration: "none",
+                  }}><MapPin size={10} /> {fmtCoord(p.lat, p.lng)}</a>
+                ) : (
+                  <div style={{ fontSize: 10.5, color: "#92600A", marginTop: 5 }}>No location</div>
+                )}
               </div>
             </div>
           ))}
         </div>
         {job.photos.length === 0 && <div style={{ fontSize: 14, color: S.sub }}>No photos yet.</div>}
+        {job.photos.length > 0 && (
+          <Btn kind="ghost" small style={{ marginTop: 12 }} onClick={() => {
+            downloadCsv(`photo-log-${job.name.replace(/\s+/g, "-").toLowerCase()}.csv`, [
+              ["Label", "Timestamp", "Latitude", "Longitude", "Accuracy (m)", "File"],
+              ...job.photos.map((p) => [p.label, p.at, p.lat ?? "", p.lng ?? "", p.accuracy ?? "", p.fileName ?? ""]),
+            ]);
+            toast("Photo log exported");
+          }}><Download size={13} /> Export photo log (CSV)</Btn>
+        )}
       </Card>
     </>
   );
@@ -3270,21 +3551,21 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
           </Card>
           {zip.trim().length === 5 && !juris && (
             <Card style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 14, color: S.sub }}>
-                No jurisdiction record for {zip} yet. In production, the office adds records as new markets open —
-                each record is a code edition, permit note, and inspector contact.
+              <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
+                {zip} is outside Supreme's OH / KY / IL markets, so there's no code guidance on file for it.
+                Add the jurisdiction from the county or municipal source to bring it in.
               </div>
             </Card>
           )}
           {juris && (
             <>
               <Card style={{ marginTop: 12 }}>
-                <CardTitle right={juris.verified
+                <CardTitle right={juris.precision === "verified"
                   ? <Chip tone="green">Verified {juris.verifiedDetail?.date}</Chip>
-                  : <Chip tone="amber">Verify before sending</Chip>}>
-                  {juris.city}, {juris.state}
+                  : <Chip tone="amber">State-level — verify locally</Chip>}>
+                  {juris.city ? `${juris.city}, ${juris.state}` : `${juris.state} — zip ${juris.zip}`}
                 </CardTitle>
-                <KV k="County" v={juris.county} />
+                {juris.county && <KV k="County" v={juris.county} />}
                 <KV k="Building code" v={juris.codeName} />
                 <KV k="Edition" v={juris.codeEdition} />
                 <KV k="Adoption" v={juris.adoption} />
@@ -3597,12 +3878,174 @@ function BrandingEditor({ brand, setBrand, onBack }) {
   );
 }
 
+/* ================================================================
+   TEAM & SEATS — admin adds users, each active seat is a login
+   ================================================================ */
+function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand }) {
+  const [editing, setEditing] = useState(null); // user object or "new"
+  const isAdmin = canManageSeats(currentUser);
+  const blank = { name: "", email: "", phone: "", role: "rep", title: "Sales Rep", commissionRate: 60, active: true };
+  const [f, setF] = useState(blank);
+  const open = (u) => { setEditing(u || "new"); setF(u ? { ...u } : blank); };
+  const set = (k) => (e) => {
+    const v = e && e.target ? (e.target.type === "checkbox" ? e.target.checked : e.target.value) : e;
+    setF((p) => ({ ...p, [k]: v }));
+  };
+  const emailTaken = users.some((u) => u.email.toLowerCase() === f.email.trim().toLowerCase() && u.id !== (editing !== "new" && editing ? editing.id : null));
+  const valid = f.name.trim() && /\S+@\S+\.\S+/.test(f.email.trim()) && !emailTaken;
+
+  const save = () => {
+    if (editing === "new") {
+      const u = { ...f, id: uid("u"), email: f.email.trim(), name: f.name.trim(), addedAt: new Date().toISOString().slice(0, 10) };
+      setUsers([...users, u]);
+      toast(`Seat created — invite sent to ${u.email}`);
+    } else {
+      setUsers(users.map((u) => (u.id === editing.id ? { ...u, ...f, name: f.name.trim(), email: f.email.trim() } : u)));
+      toast("Seat updated");
+    }
+    setEditing(null);
+  };
+  const toggleActive = (u) => {
+    setUsers(users.map((x) => (x.id === u.id ? { ...x, active: !x.active } : x)));
+    toast(u.active ? `${u.name} deactivated — login disabled` : `${u.name} reactivated`);
+  };
+  const remove = (u) => {
+    const assigned = jobs.filter((j) => j.assignee === u.name).length;
+    if (assigned > 0) { toast(`${u.name} has ${assigned} assigned job${assigned === 1 ? "" : "s"} — reassign first`); return; }
+    setUsers(users.filter((x) => x.id !== u.id));
+    toast("Seat removed");
+  };
+
+  if (!isAdmin) {
+    return (
+      <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+        <SubHeader title="Team" onBack={onBack} />
+        <Card style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <Lock size={18} color={S.sub} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
+              Seat management is admin-only. Ask the office to add, change, or deactivate a login.
+            </div>
+          </div>
+        </Card>
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle>Who's on the team</CardTitle>
+          {users.filter((u) => u.active).map((u, i) => (
+            <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+              <span style={{ width: 34, height: 34, borderRadius: 999, background: "#EEF1F4", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800, color: S.sub }}>
+                {u.name.split(" ").map((p) => p[0]).join("")}
+              </span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{u.name}</div>
+                <div style={{ fontSize: 12, color: S.sub }}>{u.title}</div>
+              </div>
+            </div>
+          ))}
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Team & seats" onBack={onBack}
+        right={<Btn small onClick={() => open(null)}><Plus size={14} /> Add seat</Btn>} />
+      <Card style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
+          Every active seat is a login for {brand.company}. Adding a seat sends an email invite to set a password.
+          Deactivating keeps the person's job history intact but blocks sign-in immediately.
+        </div>
+        <div style={{ display: "flex", gap: 16, marginTop: 12 }}>
+          <div><div style={{ fontSize: 20, fontWeight: 800 }}>{users.filter((u) => u.active).length}</div><div style={{ fontSize: 12, color: S.sub }}>Active seats</div></div>
+          <div><div style={{ fontSize: 20, fontWeight: 800 }}>{users.filter((u) => !u.active).length}</div><div style={{ fontSize: 12, color: S.sub }}>Deactivated</div></div>
+        </div>
+      </Card>
+
+      {users.map((u) => {
+        const assigned = jobs.filter((j) => j.assignee === u.name).length;
+        const role = ROLES.find((r) => r.id === u.role);
+        return (
+          <Card key={u.id} pad={16} style={{ marginTop: 10, opacity: u.active ? 1 : 0.6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{
+                width: 40, height: 40, borderRadius: 999, flexShrink: 0,
+                background: u.role === "admin" ? "#28373E" : "#EAF2FD",
+                color: u.role === "admin" ? "#fff" : "#1B6DE0",
+                display: "grid", placeItems: "center", fontSize: 13, fontWeight: 800,
+              }}>{u.name.split(" ").map((p) => p[0]).join("")}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>{u.name}</div>
+                <div style={{ fontSize: 12.5, color: S.sub, overflow: "hidden", textOverflow: "ellipsis" }}>{u.email}</div>
+              </div>
+              {!u.active && <Chip tone="gray">Disabled</Chip>}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+              <Chip tone={u.role === "admin" ? "slate" : "blue"}>{role ? role.label : u.role}</Chip>
+              {canSeeMoney(u) && u.role !== "admin" && <Chip tone="gray">{u.commissionRate}% rate</Chip>}
+              <Chip tone="gray">{assigned} job{assigned === 1 ? "" : "s"}</Chip>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => open(u)}><Pencil size={13} /> Edit</Btn>
+              <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => toggleActive(u)}>
+                {u.active ? "Deactivate" : "Reactivate"}
+              </Btn>
+              {u.id !== currentUser.id && (
+                <Btn kind="danger" small onClick={() => remove(u)}><Trash2 size={13} /></Btn>
+              )}
+            </div>
+          </Card>
+        );
+      })}
+
+      <Sheet open={!!editing} onClose={() => setEditing(null)}
+        title={editing === "new" ? "Add a seat" : "Edit seat"}
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setEditing(null)}>Cancel</Btn>
+            <Btn style={{ flex: 2 }} disabled={!valid} onClick={save}>
+              {editing === "new" ? "Create seat & send invite" : "Save changes"}
+            </Btn>
+          </div>
+        }>
+        <Field label="Full name *"><input style={inputStyle} value={f.name} onChange={set("name")} /></Field>
+        <Field label="Work email *" hint={emailTaken ? "That email already has a seat." : "This is their login. An invite to set a password goes here."}>
+          <input style={{ ...inputStyle, borderColor: emailTaken ? "#B42318" : S.line }} type="email" value={f.email} onChange={set("email")} />
+        </Field>
+        <Field label="Mobile"><input style={inputStyle} value={f.phone} onChange={set("phone")} /></Field>
+        <Field label="Role">
+          <select style={selStyle} value={f.role} onChange={(e) => {
+            const r = ROLES.find((x) => x.id === e.target.value);
+            setF((p) => ({ ...p, role: r.id, title: r.label }));
+          }}>
+            {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+          </select>
+        </Field>
+        <div style={{ background: "#EAF2FD", borderRadius: 10, padding: "11px 13px", fontSize: 13, color: "#28373E", marginBottom: 14, lineHeight: 1.5 }}>
+          {(ROLES.find((r) => r.id === f.role) || {}).blurb}
+        </div>
+        <Field label="Job title (shown in the app)"><input style={inputStyle} value={f.title} onChange={set("title")} /></Field>
+        {f.role !== "crew" && (
+          <Field label="Default commission rate (%)" hint="Starting rate on new jobs. Can be changed per job by an admin.">
+            <input style={inputStyle} inputMode="decimal" value={f.commissionRate}
+              onChange={(e) => setF((p) => ({ ...p, commissionRate: num(e.target.value) }))} />
+          </Field>
+        )}
+        <label style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
+          <input type="checkbox" checked={f.active} onChange={set("active")} style={{ width: 18, height: 18 }} />
+          Seat active (can sign in)
+        </label>
+      </Sheet>
+    </div>
+  );
+}
+
 function MoreMenu({ onNav, onLogout, brand, currentUser }) {
   const items = [
     ["insurance", Shield, "Insurance", "Clients, supplements, code lookup"],
     ["performance", PieChart, "Performance", "Rep scoreboard & funnel"],
     ["calendar", CalIcon, "Calendar", "Schedule & material drops"],
     ["contacts", Users, "Contacts", "Every client, with consent status"],
+    ["team", HardHat, "Team & seats", canManageSeats(currentUser) ? "Add users, roles, logins" : "Who's on the team"],
     ["reviews", Star, "Review automation", "Google review requests"],
     ["branding", Settings, "Company branding", "Name, colors, review link"],
   ];
@@ -3686,6 +4129,7 @@ function Inbox({ jobs, onOpenJob }) {
    ================================================================ */
 export default function SupremeCRM() {
   const [currentUser, setCurrentUser] = useState(null);
+  const [users, setUsers] = useState(SEED_USERS);
   const [brand, setBrand] = useState(DEFAULT_BRAND);
   const [stages, setStages] = useState(DEFAULT_STAGES);
   const [jobs, setJobs] = useState(seedJobs);
@@ -3727,6 +4171,8 @@ export default function SupremeCRM() {
   const createLead = (f) => {
     const id = uid("j");
     const at = nowStamp();
+    const repSeat = users.find((u) => u.name === f.assignee);
+    const rate = repSeat && repSeat.commissionRate != null ? repSeat.commissionRate : 60;
     setJobs((prev) => [{
       id, name: `${f.first} ${f.last}`.trim(),
       address: [f.street, f.city, f.stateSel].filter(Boolean).join(", "),
@@ -3742,12 +4188,13 @@ export default function SupremeCRM() {
         carrier: f.carrier, policy: f.policy, claim: f.claim,
         adjusterName: f.adjusterName, adjusterPhone: f.adjusterPhone, adjusterEmail: "",
         deductible: f.deductible, coverage: f.coverage, oLaw: f.oLaw,
+        endorsements: { rps: f.rps, cosmetic: f.cosmetic, windHailDed: f.windHailDed, acvRoof: f.acvRoof, matching: f.matching },
       } : null,
       checklist: { ...BLANK_CHECKLIST }, measurements: { ...BLANK_MEASURE },
       estimate: mkEstimate(), contract: mkContract(),
       photos: [], tasks: [{ id: uid("t"), label: "Schedule inspection", done: false }],
       files: [], payments: [],
-      fin: { materials: [], labor: [], other: [], commissionRate: 60, reimbursements: [] },
+      fin: { materials: [], labor: [], other: [], commissionRate: rate, structure: "grossProfit", overheadPct: 10, reimbursements: [] },
       portal: { estimate: false, contract: false, photos: false, invoice: false },
       review: { sent: false, clicked: false, posted: false },
     }, ...prev]);
@@ -3755,9 +4202,23 @@ export default function SupremeCRM() {
     setOpenJobId(id); setNav("jobs");
   };
 
-  if (!currentUser) return <Login brand={brand} onLogin={setCurrentUser} />;
-  const userName = currentUser.name;
-  const isAdmin = currentUser.role === "admin";
+  if (!currentUser) return <Login brand={brand} users={users} onLogin={setCurrentUser} />;
+  const liveUser = users.find((u) => u.id === currentUser.id) || currentUser;
+  if (!liveUser.active) {
+    return (
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, background: S.bg }}>
+        <Card style={{ maxWidth: 380, textAlign: "center" }}>
+          <Lock size={28} color={S.sub} />
+          <div style={{ fontSize: 16, fontWeight: 700, marginTop: 10 }}>This seat has been deactivated</div>
+          <div style={{ fontSize: 14, color: S.sub, marginTop: 6 }}>Contact the office to restore access.</div>
+          <Btn kind="ghost" style={{ width: "100%", marginTop: 16 }} onClick={() => setCurrentUser(null)}>Back to sign in</Btn>
+        </Card>
+      </div>
+    );
+  }
+  const userName = liveUser.name;
+  const isAdmin = canEditStructure(liveUser);
+  const showMoney = canSeeMoney(liveUser);
 
   const openJob = openJobId ? jobs.find((j) => j.id === openJobId) : null;
   const openJobScreen = (id) => { setOpenJobId(id); setNav("jobs"); };
@@ -3781,7 +4242,7 @@ export default function SupremeCRM() {
       {openJob ? (
         <JobDetail job={openJob} stages={stages} brand={brand} onBack={backToBoard}
           onMoveStage={moveStage} mut={mutJob(openJob.id)} toast={toast} reviewSettings={reviewSettings}
-          currentUser={currentUser} isAdmin={isAdmin} />
+          currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin} />
       ) : nav === "home" ? (
         <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav} />
       ) : nav === "jobs" ? (
@@ -3791,7 +4252,7 @@ export default function SupremeCRM() {
       ) : nav === "inbox" ? (
         <Inbox jobs={jobs} onOpenJob={openJobScreen} />
       ) : nav === "more" ? (
-        <MoreMenu brand={brand} onNav={setNav} onLogout={() => setCurrentUser(null)} currentUser={currentUser} />
+        <MoreMenu brand={brand} onNav={setNav} onLogout={() => setCurrentUser(null)} currentUser={liveUser} />
       ) : nav === "insurance" ? (
         <InsuranceHub jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} toast={toast} />
       ) : nav === "performance" ? (
@@ -3803,6 +4264,9 @@ export default function SupremeCRM() {
       ) : nav === "reviews" ? (
         <ReviewSettings settings={reviewSettings} setSettings={setReviewSettings} jobs={jobs}
           onBack={() => setNav("more")} brand={brand} />
+      ) : nav === "team" ? (
+        <TeamManager users={users} setUsers={setUsers} currentUser={liveUser} jobs={jobs}
+          onBack={() => setNav("more")} toast={toast} brand={brand} />
       ) : nav === "branding" ? (
         <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} />
       ) : null}
