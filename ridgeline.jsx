@@ -7,7 +7,7 @@ import {
   ArrowUpDown, Image as ImageIcon, CheckCircle2, Circle, Send, Eye, Shield,
   BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
-  Scale, Lightbulb, ExternalLink, Lock
+  Scale, Lightbulb, ExternalLink, Lock, Layers
 } from "lucide-react";
 
 /* ================================================================
@@ -45,6 +45,7 @@ const SOURCES = {
   ICC: { name: "ICC Digital Codes (IRC / state editions)", url: "https://codes.iccsafe.org", publisher: "International Code Council" },
   KYDHBC: { name: "Kentucky Dept. of Housing, Buildings & Construction", url: "https://dhbc.ky.gov", publisher: "Commonwealth of Kentucky — code adoption authority" },
   MUNICODE: { name: "Municode Library (IL municipal ordinances)", url: "https://library.municode.com", publisher: "Municipal code hosting — verify adoption + edition" },
+  ORC3901_20: { name: "ORC 3901.20 — Unfair and deceptive acts", url: "https://codes.ohio.gov/ohio-revised-code/section-3901.20", publisher: "Ohio Revised Code — official text" },
 };
 
 const JURISDICTIONS = {
@@ -115,7 +116,7 @@ const CODE_PROVISIONS = {
     tearOff: { cite: "RCO R908.3", note: "Recover prohibited over two or more layers or water-soaked / deteriorated covering — full tear-off required.", verified: true },
     dripEdge: { cite: "RCO R905.2.8.5", note: "Drip edge required at eaves and rakes on shingle roofs.", verified: true },
     underlayment: { cite: "RCO R905.1.1", note: "Double-layer underlayment (or self-adhering membrane) on slopes 2:12 up to 4:12.", verified: true },
-    ventilation: { cite: "RCO R806", note: "Balanced attic ventilation with adequate net free area — intake and exhaust.", verified: true },
+    ventilation: { cite: "RCO R806.2", note: "Default required ratio is 1/150. The 1/300 exception applies only with a balanced system — 40 to 50 percent of net free area in the upper portion, balance at the eaves.", verified: true },
     fastening: { cite: "RCO R905.2.5", note: "4 nails per shingle minimum; 6-nail where manufacturer or wind zone requires.", verified: true },
     decking: { cite: "RCO R803 / R908.3", note: "Sheathing must be structurally sound; recover over unsound decking prohibited.", verified: true },
   },
@@ -124,7 +125,7 @@ const CODE_PROVISIONS = {
     tearOff: { cite: "KRC R908.3 — verify edition", note: "Recover prohibited over 2+ layers or deteriorated covering (confirm KY amendments).", verified: false },
     dripEdge: { cite: "KRC R905.2.8.5 — verify edition", note: "Drip edge at eaves and rakes (confirm KY amendments).", verified: false },
     underlayment: { cite: "KRC R905.1.1 — verify edition", note: "Low-slope double underlayment 2:12–4:12 (confirm KY amendments).", verified: false },
-    ventilation: { cite: "KRC R806 — verify edition", note: "Balanced attic ventilation (confirm KY amendments).", verified: false },
+    ventilation: { cite: "KRC R806.2 — verify edition", note: "Balanced attic ventilation (confirm KY amendments).", verified: false },
     fastening: { cite: "KRC R905.2.5 — verify edition", note: "Fastening per code minimum and manufacturer spec (confirm).", verified: false },
     decking: { cite: "KRC R803 — verify edition", note: "Structurally sound sheathing required (confirm).", verified: false },
   },
@@ -133,25 +134,44 @@ const CODE_PROVISIONS = {
     tearOff: { cite: "Adopted IRC R908.3 — verify municipality", note: "Tear-off requirements per local adopted edition.", verified: false },
     dripEdge: { cite: "Adopted IRC R905.2.8.5 — verify municipality", note: "Drip edge per local adopted edition.", verified: false },
     underlayment: { cite: "Adopted IRC R905.1.1 — verify municipality", note: "Low-slope underlayment per local adopted edition.", verified: false },
-    ventilation: { cite: "Adopted IRC R806 — verify municipality", note: "Ventilation per local adopted edition.", verified: false },
+    ventilation: { cite: "Adopted IRC R806.2 — verify municipality", note: "Ventilation per local adopted edition.", verified: false },
     fastening: { cite: "Adopted IRC R905.2.5 — verify municipality", note: "Fastening per local adopted edition and manufacturer spec.", verified: false },
     decking: { cite: "Adopted IRC R803 — verify municipality", note: "Sheathing requirements per local adopted edition.", verified: false },
   },
 };
 
-/* Code Verify provision list — merged from the Ridgeline repo. Broader than
-   the per-job supplement generator below: this is the reference view with a
-   source link on every row, including the matching-insurance-regulation tie-in. */
+/* ================================================================
+   OHIO CODE PROVISIONS — canonical list.
+   One entry per requirement. Where sources disagree on a section
+   number, `conflict` records the alternate so nobody quotes a cite
+   in writing without checking it first.
+   ================================================================ */
 const PROVISION_TOPICS = [
-  { topic: "Re-cover / layers", oh: "RCO R908.3", note: "2+ layers or deteriorated first layer — recover prohibited, full tear-off.", srcOH: "RCO" },
-  { topic: "Ice barrier", oh: "RCO R905.1.2", note: "Eave edge to 24 in. or more inside the exterior wall line, measured along the slope. 8:12+ slope: 36 in. up-slope minimum.", srcOH: "RCO" },
-  { topic: "Drip edge", oh: "RCO R905.2.8.5", note: "Required at eaves and rakes on shingle roofs.", srcOH: "RCO" },
-  { topic: "Step / counter flashing", oh: "RCO R905.2.8", note: "Flashing sized and installed to prevent water intrusion — reuse of damaged flashing does not comply.", srcOH: "RCO" },
-  { topic: "Ventilation", oh: "RCO R806", note: "1/150, or 1/300 with balanced intake and exhaust. Reinstalling a non-compliant system on a code-triggered re-roof is a violation.", srcOH: "RCO" },
-  { topic: "Underlayment (low slope)", oh: "RCO R905.1.1", note: "Double underlayment required below 4:12 slope.", srcOH: "RCO" },
-  { topic: "Fastening", oh: "RCO R905.2.5", note: "4 nails per shingle, 6 in high-wind regions.", srcOH: "RCO" },
-  { topic: "Sheathing", oh: "RCO R803", note: "Recovering over unsound sheathing prohibited — deteriorated decking must be replaced.", srcOH: "RCO" },
-  { topic: "Matching (insurance reg)", oh: "OAC 3901-1-54(I)(1)(b)", note: "Replacement items must be of like kind and quality with reasonably comparable appearance.", srcOH: "OAC3901" },
+  { topic: "Re-cover / maximum layers", oh: "RCO R908.3", srcOH: "RCO",
+    note: "No third layer. Two existing layers means a full tear-off is required — the carrier owes tear-off scope, not a layover. Document the layer count before any mitigation." },
+  { topic: "Ice barrier", oh: "RCO R905.1.2", srcOH: "RCO",
+    note: "Ohio sits in IECC Climate Zones 4A and 5A, so ice barrier applies statewide. Required from the eave edge to at least 24 in. inside the warm wall line, measured along the slope. Must meet ASTM D1970. On 8:12 and steeper, 36 in. up-slope minimum." },
+  { topic: "Drip edge", oh: "RCO R905.2.8.5", srcOH: "RCO",
+    conflict: "Some field references cite R905.2.8.3 for drip edge. The subsection numbering shifts between IRC editions and Ohio adoptions — confirm against the edition your jurisdiction enforces before putting a number in a supplement letter.",
+    note: "Required at BOTH eaves and rakes. Minimum 1/4 in. below the sheathing, extending 2 in. onto the deck. Underlayment laps over the drip edge at eaves and under it at rakes. Scope includes material, labor, and R&R." },
+  { topic: "Step flashing", oh: "RCO R905.2.8.4", srcOH: "RCO",
+    note: "Required where a sloped roof meets a vertical wall. Minimum 4 in. x 4 in. per piece, one per shingle course. Cannot be reused after tear-off — reinstalling damaged flashing does not comply." },
+  { topic: "Kickout / diverter flashing", oh: "RCO R703.4", srcOH: "RCO",
+    note: "Required where a roof edge terminates at a sidewall. Diverts runoff away from the wall assembly; without it water tracks behind the siding. One of the most commonly omitted line items in a carrier scope." },
+  { topic: "Decking / sheathing", oh: "RCO R908.6 and R803", srcOH: "RCO",
+    note: "Decking must be inspected at re-roof. Non-conforming sheathing (3/8 in. plank, skip sheathing) or rotted decking must be replaced — a re-cover over unsound decking is prohibited. Cost is owed under Ordinance & Law where the policy carries it." },
+  { topic: "Underlayment (low slope)", oh: "RCO R905.1.1", srcOH: "RCO",
+    note: "Two layers of underlayment required on slopes from 2:12 up to less than 4:12, or self-adhering membrane throughout. Catches porch roofs, dormers, and additions." },
+  { topic: "Attic ventilation", oh: "RCO R806.2", srcOH: "RCO",
+    note: "Default required ratio is 1/150 of the ventilated area. The 1/300 exception only applies with a balanced system — 40 to 50 percent of the net free area in the upper portion with the balance at the eaves. Most older Ohio homes do not qualify, so 1/150 governs and the carrier owes the upgrade at re-roof. Inadequate ventilation also voids every major shingle warranty." },
+  { topic: "Fastening", oh: "RCO R905.2.5", srcOH: "RCO",
+    note: "Four nails per shingle minimum, six where the manufacturer or wind zone requires it. Installation must follow the manufacturer's instructions, which is itself a code requirement." },
+  { topic: "Water-resistive barrier", oh: "RCO R703.2", srcOH: "RCO",
+    note: "Required behind exterior veneer — minimum one layer of #15 felt or an approved WRB. On a siding replacement, damaged WRB must be replaced. A scope that pays for siding but not housewrap is short." },
+  { topic: "Vinyl siding", oh: "RCO R703.11 / ASTM D3679", srcOH: "RCO",
+    note: "Must comply with ASTM D3679 and be installed per ASTM D4756. Reusing removed vinyl is rarely feasible — UV embrittlement breaks the locking flange during removal. Document this for the matching argument." },
+  { topic: "Matching (insurance regulation)", oh: "OAC 3901-1-54(I)(1)(b)", srcOH: "OAC3901",
+    note: "Replacement items must be of like kind and quality with reasonably comparable appearance. This is the regulation behind full-slope and full-roof arguments when the shingle is discontinued." },
 ];
 
 /* Supplement templates reference a TOPIC and render with the cite for
@@ -195,7 +215,7 @@ const SUPPLEMENT_TEMPLATES = [
     scenario: "Existing ventilation is out of compliance (blocked soffit intake, gable-only, single-source, or insufficient net free area) and the adjuster excludes upgrades as betterment.",
     lineItems: ["Ridge vent LF (or box vent count) sized for the attic square footage.", "Soffit vent installation or reconditioning.", "Baffles at each rafter bay where required for airflow."],
     docs: ["Attic photos showing existing intake and exhaust.", "Attic square footage and net-free-area math."],
-    wording: "Per {CITE}, attic ventilation must be balanced with adequate net free area. The existing system on this property is [gable only / blocked soffit / undersized ridge], which does not meet the balanced requirement. Reinstalling the non-compliant system on the new roof would violate code. Please add [ridge vent LF, soffit intake, and baffles] to the approved scope. Ordinance & Law coverage applies if included in the policy.",
+    wording: "Per {CITE}, attic ventilation must meet the required net-free-area ratio — 1/150 by default, or 1/300 only where a balanced intake-and-exhaust system exists. The existing system on this property is [gable only / blocked soffit / undersized ridge], which does not meet the balanced requirement. Reinstalling the non-compliant system on the new roof would violate code. Please add [ridge vent LF, soffit intake, and baffles] to the approved scope. Ordinance & Law coverage applies if included in the policy.",
   },
   {
     id: "sup-deck", topic: "decking", category: "Structural — discovered during work",
@@ -233,11 +253,50 @@ const INSURANCE_DONT = [
 /* Ohio Insurance Law summaries — guidance, not legal advice; confirm current
    text at the linked official source before relying on it in a dispute. */
 const LAW_ITEMS = [
-  { title: "Matching — OAC 3901-1-54(I)(1)(b)", body: "When replacement of an item results in a mismatch, the carrier owes replacement of items in the area so the result is of like kind and quality with reasonably comparable appearance. This is the lever behind full-slope and full-roof arguments when the shingle is discontinued or the field is heavily weathered.", src: "OAC3901" },
-  { title: "Unfair claims practices — OAC 3901-1-54", body: "Carriers must acknowledge communications promptly, conduct a reasonable investigation before denying, and pay undisputed amounts timely. A supplement declined without inspection or a denial without documented basis runs against this rule — cite it in escalation letters, not in driveway arguments.", src: "OAC3901" },
-  { title: "Public adjusters — ORC Chapter 3951", body: "Negotiating coverage or settlement on the homeowner's behalf requires a public adjuster license. Supreme documents damage and provides its own scope — it does not negotiate the claim. That work belongs to a licensed public adjuster or an attorney.", src: "ORC3951" },
-  { title: "3-day right of rescission — ORC Chapter 1345", body: "A contract signed at the home (a home solicitation sale) carries a 3-business-day cancellation right, and the notice must appear in the contract. Don't start work or order materials inside the window without a documented waiver where permitted.", src: "ORC1345" },
+  { title: "Matching — OAC 3901-1-54(I)(1)(b)", src: "OAC3901",
+    body: "Where replacing an item leaves a mismatch, the carrier owes replacement of items in the area so the result is like kind and quality with reasonably comparable appearance. This is the lever behind full-slope and full-roof arguments when the shingle line is discontinued or the field is heavily weathered." },
+  { title: "Written matching explanation — OAC 3901-1-54(I)(2)", src: "OAC3901",
+    body: "If a carrier limits matching, it must give the insured a written explanation of the policy provision it is relying on. Always demand that explanation in writing — it either produces a citable position you can rebut, or it produces silence you can escalate." },
+  { title: "Claim handling deadlines — OAC 3901-1-54", src: "OAC3901",
+    body: "The carrier must acknowledge a claim within 15 days, complete its investigation within 21 days, and decide within a reasonable time after. Missed deadlines are documentable and belong in any escalation letter or Department of Insurance complaint." },
+  { title: "Insured's right to choose the contractor — R.C. 3901.20", src: "ORC3901_20",
+    body: "The homeowner picks who does the work. A carrier steering the insured to a preferred vendor is an unfair practice. Tell homeowners this early — many assume they must use whoever the adjuster names." },
+  { title: "Bad faith — Hoskins v. Aetna (Ohio 1983)", src: "OAC3901",
+    body: "An insurer that denies or delays without reasonable justification commits a separate tort beyond breach of contract. Slow-pay, lowball scopes, and blanket refusal of code-required items are the evidence pattern. This is attorney territory — Supreme documents, counsel argues." },
+  { title: "Appraisal — Schwartz v. Standard Fire (Ohio 2008)", src: "OAC3901",
+    body: "Confirms the appraisal clause for amount-of-loss disputes. Each side names a competent, disinterested appraiser; the two select an umpire; any two of the three signing binds the award. Appraisal resolves amount, not coverage." },
+  { title: "Public adjusters — ORC Chapter 3951", src: "ORC3951",
+    body: "Negotiating coverage or settlement for the homeowner requires a public adjuster license, and a contractor cannot act as the public adjuster on the same loss. Supreme documents damage and provides its own scope — nothing beyond that." },
+  { title: "Deductible rebating is a felony — R.C. 2913.47 / R.C. 3999.21", src: "ORC1345",
+    body: "Waiving, rebating, absorbing, or offering to pay a homeowner's deductible on an insurance claim is insurance fraud in Ohio, chargeable as a felony. Do not offer it, do not imply it, do not build it into a price. This is the single fastest way to lose a license and a company." },
+  { title: "Three-day right to cancel — R.C. 1345 (CSPA)", src: "ORC1345",
+    body: "A contract signed at the home is a home solicitation sale and carries a three-business-day cancellation right, with the notice required in the contract itself. Do not start work or order materials inside the window without a documented, permitted waiver." },
+  { title: "Large contract disclosures — R.C. 4722", src: "ORC1345",
+    body: "Home construction service contracts above the statutory threshold (commonly cited at $25,000) carry additional written disclosure requirements. Confirm the current threshold and required language with counsel before using a contract form on larger jobs." },
+  { title: "Statute of limitations — R.C. 2305.06", src: "ORC1345",
+    body: "Six years on written contracts following the 2021 amendment. Policy suit-limitation clauses are frequently shorter than the statute, so the contractual deadline usually governs — read the policy, do not assume six years." },
+  { title: "No statewide roofing license — R.C. 4740", src: "ORC1345",
+    body: "Ohio licenses commercial trades but has no statewide residential roofing contractor license. Cities and counties may still require local registration, so confirm the jurisdiction before pulling a permit." },
 ];
+
+const ESCALATION_LADDER = [
+  ["Re-inspection", "Request in writing, inside the policy's time limit. Ask specifically for a senior adjuster or a second set of eyes, and attach the documentation the first inspection missed."],
+  ["Appraisal", "Invoke the policy's appraisal clause for amount-of-loss disputes. Each side names an appraiser, the two pick an umpire, two of three signatures bind. Does not resolve coverage questions."],
+  ["Public adjuster referral", "For coverage disputes rather than pricing. Must be an ORC 3951 licensed PA — and it cannot be Supreme."],
+  ["Ohio Department of Insurance complaint", "Consumer Services, 1-800-686-1526. A complaint typically moves the file to a senior adjuster and creates a regulatory record of the handling."],
+  ["Bad-faith referral", "Coverage counsel, on the Hoskins v. Aetna standard. Refer — do not argue bad faith yourself."],
+];
+
+const KEY_CONTACTS = [
+  ["Ohio Dept. of Insurance — Consumer Services", "1-800-686-1526", "insurance.ohio.gov"],
+  ["Ohio Board of Building Standards", "", "com.ohio.gov/divisions/dico/bbs"],
+  ["GAF Technical Services", "1-800-ROOF-411", "gaf.com"],
+  ["Owens Corning Technical Services", "1-800-GET-PINK", "owenscorning.com"],
+  ["CertainTeed Technical Services", "1-800-233-8990", "certainteed.com"],
+  ["NOAA Storm Prediction Center — hail reports", "", "spc.noaa.gov/climo/online/sps"],
+  ["NOAA Storm Events database", "", "ncdc.noaa.gov/stormevents"],
+];
+
 
 const POLICY_CARDS = [
   { title: "Ordinance & Law Coverage", body: "Often listed as Coverage D or Increased Cost of Construction on HO-3 policies. Pays for costs incurred to bring the property into current code compliance as part of a covered loss. Without it, the carrier only owes the pre-loss condition — code-required upgrades come out of the homeowner's pocket.",
@@ -256,18 +315,81 @@ const POLICY_CARDS = [
     callout: { label: "Check for", text: "\"matching,\" \"uniform appearance,\" \"cosmetic\" language in the policy schedule and any endorsements. Some carriers add a cosmetic-damage exclusion that specifically strips matching for hail spatter without functional damage." } },
 ];
 
-const DOC_STANDARD = [
-  ["Ground shots of all elevations", "establishes property identity, general condition."],
-  ["Shingle layer count", "edge photo showing visible layers."],
-  ["Test square", "chalked 10x10 for hail, hit count per slope."],
-  ["Damage close-ups", "ruler or coin in frame for scale."],
-  ["Ventilation type & condition", "ridge, box, gable, power. Soffit intake status."],
-  ["Flashing condition", "step, wall, chimney, skylight, pipe boots."],
-  ["Gutter line", "downspouts for granule accumulation."],
-  ["Attic access", "decking from below, insulation depth, ventilation from inside, active leaks."],
-  ["Related property damage", "siding, screens, HVAC, gutters, fascia, soffit, downspouts. Photograph even if not this claim's scope."],
-  ["Date & time stamp", "on all photos."],
+const DOC_GROUPS = [
+  { title: "Roof photos", items: [
+    "Wide shot of every slope from the ground — all four elevations.",
+    "Two close-ups per slope showing the shingle field.",
+    "Chalked test squares, 10 ft x 10 ft, minimum two per slope, hit count written in frame.",
+    "Close-up of each individual impact with a ruler or coin for scale.",
+    "Step flashing, valley, rake, and eave details.",
+    "Two examples of clean undamaged shingle — needed for the matching argument.",
+    "Back-of-shingle markings, plant code, and measured dimensions.",
+    "Cellophane release strip.",
+    "Layer count — probe at the gutter line or a vent penetration.",
+    "Underlayment type where visible at a penetration.",
+  ]},
+  { title: "Soft metals and collateral damage", items: [
+    "Vent caps and range or kitchen vents.",
+    "Gutter aprons, gutters, and downspouts.",
+    "Plumbing boots.",
+    "Satellite dish.",
+    "AC condenser fins — hail dents show clearly on aluminum.",
+    "Painted surfaces: doors, fascia, trim.",
+    "Window screens — tears and splits.",
+    "Wood elements: rake board splintering, fascia.",
+    "Garage door — dents on raised panels.",
+    "Each siding elevation, wide and detail.",
+  ]},
+  { title: "Measurements", items: [
+    "Pitch of every distinct slope.",
+    "Square count per slope.",
+    "Linear feet: valley, rake, eave, ridge, hip.",
+    "Penetration count and type.",
+    "Step flashing and wall flashing linear feet.",
+    "Shingle width, height, and exposure — this drives the discontinued-product argument.",
+  ]},
+  { title: "Paper trail", items: [
+    "Policy declarations page — front, back, and all endorsement pages.",
+    "Roof age: homeowner statement, MLS listing, or prior claim record.",
+    "NOAA hail report for the address and loss date.",
+    "NWS storm event report.",
+    "Building permit history from the jurisdiction.",
+    "Prior claim history (CLUE report where available).",
+    "Carrier's loss summary.",
+    "Adjuster name, license number, and claim phone.",
+    "Signed contract with the three-day right-to-cancel notice.",
+    "Manufacturer do-not-mix bulletin, printed.",
+  ]},
+  { title: "Identification record", items: [
+    "Shingle manufacturer, line, and approximate year.",
+    "Plant code.",
+    "Measured width, height, and exposure.",
+    "Ridge, hip, and starter type and condition.",
+    "Underlayment type where visible.",
+    "Decking type and thickness — probe at a vent.",
+    "Number of layers.",
+    "Ventilation system: intake and exhaust, both.",
+    "Skylight type and age.",
+    "Chimney flashing condition.",
+  ]},
 ];
+
+/* Line items to check for on every insurance scope before signing off. */
+const SUPPLEMENT_TRIGGERS = [
+  ["Drip edge — full perimeter", "RCO R905.2.8.5 (verify subsection)"],
+  ["Ice barrier", "RCO R905.1.2"],
+  ["Step flashing R&R", "RCO R905.2.8.4"],
+  ["Kickout / diverter flashing", "RCO R703.4"],
+  ["Decking R&R where rotted or non-conforming", "RCO R908.6"],
+  ["Ventilation upgrade where below 1/150", "RCO R806.2"],
+  ["Water-resistive barrier on siding R&R", "RCO R703.2"],
+  ["Permit and inspection fee", "Jurisdiction"],
+  ["Dump and disposal fee", "Scope"],
+  ["Overhead & profit where multi-trade", "Typically 10/10 on larger losses"],
+  ["Starter strip and ridge cap", "Manufacturer requirement"],
+  ["Detach & reset — satellite, solar, lighting", "Scope"],
+];
+
 
 const DOC_TEMPLATES = [
   { type: "Hail", items: [
@@ -299,6 +421,7 @@ const CLAIM_SCENARIOS = [
       "If shingle line is discontinued or field is significantly weathered, cite OAC 3901-1-54(I)(1)(b) — reasonably comparable appearance.",
       "Document color-match failure with photos of a manufacturer sample vs field shingles under matched lighting.",
       "If the roof has 2+ layers, cite RCO R908.3 — recover is prohibited, so partial replacement on top of the existing bottom layer is not code-compliant either.",
+      "Re-walk the slopes the adjuster called undamaged before conceding them — a lower hit count is not no damage. Even where the rear slope genuinely has fewer impacts, the matching regulation still drives toward uniform appearance.",
     ]},
   { q: "\u201CJust layer new shingles over the existing\u201D",
     setup: "Adjuster proposes an overlay to save money.",
@@ -332,7 +455,7 @@ const CLAIM_SCENARIOS = [
   { q: "\u201CVentilation upgrade is a betterment\u201D",
     setup: "Adjuster excludes new ridge vent, soffit intake, or box vent replacement as an improvement not caused by the loss.",
     answer: [
-      "If the existing ventilation is out of compliance with RCO R806 (1/150 or 1/300 balanced), reinstalling the same non-compliant system on a code-triggered re-roof is a code violation.",
+      "The default required ratio under RCO R806.2 is 1/150; the 1/300 exception applies only where a balanced intake-and-exhaust system exists. Most older homes do not qualify, so reinstalling the existing non-compliant system on a code-triggered re-roof is a violation.",
       "Ordinance & Law coverage applies if the policy includes it.",
       "If the existing system was itself damaged by the storm (ridge cap blown off, box vent housing hail-struck), that alone is covered damage regardless of code.",
     ]},
@@ -344,6 +467,7 @@ const CLAIM_SCENARIOS = [
       "For an aged roof that also has hail impact, granule loss at impact sites (fractured mat under the impact) is diagnostic of storm damage. Photograph in raking light.",
       "Brittleness test on a cool day is more reliable than on hot; document date and temperature.",
       "Request the carrier's engineer report if damage is denied on that basis.",
+      "Where the carrier blames installation or age rather than the storm, Ohio applies efficient proximate cause: if the covered peril was the predominant cause, the loss is covered even with contributing factors. Pin the storm date with NWS wind data and NOAA hail reports, and document neighboring properties.",
     ]},
   { q: "\u201CRoof is too old for full replacement value\u201D",
     setup: "Adjuster settles on Actual Cash Value only, or applies a roof-age depreciation schedule that reduces the payment significantly.",
@@ -351,6 +475,37 @@ const CLAIM_SCENARIOS = [
       "Check the policy: does it pay Replacement Cost Value (RCV) with recoverable depreciation, or ACV only? If RCV, the homeowner recovers the withheld depreciation on completion of the work.",
       "Watch for a roof-age endorsement that converts RCV to ACV past a set age — read the endorsement pages.",
       "Document maintained, serviceable condition to push back on aggressive depreciation: no prior leaks, intact flashing, sound decking.",
+    ]},
+];
+
+const MORE_SCENARIOS = [
+  { q: "\u201CCosmetic damage only — granule loss isn't functional\u201D",
+    setup: "The carrier concedes hail struck the roof but treats the damage as appearance-only and declines replacement.",
+    answer: [
+      "Granules are the UV shield for the asphalt mat. Once impact displaces them the mat degrades faster and the manufacturer warranty is compromised — that is functional loss, not appearance.",
+      "Document what a spatter photo alone will not show: fractured mat beneath the impact, and seal strips that have released and will not re-seal.",
+      "Ask in writing whether the carrier is relying on a specific cosmetic-damage exclusion by endorsement. If there is no such endorsement, physical damage from a covered peril is covered — see Resources, Policy Provisions.",
+    ]},
+  { q: "\u201CWe won't pay for drip edge or kickout — the house never had them\u201D",
+    setup: "The carrier declines code-required components on the grounds that the pre-loss roof did not include them.",
+    answer: [
+      "Pre-loss absence is not the standard. The new installation has to pass inspection, and it cannot without these components.",
+      "Cite the specific sections: drip edge RCO R905.2.8.5 (confirm the subsection against your jurisdiction's adopted edition), step flashing RCO R905.2.8.4, kickout RCO R703.4.",
+      "Where the policy carries Ordinance & Law, code-driven upgrades fall under that coverage specifically. Check the declarations page before asserting it.",
+    ]},
+  { q: "\u201CYour estimate is too high — our software says less\u201D",
+    setup: "The carrier anchors to an estimating platform's price list and treats it as the ceiling.",
+    answer: [
+      "Estimating software is a pricing reference, not the policy. The obligation is the reasonable cost to repair at local market rates.",
+      "Document what the price list misses: code-driven line items, R&R of metals, disposal, permit fees, and the actual local labor rate.",
+      "On larger multi-trade losses, overhead and profit is a normal component of a general contractor's price and should be scoped as such.",
+    ]},
+  { q: "\u201CACV now — you'll get the depreciation when the work is done\u201D",
+    setup: "Standard on a recoverable-depreciation policy, but it becomes a problem when the release is slow or conditioned on paperwork nobody explained.",
+    answer: [
+      "Confirm first that the depreciation is actually recoverable. If a Roof Payment Schedule or ACV-roof endorsement applies, the shortfall is NOT recoverable and the homeowner needs to hear that before signing.",
+      "Ask up front what the carrier requires to release it — typically a certificate of completion and the final invoice. Send it the day the job closes.",
+      "Once submitted, OAC 3901-1-54 timelines apply. Persistent slow-pay after a complete submission is documentable and belongs in an escalation.",
     ]},
 ];
 
@@ -388,7 +543,7 @@ const CHEAT_SHEET = {
     ["Ice barrier 24 in. past wall line", "RCO R905.1.2"],
     ["New drip edge on all eaves/rakes", "RCO R905.2.8.5"],
     ["New step/counter flashing", "RCO R905.2.8"],
-    ["Ventilation to 1/300 balanced", "RCO R806"],
+    ["Ventilation to code ratio — 1/150 default", "RCO R806.2"],
     ["Double underlayment on < 4:12 slope", "RCO R905.1.1"],
     ["4-nail (or 6 in high-wind) fastening", "RCO R905.2.5"],
   ],
@@ -397,14 +552,246 @@ const CHEAT_SHEET = {
   line: "The line you don't cross: Supreme documents damage and provides its own scope. Supreme does not negotiate coverage under the policy. That's public adjuster or attorney work — ORC Chapter 3951.",
 };
 
-const RESOURCE_SECTIONS = [
-  { id: "law", icon: Scale, title: "Ohio Insurance Law", blurb: "Matching regulation, unfair claims practices, public adjuster rules, and the 3-day rescission." },
-  { id: "policy", icon: CheckCircle2, title: "Policy Provisions", blurb: "Ordinance & Law, RCV vs. ACV, matching endorsements — what to check on the dec page." },
-  { id: "docs", icon: Camera, title: "Documentation Checklist", blurb: "Per-inspection photo standard, damage-type templates, and the paper trail every claim file needs." },
-  { id: "tips", icon: Lightbulb, title: "Claim Tips", blurb: "Scenario playbook — the adjuster shortcut and the code cite that answers it. Plus carrier-specific patterns." },
-  { id: "dodont", icon: AlertTriangle, title: "Do & Don't", blurb: "Field practices on one side, ways this goes sideways on the other. Split-screen reference." },
-  { id: "truck", icon: ClipboardList, title: "Truck Cheat Sheet", blurb: "One-page summary of the three levers, code cites, and the line you don't cross. Print for the truck." },
+/* ================================================================
+   SHINGLE IDENTIFICATION — the backbone of the matching argument.
+   Width is the fastest discriminator in the field. Dimensions in
+   inches: w = width (course height), l = length, exp = exposure.
+   Verify against the manufacturer's current literature before
+   attaching any of it to a supplement.
+   ================================================================ */
+const SHINGLE_RULES = [
+  ["Laminate under 38 in. long", "Always discontinued. No current laminate is made below this size."],
+  ["38 3/4 in. long", "Either CertainTeed Landmark (current) or one of four discontinued lines — old OC Oakridge Pro 30, old Elk 30, old Atlas, old Tamko. Back-of-shingle markings tell them apart."],
+  ["39 3/8 in. long", "Current standard for most makers, BUT pre-2008 Owens Corning, pre-2008 GAF, pre-2010 OC Duration, and pre-2018 GAF Timberline HD are all discontinued at this size. Date the roof."],
+  ["CertainTeed at 36 in. (English size)", "Pre-2005. CertainTeed's Ohio plant converted to metric in 2005 — anything English-size is discontinued."],
 ];
+
+const SHINGLE_DB = [
+  // GAF
+  { mfr: "GAF", line: "Timberline HDZ", w: 13.25, l: 39.375, exp: 5.625, type: "Laminate", status: "current", years: "2018–present", note: "Current flagship. LayerLock nail zone is 1.6 in. wide vs about 1 in. on HD." },
+  { mfr: "GAF", line: "Timberline HD", w: 13.25, l: 39.375, exp: 5.625, type: "Laminate", status: "disco", years: "2007–2018", note: "Replaced by HDZ. Narrower nail zone — GAF states the two are not interchangeable." },
+  { mfr: "GAF", line: "Timberline Ultra", w: 13.25, l: 39.375, exp: 5.625, type: "Laminate", status: "disco", years: "~2005–2014", note: "Replaced by Ultra HD." },
+  { mfr: "GAF", line: "Timberline 20 / 25 / 30 (organic)", w: 13.25, l: 39.375, exp: 5.625, type: "Laminate", status: "disco", years: "1980s–2006", note: "Organic mat. Replaced by Natural Shadow. No fiberglass equivalent." },
+  { mfr: "GAF", line: "Camelot I", w: 0, l: 0, exp: 0, type: "Designer", status: "disco", years: "2003–2017", note: "Replaced by Camelot II — different profile." },
+  { mfr: "GAF", line: "Country Mansion", w: 0, l: 0, exp: 0, type: "Designer", status: "disco", years: "", note: "Replaced by Camelot / Grand Sequoia." },
+  { mfr: "GAF", line: "Sentinel (3-tab)", w: 0, l: 0, exp: 0, type: "3-tab", status: "disco", years: "phased out 2013–2025", note: "Confirm availability by color before promising a repair match." },
+  // Owens Corning
+  { mfr: "Owens Corning", line: "TruDefinition Duration", w: 13.25, l: 39.375, exp: 5.625, type: "Laminate", status: "current", years: "2010–present", note: "Current flagship. SureNail strip differs from the original Duration." },
+  { mfr: "Owens Corning", line: "Duration (original)", w: 13.25, l: 39.375, exp: 5.625, type: "Laminate", status: "disco", years: "pre-2010", note: "Different SureNail construction — not a match for TruDefinition." },
+  { mfr: "Owens Corning", line: "Oakridge Pro 25 / 30", w: 13.25, l: 38.75, exp: 5.625, type: "Laminate", status: "disco", years: "pre-2008", note: "Became Oakridge AR at 39 3/8 in. in 2008. Different mat and bonding." },
+  { mfr: "Owens Corning", line: "Oakridge Pro 40 / 50", w: 13.25, l: 39.375, exp: 5.625, type: "Laminate", status: "disco", years: "pre-2008", note: "Consolidated into Oakridge AR in 2008." },
+  { mfr: "Owens Corning", line: "Devonshire", w: 0, l: 0, exp: 0, type: "Designer", status: "disco", years: "–2020", note: "Slate-look laminate." },
+  { mfr: "Owens Corning", line: "Supreme Deep Shadow", w: 0, l: 0, exp: 0, type: "3-tab", status: "disco", years: "", note: "" },
+  { mfr: "Owens Corning", line: "Prominence", w: 0, l: 0, exp: 0, type: "3-tab", status: "disco", years: "–2008", note: "Faux-laminate 3-tab." },
+  { mfr: "Owens Corning", line: "Classic (3-tab)", w: 0, l: 0, exp: 0, type: "3-tab", status: "disco", years: "fully out 2018", note: "Limited availability from about 2010." },
+  { mfr: "Owens Corning", line: "WeatherGuard IR", w: 0, l: 0, exp: 0, type: "Designer", status: "disco", years: "–2011", note: "Impact-rated predecessor to Duration FLEX." },
+  // CertainTeed
+  { mfr: "CertainTeed", line: "Landmark", w: 13.25, l: 38.75, exp: 5.625, type: "Laminate", status: "current", years: "2005–present", note: "The ONLY current laminate at 38 3/4 in. Anything else that width is discontinued." },
+  { mfr: "CertainTeed", line: "Landmark (English size)", w: 12, l: 36, exp: 5, type: "Laminate", status: "disco", years: "pre-2005", note: "Ohio plant converted to metric in 2005." },
+  { mfr: "CertainTeed", line: "Hatteras", w: 0, l: 0, exp: 0, type: "Designer", status: "disco", years: "–2016", note: "Large 4-tab slate look. Slateline differs in profile and dimension — not a match." },
+  { mfr: "CertainTeed", line: "Independence", w: 0, l: 0, exp: 0, type: "Designer", status: "disco", years: "–2017", note: "Designer 3-tab." },
+  { mfr: "CertainTeed", line: "Horizon / New Horizon", w: 0, l: 0, exp: 0, type: "Laminate", status: "disco", years: "", note: "" },
+  { mfr: "CertainTeed", line: "Patriot I / Patriot II", w: 0, l: 0, exp: 0, type: "Laminate", status: "disco", years: "", note: "" },
+  { mfr: "CertainTeed", line: "Hallmark / Hearthstead / Centennial Slate", w: 0, l: 0, exp: 0, type: "Designer", status: "disco", years: "", note: "" },
+  { mfr: "CertainTeed", line: "XT 25 / XT 30 (3-tab)", w: 0, l: 0, exp: 0, type: "3-tab", status: "disco", years: "out by 2020", note: "" },
+  { mfr: "CertainTeed", line: "Presidential Solaris / Shake IR", w: 0, l: 0, exp: 0, type: "Designer", status: "disco", years: "", note: "Presidential base line continues; these variants do not." },
+  // Tamko
+  { mfr: "Tamko", line: "Heritage", w: 13.25, l: 39.375, exp: 5.625, type: "Laminate", status: "current", years: "2016–present", note: "Tamko went metric in 2012 — last major maker to convert." },
+  { mfr: "Tamko", line: "Heritage (Dallas / Joplin)", w: 13.25, l: 38.75, exp: 5.625, type: "Laminate", status: "disco", years: "pre-2016", note: "" },
+  { mfr: "Tamko", line: "Heritage 25 / 30", w: 0, l: 36.5, exp: 0, type: "Laminate", status: "disco", years: "pre-2012", note: "English size." },
+  { mfr: "Tamko", line: "Heritage XL", w: 0, l: 36.625, exp: 0, type: "Laminate", status: "disco", years: "", note: "" },
+  { mfr: "Tamko", line: "Elite Glass Seal (3-tab)", w: 12.25, l: 36, exp: 5.125, type: "3-tab", status: "current", years: "", note: "Limited Lifetime added 2018." },
+  { mfr: "Tamko", line: "Glass Seal 20-yr (3-tab)", w: 0, l: 0, exp: 0, type: "3-tab", status: "disco", years: "", note: "" },
+  // Atlas
+  { mfr: "Atlas", line: "Pinnacle / StormMaster / Castlebrook", w: 14, l: 42, exp: 6, type: "Laminate", status: "current", years: "2017–present", note: "Current size. Sealant is on the FRONT of the shingle, not the back." },
+  { mfr: "Atlas", line: "Pinnacle / StormMaster (mid)", w: 13.25, l: 39.375, exp: 5.625, type: "Laminate", status: "disco", years: "~2013–2017", note: "Different keyway and exposure than the 42 in. HP line — visible offset if mixed." },
+  { mfr: "Atlas", line: "Pinnacle / StormMaster (early)", w: 0, l: 38.25, exp: 5.625, type: "Laminate", status: "disco", years: "~2013", note: "" },
+  { mfr: "Atlas", line: "Castlebrook (early)", w: 0, l: 38.625, exp: 0, type: "Laminate", status: "disco", years: "~2013", note: "" },
+  { mfr: "Atlas", line: "Stratford / Chalet", w: 0, l: 0, exp: 0, type: "3-tab", status: "disco", years: "", note: "Faux-laminate 3-tabs. Atlas 3-tab production has ended." },
+  // IKO
+  { mfr: "IKO", line: "Cambridge", w: 13.75, l: 40.875, exp: 5.875, type: "Laminate", status: "current", years: "", note: "Current ArmourZone nail strike is wider than older Cambridge generations." },
+  { mfr: "IKO", line: "Dynasty", w: 13.75, l: 40.875, exp: 5.875, type: "Laminate", status: "current", years: "", note: "ArmourZone. Class 3 IR upgrade in 2022." },
+  { mfr: "IKO", line: "Marathon AR (3-tab)", w: 0, l: 0, exp: 0, type: "3-tab", status: "current", years: "", note: "Converted English to metric. Color range now limited." },
+  { mfr: "IKO", line: "Skyline / Renaissance", w: 0, l: 0, exp: 0, type: "Designer", status: "disco", years: "", note: "Private labels (e.g. CRC Biltmore 35) also likely gone — call to confirm." },
+  // Malarkey / Pabco
+  { mfr: "Malarkey", line: "Vista / Highlander", w: 13.25, l: 39, exp: 5.625, type: "Laminate", status: "current", years: "", note: "SBS rubberized. Most flagship lines carry Class 4 impact rating as standard." },
+  { mfr: "Malarkey", line: "Legacy", w: 13.25, l: 40, exp: 5.625, type: "Laminate", status: "current", years: "", note: "SBS, Class 4 standard." },
+  { mfr: "Pabco", line: "Premier / Prestige / Radiance", w: 13.25, l: 40, exp: 5.625, type: "Laminate", status: "current", years: "", note: "Narrow tooth, bold shadow. Uncommon in the Ohio market." },
+  // Elk — all discontinued
+  { mfr: "Elk (legacy)", line: "Prestique 30", w: 13.25, l: 38.75, exp: 5.625, type: "Laminate", status: "disco", years: "mid-1990s–2009", note: "Closest current analogue is GAF Timberline 30 — not a match." },
+  { mfr: "Elk (legacy)", line: "Raised Profile 30", w: 13.25, l: 38.75, exp: 5.625, type: "Laminate", status: "disco", years: "", note: "Analogue: GAF Natural Shadow." },
+  { mfr: "Elk (legacy)", line: "Prestique I 40", w: 13.25, l: 39.375, exp: 5.625, type: "Laminate", status: "disco", years: "", note: "Analogue: GAF Timberline 40." },
+  { mfr: "Elk (legacy)", line: "Prestique Plus 50", w: 13.25, l: 39.375, exp: 5.625, type: "Laminate", status: "disco", years: "", note: "Granules on the back of the shingle." },
+  { mfr: "Elk (legacy)", line: "Capstone", w: 12.125, l: 39.5, exp: 5, type: "Designer", status: "disco", years: "", note: "" },
+  { mfr: "Elk (legacy)", line: "Domain Winslow", w: 14.5, l: 40, exp: 5.625, type: "Designer", status: "disco", years: "", note: "Shake look." },
+];
+
+/* Back-of-shingle identification marks — how to tell makers apart on the roof. */
+const MFR_IDENT = [
+  { mfr: "GAF", mark: "\"GAF\" plus a plant code of two letters and four digits. Sealant is dashed, not solid.",
+    plants: "MO Mt Vernon IN · MI Michigan City IN · TA Tampa · DA Dallas · NJ Mt Vernon NJ · SH Shafter CA · MN Minneapolis · TU Tuscaloosa · CD Cedar City UT · BA Baltimore · SS Statesboro GA · EN Ennis TX (legacy Elk plant)" },
+  { mfr: "Owens Corning", mark: "Cellophane reads \"Do Not Remove\" / \"No Quitar\" with year and plant letter codes. Multiple plastic strips; black SureNail strip on TruDefinition Duration.", plants: "" },
+  { mfr: "CertainTeed", mark: "Back almost always carries \"certainteed\" with the logo or \"the roofing collection.\" Tapered tooth, medium shadow line.", plants: "" },
+  { mfr: "Tamko", mark: "Back reads \"Tamko\" or \"Frederick\" plus the plant name. Cellophane carries plant print.", plants: "" },
+  { mfr: "Atlas", mark: "Five-digit code, sometimes with a Miami-Dade approval marking. Sealant is on the FRONT of the shingle.", plants: "" },
+  { mfr: "IKO", mark: "\"PX\" plus a letter and five digits, e.g. PX A#####.", plants: "" },
+  { mfr: "Elk (legacy)", mark: "Brown paper or blank backing, \"MYERSTOWN,\" a Texas outline with \"ENNIS,\" or T1/T2/T3 and M1/M2/M3 codes with \"DO NOT REMOVE\" between them. All Elk product is discontinued.", plants: "" },
+  { mfr: "Malarkey", mark: "Brand text on the back. Vista and Highlander at 39 in., Legacy at 40 in.", plants: "" },
+];
+
+/* Current flagship specs — used to show current product is not equivalent. */
+const MFR_SPECS = [
+  { mfr: "GAF", flagship: "Timberline HDZ", w: "13-1/4 in.", l: "39-3/8 in.", exp: "5-5/8 in.",
+    wind: "130 mph with LayerLock plus StainGuard Plus", algae: "StainGuard Plus 25 yr / StainGuard 10 yr",
+    warranty: "Lifetime limited, 10 yr non-prorated", class4: "Timberline AS II · Grand Sequoia IR · Camelot II IR (select markets)",
+    dnm: "GAF technical bulletins state HD and HDZ are not interchangeable — different nail zone width, exposure, and sealant. Prior-generation Timberline is not acceptable repair material on an HDZ roof. A 2007–2018 HD roof cannot be repair-matched with current product." },
+  { mfr: "Owens Corning", flagship: "TruDefinition Duration", w: "13-1/4 in.", l: "39-3/8 in.", exp: "5-5/8 in.",
+    wind: "130 mph with SureNail, no special installation required", algae: "StreakGuard 10 yr",
+    warranty: "Lifetime limited", class4: "Duration FLEX (polymer-modified)",
+    dnm: "OC repair-versus-replace bulletins state Oakridge AR and the older Pro lines are not compatible — different mat and bonding. Same position on original Duration versus TruDefinition Duration." },
+  { mfr: "CertainTeed", flagship: "Landmark", w: "13-1/4 in.", l: "38-3/4 in.", exp: "5-5/8 in.",
+    wind: "110–130 mph across Landmark / Pro / Premium", algae: "StreakFighter 15 yr",
+    warranty: "Lifetime limited", class4: "Landmark IR · Belmont IR · Presidential IR",
+    dnm: "CertainTeed publishes lot-to-lot color variation guidance and recommends running a roof from a single production lot. Do-not-mix language applies to Hatteras, since the replacement Slateline differs in profile and dimension." },
+  { mfr: "Atlas", flagship: "Pinnacle / StormMaster / Castlebrook", w: "14 in.", l: "42 in.", exp: "6 in.",
+    wind: "130 mph with HP and Scotchgard combination", algae: "Scotchgard", warranty: "Lifetime limited",
+    class4: "StormMaster Slate / Shake / Shingle (SBS-modified)",
+    dnm: "Atlas has confirmed in writing that the 42 in. HP line cannot be matched with prior 39-3/8 in. or 38 in. product — the keyway and exposure differ, producing a visible offset." },
+  { mfr: "Tamko", flagship: "Heritage", w: "13-1/4 in.", l: "39-3/8 in.", exp: "5-5/8 in.",
+    wind: "130 mph with correct starters and fastening", algae: "Available by series", warranty: "Limited Lifetime (added 2018)",
+    class4: "Heritage IR (SBS)",
+    dnm: "Modern fiberglass Heritage cannot be matched to the older organic Heritage — the mat composition differs. Tamko organic product also carries class-action history worth knowing before you discuss it with a homeowner." },
+  { mfr: "IKO", flagship: "Cambridge / Dynasty", w: "13-3/4 in.", l: "40-7/8 in.", exp: "5-7/8 in.",
+    wind: "110 mph Cambridge · 130 mph Dynasty with ArmourZone", algae: "Available by series", warranty: "Limited Lifetime",
+    class4: "Nordic · Cambridge IR · Dynasty IR (2022+)",
+    dnm: "Cambridge generations differ in nail-zone marking — older Cambridge has a narrower nail strike than current ArmourZone Cambridge." },
+];
+
+/* Vinyl siding matching — the parallel argument to shingle matching. */
+const SIDING_MATCHING = {
+  makers: "CertainTeed · Mastic / Ply Gem · Alside · Royal · Variform · Norandex",
+  points: [
+    "UV fade. ASTM D6864 permits up to 4 Delta-E of color shift across the warranty period. The naked eye detects a difference at about 2 — so a compliant, non-defective wall can still visibly mismatch new stock.",
+    "Profile tooling changes. Manufacturers retire and revise profiles roughly every 5 to 10 years; embossing and lock geometry shift with them.",
+    "Locking flange failure. Aged vinyl embrittles under UV and the locking flange typically breaks on removal, so salvaged panels usually cannot be reinstalled.",
+    "Color SKU attrition. Individual colors are discontinued faster than the product lines that carry them.",
+  ],
+  argument: "Partial replacement of vinyl siding produces a visible mismatch in nearly every case. Photograph the existing color and profile, request manufacturer color-match samples in writing, and pursue full-elevation replacement on matching grounds.",
+};
+
+/* ================================================================
+   LETTER TEMPLATES — fill the bracketed fields, send in writing.
+   Written communication is what survives a contested claim.
+   ================================================================ */
+const LETTER_TEMPLATES = [
+  { id: "lt-supp", title: "Supplement request", when: "The carrier's scope omits code-required or manufacturer-required line items.",
+    body: `[Date]
+[Carrier] — Claims Department
+RE: Claim #[claim] · Insured: [name] · Date of loss: [date]
+Property: [address]
+
+We are the contractor of record on the above claim. Having reviewed the loss summary dated [date], we have identified the following items that were omitted or under-scoped. Each is required by the Residential Code of Ohio, by the manufacturer's published installation instructions, or by the loss settlement terms of the policy.
+
+1. Drip edge, full perimeter — RCO R905.2.8.5. [LF] at [$].
+2. Ice barrier at eaves and valleys — RCO R905.1.2. Ohio sits in IECC Climate Zones 4A and 5A; this applies statewide. [SQ] at [$].
+3. Step flashing, remove and replace — RCO R905.2.8.4. Flashing cannot be reused after tear-off. [LF] at [$].
+4. Kickout flashing — RCO R703.4. [EA] at [$].
+5. Decking replacement where existing sheathing does not provide an adequate base — RCO R908.6. [SF] at [$].
+6. Ventilation brought to the code-required ratio — RCO R806.2. [detail] at [$].
+7. Permit and inspection fee. [$].
+8. Disposal. [$].
+9. Overhead and profit, where the loss requires coordination of multiple trades.
+
+Please update the loss summary to reflect these items and reissue payment within the timeframe set by OAC 3901-1-54. Supporting photographs and measurements are attached.
+
+[Rep name] — [Company] — [Phone]` },
+
+  { id: "lt-match", title: "Matching argument", when: "The carrier authorized partial replacement and the existing shingle is discontinued.",
+    body: `[Date]
+[Carrier] — Attn: Claims Manager
+RE: Claim #[claim] · Insured: [name] · Date of loss: [date]
+
+The current authorization covers [x] slope(s). We respectfully request authorization for full replacement, on the following grounds.
+
+1. The existing shingle is discontinued. The roof is identified as [manufacturer / line], measured at [width] x [length] with [exposure] exposure. That product has not been manufactured since [year]. Attached: photographs of the back-of-shingle markings, plant code, sealant pattern, and the measurements taken on site.
+
+2. Current product is not interchangeable. [Manufacturer]'s technical bulletin dated [date] states that current product is not compatible with the discontinued line for installation, warranty, or appearance. Bulletin attached.
+
+3. Partial replacement does not meet the policy's settlement standard. The policy provides for replacement with like kind and quality. A visible line between new and existing slopes does not satisfy that standard.
+
+4. OAC 3901-1-54(I)(1)(b) requires that replacement items be of like kind and quality with reasonably comparable appearance. If the carrier intends to maintain the partial position, OAC 3901-1-54(I)(2) requires a written explanation of the provision relied upon. We request that explanation in writing.
+
+We request re-inspection within fourteen days. If the partial position is maintained, we will advise the insured of their right to invoke the policy's appraisal clause.
+
+[Rep name] — [Company] — [Phone]` },
+
+  { id: "lt-cosmetic", title: "Cosmetic-only rebuttal", when: "The carrier denied hail damage as cosmetic rather than functional.",
+    body: `[Date]
+[Carrier] — Attn: Claims Manager
+RE: Claim #[claim] · Insured: [name] — cosmetic-only determination
+
+The letter dated [date] denies this claim on the basis that the hail damage is cosmetic and does not affect function. We respectfully disagree.
+
+1. Granule loss is functional. The granule surface shields the asphalt mat from ultraviolet exposure. Where granules are displaced by impact, the mat is exposed, service life is shortened, and manufacturer warranty coverage is compromised. The published technical positions of GAF, Owens Corning, and CertainTeed all treat impact bruising as functional damage.
+
+2. We have documented fractured mat and broken seal-down. The attached photographs show impacts where the mat is fractured beneath the surface and the seal strip has released and will not re-seal. Sample shingles are available for inspection.
+
+3. If the carrier is relying on a cosmetic-damage exclusion by endorsement, we request that the endorsement be identified in writing. Absent a specific exclusion, physical damage from a covered peril is covered.
+
+We request re-inspection by a senior adjuster within fourteen days.
+
+[Rep name] — [Company] — [Phone]` },
+
+  { id: "lt-appraisal", title: "Appraisal demand", when: "The dispute is over the amount of loss, not coverage, and negotiation has stalled.",
+    body: `[Date]
+[Carrier] — Attn: Claims Manager
+RE: Claim #[claim] · Insured: [name]
+
+Pursuant to the appraisal provision of the policy, the insured demands appraisal of the disputed amount of loss.
+
+The insured names [appraiser name, address] as their competent and disinterested appraiser.
+
+Please name the carrier's appraiser within the period required by the policy. The two appraisers will then select an umpire. An award agreed by any two of the three will be binding as to the amount of loss, consistent with Schwartz v. Standard Fire Insurance Co. (Ohio 2008).
+
+[Insured name / Rep name] — [Company] — [Phone]` },
+
+  { id: "lt-odi", title: "Department of Insurance complaint",
+    when: "The carrier has missed handling deadlines or refused a written explanation. Escalates the file and creates a regulatory record.",
+    body: `[Date]
+Ohio Department of Insurance — Consumer Services Division
+50 W. Town Street, Third Floor, Suite 300
+Columbus, OH 43215
+
+RE: Claim complaint · Insured: [name] · Carrier: [carrier] · Claim #[claim] · Date of loss: [date]
+
+The insured submits this complaint regarding the handling of the above claim.
+
+1. [Select: failure to acknowledge within 15 days per OAC 3901-1-54 / failure to complete investigation within 21 days / refusal to provide the written matching explanation required by OAC 3901-1-54(I)(2) / scope omitting code-required items / other].
+
+2. The carrier has been given written notice regarding [drip edge / ice barrier / step flashing / kickout / decking / ventilation / matching] and has not updated the scope.
+
+3. The carrier's most recent communication was dated [date] and stated [summary].
+
+Enclosed: declarations page, the carrier's loss summary, our supplement request dated [date], photographs of the loss, and the manufacturer's do-not-mix bulletin.
+
+The insured requests review.
+
+[Insured name, address, phone]
+cc: [Company], contractor of record` },
+];
+
+const RESOURCE_SECTIONS = [
+  { id: "shingles", icon: Layers, title: "Shingle ID", blurb: "Width-first identification, discontinued lines by manufacturer, and back-of-shingle marks." },
+  { id: "specs", icon: Package, title: "Manufacturer Specs", blurb: "Current flagship dimensions, do-not-mix positions, Class 4 options, and siding matching." },
+  { id: "law", icon: Scale, title: "Ohio Insurance Law", blurb: "Matching, handling deadlines, bad faith, appraisal, deductible rules, and the escalation ladder." },
+  { id: "policy", icon: CheckCircle2, title: "Policy Provisions", blurb: "Ordinance & Law, RCV vs ACV, RPS, cosmetic exclusions — what to check on the dec page." },
+  { id: "docs", icon: Camera, title: "Documentation Checklist", blurb: "Every photo, measurement, and document that makes a claim file hold up." },
+  { id: "tips", icon: Lightbulb, title: "Claim Playbook", blurb: "The common adjuster positions and the citation that answers each, plus carrier patterns." },
+  { id: "letters", icon: ScrollText, title: "Letter Templates", blurb: "Supplement, matching, cosmetic rebuttal, appraisal demand, and ODI complaint." },
+  { id: "dodont", icon: AlertTriangle, title: "Do & Don't", blurb: "Field practices on one side, ways this goes sideways on the other." },
+  { id: "truck", icon: ClipboardList, title: "Truck Cheat Sheet", blurb: "One-page field summary. Print it for the truck." },
+];
+
 
 /* ================================================================
    PIPELINE + SEED DATA
@@ -3582,6 +3969,170 @@ function TabPortal({ job, brand, mut, toast }) {
 /* ================================================================
    INSURANCE MODULE
    ================================================================ */
+/* ================================================================
+   SHINGLE FINDER — search the identification database by any field.
+   Width is the fastest discriminator on a roof, so it leads.
+   ================================================================ */
+function ShingleFinder() {
+  const [q, setQ] = useState("");
+  const [mfr, setMfr] = useState("All");
+  const [status, setStatus] = useState("All");
+  const [type, setType] = useState("All");
+
+  const makers = useMemo(() => ["All", ...Array.from(new Set(SHINGLE_DB.map((x) => x.mfr)))], []);
+  const list = useMemo(() => SHINGLE_DB.filter((x) => {
+    if (mfr !== "All" && x.mfr !== mfr) return false;
+    if (status !== "All" && x.status !== status) return false;
+    if (type !== "All" && x.type !== type) return false;
+    if (q.trim()) {
+      const hay = `${x.mfr} ${x.line} ${x.type} ${x.years} ${x.note} ${x.l} ${x.w} ${x.exp}`.toLowerCase();
+      if (!hay.includes(q.trim().toLowerCase())) return false;
+    }
+    return true;
+  }), [q, mfr, status, type]);
+
+  const dim = (n) => (n ? String(n).replace(/\.0$/, "") + '"' : "—");
+  const Seg = ({ opts, val, set }) => (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {opts.map((o) => (
+        <button key={o.v} onClick={() => set(o.v)} style={{
+          border: `1.5px solid ${val === o.v ? "#1B6DE0" : S.line}`,
+          background: val === o.v ? "#EAF2FD" : "#fff",
+          color: val === o.v ? "#1B6DE0" : S.ink,
+          borderRadius: 999, padding: "7px 13px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+        }}>{o.l}</button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div>
+      <Card>
+        <CardTitle>Width tells you almost everything</CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Measure the shingle length on the roof before anything else, then confirm with the back-of-shingle marks.
+        </div>
+        {SHINGLE_RULES.map(([k, v], i) => (
+          <div key={i} style={{ padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: S.ink }}>{k}</div>
+            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 3 }}>{v}</div>
+          </div>
+        ))}
+      </Card>
+
+      <Card style={{ marginTop: 14 }}>
+        <CardTitle right={<Chip tone="blue">{list.length}</Chip>}>Search</CardTitle>
+        <input style={inputStyle} placeholder="Manufacturer, line, size, year…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <div style={{ marginTop: 10 }}>
+          <Seg val={status} set={setStatus} opts={[{ v: "All", l: "All" }, { v: "disco", l: "Discontinued" }, { v: "current", l: "Current" }]} />
+        </div>
+        <div style={{ marginTop: 8 }}>
+          <Seg val={type} set={setType} opts={[{ v: "All", l: "All types" }, { v: "Laminate", l: "Laminate" }, { v: "3-tab", l: "3-tab" }, { v: "Designer", l: "Designer" }]} />
+        </div>
+        <select style={{ ...selStyle, marginTop: 10 }} value={mfr} onChange={(e) => setMfr(e.target.value)}>
+          {makers.map((m) => <option key={m}>{m}</option>)}
+        </select>
+      </Card>
+
+      {list.map((x, i) => (
+        <Card key={i} pad={15} style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>{x.line}</div>
+              <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>{x.mfr}{x.years ? ` · ${x.years}` : ""}</div>
+            </div>
+            <Chip tone={x.status === "current" ? "green" : "red"}>{x.status === "current" ? "Current" : "Discontinued"}</Chip>
+          </div>
+          {(x.l || x.w || x.exp) ? (
+            <div style={{ display: "flex", gap: 16, marginTop: 10, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12.5, color: S.sub }}>Length <b style={{ color: S.ink }}>{dim(x.l)}</b></span>
+              <span style={{ fontSize: 12.5, color: S.sub }}>Width <b style={{ color: S.ink }}>{dim(x.w)}</b></span>
+              <span style={{ fontSize: 12.5, color: S.sub }}>Exposure <b style={{ color: S.ink }}>{dim(x.exp)}</b></span>
+              <Chip tone="gray">{x.type}</Chip>
+            </div>
+          ) : (
+            <div style={{ marginTop: 10 }}><Chip tone="gray">{x.type}</Chip></div>
+          )}
+          {x.note && <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 9 }}>{x.note}</div>}
+        </Card>
+      ))}
+      {list.length === 0 && (
+        <Card style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 14, color: S.sub }}>No match. Try the length alone, or clear the filters.</div>
+        </Card>
+      )}
+
+      <Card style={{ marginTop: 14 }}>
+        <CardTitle>Back-of-shingle marks</CardTitle>
+        {MFR_IDENT.map((m, i) => (
+          <div key={i} style={{ padding: "11px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: S.ink }}>{m.mfr}</div>
+            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 4 }}>{m.mark}</div>
+            {m.plants && <div style={{ fontSize: 12, color: S.sub, lineHeight: 1.5, marginTop: 6 }}><b>Plant codes:</b> {m.plants}</div>}
+          </div>
+        ))}
+      </Card>
+      <Callout label="Verify before it goes in writing">
+        Dimensions and dates here are a field reference compiled from manufacturer data and industry sources. Before
+        attaching any of it to a supplement, confirm against the manufacturer's own current literature or their tech
+        services line — their document is the evidence, this screen is the shortcut to finding it.
+      </Callout>
+    </div>
+  );
+}
+
+/* ================================================================
+   LETTER TEMPLATES — copy, fill the brackets, send.
+   ================================================================ */
+function LetterTemplates() {
+  const [open, setOpen] = useState(null);
+  const [copied, setCopied] = useState(null);
+  const copy = async (t) => {
+    try {
+      await navigator.clipboard.writeText(t.body);
+      setCopied(t.id);
+      setTimeout(() => setCopied(null), 1800);
+    } catch { setCopied("fail"); setTimeout(() => setCopied(null), 1800); }
+  };
+  return (
+    <div>
+      <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }}>
+        Put it in writing. Verbal approvals and denials disappear when a claim gets contested — written ones do not.
+        Copy a template, fill the bracketed fields, send it from your work email so there's a timestamp.
+      </div>
+      {LETTER_TEMPLATES.map((t, i) => (
+        <Card key={t.id} style={{ marginTop: i ? 12 : 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>{t.title}</div>
+              <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 4 }}>{t.when}</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => setOpen(open === t.id ? null : t.id)}>
+              <Eye size={13} /> {open === t.id ? "Hide" : "Read"}
+            </Btn>
+            <Btn small style={{ flex: 1 }} onClick={() => copy(t)}>
+              {copied === t.id ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
+            </Btn>
+          </div>
+          {open === t.id && (
+            <pre style={{
+              whiteSpace: "pre-wrap", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: 12.5, lineHeight: 1.6, color: S.ink, background: "#FAFBFC",
+              border: `1px solid ${S.line}`, borderRadius: 10, padding: 13, marginTop: 12, overflowX: "auto",
+            }}>{t.body}</pre>
+          )}
+        </Card>
+      ))}
+      <Callout label="Before sending">
+        Replace every bracketed field — an unfilled placeholder in front of an adjuster costs credibility on the whole
+        letter. Attach the photos, measurements, and manufacturer bulletin you reference. Keep a copy in the job's Files tab.
+      </Callout>
+    </div>
+  );
+}
+
 function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
   const [tab, setTab] = useState("clients");
   const [zip, setZip] = useState("");
@@ -3773,6 +4324,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
                         <Chip tone={p.srcOH === "RCO" ? "blue" : "amber"}>{p.oh}</Chip>
                       </div>
                       <div style={{ fontSize: 13, color: S.sub, marginTop: 5, lineHeight: 1.5 }}>{p.note}</div>
+                      {p.conflict && <Callout label="Check the section number">{p.conflict}</Callout>}
                       <SourceLink srcId={p.srcOH} />
                     </div>
                   ))}
@@ -3812,6 +4364,49 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
                 display: "flex", alignItems: "center", gap: 6, border: "none", background: "none",
                 color: "#1B6DE0", fontWeight: 700, fontSize: 14, cursor: "pointer", padding: "4px 0 12px",
               }}><ChevronLeft size={16} /> Resources</button>
+              {resourcePage === "shingles" && <ShingleFinder />}
+              {resourcePage === "specs" && (
+                <div>
+                  <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }}>
+                    Used to show that current product is not equivalent to what's on the roof. Pull the manufacturer's own
+                    bulletin from their tech services line and attach it to the supplement — your summary is not the evidence, theirs is.
+                  </div>
+                  {MFR_SPECS.map((m, i) => (
+                    <Card key={i} style={{ marginTop: i ? 14 : 0 }}>
+                      <CardTitle right={<Chip tone="blue">{m.mfr}</Chip>}>{m.flagship}</CardTitle>
+                      <KV k="Width" v={m.w} />
+                      <KV k="Length" v={m.l} />
+                      <KV k="Exposure" v={m.exp} />
+                      <KV k="Wind warranty" v={m.wind} />
+                      <KV k="Algae warranty" v={m.algae} />
+                      <KV k="Limited warranty" v={m.warranty} />
+                      <KV k="Class 4 (UL 2218)" v={m.class4} />
+                      <Callout label="Do not mix">{m.dnm}</Callout>
+                    </Card>
+                  ))}
+                  <Card style={{ marginTop: 14 }}>
+                    <CardTitle>Vinyl siding — the matching reality</CardTitle>
+                    <div style={{ fontSize: 13, color: S.sub, marginBottom: 8 }}>Major makers: {SIDING_MATCHING.makers}</div>
+                    <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.55 }}>
+                      Even with a current SKU in a current color, a ten-year-old wall will not match new stock. Four reasons:
+                    </div>
+                    <Bullets items={SIDING_MATCHING.points} />
+                    <Callout label="The argument" tone="green">{SIDING_MATCHING.argument}</Callout>
+                  </Card>
+                  <Card style={{ marginTop: 14 }}>
+                    <CardTitle>Technical services lines</CardTitle>
+                    {KEY_CONTACTS.map(([name, phone, web], i) => (
+                      <div key={i} style={{ padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{name}</div>
+                        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>
+                          {[phone, web].filter(Boolean).join("  ·  ")}
+                        </div>
+                      </div>
+                    ))}
+                  </Card>
+                </div>
+              )}
+              {resourcePage === "letters" && <LetterTemplates />}
               {resourcePage === "law" && (
                 <div>
                   {LAW_ITEMS.map((it, i) => (
@@ -3821,8 +4416,18 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
                       <SourceLink srcId={it.src} />
                     </Card>
                   ))}
+                  <Card style={{ marginTop: 14 }}>
+                    <CardTitle>Who to call</CardTitle>
+                    {KEY_CONTACTS.slice(0, 2).map(([name, phone, web], i) => (
+                      <div key={i} style={{ padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{name}</div>
+                        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>{[phone, web].filter(Boolean).join("  ·  ")}</div>
+                      </div>
+                    ))}
+                  </Card>
                   <Callout label="Guidance, not legal advice">
-                    Summaries for field use. Confirm current text at the linked official sources before relying on any of it in a dispute.
+                    Summaries for field use, current as compiled. Confirm the text at the linked official source before
+                    relying on any of it in a dispute, and route anything adversarial to counsel.
                   </Callout>
                 </div>
               )}
@@ -3843,26 +4448,35 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
               {resourcePage === "docs" && (
                 <div>
                   <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }}>
-                    Photos, notes, and paper that make or break a claim. The adjuster reads what's in the file — make sure the file says what you mean.
+                    If it wasn't photographed and measured, it didn't happen. The adjuster reads the file, not your memory.
                   </div>
-                  <Card>
-                    <CardTitle>Per-inspection documentation standard</CardTitle>
-                    {DOC_STANDARD.map(([t, d], i) => (
-                      <div key={i} style={{ display: "flex", gap: 10, padding: "8px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
-                        <CheckCircle2 size={17} color="#177245" style={{ flexShrink: 0, marginTop: 2 }} />
-                        <div style={{ fontSize: 14, lineHeight: 1.5 }}>
-                          <span style={{ fontWeight: 800, color: S.ink }}>{t}</span>
-                          <span style={{ color: S.sub }}> — {d}</span>
+                  {DOC_GROUPS.map((g, gi) => (
+                    <Card key={gi} style={{ marginTop: gi ? 14 : 0 }}>
+                      <CardTitle>{g.title}</CardTitle>
+                      {g.items.map((t, i) => (
+                        <div key={i} style={{ display: "flex", gap: 10, padding: "7px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+                          <CheckCircle2 size={16} color="#177245" style={{ flexShrink: 0, marginTop: 2 }} />
+                          <div style={{ fontSize: 13.5, lineHeight: 1.5, color: S.ink }}>{t}</div>
                         </div>
-                      </div>
-                    ))}
-                  </Card>
+                      ))}
+                    </Card>
+                  ))}
                   <Card style={{ marginTop: 14 }}>
                     <CardTitle>Photo templates by damage type</CardTitle>
                     {DOC_TEMPLATES.map((t, i) => (
                       <div key={i} style={{ marginTop: i ? 12 : 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 800, color: S.ink }}>{t.type}</div>
                         <Bullets items={t.items} />
+                      </div>
+                    ))}
+                  </Card>
+                  <Card style={{ marginTop: 14 }}>
+                    <CardTitle>Scope items to check on every carrier estimate</CardTitle>
+                    <div style={{ fontSize: 13, color: S.sub, marginBottom: 8 }}>Run this list against the loss summary before you sign off on scope.</div>
+                    {SUPPLEMENT_TRIGGERS.map(([item, cite], i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+                        <span style={{ fontSize: 13.5, color: S.ink, fontWeight: 600 }}>{item}</span>
+                        <span style={{ fontSize: 12, color: S.sub, textAlign: "right", flexShrink: 0 }}>{cite}</span>
                       </div>
                     ))}
                   </Card>
@@ -3881,6 +4495,29 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
                       <Callout label="Answer" tone="green"><Bullets items={sc.answer} /></Callout>
                     </Card>
                   ))}
+                  {MORE_SCENARIOS.map((sc, i) => (
+                    <Card key={`m${i}`} style={{ marginTop: 14 }}>
+                      <div style={{ fontSize: 15.5, fontWeight: 800, color: S.ink }}>{sc.q}</div>
+                      <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.55, marginTop: 6 }}>{sc.setup}</div>
+                      <Callout label="Answer" tone="green"><Bullets items={sc.answer} /></Callout>
+                    </Card>
+                  ))}
+                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: "#1B6DE0", margin: "20px 0 10px" }}>WHEN THE ADJUSTER SAYS FINAL</div>
+                  <Card>
+                    <div style={{ fontSize: 13.5, color: S.sub, marginBottom: 10 }}>Escalate in order. Each step creates a record the next one relies on.</div>
+                    {ESCALATION_LADDER.map(([t, d], i) => (
+                      <div key={i} style={{ display: "flex", gap: 12, padding: "10px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+                        <span style={{
+                          width: 24, height: 24, borderRadius: 999, background: "#EAF2FD", color: "#1B6DE0",
+                          display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800, flexShrink: 0,
+                        }}>{i + 1}</span>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: S.ink }}>{t}</div>
+                          <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 3 }}>{d}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </Card>
                   <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: "#1B6DE0", margin: "20px 0 10px" }}>CARRIER PATTERNS</div>
                   {CARRIER_PATTERNS.map((cp, i) => (
                     <Card key={i} style={{ marginTop: i ? 14 : 0 }}>
