@@ -8,7 +8,7 @@ import {
   BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
   Scale, Lightbulb, ExternalLink, Lock, Layers
-} from "lucide-react";
+, Filter } from "lucide-react";
 
 /* ================================================================
    BRANDING — single source of company identity. Everything company-
@@ -852,7 +852,9 @@ const MERGE_FIELDS = [
   ["{{customer_first}}", "Customer's first name"],
   ["{{job_address}}", "Property address"],
   ["{{rep_name}}", "Assigned rep"],
-  ["{{rep_phone}}", "Company phone"],
+  ["{{rep_phone}}", "Rep's direct phone (falls back to office)"],
+  ["{{office_phone}}", "Rep's office phone"],
+  ["{{office_address}}", "Rep's office address"],
   ["{{company}}", "Company name"],
   ["{{crew_name}}", "Assigned crew"],
   ["{{scheduled_date}}", "Scheduled production date"],
@@ -866,12 +868,18 @@ function mergeTemplate(text, ctx) {
   if (!text) return "";
   return text.replace(/\{\{(\w+)\}\}/g, (m, k) => (ctx[k] != null && ctx[k] !== "" ? String(ctx[k]) : m));
 }
-function templateContext(job, brand, crew) {
+function templateContext(job, brand, crew, users) {
   const pay = paymentsSummary(job);
   const first = (job.name || "").split(" ")[0];
+  const rep = (users || []).find((u) => u.name === job.assignee);
+  const loc = rep && rep.locationId && (brand.locations || []).find((l) => l.id === rep.locationId);
   return {
     customer_name: job.name, customer_first: first, job_address: job.address,
-    rep_name: job.assignee, rep_phone: brand.phone, company: brand.company,
+    rep_name: job.assignee,
+    rep_phone: (rep && rep.repPhone) || (loc && loc.phone) || brand.phone,
+    office_address: (loc && loc.address) || brand.address,
+    office_phone: (loc && loc.phone) || brand.phone,
+    company: brand.company,
     crew_name: crew ? crew.name : "", scheduled_date: job.schedDate || "",
     contract_total: pay.contract ? money(pay.contract) : "",
     balance_due: pay.balance ? money(pay.balance) : "",
@@ -1473,11 +1481,19 @@ function paymentsSummary(job) {
   return { received, paidOut, contract, balance: contract - received };
 }
 function downloadCsv(name, rows) {
-  const csv = rows.map((r) => r.map((c) => `"${String(c ?? "").replaceAll('"', '""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = name; a.click();
-  URL.revokeObjectURL(a.href);
+  try {
+    const csv = rows.map((r) => r.map((c) => `"${String(c ?? "").replaceAll('"', '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    return true;
+  } catch (e) {
+    /* Sandboxed previews block programmatic downloads; the deployed site allows them. */
+    if (typeof window !== "undefined" && window.alert) window.alert("Download blocked in this preview. On the deployed site this saves a file.");
+    return false;
+  }
 }
 function jurisdictionForZip(zip) { return resolveJurisdiction(zip); }
 function citeFor(state, topic) {
@@ -1529,15 +1545,27 @@ const toProfile = (u) => ({
    SHARED UI
    ================================================================ */
 const S = { ink: "#111827", sub: "#6B7280", line: "#E5E7EB", bg: "#F7F8FA", soft: "#F3F4F6" };
+/* Live theme. The root component copies brand colors in on every render,
+   and because inline styles read these properties at render time, a color
+   change in Branding repaints the whole app immediately. */
+const T = { primary: "#28373E", accent: "#1B6DE0", accentSoft: "#EAF2FD" };
+function softOf(hex) {
+  try {
+    const n = parseInt(hex.slice(1), 16);
+    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    const mix = (c) => Math.round(c + (255 - c) * 0.88);
+    return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
+  } catch { return "#EAF2FD"; }
+}
 
 function Chip({ children, tone = "gray" }) {
   const tones = {
     gray: { bg: "#F3F4F6", fg: "#374151" },
-    blue: { bg: "#EAF2FD", fg: "#1B6DE0" },
+    blue: { bg: T.accentSoft, fg: T.accent },
     green: { bg: "#E8F6EE", fg: "#177245" },
     red: { bg: "#FDECEC", fg: "#B42318" },
     amber: { bg: "#FDF4E3", fg: "#92600A" },
-    slate: { bg: "#E9EDEF", fg: "#28373E" },
+    slate: { bg: "#E9EDEF", fg: T.primary },
   };
   const t = tones[tone] || tones.gray;
   return (
@@ -1557,10 +1585,10 @@ function Btn({ children, kind = "primary", onClick, style, small, disabled }) {
     opacity: disabled ? 0.5 : 1,
   };
   const kinds = {
-    primary: { background: "#1B6DE0", color: "#fff" },
-    dark: { background: "#28373E", color: "#fff" },
+    primary: { background: T.accent, color: "#fff" },
+    dark: { background: T.primary, color: "#fff" },
     ghost: { background: "#fff", color: S.ink, border: `1px solid ${S.line}` },
-    soft: { background: "#EAF2FD", color: "#1B6DE0" },
+    soft: { background: T.accentSoft, color: T.accent },
     danger: { background: "#fff", color: "#B42318", border: `1px solid ${S.line}` },
     green: { background: "#177245", color: "#fff" },
   };
@@ -1587,9 +1615,9 @@ const inputStyle = {
 };
 const selStyle = { ...inputStyle, appearance: "auto" };
 
-function Card({ children, style, pad = 18 }) {
+function Card({ children, style, pad = 18, onClick }) {
   return (
-    <div style={{ background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }}>
+    <div onClick={onClick} style={{ background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }}>
       {children}
     </div>
   );
@@ -1640,7 +1668,7 @@ function SourceLink({ srcId }) {
     <a href={s.url} target="_blank" rel="noreferrer" style={{
       display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none",
       border: `1px solid ${S.line}`, borderRadius: 999, padding: "6px 12px",
-      fontSize: 12.5, fontWeight: 700, color: "#1B6DE0", background: "#fff", marginTop: 8, marginRight: 8,
+      fontSize: 12.5, fontWeight: 700, color: T.accent, background: "#fff", marginTop: 8, marginRight: 8,
     }}>
       <ExternalLink size={13} /> {s.name}
     </a>
@@ -1724,10 +1752,10 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
               style={{
                 display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left",
                 border: "none", cursor: "pointer", padding: "11px 13px",
-                background: hi === i ? "#EAF2FD" : "#fff",
+                background: hi === i ? T.accentSoft : "#fff",
                 borderTop: i ? `1px solid ${S.line}` : "none",
               }}>
-              <MapPin size={14} color="#1B6DE0" style={{ flexShrink: 0, marginTop: 2 }} />
+              <MapPin size={14} color={T.accent} style={{ flexShrink: 0, marginTop: 2 }} />
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: S.ink }}>
                   {it.street || it.formatted}
@@ -1906,8 +1934,8 @@ function Login({ brand, users, onLogin }) {
               }}>
                 <div style={{
                   width: 38, height: 38, borderRadius: 999, flexShrink: 0,
-                  background: u.role === "admin" ? brand.primary : "#EAF2FD",
-                  color: u.role === "admin" ? "#fff" : "#1B6DE0",
+                  background: u.role === "admin" ? brand.primary : T.accentSoft,
+                  color: u.role === "admin" ? "#fff" : T.accent,
                   display: "grid", placeItems: "center", fontWeight: 800, fontSize: 14,
                 }}>{u.name.split(" ").map((x) => x[0]).join("")}</div>
                 <div style={{ flex: 1 }}>
@@ -1935,11 +1963,15 @@ function Login({ brand, users, onLogin }) {
     }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{
-            width: 64, height: 64, margin: "0 auto 14px", borderRadius: 16,
-            background: brand.primary, color: "#fff", display: "grid", placeItems: "center",
-            fontWeight: 800, fontSize: 20, letterSpacing: 1,
-          }}>{brand.short}</div>
+          {brand.logo ? (
+            <img src={brand.logo} alt={brand.company} style={{ height: 72, maxWidth: 220, objectFit: "contain", margin: "0 auto 14px", display: "block" }} />
+          ) : (
+            <div style={{
+              width: 64, height: 64, margin: "0 auto 14px", borderRadius: 16,
+              background: brand.primary, color: "#fff", display: "grid", placeItems: "center",
+              fontWeight: 800, fontSize: 20, letterSpacing: 1,
+            }}>{brand.short}</div>
+          )}
           <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>{brand.company}</div>
           <div style={{ fontSize: 14, color: S.sub, marginTop: 6 }}>{brand.slogan}</div>
         </div>
@@ -1964,7 +1996,7 @@ function Login({ brand, users, onLogin }) {
             </Btn>
             <button onClick={() => { setErr(""); setMode("forgot"); }} style={{
               display: "block", margin: "16px auto 0", border: "none", background: "none",
-              color: "#1B6DE0", fontWeight: 600, fontSize: 14, cursor: "pointer",
+              color: T.accent, fontWeight: 600, fontSize: 14, cursor: "pointer",
             }}>Forgot password?</button>
             {!live && (
               <div style={{ textAlign: "center", fontSize: 12, color: S.sub, marginTop: 18, lineHeight: 1.5 }}>
@@ -2014,7 +2046,7 @@ function Login({ brand, users, onLogin }) {
 /* ================================================================
    DASHBOARD
    ================================================================ */
-function Dashboard({ jobs, stages, onOpenJob, userName, go }) {
+function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask }) {
   const totalPipeline = jobs.filter((j) => !DEAD_STAGES.includes(j.stageId) && j.stageId !== "s10").reduce((s, j) => s + j.value, 0);
   const stale = jobs.filter((j) => j.daysInStage >= 14 && !["s10","s11","s12"].includes(j.stageId));
   const approvedPlus = jobs.filter((j) => WON_STAGES.includes(j.stageId));
@@ -2055,7 +2087,7 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go }) {
 
       <Card style={{ marginTop: 14 }}>
         <CardTitle right={
-          <button onClick={() => go("jobs")} style={{ border: "none", background: "none", color: "#1B6DE0", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+          <button onClick={() => go("jobs")} style={{ border: "none", background: "none", color: T.accent, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
             Open board
           </button>
         }>Pipeline by stage</CardTitle>
@@ -2067,7 +2099,7 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go }) {
             </div>
             <div style={{ height: 7, background: "#EEF1F4", borderRadius: 99 }}>
               <div style={{
-                height: 7, borderRadius: 99, background: "#1B6DE0",
+                height: 7, borderRadius: 99, background: T.accent,
                 width: `${Math.max(5, totalPipeline + signedValue ? (s.value / Math.max(totalPipeline, signedValue)) * 100 : 0)}%`,
                 maxWidth: "100%",
               }} />
@@ -2077,7 +2109,12 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go }) {
       </Card>
 
       <Card style={{ marginTop: 14 }}>
-        <CardTitle>Needs attention</CardTitle>
+        <CardTitle right={
+          <span style={{ display: "flex", gap: 6 }}>
+            <Btn kind="soft" small onClick={onQuickTask}><Plus size={12} /> Task</Btn>
+            <Btn kind="soft" small onClick={onNewLead}><Plus size={12} /> Lead</Btn>
+          </span>
+        }>Needs attention</CardTitle>
         {stale.length === 0 && openTasks.length === 0 && (
           <div style={{ fontSize: 14, color: S.sub }}>Nothing stale and no open tasks. Pipeline is moving.</div>
         )}
@@ -2244,17 +2281,17 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {isAdmin && (
             <button onClick={() => setScope("company")} style={{
-              border: `1.5px solid ${scope === "company" ? "#1B6DE0" : S.line}`,
-              background: scope === "company" ? "#EAF2FD" : "#fff",
-              color: scope === "company" ? "#1B6DE0" : S.ink,
+              border: `1.5px solid ${scope === "company" ? T.accent : S.line}`,
+              background: scope === "company" ? T.accentSoft : "#fff",
+              color: scope === "company" ? T.accent : S.ink,
               borderRadius: 999, padding: "8px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer",
             }}>Company-wide</button>
           )}
           {users.filter((u) => u.role !== "crew" && (isAdmin || u.name === currentUser.name)).map((u) => (
             <button key={u.id} onClick={() => setScope(u.name)} style={{
-              border: `1.5px solid ${scope === u.name ? "#1B6DE0" : S.line}`,
-              background: scope === u.name ? "#EAF2FD" : "#fff",
-              color: scope === u.name ? "#1B6DE0" : S.ink,
+              border: `1.5px solid ${scope === u.name ? T.accent : S.line}`,
+              background: scope === u.name ? T.accentSoft : "#fff",
+              color: scope === u.name ? T.accent : S.ink,
               borderRadius: 999, padding: "8px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
             }}>{u.name.split(" ")[0]}</button>
           ))}
@@ -2265,7 +2302,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
         {[["summary", "Summary"], ["commission", "Commission"], isAdmin && ["reps", "By rep"], ["sources", "Lead sources"], ["pipeline", "Pipeline"]]
           .filter(Boolean).map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} style={{
-              border: "none", background: tab === id ? "#28373E" : "#fff",
+              border: "none", background: tab === id ? T.primary : "#fff",
               color: tab === id ? "#fff" : S.ink, borderRadius: 999,
               padding: "9px 15px", fontSize: 13, fontWeight: 700, cursor: "pointer",
               whiteSpace: "nowrap", flexShrink: 0,
@@ -2316,10 +2353,10 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
             <KV k="Reimbursements" v={money(stat.reimb)} />
             <div style={{
               display: "flex", justifyContent: "space-between", alignItems: "center",
-              background: "#EAF2FD", borderRadius: 10, padding: "12px 14px", marginTop: 10,
+              background: T.accentSoft, borderRadius: 10, padding: "12px 14px", marginTop: 10,
             }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: "#28373E" }}>Total payout</span>
-              <span style={{ fontSize: 19, fontWeight: 800, color: "#1B6DE0" }}>{money(stat.payout)}</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: T.primary }}>Total payout</span>
+              <span style={{ fontSize: 19, fontWeight: 800, color: T.accent }}>{money(stat.payout)}</span>
             </div>
             {isAdmin && <KV k="Net to company" v={money(stat.netCo)} strong />}
           </Card>
@@ -2333,7 +2370,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
                   <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>{job.address}</div>
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: "#1B6DE0" }}>{money(cap.payout)}</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: T.accent }}>{money(cap.payout)}</div>
                   <div style={{ fontSize: 11, color: S.sub }}>payout</div>
                 </div>
               </div>
@@ -2376,7 +2413,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
                 borderTop: `1px solid ${S.line}`,
               }}>
                 <span style={{ fontSize: 13, color: S.sub }}>Commission {money(r.commission)} + reimb {money(r.reimb)}</span>
-                <span style={{ fontSize: 14, fontWeight: 800, color: "#1B6DE0" }}>{money(r.payout)}</span>
+                <span style={{ fontSize: 14, fontWeight: 800, color: T.accent }}>{money(r.payout)}</span>
               </div>
             </Card>
           ))}
@@ -2425,7 +2462,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
                 <div style={{ flex: 1, height: 18, background: "#EEF1F4", borderRadius: 6, overflow: "hidden" }}>
                   <div style={{
                     height: "100%", width: `${(inStage.length / max) * 100}%`,
-                    background: DEAD_STAGES.includes(st.id) ? "#B42318" : WON_STAGES.includes(st.id) ? "#177245" : "#28373E",
+                    background: DEAD_STAGES.includes(st.id) ? "#B42318" : WON_STAGES.includes(st.id) ? "#177245" : T.primary,
                     borderRadius: 6, minWidth: inStage.length ? 18 : 0,
                   }} />
                 </div>
@@ -2457,84 +2494,145 @@ function SubHeader({ title, onBack, right }) {
 /* ================================================================
    CALENDAR — month grid; jobs with a scheduled date appear as dots
    ================================================================ */
-function CalendarView({ jobs, onBack, onOpenJob }) {
-  const [ym, setYm] = useState(() => {
-    const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() };
-  });
-  const first = new Date(ym.y, ym.m, 1);
-  const startDow = first.getDay();
-  const daysIn = new Date(ym.y, ym.m + 1, 0).getDate();
-  const cells = [];
-  for (let i = 0; i < startDow; i++) cells.push(null);
-  for (let d = 1; d <= daysIn; d++) cells.push(d);
-  const monthName = first.toLocaleDateString(undefined, { month: "long", year: "numeric" });
-  const jobsOn = (d) => {
-    const key = `${ym.y}-${String(ym.m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    return jobs.filter((j) => j.schedDate === key);
+function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast }) {
+  const today = new Date();
+  const [month, setMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [adding, setAdding] = useState(false);
+  const [f, setF] = useState({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "" });
+  const [newType, setNewType] = useState("");
+
+  const y = month.getFullYear(), m = month.getMonth();
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  const firstDow = new Date(y, m, 1).getDay();
+  const iso = (d) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+  const jobsOn = (d) => jobs.filter((j) => j.schedDate === iso(d));
+  const apptsOn = (d) => appointments.filter((ap) => ap.date === iso(d));
+  const monthAppts = appointments
+    .filter((ap) => ap.date && ap.date.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`))
+    .sort((a2, b2) => (a2.date + (a2.time || "")).localeCompare(b2.date + (b2.time || "")));
+  const monthJobs = jobs
+    .filter((j) => j.schedDate && j.schedDate.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`))
+    .sort((a2, b2) => a2.schedDate.localeCompare(b2.schedDate));
+
+  const save = () => {
+    setAppointments([...appointments, { ...f, id: uid("ap") }]);
+    setAdding(false);
+    setF({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "" });
+    toast("Appointment added");
   };
-  const scheduled = jobs.filter((j) => j.schedDate).sort((a, b) => a.schedDate.localeCompare(b.schedDate));
+  const addType = () => {
+    const v = newType.trim();
+    if (!v || apptTypes.some((t) => t.toLowerCase() === v.toLowerCase())) return;
+    setApptTypes([...apptTypes, v]);
+    setF({ ...f, type: v });
+    setNewType("");
+  };
+  const jobOf = (id) => jobs.find((j) => j.id === id);
+
   return (
     <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
-      <SubHeader title="Calendar" onBack={onBack} />
+      <SubHeader title="Calendar" onBack={onBack}
+        right={<Btn small onClick={() => setAdding(true)}><Plus size={14} /> Add</Btn>} />
       <Card style={{ marginTop: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <button onClick={() => setYm(ym.m === 0 ? { y: ym.y - 1, m: 11 } : { y: ym.y, m: ym.m - 1 })} style={pillIcon}><ChevronLeft size={16} /></button>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>{monthName}</div>
-          <button onClick={() => setYm(ym.m === 11 ? { y: ym.y + 1, m: 0 } : { y: ym.y, m: ym.m + 1 })} style={pillIcon}><ChevronRight size={16} /></button>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <button onClick={() => setMonth(new Date(y, m - 1, 1))} style={{ border: "none", background: "none", cursor: "pointer" }}><ChevronLeft size={18} /></button>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>{month.toLocaleString("en-US", { month: "long", year: "numeric" })}</div>
+          <button onClick={() => setMonth(new Date(y, m + 1, 1))} style={{ border: "none", background: "none", cursor: "pointer" }}><ChevronRight size={18} /></button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
-          {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-            <div key={i} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: S.sub, padding: "4px 0" }}>{d}</div>
+          {["S", "M", "T", "W", "T", "F", "S"].map((d, i2) => (
+            <div key={i2} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: S.sub, padding: "4px 0" }}>{d}</div>
           ))}
-          {cells.map((d, i) => {
-            const dayJobs = d ? jobsOn(d) : [];
-            const isToday = d && ym.y === new Date().getFullYear() && ym.m === new Date().getMonth() && d === new Date().getDate();
+          {Array.from({ length: firstDow }).map((_, i2) => <div key={`b${i2}`} />)}
+          {Array.from({ length: daysInMonth }).map((_, i2) => {
+            const d = i2 + 1;
+            const hasJob = jobsOn(d).length > 0;
+            const hasAppt = apptsOn(d).length > 0;
+            const isToday = today.getFullYear() === y && today.getMonth() === m && today.getDate() === d;
             return (
-              <div key={i} style={{
-                minHeight: 44, borderRadius: 8, padding: 4, textAlign: "center",
-                background: isToday ? "#28373E" : d ? "#FAFBFC" : "transparent",
-                border: d ? `1px solid ${S.line}` : "none",
+              <div key={d} style={{
+                textAlign: "center", padding: "7px 0 4px", borderRadius: 8, fontSize: 13,
+                background: isToday ? T.accentSoft : "transparent",
+                fontWeight: isToday ? 800 : 500, color: isToday ? T.accent : S.ink,
               }}>
-                {d && <div style={{ fontSize: 12, fontWeight: 700, color: isToday ? "#fff" : S.ink }}>{d}</div>}
-                <div style={{ display: "flex", gap: 3, justifyContent: "center", marginTop: 3 }}>
-                  {dayJobs.slice(0, 3).map((j) => (
-                    <span key={j.id} style={{ width: 6, height: 6, borderRadius: 99, background: "#1B6DE0", display: "inline-block" }} />
-                  ))}
+                {d}
+                <div style={{ display: "flex", gap: 3, justifyContent: "center", height: 6, marginTop: 2 }}>
+                  {hasJob && <span style={{ width: 5, height: 5, borderRadius: 99, background: T.accent }} />}
+                  {hasAppt && <span style={{ width: 5, height: 5, borderRadius: 99, background: "#92600A" }} />}
                 </div>
               </div>
             );
           })}
         </div>
-        <div style={{ fontSize: 12, color: S.sub, marginTop: 10 }}>● scheduled jobs and material drops</div>
+        <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 11.5, color: S.sub }}>
+          <span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: T.accent, marginRight: 5 }} />Production</span>
+          <span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: "#92600A", marginRight: 5 }} />Appointment</span>
+        </div>
       </Card>
-      <Card style={{ marginTop: 14 }}>
-        <CardTitle>Scheduled</CardTitle>
-        {scheduled.length === 0 && <div style={{ fontSize: 14, color: S.sub }}>Nothing on the calendar yet.</div>}
-        {scheduled.map((j) => (
-          <button key={j.id} onClick={() => onOpenJob(j.id)} style={{
-            width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
-            border: "none", background: "none", cursor: "pointer", textAlign: "left",
-            padding: "11px 0", borderBottom: `1px solid ${S.line}`,
-          }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700 }}>{j.name}</div>
-              <div style={{ fontSize: 12, color: S.sub }}>{j.address}</div>
+
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, margin: "16px 0 8px" }}>THIS MONTH</div>
+      {monthAppts.map((ap) => {
+        const j = jobOf(ap.jobId);
+        return (
+          <Card key={ap.id} pad={14} style={{ marginTop: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+              <button onClick={() => j && onOpenJob(j.id)} style={{ border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{ap.type}{j ? ` — ${j.name}` : ""}</div>
+                <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>{ap.date}{ap.time ? ` · ${ap.time}` : ""}{j ? ` · ${j.address}` : ""}</div>
+                {ap.notes && <div style={{ fontSize: 12.5, color: S.sub, marginTop: 4 }}>{ap.notes}</div>}
+              </button>
+              <button onClick={() => setAppointments(appointments.filter((x) => x.id !== ap.id))}
+                style={{ border: "none", background: "none", cursor: "pointer", flexShrink: 0 }}>
+                <Trash2 size={15} color="#B42318" />
+              </button>
             </div>
-            <Chip tone="blue">{j.schedDate}</Chip>
+          </Card>
+        );
+      })}
+      {monthJobs.map((j) => (
+        <Card key={j.id} pad={14} style={{ marginTop: 8 }}>
+          <button onClick={() => onOpenJob(j.id)} style={{ border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, width: "100%" }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>Production — {j.name}</div>
+            <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>{j.schedDate} · {j.address}</div>
           </button>
-        ))}
-      </Card>
+        </Card>
+      ))}
+      {monthAppts.length === 0 && monthJobs.length === 0 && (
+        <Card style={{ marginTop: 8 }}><div style={{ fontSize: 14, color: S.sub }}>Nothing scheduled this month.</div></Card>
+      )}
+
+      <Sheet open={adding} onClose={() => setAdding(false)} title="Add appointment"
+        footer={<Btn style={{ width: "100%" }} disabled={!f.jobId || !f.date} onClick={save}>Add to calendar</Btn>}>
+        <Field label="Customer / job *">
+          <select style={selStyle} value={f.jobId} onChange={(e) => setF({ ...f, jobId: e.target.value })}>
+            <option value="">Select…</option>
+            {jobs.filter((j) => !DEAD_STAGES.includes(j.stageId)).map((j) => (
+              <option key={j.id} value={j.id}>{j.name} — {j.address}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Type">
+          <select style={selStyle} value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}>
+            {apptTypes.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </Field>
+        <div style={{ display: "flex", gap: 8, marginTop: -6, marginBottom: 14 }}>
+          <input style={{ ...inputStyle, flex: 1 }} placeholder="Add a custom type…" value={newType}
+            onChange={(e) => setNewType(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addType(); }} />
+          <Btn kind="ghost" small onClick={addType} disabled={!newType.trim()}><Plus size={13} /></Btn>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Date *"><input style={inputStyle} type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
+          <Field label="Time"><input style={inputStyle} type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} /></Field>
+        </div>
+        <Field label="Notes"><textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
+      </Sheet>
     </div>
   );
 }
-const pillIcon = {
-  border: `1px solid #E5E7EB`, background: "#fff", borderRadius: 999,
-  width: 32, height: 32, display: "grid", placeItems: "center", cursor: "pointer",
-};
 
-/* ================================================================
-   CONTACTS
-   ================================================================ */
 function Contacts({ jobs, onBack, onOpenJob }) {
   const [q, setQ] = useState("");
   const list = jobs.filter((j) =>
@@ -2578,7 +2676,7 @@ function Contacts({ jobs, onBack, onOpenJob }) {
    NEW LEAD — intake with claim type, insurance details, and
    timestamped SMS/email consent captured at the point of collection
    ================================================================ */
-function NewLeadSheet({ open, onClose, onCreate, brand }) {
+function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURCES, users = [] }) {
   const blank = {
     first: "", last: "", phone: "", email: "", street: "", city: "", stateSel: "OH", zip: "",
     lat: null, lng: null,
@@ -2600,7 +2698,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand }) {
           <Btn style={{ flex: 2 }} disabled={!canCreate} onClick={() => { onCreate(f); onClose(); }}>Create lead</Btn>
         </div>
       }>
-      <div style={{ fontSize: 13, fontWeight: 800, color: "#28373E", textTransform: "uppercase", letterSpacing: 0.5, margin: "6px 0 10px" }}>Primary contact</div>
+      <div style={{ fontSize: 13, fontWeight: 800, color: T.primary, textTransform: "uppercase", letterSpacing: 0.5, margin: "6px 0 10px" }}>Primary contact</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="First name *"><input style={inputStyle} value={f.first} onChange={set("first")} /></Field>
         <Field label="Last name *"><input style={inputStyle} value={f.last} onChange={set("last")} /></Field>
@@ -2610,7 +2708,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand }) {
         <Field label="Email"><input style={inputStyle} value={f.email} onChange={set("email")} /></Field>
       </div>
 
-      <div style={{ fontSize: 13, fontWeight: 800, color: "#28373E", textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0" }}>Location</div>
+      <div style={{ fontSize: 13, fontWeight: 800, color: T.primary, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0" }}>Location</div>
       <Field label="Street *" hint={geoReady() ? "Start typing — pick a suggestion to fill city, state, and zip." : undefined}>
         <AddressAutocomplete
           value={f.street}
@@ -2636,23 +2734,23 @@ function NewLeadSheet({ open, onClose, onCreate, brand }) {
         <Field label="Zip *"><input style={inputStyle} value={f.zip} onChange={set("zip")} /></Field>
       </div>
       {juris && (
-        <div style={{ background: "#EAF2FD", borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#28373E" }}>
+        <div style={{ background: T.accentSoft, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: T.primary }}>
             {juris.city ? `${juris.city}, ${juris.state}` : juris.state} — {juris.codeName}
           </div>
-          <div style={{ fontSize: 12, color: "#28373E", marginTop: 3 }}>
+          <div style={{ fontSize: 12, color: T.primary, marginTop: 3 }}>
             {juris.codeEdition}
             {juris.precision === "verified" ? ` · ${juris.inspector.office}` : " · statewide default, confirm locally"}
           </div>
         </div>
       )}
 
-      <div style={{ fontSize: 13, fontWeight: 800, color: "#28373E", textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0" }}>Job details</div>
+      <div style={{ fontSize: 13, fontWeight: 800, color: T.primary, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0" }}>Job details</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="Lead source">
           <select style={selStyle} value={f.leadSource} onChange={set("leadSource")}>
             <option value="">— select —</option>
-            {LEAD_SOURCES.map((l) => <option key={l}>{l}</option>)}
+            {leadSources.map((l) => <option key={l}>{l}</option>)}
           </select>
         </Field>
         <Field label="Assign to">
@@ -2665,9 +2763,9 @@ function NewLeadSheet({ open, onClose, onCreate, brand }) {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {["Insurance", "Retail", "Unknown"].map((c) => (
             <button key={c} onClick={() => setF({ ...f, claimType: c })} style={{
-              border: `1.5px solid ${f.claimType === c ? "#1B6DE0" : S.line}`,
-              background: f.claimType === c ? "#EAF2FD" : "#fff",
-              color: f.claimType === c ? "#1B6DE0" : S.ink,
+              border: `1.5px solid ${f.claimType === c ? T.accent : S.line}`,
+              background: f.claimType === c ? T.accentSoft : "#fff",
+              color: f.claimType === c ? T.accent : S.ink,
               borderRadius: 999, padding: "9px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer",
             }}>{c === "Unknown" ? "Don't know yet" : c}</button>
           ))}
@@ -2694,7 +2792,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand }) {
             <input type="checkbox" checked={f.oLaw} onChange={set("oLaw")} style={{ width: 18, height: 18 }} />
             Ordinance & Law coverage present
           </label>
-          <div style={{ fontSize: 12, fontWeight: 800, color: "#28373E", margin: "14px 0 8px" }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: T.primary, margin: "14px 0 8px" }}>
             ENDORSEMENTS FOUND ON THE DEC PAGE
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -2722,17 +2820,17 @@ function NewLeadSheet({ open, onClose, onCreate, brand }) {
         </div>
       )}
 
-      <div style={{ fontSize: 13, fontWeight: 800, color: "#28373E", textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0" }}>Communication consent</div>
+      <div style={{ fontSize: 13, fontWeight: 800, color: T.primary, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0" }}>Communication consent</div>
       <div style={{ border: `1px solid ${S.line}`, borderRadius: 12, padding: 14, marginBottom: 6 }}>
-        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, color: S.ink, marginBottom: 10 }}>
-          <input type="checkbox" checked={f.smsConsent} onChange={set("smsConsent")} style={{ width: 18, height: 18, marginTop: 2 }} />
+        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13.5, lineHeight: 1.55, color: S.ink, marginBottom: 12 }}>
+          <input type="checkbox" checked={f.smsConsent} onChange={set("smsConsent")} style={{ width: 19, height: 19, marginTop: 2, flexShrink: 0, accentColor: T.accent }} />
           <span>
             <b>Text messages.</b> I agree to receive texts about my project from {brand.company}. Msg & data rates
             may apply. Reply STOP to opt out.
           </span>
         </label>
-        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, color: S.ink }}>
-          <input type="checkbox" checked={f.emailConsent} onChange={set("emailConsent")} style={{ width: 18, height: 18, marginTop: 2 }} />
+        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13.5, lineHeight: 1.55, color: S.ink }}>
+          <input type="checkbox" checked={f.emailConsent} onChange={set("emailConsent")} style={{ width: 19, height: 19, marginTop: 2, flexShrink: 0, accentColor: T.accent }} />
           <span><b>Email.</b> I agree to receive project updates and documents by email.</span>
         </label>
         <div style={{ fontSize: 12, color: S.sub, marginTop: 10 }}>
@@ -2772,8 +2870,8 @@ function FiltersSheet({ open, onClose, stages, filters, setFilters }) {
     }}>
       <span style={{
         width: 22, height: 22, borderRadius: 6, display: "grid", placeItems: "center",
-        border: `1.5px solid ${checked ? "#1B6DE0" : "#C7CBD1"}`,
-        background: checked ? "#1B6DE0" : "#fff", flexShrink: 0,
+        border: `1.5px solid ${checked ? T.accent : "#C7CBD1"}`,
+        background: checked ? T.accent : "#fff", flexShrink: 0,
       }}>{checked && <Check size={14} color="#fff" />}</span>
       <span style={{ fontSize: 15, color: S.ink }}>{label}</span>
     </button>
@@ -2807,7 +2905,7 @@ function FiltersSheet({ open, onClose, stages, filters, setFilters }) {
             display: "block", width: "100%", textAlign: "left", padding: "8px 0",
             border: "none", background: "none", cursor: "pointer",
             fontSize: 15, fontWeight: local.sort === id ? 700 : 400,
-            color: local.sort === id ? "#1B6DE0" : S.ink,
+            color: local.sort === id ? T.accent : S.ink,
           }}>{label}</button>
         ))}
       </Section>
@@ -2835,7 +2933,7 @@ function FiltersSheet({ open, onClose, stages, filters, setFilters }) {
     </Sheet>
   );
 }
-const linkBtn = { border: "none", background: "none", color: "#1B6DE0", fontWeight: 700, fontSize: 13, cursor: "pointer", padding: 0 };
+const linkBtn = { border: "none", background: "none", color: T.accent, fontWeight: 700, fontSize: 13, cursor: "pointer", padding: 0 };
 
 /* ================================================================
    WORKFLOW EDITOR — rename / reorder / add / remove stages
@@ -2994,7 +3092,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 14, paddingBottom: 14, overflowX: "auto", alignItems: "center" }}>
           <button style={pill} onClick={() => setShowSearch(!showSearch)}><Search size={16} /></button>
-          <button onClick={onOpenFilters} style={{ ...pill, color: "#1B6DE0", background: "#EAF2FD" }}>
+          <button onClick={onOpenFilters} style={{ ...pill, color: T.accent, background: T.accentSoft }}>
             <SlidersHorizontal size={15} />{activeFilterCount > 0 && <span style={{ fontWeight: 700 }}>{activeFilterCount}</span>}
           </button>
           <button onClick={onOpenWorkflow} style={{ ...pill, whiteSpace: "nowrap" }}>
@@ -3026,7 +3124,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
                 }}
                 style={{
                   minWidth: 296, maxWidth: 316, flexShrink: 0, borderRadius: 12,
-                  outline: dragOver === stage.id ? `2px solid #1B6DE0` : "none", outlineOffset: 4,
+                  outline: dragOver === stage.id ? `2px solid ${T.accent}` : "none", outlineOffset: 4,
                 }}>
                 <div style={{
                   display: "flex", justifyContent: "space-between", alignItems: "baseline",
@@ -3079,7 +3177,7 @@ const JOB_TABS = [
   ["tasks", "Tasks"], ["files", "Files"], ["portal", "Portal"],
 ];
 
-function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} } }) {
+function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [] }) {
   const [tab, setTab] = useState("overview");
   const MONEY_TABS = ["estimate", "contract", "financials", "payments", "invoice"];
   const visibleTabs = JOB_TABS.filter(([id]) => showMoney || !MONEY_TABS.includes(id));
@@ -3115,8 +3213,8 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
             <button key={id} onClick={() => setTab(id)} style={{
               border: "none", background: "none", cursor: "pointer", whiteSpace: "nowrap",
               padding: "10px 12px", fontSize: 14, fontWeight: 700,
-              color: tab === id ? "#1B6DE0" : S.sub,
-              borderBottom: tab === id ? "2.5px solid #1B6DE0" : "2.5px solid transparent",
+              color: tab === id ? T.accent : S.sub,
+              borderBottom: tab === id ? `2.5px solid ${T.accent}` : "2.5px solid transparent",
             }}>{label}</button>
           ))}
         </div>
@@ -3130,13 +3228,13 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
         {tab === "contract" && <TabContract job={job} brand={brand} mut={mut} toast={toast} />}
         {tab === "report" && <TabReport job={job} brand={brand} juris={juris} />}
         {tab === "messages" && <TabMessages job={job} mut={mut} toast={toast} brand={brand}
-          templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} />}
+          templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />}
         {tab === "photos" && <TabPhotos job={job} mut={mut} toast={toast} />}
         {tab === "financials" && <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} />}
         {tab === "payments" && <TabPayments job={job} mut={mut} toast={toast} />}
         {tab === "invoice" && <TabInvoice job={job} brand={brand} toast={toast} />}
         {tab === "workorder" && <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
-          crews={crews} templates={templates} currentUser={currentUser} />} brand={brand} toast={toast} />}
+          crews={crews} templates={templates} currentUser={currentUser} users={users} />}
         {tab === "tasks" && <TabTasks job={job} mut={mut} />}
         {tab === "files" && <TabFiles job={job} mut={mut} toast={toast} />}
         {tab === "portal" && <TabPortal job={job} brand={brand} mut={mut} toast={toast} />}
@@ -3261,9 +3359,9 @@ function TabChecklist({ job, mut, toast }) {
     <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
       {options.map((o) => (
         <button key={o} onClick={() => set(k)(o)} style={{
-          border: `1.5px solid ${c[k] === o ? "#1B6DE0" : S.line}`,
-          background: c[k] === o ? "#EAF2FD" : "#fff",
-          color: c[k] === o ? "#1B6DE0" : S.ink,
+          border: `1.5px solid ${c[k] === o ? T.accent : S.line}`,
+          background: c[k] === o ? T.accentSoft : "#fff",
+          color: c[k] === o ? T.accent : S.ink,
           borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 600, cursor: "pointer",
         }}>{o}</button>
       ))}
@@ -3275,8 +3373,8 @@ function TabChecklist({ job, mut, toast }) {
         const on = c[k].includes(o);
         return (
           <button key={o} onClick={() => set(k)(on ? c[k].filter((x) => x !== o) : [...c[k], o])} style={{
-            border: `1.5px solid ${on ? "#1B6DE0" : S.line}`,
-            background: on ? "#EAF2FD" : "#fff", color: on ? "#1B6DE0" : S.ink,
+            border: `1.5px solid ${on ? T.accent : S.line}`,
+            background: on ? T.accentSoft : "#fff", color: on ? T.accent : S.ink,
             borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 600, cursor: "pointer",
           }}>{o}</button>
         );
@@ -3750,14 +3848,14 @@ function TabReport({ job, brand, juris }) {
   const pTone = { HIGH: "red", MODERATE: "amber", MONITOR: "blue" };
   const Section = ({ n, title, children }) => (
     <Card style={{ marginTop: 12 }}>
-      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, color: "#1B6DE0", marginBottom: 4 }}>SECTION {n}</div>
+      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, color: T.accent, marginBottom: 4 }}>SECTION {n}</div>
       <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 10 }}>{title}</div>
       {children}
     </Card>
   );
   return (
     <>
-      <Card style={{ background: "#28373E", border: "none" }}>
+      <Card style={{ background: T.primary, border: "none" }}>
         <div style={{ color: "#fff" }}>
           <div style={{ fontSize: 12, letterSpacing: 1.5, opacity: 0.75, fontWeight: 700 }}>ROOF INSPECTION REPORT</div>
           <div style={{ fontSize: 20, fontWeight: 800, margin: "6px 0 2px" }}>{job.name}</div>
@@ -3844,13 +3942,13 @@ const SHOT_LIST = [
    MESSAGES — send email or SMS to the customer or crew from the job,
    with the thread kept on the job record.
    ================================================================ */
-function TabMessages({ job, mut, toast, brand, templates, crews, integrations, currentUser }) {
+function TabMessages({ job, mut, toast, brand, templates, crews, integrations, currentUser, users }) {
   const [compose, setCompose] = useState(null); // 'email' | 'sms'
   const [to, setTo] = useState("Customer");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const crew = crews.find((c) => c.id === job.crewId) || null;
-  const ctx = templateContext(job, brand, crew);
+  const ctx = templateContext(job, brand, crew, users);
   const thread = job.messages || [];
 
   const consentOk = (channel, audience) => {
@@ -3924,7 +4022,7 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
           <div key={m.id} style={{ padding: "12px 0", borderTop: `1px solid ${S.line}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
               <div style={{ display: "flex", gap: 7, alignItems: "center", minWidth: 0 }}>
-                {m.kind === "email" ? <Mail size={14} color="#1B6DE0" /> : <MessageCircle size={14} color="#1B6DE0" />}
+                {m.kind === "email" ? <Mail size={14} color={T.accent} /> : <MessageCircle size={14} color={T.accent} />}
                 <span style={{ fontSize: 13, fontWeight: 700, color: S.ink }}>{m.audience}</span>
                 <span style={{ fontSize: 12, color: S.sub, overflow: "hidden", textOverflow: "ellipsis" }}>{m.to}</span>
               </div>
@@ -3963,7 +4061,7 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
         )}
         {available.length > 0 && (
           <>
-            <div style={{ fontSize: 13, fontWeight: 800, color: "#28373E", margin: "8px 0" }}>START FROM A TEMPLATE</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: T.primary, margin: "8px 0" }}>START FROM A TEMPLATE</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
               {available.map((t) => (
                 <button key={t.id} type="button" onClick={() => applyTemplate(t)} style={{
@@ -4120,7 +4218,7 @@ function TabPhotos({ job, mut, toast }) {
                 {p.lat != null ? (
                   <a href={mapLinkForCoords(p.lat, p.lng)} target="_blank" rel="noreferrer" style={{
                     display: "inline-flex", alignItems: "center", gap: 4, marginTop: 5,
-                    fontSize: 10.5, fontWeight: 700, color: "#1B6DE0", textDecoration: "none",
+                    fontSize: 10.5, fontWeight: 700, color: T.accent, textDecoration: "none",
                   }}><MapPin size={10} /> {fmtCoord(p.lat, p.lng)}</a>
                 ) : (
                   <div style={{ fontSize: 10.5, color: "#92600A", marginTop: 5 }}>No location</div>
@@ -4203,7 +4301,7 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser }) {
   );
   return (
     <>
-      <Card style={{ background: "#28373E", border: "none" }}>
+      <Card style={{ background: T.primary, border: "none" }}>
         <div style={{ color: "#fff" }}>
           <div style={{ display: "flex", justifyContent: "space-between", opacity: 0.85, fontSize: 13 }}>
             <span>Contract price</span><span>{money(cap.contract)}</span>
@@ -4268,8 +4366,8 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser }) {
         <KV k="Rep commission" v={money(cap.commission)} strong />
         {isAdmin && <KV k="Net to company" v={money(cap.netCompany)} strong />}
         <div style={{ height: 10, borderRadius: 99, overflow: "hidden", display: "flex", margin: "10px 0" }}>
-          <div style={{ width: `${cap.repPctGross}%`, background: "#1B6DE0" }} />
-          <div style={{ width: `${cap.coPctGross}%`, background: "#28373E" }} />
+          <div style={{ width: `${cap.repPctGross}%`, background: T.accent }} />
+          <div style={{ width: `${cap.coPctGross}%`, background: T.primary }} />
         </div>
         {isAdmin && (
           <>
@@ -4336,9 +4434,9 @@ function TabPayments({ job, mut, toast }) {
         <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
           {["Received", "Paid out"].map((t) => (
             <button key={t} onClick={() => setForm({ ...form, type: t })} style={{
-              flex: 1, border: `1.5px solid ${form.type === t ? "#1B6DE0" : S.line}`,
-              background: form.type === t ? "#EAF2FD" : "#fff",
-              color: form.type === t ? "#1B6DE0" : S.ink,
+              flex: 1, border: `1.5px solid ${form.type === t ? T.accent : S.line}`,
+              background: form.type === t ? T.accentSoft : "#fff",
+              color: form.type === t ? T.accent : S.ink,
               borderRadius: 10, padding: "10px 0", fontSize: 14, fontWeight: 700, cursor: "pointer",
             }}>{t}</button>
           ))}
@@ -4416,7 +4514,7 @@ function TabInvoice({ job, brand, toast }) {
 }
 
 /* ---------- Work order — crew view, no pricing ---------- */
-function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser }) {
+function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, users }) {
   const [picking, setPicking] = useState(false);
   const [sending, setSending] = useState(false);
   const [notes, setNotes] = useState(job.workOrder ? job.workOrder.notes : "");
@@ -4433,7 +4531,7 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser })
     toast(`${c.name} assigned`);
   };
   const openSend = () => {
-    const ctx = templateContext(job, brand, crew);
+    const ctx = templateContext(job, brand, crew, users);
     const t = templates.find((x) => x.kind === "email" && x.audience === "Crew");
     setSubject(t ? mergeTemplate(t.subject, ctx) : `${brand.company} — work order for ${job.address}`);
     setBody(t ? mergeTemplate(t.body, ctx) : "");
@@ -4630,7 +4728,7 @@ function TabFiles({ job, mut, toast }) {
         {job.files.length === 0 && <div style={{ fontSize: 14, color: S.sub }}>No files yet.</div>}
         {job.files.map((f) => (
           <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: `1px solid ${S.line}` }}>
-            <FileText size={18} color="#1B6DE0" style={{ flexShrink: 0 }} />
+            <FileText size={18} color={T.accent} style={{ flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{f.name}</div>
               <div style={{ fontSize: 12, color: S.sub }}>{f.cat} · {f.at} · {f.by}</div>
@@ -4670,7 +4768,7 @@ function TabPortal({ job, brand, mut, toast }) {
             </div>
             <button onClick={() => mut((j) => ({ ...j, portal: { ...j.portal, [k]: !j.portal[k] } }))} style={{
               width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer",
-              background: job.portal[k] ? "#1B6DE0" : "#D6D9DE", position: "relative", transition: "background .15s",
+              background: job.portal[k] ? T.accent : "#D6D9DE", position: "relative", transition: "background .15s",
             }}>
               <span style={{
                 position: "absolute", top: 3, left: job.portal[k] ? 22 : 3,
@@ -4686,7 +4784,7 @@ function TabPortal({ job, brand, mut, toast }) {
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="blue">Client view</Chip>}>Portal preview</CardTitle>
         <div style={{ border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" }}>
-          <div style={{ background: "#28373E", padding: "16px 16px 14px", color: "#fff" }}>
+          <div style={{ background: T.primary, padding: "16px 16px 14px", color: "#fff" }}>
             <div style={{ fontSize: 12, opacity: 0.75 }}>{brand.company}</div>
             <div style={{ fontSize: 17, fontWeight: 800, marginTop: 3 }}>Your roofing project</div>
             <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>{job.address}</div>
@@ -4697,7 +4795,7 @@ function TabPortal({ job, brand, mut, toast }) {
             <div style={{ marginTop: 14, fontSize: 13, fontWeight: 700 }}>Shared with you</div>
             {rows.filter(([k]) => job.portal[k]).map(([k, label]) => (
               <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: `1px solid ${S.line}` }}>
-                <FileText size={15} color="#1B6DE0" /><span style={{ fontSize: 14 }}>{label}</span>
+                <FileText size={15} color={T.accent} /><span style={{ fontSize: 14 }}>{label}</span>
               </div>
             ))}
             {rows.every(([k]) => !job.portal[k]) && (
@@ -4743,9 +4841,9 @@ function ShingleFinder() {
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
       {opts.map((o) => (
         <button key={o.v} onClick={() => set(o.v)} style={{
-          border: `1.5px solid ${val === o.v ? "#1B6DE0" : S.line}`,
-          background: val === o.v ? "#EAF2FD" : "#fff",
-          color: val === o.v ? "#1B6DE0" : S.ink,
+          border: `1.5px solid ${val === o.v ? T.accent : S.line}`,
+          background: val === o.v ? T.accentSoft : "#fff",
+          color: val === o.v ? T.accent : S.ink,
           borderRadius: 999, padding: "7px 13px", fontSize: 13, fontWeight: 600, cursor: "pointer",
         }}>{o.l}</button>
       ))}
@@ -4897,7 +4995,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
           <button key={id} onClick={() => setTab(id)} style={{
             border: "none", borderRadius: 999, padding: "9px 16px", fontSize: 14, fontWeight: 700,
             cursor: "pointer", whiteSpace: "nowrap",
-            background: tab === id ? "#28373E" : "#fff", color: tab === id ? "#fff" : S.ink,
+            background: tab === id ? T.primary : "#fff", color: tab === id ? "#fff" : S.ink,
           }}>{label}</button>
         ))}
       </div>
@@ -4935,9 +5033,9 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
             <div style={{ display: "flex", gap: 8 }}>
               {["OH", "KY", "IL"].map((st) => (
                 <button key={st} onClick={() => setTplState(st)} style={{
-                  flex: 1, border: `1.5px solid ${tplState === st ? "#1B6DE0" : S.line}`,
-                  background: tplState === st ? "#EAF2FD" : "#fff",
-                  color: tplState === st ? "#1B6DE0" : S.ink,
+                  flex: 1, border: `1.5px solid ${tplState === st ? T.accent : S.line}`,
+                  background: tplState === st ? T.accentSoft : "#fff",
+                  color: tplState === st ? T.accent : S.ink,
                   borderRadius: 10, padding: "10px 0", fontWeight: 800, cursor: "pointer",
                 }}>{st}</button>
               ))}
@@ -4973,19 +5071,19 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
                 </button>
                 {isOpen && (
                   <div style={{ marginTop: 12, borderTop: `1px solid ${S.line}`, paddingTop: 12 }}>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: "#28373E", marginBottom: 5 }}>WHEN TO USE</div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: T.primary, marginBottom: 5 }}>WHEN TO USE</div>
                     <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.55 }}>{t.scenario}</div>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: "#28373E", margin: "12px 0 5px" }}>CODE BASIS</div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: T.primary, margin: "12px 0 5px" }}>CODE BASIS</div>
                     <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.55 }}>{prov.note}</div>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: "#28373E", margin: "12px 0 5px" }}>LINE ITEMS TO ADD</div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: T.primary, margin: "12px 0 5px" }}>LINE ITEMS TO ADD</div>
                     {t.lineItems.map((li, i) => (
                       <div key={i} style={{ fontSize: 13, color: S.ink, lineHeight: 1.55, marginBottom: 3 }}>• {li}</div>
                     ))}
-                    <div style={{ fontSize: 12, fontWeight: 800, color: "#28373E", margin: "12px 0 5px" }}>DOCUMENTATION</div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: T.primary, margin: "12px 0 5px" }}>DOCUMENTATION</div>
                     {t.docs.map((d, i) => (
                       <div key={i} style={{ fontSize: 13, color: S.ink, lineHeight: 1.55, marginBottom: 3 }}>• {d}</div>
                     ))}
-                    <div style={{ fontSize: 12, fontWeight: 800, color: "#28373E", margin: "12px 0 5px" }}>SUPPLEMENT WORDING</div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: T.primary, margin: "12px 0 5px" }}>SUPPLEMENT WORDING</div>
                     <div style={{
                       fontSize: 13, color: S.ink, lineHeight: 1.6, background: "#FAFBFC",
                       border: `1px solid ${S.line}`, borderRadius: 10, padding: 12,
@@ -5093,12 +5191,12 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
                     textAlign: "left", background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14,
                     padding: 16, cursor: "pointer", display: "flex", flexDirection: "column", gap: 8,
                   }}>
-                    <div style={{ width: 36, height: 36, borderRadius: 10, background: "#EAF2FD", display: "grid", placeItems: "center" }}>
-                      <Icon size={18} color="#1B6DE0" />
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: T.accentSoft, display: "grid", placeItems: "center" }}>
+                      <Icon size={18} color={T.accent} />
                     </div>
                     <div style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>{sec.title}</div>
                     <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.45 }}>{sec.blurb}</div>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: "#1B6DE0", display: "flex", alignItems: "center", gap: 4 }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: T.accent, display: "flex", alignItems: "center", gap: 4 }}>
                       Open <ChevronRight size={14} />
                     </div>
                   </button>
@@ -5109,7 +5207,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
             <>
               <button onClick={() => setResourcePage(null)} style={{
                 display: "flex", alignItems: "center", gap: 6, border: "none", background: "none",
-                color: "#1B6DE0", fontWeight: 700, fontSize: 14, cursor: "pointer", padding: "4px 0 12px",
+                color: T.accent, fontWeight: 700, fontSize: 14, cursor: "pointer", padding: "4px 0 12px",
               }}><ChevronLeft size={16} /> Resources</button>
               {resourcePage === "shingles" && <ShingleFinder />}
               {resourcePage === "specs" && (
@@ -5234,7 +5332,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
                   <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }}>
                     The most common adjuster shortcuts and the code cite that answers each. Plus patterns we see from specific carriers — not accusations, just field observations to prepare for.
                   </div>
-                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: "#1B6DE0", marginBottom: 10 }}>CLAIM SCENARIOS</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: T.accent, marginBottom: 10 }}>CLAIM SCENARIOS</div>
                   {CLAIM_SCENARIOS.map((sc, i) => (
                     <Card key={i} style={{ marginTop: i ? 14 : 0 }}>
                       <div style={{ fontSize: 15.5, fontWeight: 800, color: S.ink }}>{sc.q}</div>
@@ -5249,13 +5347,13 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
                       <Callout label="Answer" tone="green"><Bullets items={sc.answer} /></Callout>
                     </Card>
                   ))}
-                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: "#1B6DE0", margin: "20px 0 10px" }}>WHEN THE ADJUSTER SAYS FINAL</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: T.accent, margin: "20px 0 10px" }}>WHEN THE ADJUSTER SAYS FINAL</div>
                   <Card>
                     <div style={{ fontSize: 13.5, color: S.sub, marginBottom: 10 }}>Escalate in order. Each step creates a record the next one relies on.</div>
                     {ESCALATION_LADDER.map(([t, d], i) => (
                       <div key={i} style={{ display: "flex", gap: 12, padding: "10px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
                         <span style={{
-                          width: 24, height: 24, borderRadius: 999, background: "#EAF2FD", color: "#1B6DE0",
+                          width: 24, height: 24, borderRadius: 999, background: T.accentSoft, color: T.accent,
                           display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800, flexShrink: 0,
                         }}>{i + 1}</span>
                         <div>
@@ -5265,7 +5363,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
                       </div>
                     ))}
                   </Card>
-                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: "#1B6DE0", margin: "20px 0 10px" }}>CARRIER PATTERNS</div>
+                  <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 1.2, color: T.accent, margin: "20px 0 10px" }}>CARRIER PATTERNS</div>
                   {CARRIER_PATTERNS.map((cp, i) => (
                     <Card key={i} style={{ marginTop: i ? 14 : 0 }}>
                       <div style={{ fontSize: 15.5, fontWeight: 800, color: S.ink }}>{cp.title}</div>
@@ -5325,14 +5423,25 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
 /* ================================================================
    REVIEW AUTOMATION SETTINGS
    ================================================================ */
-function ReviewSettings({ settings, setSettings, jobs, onBack, brand }) {
+function ReviewSettings({ settings, setSettings, jobs, onBack, brand, mut, toast }) {
+  /* Requests manager state: per-job rating capture + internal feedback. */
+  const [rating, setRating] = useState({});      // jobId -> 1..5
+  const [fbOpen, setFbOpen] = useState(null);    // jobId with feedback form open
+  const [fbText, setFbText] = useState("");
+  const completed = jobs.filter((j) => j.stageId === "s10");
+  const setReview = (j, patch) => mut(j.id, (x) => ({ ...x, review: { ...x.review, ...patch } }));
+  const saveFeedback = (j) => {
+    setReview(j, { rating: rating[j.id], feedback: fbText.trim(), feedbackAt: new Date().toISOString().slice(0, 10) });
+    setFbOpen(null); setFbText("");
+    toast("Feedback saved to the job — follow up before they post anywhere");
+  };
   const sent = jobs.filter((j) => j.review.sent);
   const posted = jobs.filter((j) => j.review.posted);
   const set = (k) => (v) => setSettings({ ...settings, [k]: v });
   const Toggle = ({ on, onClick }) => (
     <button onClick={onClick} style={{
       width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer",
-      background: on ? "#1B6DE0" : "#D6D9DE", position: "relative", flexShrink: 0,
+      background: on ? T.accent : "#D6D9DE", position: "relative", flexShrink: 0,
     }}>
       <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" }} />
     </button>
@@ -5351,6 +5460,87 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand }) {
           <Toggle on={settings.enabled} onClick={() => set("enabled")(!settings.enabled)} />
         </div>
       </Card>
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={<Chip tone="blue">{completed.length} completed</Chip>}>Review requests</CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, marginBottom: 6, lineHeight: 1.5 }}>
+          Every job in "Job completed." Toggle what's been sent and what's posted. Log the customer's rating when
+          they answer the "how did we do?" message — anything under 5 opens the internal feedback form so you can
+          make it right first.
+        </div>
+        {completed.length === 0 && <div style={{ fontSize: 13.5, color: S.sub, marginTop: 8 }}>No completed jobs yet.</div>}
+        {completed.map((j) => {
+          const hasConsent = j.consent.sms.granted || j.consent.email.granted;
+          const r = rating[j.id] || j.review.rating || 0;
+          return (
+            <div key={j.id} style={{ borderTop: `1px solid ${S.line}`, padding: "12px 0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 700 }}>{j.name}</div>
+                  <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>{j.address}</div>
+                  {!hasConsent && <Chip tone="amber">No consent — can't send</Chip>}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 7, alignItems: "flex-end", flexShrink: 0 }}>
+                  <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 12.5, color: S.sub }}>
+                    Sent
+                    <input type="checkbox" checked={!!j.review.sent} disabled={!hasConsent}
+                      onChange={(e) => setReview(j, { sent: e.target.checked, sentAt: e.target.checked ? new Date().toISOString().slice(0, 10) : null })}
+                      style={{ width: 17, height: 17, accentColor: T.accent }} />
+                  </label>
+                  <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: 12.5, color: S.sub }}>
+                    Posted
+                    <input type="checkbox" checked={!!j.review.posted}
+                      onChange={(e) => setReview(j, { posted: e.target.checked })}
+                      style={{ width: 17, height: 17, accentColor: T.accent }} />
+                  </label>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 4, marginTop: 8, alignItems: "center" }}>
+                <span style={{ fontSize: 12.5, color: S.sub, marginRight: 4 }}>Rating:</span>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <button key={n} onClick={() => {
+                    setRating({ ...rating, [j.id]: n });
+                    if (n === 5) { setReview(j, { rating: 5 }); toast("5 stars — send them the Google link"); setFbOpen(null); }
+                    else { setFbOpen(j.id); setFbText(j.review.feedback || ""); }
+                  }} style={{ border: "none", background: "none", cursor: "pointer", padding: 2 }}>
+                    <Star size={19} color={n <= r ? "#D3860A" : "#D6D9DE"} fill={n <= r ? "#D3860A" : "none"} />
+                  </button>
+                ))}
+                {r === 5 && brand.googleReviewLink && (
+                  <a href={brand.googleReviewLink} target="_blank" rel="noreferrer"
+                    style={{ fontSize: 12.5, color: T.accent, fontWeight: 700, marginLeft: 6 }}>Google link →</a>
+                )}
+              </div>
+              {j.review.feedback && fbOpen !== j.id && (
+                <div style={{ marginTop: 8, background: "#FDF6EC", border: "1px solid #F0DFC5", borderRadius: 10, padding: "9px 12px", fontSize: 12.5, color: "#92600A" }}>
+                  Internal feedback ({j.review.feedbackAt}): {j.review.feedback}
+                </div>
+              )}
+              {fbOpen === j.id && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 6 }}>
+                    Under 5 stars — capture what went wrong. This stays internal so the team can fix it and follow up.
+                  </div>
+                  <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" }}
+                    value={fbText} onChange={(e) => setFbText(e.target.value)}
+                    placeholder="What happened, and who's following up…" />
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <Btn small onClick={() => saveFeedback(j)} disabled={!fbText.trim()}>Save feedback</Btn>
+                    <Btn small kind="ghost" onClick={() => setFbOpen(null)}>Cancel</Btn>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <div style={{ marginTop: 12, background: "#FDF6EC", border: "1px solid #F0DFC5", borderRadius: 10, padding: "10px 13px", fontSize: 12.5, color: "#92600A", lineHeight: 1.55 }}>
+          Two honest limits. Reviews can't auto-post to Google — Google has no API for posting reviews, so a 5-star
+          customer still has to tap the link and write it themselves. And asking only happy customers for Google
+          reviews while diverting unhappy ones is "review gating," which Google's policy prohibits and can get
+          reviews filtered. The safe version is what this does: ask everyone how it went, resolve problems privately
+          first, and make the Google link available to all.
+        </div>
+      </Card>
+
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Rules</CardTitle>
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
@@ -5397,22 +5587,96 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand }) {
 /* ================================================================
    BRANDING EDITOR + MORE MENU + INBOX
    ================================================================ */
-function BrandingEditor({ brand, setBrand, onBack }) {
-  const set = (k) => (e) => setBrand({ ...brand, [k]: e.target.value });
+function LeadSourceManager({ sources, setSources, jobs, onBack, toast }) {
+  const [draft, setDraft] = useState("");
+  const usage = (src) => jobs.filter((j) => j.leadSource === src).length;
+  const add = () => {
+    const v = draft.trim();
+    if (!v) return;
+    if (sources.some((x) => x.toLowerCase() === v.toLowerCase())) { toast("Already in the list"); return; }
+    setSources([...sources, v]); setDraft(""); toast("Source added");
+  };
   return (
     <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Lead sources" onBack={onBack} />
+      <Card style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 13, color: S.sub, marginBottom: 12, lineHeight: 1.5 }}>
+          These are the options reps pick from on a new lead, and what Performance groups by. Removing a source
+          doesn't touch jobs already tagged with it.
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input style={{ ...inputStyle, flex: 1 }} value={draft} placeholder="Add a source — Home show, Yard sign…"
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
+          <Btn onClick={add} disabled={!draft.trim()}><Plus size={14} /></Btn>
+        </div>
+      </Card>
+      {sources.map((src, i2) => (
+        <Card key={src} pad={13} style={{ marginTop: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 14.5, fontWeight: 700 }}>{src}</div>
+              <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>{usage(src)} job{usage(src) === 1 ? "" : "s"} tagged</div>
+            </div>
+            <button onClick={() => { setSources(sources.filter((x) => x !== src)); toast("Source removed"); }}
+              style={{ border: "none", background: "none", cursor: "pointer" }}>
+              <Trash2 size={16} color="#B42318" />
+            </button>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function BrandingEditor({ brand, setBrand, onBack, toast }) {
+  const set = (k) => (e) => setBrand({ ...brand, [k]: e.target.value });
+  const logoRef = useRef(null);
+  const onLogo = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast("That file isn't an image"); return; }
+    const r = new FileReader();
+    r.onload = () => { setBrand({ ...brand, logo: String(r.result) }); toast("Logo updated"); };
+    r.readAsDataURL(file);
+    e.target.value = "";
+  };
+  const locations = brand.locations || [];
+  const setLoc = (i, k, v) => {
+    const next = locations.map((l, x) => (x === i ? { ...l, [k]: v } : l));
+    setBrand({ ...brand, locations: next });
+  };
+  const addLoc = () => setBrand({ ...brand, locations: [...locations, { id: uid("loc"), label: "", phone: "", address: "" }] });
+  const rmLoc = (i) => setBrand({ ...brand, locations: locations.filter((_, x) => x !== i) });
+
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <input ref={logoRef} type="file" accept="image/*" onChange={onLogo} style={{ display: "none" }} />
       <SubHeader title="Company branding" onBack={onBack} />
       <Card style={{ marginTop: 14 }}>
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 14 }}>
-          One place for company identity. Login, documents, the client portal, and review messages all read from here —
-          rebranding the app is editing this page.
+          One place for company identity. Login, documents, the client portal, and review messages all read from
+          here — colors repaint the whole app the moment you change them.
         </div>
+        <Field label="Logo" hint="Shows on the login screen, the loading screen, and document headers. PNG with a transparent background works best.">
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            {brand.logo ? (
+              <img src={brand.logo} alt="Company logo" style={{ height: 56, maxWidth: 160, objectFit: "contain", borderRadius: 8, border: `1px solid ${S.line}`, padding: 4, background: "#fff" }} />
+            ) : (
+              <div style={{ width: 56, height: 56, borderRadius: 14, background: T.primary, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }}>{brand.short}</div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn kind="ghost" small onClick={() => logoRef.current && logoRef.current.click()}><Upload size={13} /> {brand.logo ? "Replace" : "Upload"}</Btn>
+              {brand.logo && <Btn kind="danger" small onClick={() => setBrand({ ...brand, logo: null })}>Remove</Btn>}
+            </div>
+          </div>
+        </Field>
         <Field label="Company name"><input style={inputStyle} value={brand.company} onChange={set("company")} /></Field>
-        <Field label="Short mark (logo block)"><input style={inputStyle} value={brand.short} onChange={set("short")} /></Field>
+        <Field label="Short mark (fallback when no logo)"><input style={inputStyle} value={brand.short} onChange={set("short")} /></Field>
         <Field label="Slogan"><input style={inputStyle} value={brand.slogan} onChange={set("slogan")} /></Field>
-        <Field label="Phone"><input style={inputStyle} value={brand.phone} onChange={set("phone")} /></Field>
+        <Field label="Main phone"><input style={inputStyle} value={brand.phone} onChange={set("phone")} /></Field>
         <Field label="Email"><input style={inputStyle} value={brand.email} onChange={set("email")} /></Field>
-        <Field label="Address"><input style={inputStyle} value={brand.address} onChange={set("address")} /></Field>
+        <Field label="Head office address"><input style={inputStyle} value={brand.address} onChange={set("address")} /></Field>
         <Field label="Google review link"><input style={inputStyle} value={brand.googleReviewLink} onChange={set("googleReviewLink")} /></Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Primary color">
@@ -5422,6 +5686,29 @@ function BrandingEditor({ brand, setBrand, onBack }) {
             <input type="color" value={brand.accent} onChange={set("accent")} style={{ ...inputStyle, height: 46, padding: 4 }} />
           </Field>
         </div>
+        <div style={{ fontSize: 12, color: S.sub }}>The soft accent (chips, highlights) is derived from the accent automatically.</div>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={<Btn kind="soft" small onClick={addLoc}><Plus size={13} /> Add location</Btn>}>Locations</CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, marginBottom: 6, lineHeight: 1.5 }}>
+          Each office gets its own phone and address. A rep picks their location on their seat, and documents and
+          messages for their jobs show that office's contact info instead of head office.
+        </div>
+        {locations.length === 0 && <div style={{ fontSize: 13, color: S.sub, marginTop: 8 }}>No additional locations — everything uses the head office above.</div>}
+        {locations.map((l, i) => (
+          <div key={l.id} style={{ border: `1px solid ${S.line}`, borderRadius: 12, padding: 13, marginTop: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: S.sub }}>LOCATION {i + 1}</div>
+              <button onClick={() => rmLoc(i)} style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={15} color="#B42318" /></button>
+            </div>
+            <Field label="Label"><input style={inputStyle} value={l.label} onChange={(e) => setLoc(i, "label", e.target.value)} placeholder="Cincinnati office" /></Field>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Field label="Office phone"><input style={inputStyle} value={l.phone} onChange={(e) => setLoc(i, "phone", e.target.value)} /></Field>
+              <Field label="Address"><input style={inputStyle} value={l.address} onChange={(e) => setLoc(i, "address", e.target.value)} /></Field>
+            </div>
+          </div>
+        ))}
       </Card>
     </div>
   );
@@ -5445,11 +5732,22 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   const soon = new Date(Date.now() + 60 * 864e5).toISOString().slice(0, 10);
   const expiring = docs.filter((d) => d.expires && d.expires <= soon);
 
+  const [viewing, setViewing] = useState(null);
   const list = docs.filter((d) => {
     if (cat !== "All" && d.cat !== cat) return false;
     if (q && !(d.name + d.cat).toLowerCase().includes(q.toLowerCase())) return false;
     return true;
-  }).sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.at.localeCompare(a.at));
+  }).sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (a.order ?? 999) - (b.order ?? 999) || b.at.localeCompare(a.at));
+
+  const move = (id, dir) => {
+    const ordered = [...list];
+    const idx = ordered.findIndex((d) => d.id === id);
+    const swap = idx + dir;
+    if (swap < 0 || swap >= ordered.length) return;
+    [ordered[idx], ordered[swap]] = [ordered[swap], ordered[idx]];
+    const orderMap = Object.fromEntries(ordered.map((d, i2) => [d.id, i2]));
+    setDocs(docs.map((d) => ({ ...d, order: orderMap[d.id] ?? d.order })));
+  };
 
   const onFile = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -5491,18 +5789,19 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
       <div style={{ display: "flex", gap: 6, marginTop: 10, overflowX: "auto", paddingBottom: 4 }}>
         {["All", ...DOC_CATEGORIES].map((c) => (
           <button key={c} onClick={() => setCat(c)} style={{
-            border: `1.5px solid ${cat === c ? "#1B6DE0" : S.line}`,
-            background: cat === c ? "#EAF2FD" : "#fff", color: cat === c ? "#1B6DE0" : S.ink,
+            border: `1.5px solid ${cat === c ? T.accent : S.line}`,
+            background: cat === c ? T.accentSoft : "#fff", color: cat === c ? T.accent : S.ink,
             borderRadius: 999, padding: "7px 13px", fontSize: 13, fontWeight: 600,
             cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
           }}>{c}</button>
         ))}
       </div>
 
-      {list.map((d) => (
+      {list.map((d, di) => (
         <Card key={d.id} pad={15} style={{ marginTop: 10 }}>
-          <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-            <FileText size={20} color="#1B6DE0" style={{ flexShrink: 0, marginTop: 2 }} />
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start", cursor: "pointer" }}
+            onClick={() => setViewing(d)}>
+            <FileText size={20} color={T.accent} style={{ flexShrink: 0, marginTop: 2 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{d.name}</div>
               <div style={{ fontSize: 12, color: S.sub, marginTop: 3 }}>
@@ -5516,6 +5815,8 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
           </div>
           {canEdit && (
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <Btn kind="ghost" small onClick={() => move(d.id, -1)} disabled={di === 0}>↑</Btn>
+              <Btn kind="ghost" small onClick={() => move(d.id, 1)} disabled={di === list.length - 1}>↓</Btn>
               <Btn kind="ghost" small style={{ flex: 1 }}
                 onClick={() => setDocs(docs.map((x) => (x.id === d.id ? { ...x, pinned: !x.pinned } : x)))}>
                 {d.pinned ? "Unpin" : "Pin"}
@@ -5528,6 +5829,24 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
         </Card>
       ))}
       {list.length === 0 && <Card style={{ marginTop: 10 }}><div style={{ fontSize: 14, color: S.sub }}>No documents here yet.</div></Card>}
+
+      <Sheet open={!!viewing} onClose={() => setViewing(null)} title={viewing ? viewing.name : ""}>
+        {viewing && (
+          <>
+            <KV k="Category" v={viewing.cat} />
+            <KV k="Added" v={`${viewing.at} by ${viewing.by}`} />
+            {viewing.expires && <KV k="Expires" v={viewing.expires} />}
+            <div style={{
+              marginTop: 14, border: `1.5px dashed ${S.line}`, borderRadius: 12, padding: "34px 16px",
+              textAlign: "center", color: S.sub, fontSize: 13.5, lineHeight: 1.6,
+            }}>
+              <FileText size={28} color="#C7CBD1" style={{ marginBottom: 8 }} />
+              <div>Preview isn't available yet — files aren't stored anywhere while the app runs on in-memory data.
+              Once documents are wired to Supabase Storage, this opens the actual PDF.</div>
+            </div>
+          </>
+        )}
+      </Sheet>
 
       <Sheet open={adding} onClose={() => setAdding(false)} title="Add document"
         footer={<Btn style={{ width: "100%" }} disabled={!f.name.trim()} onClick={save}>Save document</Btn>}>
@@ -5606,6 +5925,27 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
     !q || (r.item + r.sku + r.supplier + r.category).toLowerCase().includes(q.toLowerCase()));
   const margin = (r) => (r.price > 0 ? ((r.price - r.cost) / r.price) * 100 : 0);
 
+  const [editing, setEditing] = useState(null);
+  const [ef, setEf] = useState(null);
+  const openEdit = (r) => { setEditing(r ? r.id : "new"); setEf(r ? { ...r, marginPct: margin(r).toFixed(1) } : { sku: "", item: "", unit: "EA", cost: 0, price: 0, supplier: "", category: "", marginPct: "30" }); };
+  const efSet = (k) => (e) => {
+    const v = e.target.value;
+    setEf((prev) => {
+      const next = { ...prev, [k]: v };
+      const cost = num(next.cost), price = num(next.price), m = num(next.marginPct);
+      if (k === "marginPct" && cost > 0 && m < 100) next.price = +(cost / (1 - m / 100)).toFixed(2);
+      else if ((k === "price" || k === "cost") && price > 0) next.marginPct = (((price - cost) / price) * 100).toFixed(1);
+      return next;
+    });
+  };
+  const saveEdit = () => {
+    const row = { ...ef, cost: num(ef.cost), price: num(ef.price) };
+    delete row.marginPct;
+    if (editing === "new") setList([...list, { ...row, id: uid("pl") }]);
+    else setList(list.map((r) => (r.id === editing ? { ...r, ...row } : r)));
+    setEditing(null); toast("Line item saved");
+  };
+
   return (
     <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
       <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onFile} style={{ display: "none" }} />
@@ -5642,7 +5982,8 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
       </div>
 
       {filtered.map((r) => (
-        <Card key={r.id} pad={14} style={{ marginTop: 10 }}>
+        <Card key={r.id} pad={14} style={{ marginTop: 10, cursor: canEdit ? "pointer" : "default" }}
+          onClick={canEdit ? () => openEdit(r) : undefined}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{r.item}</div>
@@ -5662,6 +6003,45 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
         </Card>
       ))}
       {filtered.length === 0 && <Card style={{ marginTop: 10 }}><div style={{ fontSize: 14, color: S.sub }}>No items match.</div></Card>}
+
+      {canEdit && (
+        <Btn kind="ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => openEdit(null)}>
+          <Plus size={14} /> Add line item
+        </Btn>
+      )}
+
+      <Sheet open={!!editing} onClose={() => setEditing(null)} title={editing === "new" ? "Add line item" : "Edit line item"}
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            {editing !== "new" && (
+              <Btn kind="danger" onClick={() => { setList(list.filter((r) => r.id !== editing)); setEditing(null); toast("Line item deleted"); }}>
+                <Trash2 size={14} />
+              </Btn>
+            )}
+            <Btn style={{ flex: 1 }} disabled={!ef || !ef.item.trim()} onClick={saveEdit}>Save</Btn>
+          </div>
+        }>
+        {ef && (
+          <>
+            <Field label="Item *"><input style={inputStyle} value={ef.item} onChange={efSet("item")} /></Field>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Field label="SKU"><input style={inputStyle} value={ef.sku} onChange={efSet("sku")} /></Field>
+              <Field label="Unit"><input style={inputStyle} value={ef.unit} onChange={efSet("unit")} /></Field>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+              <Field label="Cost"><input style={inputStyle} type="number" step="0.01" value={ef.cost} onChange={efSet("cost")} /></Field>
+              <Field label="Price"><input style={inputStyle} type="number" step="0.01" value={ef.price} onChange={efSet("price")} /></Field>
+              <Field label="Margin %" hint="Changing this recomputes price from cost.">
+                <input style={inputStyle} type="number" step="0.1" value={ef.marginPct} onChange={efSet("marginPct")} />
+              </Field>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Field label="Supplier"><input style={inputStyle} value={ef.supplier} onChange={efSet("supplier")} /></Field>
+              <Field label="Category"><input style={inputStyle} value={ef.category} onChange={efSet("category")} /></Field>
+            </div>
+          </>
+        )}
+      </Sheet>
 
       <Sheet open={!!importing} onClose={() => setImporting(null)} title="Import price list"
         footer={importing && !importing.error && (
@@ -5760,8 +6140,8 @@ function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, 
       <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
         {[["email", "Email"], ["sms", "Text"]].map(([k, l]) => (
           <button key={k} onClick={() => setKind(k)} style={{
-            flex: 1, border: `1.5px solid ${kind === k ? "#1B6DE0" : S.line}`,
-            background: kind === k ? "#EAF2FD" : "#fff", color: kind === k ? "#1B6DE0" : S.ink,
+            flex: 1, border: `1.5px solid ${kind === k ? T.accent : S.line}`,
+            background: kind === k ? T.accentSoft : "#fff", color: kind === k ? T.accent : S.ink,
             borderRadius: 10, padding: "10px 0", fontSize: 14, fontWeight: 700, cursor: "pointer",
           }}>{l}</button>
         ))}
@@ -5769,8 +6149,8 @@ function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, 
       <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
         {["All", "Customer", "Crew"].map((a) => (
           <button key={a} onClick={() => setAud(a)} style={{
-            border: `1.5px solid ${aud === a ? "#1B6DE0" : S.line}`,
-            background: aud === a ? "#EAF2FD" : "#fff", color: aud === a ? "#1B6DE0" : S.ink,
+            border: `1.5px solid ${aud === a ? T.accent : S.line}`,
+            background: aud === a ? T.accentSoft : "#fff", color: aud === a ? T.accent : S.ink,
             borderRadius: 999, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
           }}>{a}</button>
         ))}
@@ -5834,12 +6214,12 @@ function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, 
             {f.body.length} characters — texts over 160 send as multiple segments.
           </div>
         )}
-        <div style={{ fontSize: 13, fontWeight: 800, color: "#28373E", marginBottom: 8 }}>INSERT A MERGE FIELD</div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: T.primary, marginBottom: 8 }}>INSERT A MERGE FIELD</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {MERGE_FIELDS.map(([token, label]) => (
             <button key={token} type="button" title={label} onClick={() => insertField(token)} style={{
               border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
-              padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#1B6DE0",
+              padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer", color: T.accent,
             }}>{token}</button>
           ))}
         </div>
@@ -5913,8 +6293,8 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
               return (
                 <button key={t} type="button" onClick={() => setF({ ...f, trades: on ? f.trades.filter((x) => x !== t) : [...f.trades, t] })}
                   style={{
-                    border: `1.5px solid ${on ? "#1B6DE0" : S.line}`, background: on ? "#EAF2FD" : "#fff",
-                    color: on ? "#1B6DE0" : S.ink, borderRadius: 999, padding: "7px 13px",
+                    border: `1.5px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : "#fff",
+                    color: on ? T.accent : S.ink, borderRadius: 999, padding: "7px 13px",
                     fontSize: 13, fontWeight: 600, cursor: "pointer",
                   }}>{on ? "✓ " : ""}{t}</button>
               );
@@ -6284,7 +6664,11 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
       }
       setEditing(null);
     } catch (e) {
-      setSeatErr(e && e.message ? e.message : "Could not save the seat.");
+      const msg = e && e.message ? e.message : "Could not save the seat.";
+      const hint = /Failed to send a request|FunctionsFetchError|not found|Failed to fetch/i.test(msg)
+        ? " — The invite-user Edge Function isn't deployed yet. Run `supabase functions deploy invite-user`, or add the user from the Supabase dashboard (Authentication → Users) for now."
+        : "";
+      setSeatErr(msg + hint);
     }
     setSaving(false);
   };
@@ -6361,8 +6745,8 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{
                 width: 40, height: 40, borderRadius: 999, flexShrink: 0,
-                background: u.role === "admin" ? "#28373E" : "#EAF2FD",
-                color: u.role === "admin" ? "#fff" : "#1B6DE0",
+                background: u.role === "admin" ? T.primary : T.accentSoft,
+                color: u.role === "admin" ? "#fff" : T.accent,
                 display: "grid", placeItems: "center", fontSize: 13, fontWeight: 800,
               }}>{u.name.split(" ").map((p) => p[0]).join("")}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -6413,10 +6797,19 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
             {ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
           </select>
         </Field>
-        <div style={{ background: "#EAF2FD", borderRadius: 10, padding: "11px 13px", fontSize: 13, color: "#28373E", marginBottom: 14, lineHeight: 1.5 }}>
+        <div style={{ background: T.accentSoft, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.primary, marginBottom: 14, lineHeight: 1.5 }}>
           {(ROLES.find((r) => r.id === f.role) || {}).blurb}
         </div>
         <Field label="Job title (shown in the app)"><input style={inputStyle} value={f.title} onChange={set("title")} /></Field>
+        {(brand.locations || []).length > 0 && (
+          <Field label="Location" hint="Documents and messages for this rep's jobs show this office's phone and address.">
+            <select style={selStyle} value={f.locationId || ""} onChange={(e) => setF((p2) => ({ ...p2, locationId: e.target.value || null }))}>
+              <option value="">Head office</option>
+              {(brand.locations || []).map((l) => <option key={l.id} value={l.id}>{l.label || l.address}</option>)}
+            </select>
+          </Field>
+        )}
+        <Field label="Direct phone (shown on this rep's documents)"><input style={inputStyle} value={f.repPhone || ""} onChange={(e) => setF((p2) => ({ ...p2, repPhone: e.target.value }))} /></Field>
         {f.role !== "crew" && (
           <Field label="Default commission rate (%)" hint="Starting rate on new jobs. Can be changed per job by an admin.">
             <input style={inputStyle} inputMode="decimal" value={f.commissionRate}
@@ -6445,6 +6838,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
     ["templates", ScrollText, "Message templates", "Email and text, customer and crew"],
     ["integrations", Share2, "Integrations", "Gmail and text messaging"],
     ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
+    ["leadsources", Filter, "Lead sources", "Add or remove the options reps pick from"],
     ["reviews", Star, "Review automation", "Google review requests"],
     ["branding", Settings, "Company branding", "Name, colors, review link"],
   ];
@@ -6464,8 +6858,8 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
             display: "flex", alignItems: "center", gap: 14, width: "100%",
             border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0,
           }}>
-            <span style={{ width: 40, height: 40, borderRadius: 12, background: "#EAF2FD", display: "grid", placeItems: "center", flexShrink: 0 }}>
-              <Icon size={19} color="#1B6DE0" />
+            <span style={{ width: 40, height: 40, borderRadius: 12, background: T.accentSoft, display: "grid", placeItems: "center", flexShrink: 0 }}>
+              <Icon size={19} color={T.accent} />
             </span>
             <span style={{ flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{label}</div>
@@ -6480,52 +6874,72 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
   );
 }
 
-function Inbox({ jobs, onOpenJob }) {
-  const threads = jobs.slice(0, 4).map((j, i) => ({
-    job: j,
-    last: [
-      "Sounds good — see you then.",
-      "Just checking in on the estimate you sent over.",
-      "The adjuster confirmed Thursday at 10.",
-      "Thank you!! The crew left it spotless.",
-    ][i],
-    at: ["9:14 AM", "Yesterday", "Mon", "Jul 19"][i],
-  }));
+function Inbox({ jobs, onOpenJob, onCompose }) {
+  const [filter, setFilter] = useState("All");
+  const all = jobs.flatMap((j) => (j.messages || []).map((msg) => ({ job: j, msg })))
+    .sort((x, y2) => (y2.msg.at || "").localeCompare(x.msg.at || ""));
+  const list = all.filter(({ msg }) => {
+    if (filter === "All") return true;
+    if (filter === "Sent") return msg.status === "Sent";
+    if (filter === "Queued") return msg.status !== "Sent";
+    if (filter === "Viewed") return !!msg.viewed;
+    return true;
+  });
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
-      <div style={{ fontSize: 24, fontWeight: 800, color: S.ink, marginBottom: 16 }}>Inbox</div>
-      {threads.map((t) => (
-        <Card key={t.job.id} pad={16} style={{ marginBottom: 10, cursor: "pointer" }}>
-          <button onClick={() => onOpenJob(t.job.id)} style={{
-            display: "flex", gap: 12, width: "100%", border: "none", background: "none",
-            cursor: "pointer", textAlign: "left", padding: 0, alignItems: "center",
-          }}>
-            <span style={{
-              width: 42, height: 42, borderRadius: 999, background: "#28373E", color: "#fff",
-              display: "grid", placeItems: "center", fontWeight: 700, fontSize: 14, flexShrink: 0,
-            }}>{t.job.name.split(" ").map((w) => w[0]).join("")}</span>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{t.job.name}</span>
-                <span style={{ fontSize: 12, color: S.sub }}>{t.at}</span>
+    <div style={{ padding: "18px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>Inbox</div>
+        <Btn small onClick={onCompose}><Plus size={14} /> New message</Btn>
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        {["All", "Sent", "Queued", "Viewed"].map((fl) => (
+          <button key={fl} onClick={() => setFilter(fl)} style={{
+            border: `1.5px solid ${filter === fl ? T.accent : S.line}`,
+            background: filter === fl ? T.accentSoft : "#fff",
+            color: filter === fl ? T.accent : S.ink,
+            borderRadius: 999, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+          }}>{fl}</button>
+        ))}
+      </div>
+      {list.length === 0 && (
+        <Card>
+          <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
+            {all.length === 0
+              ? "No messages yet. Send one from a job's Messages tab, or start with New message."
+              : "Nothing matches this filter."}
+          </div>
+        </Card>
+      )}
+      {list.map(({ job, msg }) => (
+        <Card key={msg.id} pad={14} style={{ marginTop: 8 }}>
+          <button onClick={() => onOpenJob(job.id)} style={{ border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, width: "100%" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 7, alignItems: "center", minWidth: 0 }}>
+                {msg.kind === "email" ? <Mail size={14} color={T.accent} /> : <MessageCircle size={14} color={T.accent} />}
+                <span style={{ fontSize: 14, fontWeight: 700, color: S.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{job.name}</span>
+              </div>
+              <span style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+                {msg.viewed && <Chip tone="green">Viewed</Chip>}
+                <Chip tone={msg.status === "Sent" ? "blue" : "amber"}>{msg.status === "Sent" ? "Sent" : "Queued"}</Chip>
               </span>
-              <span style={{ display: "block", fontSize: 13, color: S.sub, marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {t.last}
-              </span>
-            </span>
+            </div>
+            {msg.subject && <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 5 }}>{msg.subject}</div>}
+            <div style={{
+              fontSize: 13, color: S.sub, marginTop: 3, lineHeight: 1.5,
+              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+            }}>{msg.body}</div>
+            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 5 }}>{msg.audience} · {msg.to} · {msg.at}</div>
           </button>
         </Card>
       ))}
-      <div style={{ fontSize: 12, color: S.sub, textAlign: "center", marginTop: 8 }}>
-        Texts send from the company number; SMS consent is enforced per client.
+      <div style={{ fontSize: 12, color: S.sub, marginTop: 16, lineHeight: 1.55 }}>
+        "Viewed" tracking needs the email backend — it works by embedding a tiny pixel that fires when the recipient
+        opens the message. It arrives with the Gmail integration, not before.
       </div>
     </div>
   );
 }
 
-/* ================================================================
-   ROOT APP
-   ================================================================ */
 export default function SupremeCRM() {
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState(SEED_USERS);
@@ -6568,6 +6982,9 @@ export default function SupremeCRM() {
   const [templates, setTemplates] = useState(SEED_TEMPLATES);
   const [companyDocs, setCompanyDocs] = useState(SEED_COMPANY_DOCS);
   const [priceList, setPriceList] = useState(SEED_PRICE_LIST);
+  const [leadSources, setLeadSources] = useState([...LEAD_SOURCES]);
+  const [appointments, setAppointments] = useState([]);
+  const [apptTypes, setApptTypes] = useState(["Inspection", "Adjuster meeting", "Estimate presentation", "Production start", "Final walkthrough"]);
   const [integrations, setIntegrations] = useState({
     gmail: { connected: false, email: "", at: null },
     sms: { connected: false, provider: "", number: "" },
@@ -6580,12 +6997,20 @@ export default function SupremeCRM() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [newLeadOpen, setNewLeadOpen] = useState(false);
+  const [quickTaskOpen, setQuickTaskOpen] = useState(false);
+  const [inboxPick, setInboxPick] = useState(false);
+  const [qt, setQt] = useState({ jobId: "", label: "" });
   const [toastMsg, setToastMsg] = useState("");
   const [filters, setFilters] = useState({ sort: "updated", assignees: [], stages: [], sources: [] });
   const [reviewSettings, setReviewSettings] = useState({
     enabled: true, delayHours: 24, followUpDays: 3,
     template: "Hi {first_name}, thank you for trusting {company} with your home! If we earned it, a quick Google review means the world to our small team: {review_link}",
   });
+  /* Copy brand colors into the live theme before anything renders. */
+  T.primary = brand.primary || "#28373E";
+  T.accent = brand.accent || "#1B6DE0";
+  T.accentSoft = brand.accentSoft && brand.accentSoftCustom ? brand.accentSoft : softOf(T.accent);
+
   const toast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(""), 2200); };
 
   const mutJob = (id) => (fn) => setJobs((prev) => prev.map((j) => (j.id === id ? fn(j) : j)));
@@ -6649,10 +7074,14 @@ export default function SupremeCRM() {
     return (
       <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff" }}>
         <div style={{ textAlign: "center" }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: 14, background: brand.primary, color: "#fff",
-            display: "grid", placeItems: "center", fontWeight: 800, margin: "0 auto 14px",
-          }}>{brand.short}</div>
+          {brand.logo ? (
+            <img src={brand.logo} alt={brand.company} style={{ height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" }} />
+          ) : (
+            <div style={{
+              width: 56, height: 56, borderRadius: 14, background: brand.primary, color: "#fff",
+              display: "grid", placeItems: "center", fontWeight: 800, margin: "0 auto 14px",
+            }}>{brand.short}</div>
+          )}
           <div style={{ fontSize: 14, color: S.sub }}>Loading…</div>
         </div>
       </div>
@@ -6700,8 +7129,8 @@ export default function SupremeCRM() {
         flex: 1, border: "none", background: "none", cursor: "pointer",
         display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 0",
       }}>
-        <Icon size={21} color={active ? "#1B6DE0" : "#9CA3AF"} strokeWidth={active ? 2.4 : 2} />
-        <span style={{ fontSize: 11, fontWeight: active ? 700 : 500, color: active ? "#1B6DE0" : "#9CA3AF" }}>{label}</span>
+        <Icon size={21} color={active ? T.accent : "#9CA3AF"} strokeWidth={active ? 2.4 : 2} />
+        <span style={{ fontSize: 11, fontWeight: active ? 700 : 500, color: active ? T.accent : "#9CA3AF" }}>{label}</span>
       </button>
     );
   };
@@ -6712,15 +7141,16 @@ export default function SupremeCRM() {
         <JobDetail job={openJob} stages={stages} brand={brand} onBack={backToBoard}
           onMoveStage={moveStage} mut={mutJob(openJob.id)} toast={toast} reviewSettings={reviewSettings}
 currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
-          crews={crews} setCrews={setCrews} templates={templates} integrations={integrations} />
+          crews={crews} setCrews={setCrews} templates={templates} integrations={integrations} users={users} />
       ) : nav === "home" ? (
-        <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav} />
+        <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav}
+          onNewLead={() => setNewLeadOpen(true)} onQuickTask={() => setQuickTaskOpen(true)} />
       ) : nav === "jobs" ? (
         <JobBoard jobs={jobs} stages={stages} filters={filters}
           onOpenFilters={() => setFiltersOpen(true)} onOpenWorkflow={() => setWorkflowOpen(true)}
           onOpenJob={openJobScreen} onMoveStage={moveStage} onNewLead={() => setNewLeadOpen(true)} />
       ) : nav === "inbox" ? (
-        <Inbox jobs={jobs} onOpenJob={openJobScreen} />
+        <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)} />
       ) : nav === "more" ? (
         <MoreMenu brand={brand} onNav={setNav} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
       ) : nav === "insurance" ? (
@@ -6729,12 +7159,17 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <Performance jobs={jobs} stages={stages} users={users} onBack={() => setNav("more")}
           isAdmin={isAdmin} currentUser={liveUser} toast={toast} />
       ) : nav === "calendar" ? (
-        <CalendarView jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
+        <CalendarView jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}
+          appointments={appointments} setAppointments={setAppointments}
+          apptTypes={apptTypes} setApptTypes={setApptTypes} toast={toast} />
       ) : nav === "contacts" ? (
         <Contacts jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
       ) : nav === "reviews" ? (
         <ReviewSettings settings={reviewSettings} setSettings={setReviewSettings} jobs={jobs}
-          onBack={() => setNav("more")} brand={brand} />
+          onBack={() => setNav("more")} brand={brand} mut={mutJob} toast={toast} />
+      ) : nav === "leadsources" ? (
+        <LeadSourceManager sources={leadSources} setSources={setLeadSources} jobs={jobs}
+          onBack={() => setNav("more")} toast={toast} />
       ) : nav === "import" ? (
         <JobImport jobs={jobs} setJobs={setJobs} stages={stages} users={users}
           onBack={() => setNav("more")} toast={toast} currentUser={liveUser} />
@@ -6757,7 +7192,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <TeamManager users={users} setUsers={setUsers} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} brand={brand} />
       ) : nav === "branding" ? (
-        <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} />
+        <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} />
       ) : null}
 
       {/* Bottom navigation */}
@@ -6769,7 +7204,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <NavBtn id="home" icon={Home} label="Home" />
         <NavBtn id="jobs" icon={Briefcase} label="Jobs" />
         <button onClick={() => setNewLeadOpen(true)} style={{
-          border: "none", cursor: "pointer", background: "#1B6DE0", color: "#fff",
+          border: "none", cursor: "pointer", background: T.accent, color: "#fff",
           width: 52, height: 52, borderRadius: 999, display: "grid", placeItems: "center",
           margin: "0 10px", transform: "translateY(-12px)", boxShadow: "0 6px 16px rgba(27,109,224,.35)",
           flexShrink: 0,
@@ -6778,7 +7213,37 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <NavBtn id="more" icon={Menu} label="More" />
       </div>
 
-      <NewLeadSheet open={newLeadOpen} onClose={() => setNewLeadOpen(false)} onCreate={createLead} brand={brand} />
+      <NewLeadSheet open={newLeadOpen} onClose={() => setNewLeadOpen(false)} onCreate={createLead} brand={brand} leadSources={leadSources} users={users} />
+      <Sheet open={inboxPick} onClose={() => setInboxPick(false)} title="Message a customer">
+        <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>Pick who this is going to — the composer opens on their job with templates ready.</div>
+        {jobs.filter((j) => !DEAD_STAGES.includes(j.stageId)).map((j, i2) => (
+          <button key={j.id} onClick={() => { setInboxPick(false); openJobScreen(j.id); }} style={{
+            width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer",
+            padding: "12px 4px", borderTop: i2 ? `1px solid ${S.line}` : "none",
+          }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{j.name}</div>
+            <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>{j.address}</div>
+            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+              <Chip tone={j.consent.email.granted ? "green" : "gray"}>email {j.consent.email.granted ? "✓" : "—"}</Chip>
+              <Chip tone={j.consent.sms.granted ? "green" : "gray"}>sms {j.consent.sms.granted ? "✓" : "—"}</Chip>
+            </div>
+          </button>
+        ))}
+      </Sheet>
+
+      <Sheet open={quickTaskOpen} onClose={() => setQuickTaskOpen(false)} title="Quick task"
+        footer={<Btn style={{ width: "100%" }} disabled={!qt.jobId || !qt.label.trim()} onClick={() => {
+          mutJob(qt.jobId, (j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: qt.label.trim(), done: false }] }));
+          setQuickTaskOpen(false); setQt({ jobId: "", label: "" }); toast("Task added");
+        }}>Add task</Btn>}>
+        <Field label="Customer / job">
+          <select style={selStyle} value={qt.jobId} onChange={(e) => setQt({ ...qt, jobId: e.target.value })}>
+            <option value="">Select…</option>
+            {jobs.filter((j) => !DEAD_STAGES.includes(j.stageId)).map((j) => <option key={j.id} value={j.id}>{j.name} — {j.address}</option>)}
+          </select>
+        </Field>
+        <Field label="Task"><input style={inputStyle} value={qt.label} onChange={(e) => setQt({ ...qt, label: e.target.value })} placeholder="Call adjuster back, order materials…" /></Field>
+      </Sheet>
       <FiltersSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} stages={stages}
         filters={filters} setFilters={setFilters} />
       <WorkflowEditor open={workflowOpen} onClose={() => setWorkflowOpen(false)} stages={stages}
