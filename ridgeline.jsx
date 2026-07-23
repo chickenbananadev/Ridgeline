@@ -415,7 +415,7 @@ const DOC_TEMPLATES = [
 ];
 
 const CLAIM_SCENARIOS = [
-  { q: "\u201CWe'll only pay for the damaged slope\u201D",
+  { q: "“We'll only pay for the damaged slope”",
     setup: "Adjuster acknowledges wind or hail damage but scopes only the affected slope, leaving the other slopes with the original shingles.",
     answer: [
       "If shingle line is discontinued or field is significantly weathered, cite OAC 3901-1-54(I)(1)(b) — reasonably comparable appearance.",
@@ -423,14 +423,14 @@ const CLAIM_SCENARIOS = [
       "If the roof has 2+ layers, cite RCO R908.3 — recover is prohibited, so partial replacement on top of the existing bottom layer is not code-compliant either.",
       "Re-walk the slopes the adjuster called undamaged before conceding them — a lower hit count is not no damage. Even where the rear slope genuinely has fewer impacts, the matching regulation still drives toward uniform appearance.",
     ]},
-  { q: "\u201CJust layer new shingles over the existing\u201D",
+  { q: "“Just layer new shingles over the existing”",
     setup: "Adjuster proposes an overlay to save money.",
     answer: [
       "Count the layers. If two or more, cite RCO R908.3 — recover is not permitted.",
       "If first layer is water-damaged, cite same section — unsuitable base prohibits recover regardless of layer count.",
       "Point out that a code violation is a policy problem for the carrier: the homeowner would be occupying a non-code-compliant structure funded by the claim.",
     ]},
-  { q: "\u201CDecking replacement is not covered\u201D",
+  { q: "“Decking replacement is not covered”",
     setup: "Deteriorated decking is discovered during tear-off. Adjuster wants to exclude it as maintenance.",
     answer: [
       "If the policy has Ordinance & Law (Coverage D), deck replacement required by code is covered under that coverage even if not covered by dwelling coverage.",
@@ -438,28 +438,28 @@ const CLAIM_SCENARIOS = [
       "Photograph every replaced board with scale, log square footage, submit as supplement with dated photos.",
       "Check the policy declarations page before promising O&L coverage — not every homeowner has it.",
     ]},
-  { q: "\u201CA strip of ice & water at the eave is enough\u201D",
+  { q: "“A strip of ice & water at the eave is enough”",
     setup: "Adjuster's scope includes ice & water at the drip edge only, not the full 24-inch-past-wall-line coverage.",
     answer: [
       "Cite RCO R905.1.2 — the barrier must extend from the eave edge to a point at least 24 inches inside the exterior wall line, measured along the slope.",
       "Measure the overhang depth: eave-to-wall distance plus 24 inches gives you the required coverage measured up the slope.",
       "Slope 8:12 or steeper needs 36 inches up the slope minimum.",
     ]},
-  { q: "\u201CReuse the existing flashings\u201D",
+  { q: "“Reuse the existing flashings”",
     setup: "Common on step flashings, chimney counter-flashings, and skylight kits.",
     answer: [
       "Cite RCO R905.2.8 — flashings must be sized and installed to prevent water intrusion. Reused flashings damaged during tear-off do not satisfy this requirement.",
       "Photograph the existing condition to preempt the argument: rust, caulk-sealed joints, missing counter-flashing on masonry, undersized step flashing.",
       "New skylight flashing kit is standard scope on any re-roof; the skylight manufacturer's warranty typically requires new flashing with any new roof.",
     ]},
-  { q: "\u201CVentilation upgrade is a betterment\u201D",
+  { q: "“Ventilation upgrade is a betterment”",
     setup: "Adjuster excludes new ridge vent, soffit intake, or box vent replacement as an improvement not caused by the loss.",
     answer: [
       "The default required ratio under RCO R806.2 is 1/150; the 1/300 exception applies only where a balanced intake-and-exhaust system exists. Most older homes do not qualify, so reinstalling the existing non-compliant system on a code-triggered re-roof is a violation.",
       "Ordinance & Law coverage applies if the policy includes it.",
       "If the existing system was itself damaged by the storm (ridge cap blown off, box vent housing hail-struck), that alone is covered damage regardless of code.",
     ]},
-  { q: "\u201CIt's just wear and tear\u201D",
+  { q: "“It's just wear and tear”",
     setup: "Adjuster denies hail damage as normal aging or wear, or claims granule loss is not impact-related.",
     answer: [
       "Document impact patterns with the HAAG-style test square (a chalked 10-foot square, count of hits per slope).",
@@ -469,7 +469,7 @@ const CLAIM_SCENARIOS = [
       "Request the carrier's engineer report if damage is denied on that basis.",
       "Where the carrier blames installation or age rather than the storm, Ohio applies efficient proximate cause: if the covered peril was the predominant cause, the loss is covered even with contributing factors. Pin the storm date with NWS wind data and NOAA hail reports, and document neighboring properties.",
     ]},
-  { q: "\u201CRoof is too old for full replacement value\u201D",
+  { q: "“Roof is too old for full replacement value”",
     setup: "Adjuster settles on Actual Cash Value only, or applies a roof-age depreciation schedule that reduces the payment significantly.",
     answer: [
       "Check the policy: does it pay Replacement Cost Value (RCV) with recoverable depreciation, or ACV only? If RCV, the homeowner recovers the withheld depreciation on completion of the work.",
@@ -479,28 +479,28 @@ const CLAIM_SCENARIOS = [
 ];
 
 const MORE_SCENARIOS = [
-  { q: "\u201CCosmetic damage only — granule loss isn't functional\u201D",
+  { q: "“Cosmetic damage only — granule loss isn't functional”",
     setup: "The carrier concedes hail struck the roof but treats the damage as appearance-only and declines replacement.",
     answer: [
       "Granules are the UV shield for the asphalt mat. Once impact displaces them the mat degrades faster and the manufacturer warranty is compromised — that is functional loss, not appearance.",
       "Document what a spatter photo alone will not show: fractured mat beneath the impact, and seal strips that have released and will not re-seal.",
       "Ask in writing whether the carrier is relying on a specific cosmetic-damage exclusion by endorsement. If there is no such endorsement, physical damage from a covered peril is covered — see Resources, Policy Provisions.",
     ]},
-  { q: "\u201CWe won't pay for drip edge or kickout — the house never had them\u201D",
+  { q: "“We won't pay for drip edge or kickout — the house never had them”",
     setup: "The carrier declines code-required components on the grounds that the pre-loss roof did not include them.",
     answer: [
       "Pre-loss absence is not the standard. The new installation has to pass inspection, and it cannot without these components.",
       "Cite the specific sections: drip edge RCO R905.2.8.5 (confirm the subsection against your jurisdiction's adopted edition), step flashing RCO R905.2.8.4, kickout RCO R703.4.",
       "Where the policy carries Ordinance & Law, code-driven upgrades fall under that coverage specifically. Check the declarations page before asserting it.",
     ]},
-  { q: "\u201CYour estimate is too high — our software says less\u201D",
+  { q: "“Your estimate is too high — our software says less”",
     setup: "The carrier anchors to an estimating platform's price list and treats it as the ceiling.",
     answer: [
       "Estimating software is a pricing reference, not the policy. The obligation is the reasonable cost to repair at local market rates.",
       "Document what the price list misses: code-driven line items, R&R of metals, disposal, permit fees, and the actual local labor rate.",
       "On larger multi-trade losses, overhead and profit is a normal component of a general contractor's price and should be scoped as such.",
     ]},
-  { q: "\u201CACV now — you'll get the depreciation when the work is done\u201D",
+  { q: "“ACV now — you'll get the depreciation when the work is done”",
     setup: "Standard on a recoverable-depreciation policy, but it becomes a problem when the release is slow or conditioned on paperwork nobody explained.",
     answer: [
       "Confirm first that the depreciation is actually recoverable. If a Roof Payment Schedule or ACV-roof endorsement applies, the shortfall is NOT recoverable and the homeowner needs to hear that before signing.",
@@ -1952,7 +1952,7 @@ function Login({ brand, users, onLogin }) {
             </Field>
             <Field label="Password">
               <input style={inputStyle} type="password" autoComplete="current-password" value={pw}
-                onChange={(e) => setPw(e.target.value)} placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022"
+                onChange={(e) => setPw(e.target.value)} placeholder="••••••••"
                 onKeyDown={(e) => { if (e.key === "Enter" && live && email && pw) submit(); }} />
             </Field>
             {err && <Callout label="Sign-in failed" tone="red">{err}</Callout>}
@@ -1960,7 +1960,7 @@ function Login({ brand, users, onLogin }) {
               onClick={live ? submit : () => setMode("account")}
               disabled={busy || (live && (!email.trim() || !pw))}
               style={{ width: "100%", marginTop: 4 }}>
-              {busy ? "Signing in\u2026" : "Sign in"}
+              {busy ? "Signing in…" : "Sign in"}
             </Btn>
             <button onClick={() => { setErr(""); setMode("forgot"); }} style={{
               display: "block", margin: "16px auto 0", border: "none", background: "none",
@@ -1984,7 +1984,7 @@ function Login({ brand, users, onLogin }) {
             </Field>
             {err && <Callout label="Could not send" tone="red">{err}</Callout>}
             <Btn onClick={live ? reset : () => setMode("sent")} disabled={busy || !email.trim()} style={{ width: "100%" }}>
-              {busy ? "Sending\u2026" : "Send reset link"}
+              {busy ? "Sending…" : "Send reset link"}
             </Btn>
             <button onClick={() => { setErr(""); setMode("login"); }} style={{
               display: "block", margin: "16px auto 0", border: "none", background: "none",
@@ -2005,7 +2005,7 @@ function Login({ brand, users, onLogin }) {
         )}
       </div>
       <div style={{ position: "absolute", bottom: 20, fontSize: 12, color: "#9CA3AF" }}>
-        \u00A9 {new Date().getFullYear()} {brand.company}
+        © {new Date().getFullYear()} {brand.company}
       </div>
     </div>
   );
@@ -5916,7 +5916,7 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
                     border: `1.5px solid ${on ? "#1B6DE0" : S.line}`, background: on ? "#EAF2FD" : "#fff",
                     color: on ? "#1B6DE0" : S.ink, borderRadius: 999, padding: "7px 13px",
                     fontSize: 13, fontWeight: 600, cursor: "pointer",
-                  }}>{on ? "\u2713 " : ""}{t}</button>
+                  }}>{on ? "✓ " : ""}{t}</button>
               );
             })}
           </div>
@@ -6395,7 +6395,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
           <div style={{ display: "flex", gap: 10 }}>
             <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setEditing(null)}>Cancel</Btn>
             <Btn style={{ flex: 2 }} disabled={!valid || saving} onClick={save}>
-              {saving ? "Saving\u2026" : editing === "new" ? "Create seat & send invite" : "Save changes"}
+              {saving ? "Saving…" : editing === "new" ? "Create seat & send invite" : "Save changes"}
             </Btn>
           </div>
         }>
@@ -6653,7 +6653,7 @@ export default function SupremeCRM() {
             width: 56, height: 56, borderRadius: 14, background: brand.primary, color: "#fff",
             display: "grid", placeItems: "center", fontWeight: 800, margin: "0 auto 14px",
           }}>{brand.short}</div>
-          <div style={{ fontSize: 14, color: S.sub }}>Loading\u2026</div>
+          <div style={{ fontSize: 14, color: S.sub }}>Loading…</div>
         </div>
       </div>
     );
