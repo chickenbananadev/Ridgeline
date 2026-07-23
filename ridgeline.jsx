@@ -753,7 +753,7 @@ function resolveJurisdiction(zip) {
    and lock it to your domain under Allowed Origins in the Geoapify console. */
 const GEO_PROVIDER = {
   name: "geoapify",
-  apiKey: (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_GEOAPIFY_KEY) || "d4895cd9d44b4229af2885ffa85e343e",
+  apiKey: (typeof window !== "undefined" && window.__GEOAPIFY_KEY__) || "d4895cd9d44b4229af2885ffa85e343e",
   base: "https://api.geoapify.com/v1/geocode",
   countries: "us",
 };
