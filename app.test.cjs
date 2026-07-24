@@ -8941,6 +8941,228 @@ function Inbox({ jobs, onOpenJob, onCompose }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 16, lineHeight: 1.55 }, children: '"Viewed" tracking needs the email backend \u2014 it works by embedding a tiny pixel that fires when the recipient opens the message. It arrives with the Gmail integration, not before.' })
   ] });
 }
+var DB = () => typeof window !== "undefined" ? window.__SUPABASE__ || null : null;
+var liveDb = () => !!DB();
+var EMPTY_FIN = () => ({ costLines: [], reimbursements: [] });
+function useDbSync(st) {
+  const {
+    ready,
+    isCrew,
+    userName,
+    jobs,
+    setJobs,
+    appointments,
+    setAppointments,
+    activity,
+    setActivity,
+    chatMsgs,
+    setChatMsgs,
+    orgPack,
+    unpackOrg
+  } = st;
+  const [hydrated, setHydrated] = (0, import_react.useState)(!liveDb());
+  const [syncErr, setSyncErr] = (0, import_react.useState)("");
+  const jobRefs = (0, import_react.useRef)(/* @__PURE__ */ new Map());
+  const apptRefs = (0, import_react.useRef)(/* @__PURE__ */ new Map());
+  const persistedActivity = (0, import_react.useRef)(/* @__PURE__ */ new Set());
+  const persistedChat = (0, import_react.useRef)(/* @__PURE__ */ new Set());
+  const orgTimer = (0, import_react.useRef)(null);
+  const jobTimer = (0, import_react.useRef)(null);
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db || !ready) return;
+    let alive = true;
+    (async () => {
+      try {
+        const { data: orgRow, error: orgErr } = await db.from("crm_org").select("data").eq("id", 1).maybeSingle();
+        if (orgErr) throw orgErr;
+        if (!alive) return;
+        if (orgRow && orgRow.data && Object.keys(orgRow.data).length) {
+          unpackOrg(orgRow.data);
+        } else {
+          await db.from("crm_org").upsert({ id: 1, data: orgPack(), updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+        }
+        const { data: jobRows, error: jErr } = await db.from("crm_jobs").select("id, data");
+        if (jErr) throw jErr;
+        let finMap = {};
+        if (!isCrew) {
+          const { data: finRows } = await db.from("crm_financials").select("job_id, data");
+          (finRows || []).forEach((r) => {
+            finMap[r.job_id] = r.data || {};
+          });
+        }
+        const loadedJobs = (jobRows || []).map((r) => {
+          const base = r.data || {};
+          const fin = finMap[r.id] || {};
+          return {
+            ...base,
+            id: r.id,
+            financials: fin.financials || base.financials || EMPTY_FIN(),
+            payments: fin.payments || base.payments || []
+          };
+        });
+        if (!alive) return;
+        loadedJobs.forEach((j) => jobRefs.current.set(j.id, j));
+        setJobs(loadedJobs);
+        const { data: apRows } = await db.from("crm_appointments").select("*");
+        if (alive && apRows) {
+          const aps = apRows.map((r) => ({ id: r.id, jobId: r.job_id, type: r.type, date: r.date, time: r.time || "", notes: r.notes || "" }));
+          aps.forEach((a) => apptRefs.current.set(a.id, a));
+          setAppointments(aps);
+        }
+        const { data: actRows } = await db.from("crm_activity").select("*").order("at", { ascending: false }).limit(300);
+        if (alive && actRows) {
+          const acts = actRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, kind: r.kind, jobId: r.job_id, jobName: r.job_name, text: r.body }));
+          acts.forEach((a) => persistedActivity.current.add(a.id));
+          setActivity(acts);
+        }
+        const { data: chatRows } = await db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
+        if (alive && chatRows) {
+          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id }));
+          msgs.forEach((m) => persistedChat.current.add(m.id));
+          setChatMsgs(msgs);
+        }
+        setSyncErr("");
+      } catch (e) {
+        if (alive) setSyncErr("Couldn't load saved data \u2014 check that the persistence migration has been run. " + (e && e.message ? e.message : ""));
+      }
+      if (alive) setHydrated(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [ready]);
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db || !ready) return;
+    const ch = db.channel("crm-stream").on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_chat" }, (payload) => {
+      const r = payload.new;
+      if (persistedChat.current.has(r.id)) return;
+      persistedChat.current.add(r.id);
+      setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev : [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id }]);
+    }).on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_activity" }, (payload) => {
+      const r = payload.new;
+      if (persistedActivity.current.has(r.id)) return;
+      persistedActivity.current.add(r.id);
+      setActivity((prev) => prev.some((a) => a.id === r.id) ? prev : [{ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, kind: r.kind, jobId: r.job_id, jobName: r.job_name, text: r.body }, ...prev]);
+    }).subscribe();
+    return () => {
+      db.removeChannel(ch);
+    };
+  }, [ready]);
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db || !ready || !hydrated) return;
+    if (jobTimer.current) clearTimeout(jobTimer.current);
+    jobTimer.current = setTimeout(async () => {
+      try {
+        const current = new Map(jobs.map((j) => [j.id, j]));
+        const changed = jobs.filter((j) => jobRefs.current.get(j.id) !== j);
+        const removed = [...jobRefs.current.keys()].filter((id) => !current.has(id));
+        if (changed.length) {
+          const rows = changed.map((j) => {
+            const { financials, payments, ...rest } = j;
+            return { id: j.id, name: j.name, stage_id: j.stageId, assignee: j.assignee, data: rest, updated_at: (/* @__PURE__ */ new Date()).toISOString() };
+          });
+          const { error } = await db.from("crm_jobs").upsert(rows);
+          if (error) throw error;
+          if (!isCrew) {
+            const finRows = changed.map((j) => ({ job_id: j.id, data: { financials: j.financials, payments: j.payments }, updated_at: (/* @__PURE__ */ new Date()).toISOString() }));
+            await db.from("crm_financials").upsert(finRows);
+          }
+          changed.forEach((j) => jobRefs.current.set(j.id, j));
+        }
+        if (removed.length) {
+          await db.from("crm_jobs").delete().in("id", removed);
+          removed.forEach((id) => jobRefs.current.delete(id));
+        }
+        setSyncErr("");
+      } catch (e) {
+        setSyncErr("Save failed \u2014 changes are on this device only. " + (e && e.message ? e.message : ""));
+      }
+    }, 1100);
+    return () => {
+      if (jobTimer.current) clearTimeout(jobTimer.current);
+    };
+  }, [jobs, ready, hydrated]);
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db || !ready || !hydrated) return;
+    const t = setTimeout(async () => {
+      try {
+        const current = new Map(appointments.map((a) => [a.id, a]));
+        const changed = appointments.filter((a) => apptRefs.current.get(a.id) !== a);
+        const removed = [...apptRefs.current.keys()].filter((id) => !current.has(id));
+        if (changed.length) {
+          await db.from("crm_appointments").upsert(changed.map((a) => ({
+            id: a.id,
+            job_id: a.jobId,
+            type: a.type,
+            date: a.date,
+            time: a.time || null,
+            notes: a.notes || null,
+            created_by: userName
+          })));
+          changed.forEach((a) => apptRefs.current.set(a.id, a));
+        }
+        if (removed.length) {
+          await db.from("crm_appointments").delete().in("id", removed);
+          removed.forEach((id) => apptRefs.current.delete(id));
+        }
+      } catch {
+      }
+    }, 800);
+    return () => clearTimeout(t);
+  }, [appointments, ready, hydrated]);
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db || !ready || !hydrated) return;
+    const fresh = activity.filter((a) => !persistedActivity.current.has(a.id));
+    if (!fresh.length) return;
+    fresh.forEach((a) => persistedActivity.current.add(a.id));
+    db.from("crm_activity").insert(fresh.map((a) => ({
+      id: a.id,
+      by_name: a.by,
+      kind: a.kind,
+      job_id: a.jobId || null,
+      job_name: a.jobName || null,
+      body: a.text
+    }))).then(({ error }) => {
+      if (error) fresh.forEach((a) => persistedActivity.current.delete(a.id));
+    });
+  }, [activity, ready, hydrated]);
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db || !ready || !hydrated) return;
+    const fresh = chatMsgs.filter((m) => !persistedChat.current.has(m.id) && m.by === userName);
+    if (!fresh.length) return;
+    fresh.forEach((m) => persistedChat.current.add(m.id));
+    db.from("crm_chat").insert(fresh.map((m) => ({
+      id: m.id,
+      by_name: m.by,
+      body: m.text,
+      mentions: m.mentions || [],
+      job_id: m.jobId || null
+    }))).then(({ error }) => {
+      if (error) fresh.forEach((m) => persistedChat.current.delete(m.id));
+    });
+  }, [chatMsgs, ready, hydrated]);
+  const packStr = JSON.stringify(st.orgDeps);
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db || !ready || !hydrated) return;
+    if (orgTimer.current) clearTimeout(orgTimer.current);
+    orgTimer.current = setTimeout(() => {
+      db.from("crm_org").upsert({ id: 1, data: orgPack(), updated_at: (/* @__PURE__ */ new Date()).toISOString() }).then(({ error }) => {
+        if (error) setSyncErr("Settings save failed. " + error.message);
+      });
+    }, 1400);
+    return () => {
+      if (orgTimer.current) clearTimeout(orgTimer.current);
+    };
+  }, [packStr, ready, hydrated]);
+  return { hydrated, syncErr };
+}
 function SupremeCRM() {
   const [currentUser, setCurrentUser] = (0, import_react.useState)(null);
   const [users, setUsers] = (0, import_react.useState)(SEED_USERS);
@@ -9005,7 +9227,7 @@ function SupremeCRM() {
   });
   const [brand, setBrand] = (0, import_react.useState)(DEFAULT_BRAND);
   const [stages, setStages] = (0, import_react.useState)(DEFAULT_STAGES);
-  const [jobs, setJobs] = (0, import_react.useState)(seedJobs);
+  const [jobs, setJobs] = (0, import_react.useState)(() => liveDb() ? [] : seedJobs);
   const [nav, setNav] = (0, import_react.useState)("home");
   const [openJobId, setOpenJobId] = (0, import_react.useState)(null);
   const [filtersOpen, setFiltersOpen] = (0, import_react.useState)(false);
@@ -9021,6 +9243,51 @@ function SupremeCRM() {
     delayHours: 24,
     followUpDays: 3,
     template: "Hi {first_name}, thank you for trusting {company} with your home! If we earned it, a quick Google review means the world to our small team: {review_link}"
+  });
+  const orgDeps = [brand, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings];
+  const orgPack = () => ({
+    brand,
+    stages,
+    leadSources,
+    apptTypes,
+    templates,
+    estimateTemplates,
+    priceList,
+    companyDocs,
+    crews,
+    vendors,
+    reviewSettings,
+    version: 1
+  });
+  const unpackOrg = (d) => {
+    if (d.brand) setBrand(d.brand);
+    if (d.stages) setStages(d.stages);
+    if (d.leadSources) setLeadSources(d.leadSources);
+    if (d.apptTypes) setApptTypes(d.apptTypes);
+    if (d.templates) setTemplates(d.templates);
+    if (d.estimateTemplates) setEstimateTemplates(d.estimateTemplates);
+    if (d.priceList) setPriceList(d.priceList);
+    if (d.companyDocs) setCompanyDocs(d.companyDocs);
+    if (d.crews) setCrews(d.crews);
+    if (d.vendors) setVendors(d.vendors);
+    if (d.reviewSettings) setReviewSettings(d.reviewSettings);
+  };
+  const syncUserName = currentUser ? currentUser.name : "Demo";
+  const { hydrated, syncErr } = useDbSync({
+    ready: liveAuth() ? !!currentUser : true,
+    isCrew: !!(currentUser && currentUser.role === "crew"),
+    userName: syncUserName,
+    jobs,
+    setJobs,
+    appointments,
+    setAppointments,
+    activity,
+    setActivity,
+    chatMsgs,
+    setChatMsgs,
+    orgPack,
+    unpackOrg,
+    orgDeps
   });
   T.primary = brand.primary || "#28373E";
   T.accent = brand.accent || "#1B6DE0";
@@ -9118,7 +9385,7 @@ function SupremeCRM() {
     setOpenJobId(id);
     setNav("jobs");
   };
-  if (booting) {
+  if (booting || liveAuth() && currentUser && !hydrated) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center" }, children: [
       brand.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand.logo, alt: brand.company, style: { height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
         width: 56,
@@ -9247,18 +9514,21 @@ function SupremeCRM() {
         leadSources,
         activity
       }
-    ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-      Dashboard,
-      {
-        jobs,
-        stages,
-        onOpenJob: openJobScreen,
-        userName,
-        go: setNav,
-        onNewLead: () => setNewLeadOpen(true),
-        onQuickTask: () => setQuickTaskOpen(true)
-      }
-    ) : nav === "jobs" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      liveDb() && jobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { margin: "14px 16px 0", background: "#EAF6EE", border: "1px solid #CDE8D6", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "#177245", lineHeight: 1.5 }, children: "Fresh database \u2014 no demo customers here. Everything you create now saves for real. Have a Roofr export? More \u2192 Import jobs pulls your whole pipeline in." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        Dashboard,
+        {
+          jobs,
+          stages,
+          onOpenJob: openJobScreen,
+          userName,
+          go: setNav,
+          onNewLead: () => setNewLeadOpen(true),
+          onQuickTask: () => setQuickTaskOpen(true)
+        }
+      )
+    ] }) : nav === "jobs" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       JobBoard,
       {
         jobs,
@@ -9419,6 +9689,19 @@ function SupremeCRM() {
         brand
       }
     ) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand, setBrand, onBack: () => setNav("more"), toast }) : null,
+    syncErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 90,
+      background: "#7A1D12",
+      color: "#fff",
+      fontSize: 12.5,
+      lineHeight: 1.45,
+      padding: "9px 14px",
+      textAlign: "center"
+    }, children: syncErr }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
       position: "fixed",
       bottom: 0,
