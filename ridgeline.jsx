@@ -2081,7 +2081,9 @@ function Login({ brand, users, onLogin }) {
 /* ================================================================
    DASHBOARD
    ================================================================ */
-function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND, appointments = [], apptTypes = [], crews = [] }) {
+function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND,
+  appointments = [], apptTypes = [], crews = [], setAppointments, setApptTypes, toast, onQueueMessage, onLog, users = [], mutJob }) {
+  const [homeBoard, setHomeBoard] = useState("calendar");
   const todayIso = new Date().toISOString().slice(0, 10);
   const todaysAppts = appointments
     .filter((ap) => ap.date === todayIso)
@@ -2316,19 +2318,90 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         );
       })()}
 
+      {/* Calendar and dispatch live on the home screen, using the same
+          components as the full screens — an appointment added here is
+          the same record as one added under More, not a copy. */}
+      {setAppointments && (
+        <Card style={{ marginTop: 16 }}>
+          <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
+            {[["calendar", "Calendar"], ["dispatch", "Dispatch"]].map(([id, label]) => (
+              <button key={id} onClick={() => setHomeBoard(id)} style={{
+                flex: 1, border: `1.5px solid ${homeBoard === id ? T.accent : S.line}`,
+                background: homeBoard === id ? T.accentSoft : "#fff",
+                color: homeBoard === id ? T.accent : S.ink,
+                borderRadius: 999, padding: "8px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer",
+              }}>{label}</button>
+            ))}
+          </div>
+          {homeBoard === "calendar" ? (
+            <CalendarView embedded jobs={jobs} onOpenJob={onOpenJob} appointments={appointments}
+              setAppointments={setAppointments} apptTypes={apptTypes} setApptTypes={setApptTypes}
+              toast={toast} onQueueMessage={onQueueMessage} onLog={onLog} users={users}
+              onBack={() => go("calendar")} />
+          ) : (
+            <DispatchBoard embedded jobs={jobs} crews={crews} mutJob={mutJob}
+              onOpenJob={onOpenJob} toast={toast} onBack={() => go("dispatch")} />
+          )}
+        </Card>
+      )}
+
       {/* Pipeline at a glance — counts and dollars per stage, tap to filter the board */}
       <Card style={{ marginTop: 16 }}>
-        <CardTitle right={<button style={linkBtn} onClick={() => go("jobs")}>Open board →</button>}>Pipeline</CardTitle>
         {(() => {
           const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
           const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
           const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
           const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
+          /* Ring summary: five buckets of the twelve stages, each a
+             tappable letter that filters the board. Mirrors the at-a-glance
+             read Jacob wanted from his old dashboard. */
+          const RINGS = [
+            ["L", "Leads", "#F0B429", ["s1"]],
+            ["P", "Pipeline", "#F2711C", ["s2", "s3", "s4"]],
+            ["A", "Approved", "#63B54B", ["s5", "s6", "s7"]],
+            ["C", "Production", "#2BA4DE", ["s8", "s9"]],
+            ["I", "Invoicing", "#E0464B", ["s10"]],
+          ];
+          const ringData = RINGS.map(([letter, label, color, ids]) => ({
+            letter, label, color, ids,
+            count: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.count, 0),
+            value: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.value, 0),
+          }));
           return (
             <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-                <span style={{ fontSize: 26, fontWeight: 800, color: S.ink }}>{activeTotal}</span>
-                <span style={{ fontSize: 13, color: S.sub }}>active {activeTotal === 1 ? "job" : "jobs"} · {money(totalPipeline)}</span>
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${S.line}`,
+              }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>Current pipeline</span>
+                <span style={{ fontSize: 13, color: S.sub }}>Active jobs: {activeTotal}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-around", gap: 4, padding: "14px 0 16px", flexWrap: "wrap" }}>
+                {ringData.map((r) => (
+                  <button key={r.letter} onClick={() => onOpenStage && onOpenStage(r.ids[0])}
+                    aria-label={`${r.label}: ${r.count} jobs`}
+                    style={{
+                      border: "none", background: "none", cursor: "pointer", padding: "0 2px",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 56,
+                    }}>
+                    <span style={{
+                      width: 46, height: 46, borderRadius: "50%", background: r.color,
+                      display: "grid", placeItems: "center", color: "#fff", fontSize: 21, fontWeight: 800,
+                    }}>{r.letter}</span>
+                    <span style={{ fontSize: 17, fontWeight: 800, color: r.count ? "#F2711C" : "#C7CBD1" }}>{r.count}</span>
+                    <span style={{ fontSize: 11.5, color: S.sub, whiteSpace: "nowrap" }}>
+                      {r.value > 0 ? money(r.value) : "—"}
+                    </span>
+                    <span style={{ fontSize: 10.5, color: S.sub, letterSpacing: ".02em" }}>{r.label}</span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => go("jobs")} style={{
+                ...linkBtn, display: "block", width: "100%", textAlign: "center",
+                padding: "6px 0 10px", fontSize: 13,
+              }}>Open board →</button>
+              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: S.sub, borderTop: `1px solid ${S.line}`, paddingTop: 12, marginBottom: 2 }}>
+                BY STAGE · {money(totalPipeline)}
               </div>
               {liveStages.map((st) => (
                 <button key={st.id} onClick={() => onOpenStage && onOpenStage(st.id)}
@@ -2803,7 +2876,7 @@ function timeMinutes(value) {
   return hours * 60 + minutes;
 }
 
-function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage, onLog = () => {}, users = [] }) {
+function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage, onLog = () => {}, users = [], embedded = false }) {
   const today = new Date();
   const [month, setMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [view, setView] = useState("all");
@@ -2909,9 +2982,16 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   const jobOf = (id) => jobs.find((j) => j.id === id);
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
-      <SubHeader title="Calendar" onBack={onBack}
-        right={<Btn small onClick={() => openAdd(null)}><Plus size={14} /> Add</Btn>} />
+    <div style={embedded ? { padding: 0 } : { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      {embedded ? (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: S.ink }}>Calendar</div>
+          <Btn small onClick={() => openAdd(null)}><Plus size={14} /> Add</Btn>
+        </div>
+      ) : (
+        <SubHeader title="Calendar" onBack={onBack}
+          right={<Btn small onClick={() => openAdd(null)}><Plus size={14} /> Add</Btn>} />
+      )}
       <div style={{ display: "flex", gap: 7, overflowX: "auto", marginTop: 12, paddingBottom: 2 }}>
         {CALENDAR_VIEWS.map(([id, label]) => (
           <button key={id} onClick={() => setView(id)} style={{
@@ -5442,7 +5522,7 @@ function WarrantyCenter({ jobs, onOpenJob, onBack }) {
   );
 }
 
-function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast }) {
+function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded = false }) {
   const [weekStart, setWeekStart] = useState(() => {
     const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday
     d.setHours(0, 0, 0, 0); return d;
@@ -5464,18 +5544,31 @@ function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast }) {
     setAssigning(null);
   };
   return (
-    <div style={{ padding: "16px 0 110px", background: S.bg, minHeight: "100vh" }}>
-      <div style={{ padding: "0 16px" }}>
-        <SubHeader title="Dispatch" onBack={onBack}
-          right={
+    <div style={embedded ? { padding: 0 } : { padding: "16px 0 110px", background: S.bg, minHeight: "100vh" }}>
+      <div style={embedded ? { padding: 0 } : { padding: "0 16px" }}>
+        {embedded ? (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: S.ink }}>Dispatch</div>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <Btn small kind="ghost" onClick={() => shiftWeek(-1)}><ChevronLeft size={15} /></Btn>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: S.ink, whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: S.ink, whiteSpace: "nowrap" }}>
                 {days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – {days[6].toLocaleDateString(undefined, { month: "short", day: "numeric" })}
               </span>
               <Btn small kind="ghost" onClick={() => shiftWeek(1)}><ChevronRight size={15} /></Btn>
             </div>
-          } />
+          </div>
+        ) : (
+          <SubHeader title="Dispatch" onBack={onBack}
+            right={
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <Btn small kind="ghost" onClick={() => shiftWeek(-1)}><ChevronLeft size={15} /></Btn>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: S.ink, whiteSpace: "nowrap" }}>
+                  {days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – {days[6].toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                </span>
+                <Btn small kind="ghost" onClick={() => shiftWeek(1)}><ChevronRight size={15} /></Btn>
+              </div>
+            } />
+        )}
         {assigning && (
           <div style={{ marginTop: 10, background: T.accentSoft, border: `1.5px solid ${T.accent}`, borderRadius: 11, padding: "10px 13px", fontSize: 13, color: T.accent, fontWeight: 600 }}>
             Placing <b>{assigning.name}</b> — tap a crew's day below.
@@ -11622,7 +11715,10 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav}
             onNewLead={() => { setLeadSeed(null); setNewLeadOpen(true); }} onQuickTask={() => setQuickTaskOpen(true)}
             onOpenStage={(id) => { setBoardStage(id); setNav("jobs"); }} brand={brand}
-            appointments={appointments} apptTypes={apptTypes} crews={crews} />
+            appointments={appointments} apptTypes={apptTypes} crews={crews}
+            setAppointments={setAppointments} setApptTypes={setApptTypes} toast={toast}
+            onQueueMessage={(jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))}
+            onLog={logAct} users={users} mutJob={mutJob} />
         </>
       ) : nav === "jobs" ? (
         <JobBoard jobs={jobs} stages={stages} filters={filters}

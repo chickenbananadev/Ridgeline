@@ -2594,7 +2594,28 @@ function Login({ brand: brand2, users, onLogin }) {
     ] })
   ] });
 }
-function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand: brand2 = DEFAULT_BRAND, appointments = [], apptTypes = [], crews = [] }) {
+function Dashboard({
+  jobs,
+  stages,
+  onOpenJob,
+  userName,
+  go,
+  onNewLead,
+  onQuickTask,
+  onOpenStage,
+  brand: brand2 = DEFAULT_BRAND,
+  appointments = [],
+  apptTypes = [],
+  crews = [],
+  setAppointments,
+  setApptTypes,
+  toast: toast2,
+  onQueueMessage,
+  onLog,
+  users = [],
+  mutJob
+}) {
+  const [homeBoard, setHomeBoard] = (0, import_react.useState)("calendar");
   const todayIso = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
   const todaysAppts = appointments.filter((ap) => ap.date === todayIso).map((ap) => ({ ap, job: jobs.find((j) => j.id === ap.jobId) })).sort((a, b) => String(a.ap.time || "99").localeCompare(String(b.ap.time || "99")));
   const todaysCrews = jobs.filter((j) => j.schedDate === todayIso);
@@ -2871,60 +2892,165 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         ] })
       ] });
     })(),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("jobs"), children: "Open board \u2192" }), children: "Pipeline" }),
-      (() => {
-        const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
-        const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
-        const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
-        const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 26, fontWeight: 800, color: S.ink }, children: activeTotal }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13, color: S.sub }, children: [
-              "active ",
-              activeTotal === 1 ? "job" : "jobs",
-              " \xB7 ",
-              money(totalPipeline)
-            ] })
-          ] }),
-          liveStages.map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-            "button",
-            {
-              onClick: () => onOpenStage && onOpenStage(st.id),
-              style: {
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                border: "none",
-                background: "none",
-                cursor: "pointer",
-                padding: "7px 0",
-                borderTop: `1px solid ${S.line}`
-              },
-              children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }, children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: st.label }),
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }, children: st.value > 0 ? money(st.value) : "" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }, children: st.count })
-                ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 5, borderRadius: 99, background: S.soft, marginTop: 5, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
-                  width: `${st.count / maxCount * 100}%`,
-                  height: "100%",
-                  borderRadius: 99,
-                  background: st.count ? T.accent : "transparent"
-                } }) })
-              ]
-            },
-            st.id
-          )),
-          lost > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 9 }, children: [
-            lost,
-            " lost or unqualified \u2014 not counted above"
-          ] })
-        ] });
-      })()
+    setAppointments && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, marginBottom: 14 }, children: [["calendar", "Calendar"], ["dispatch", "Dispatch"]].map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setHomeBoard(id), style: {
+        flex: 1,
+        border: `1.5px solid ${homeBoard === id ? T.accent : S.line}`,
+        background: homeBoard === id ? T.accentSoft : "#fff",
+        color: homeBoard === id ? T.accent : S.ink,
+        borderRadius: 999,
+        padding: "8px 12px",
+        fontSize: 13,
+        fontWeight: 700,
+        cursor: "pointer"
+      }, children: label }, id)) }),
+      homeBoard === "calendar" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        CalendarView,
+        {
+          embedded: true,
+          jobs,
+          onOpenJob,
+          appointments,
+          setAppointments,
+          apptTypes,
+          setApptTypes,
+          toast: toast2,
+          onQueueMessage,
+          onLog,
+          users,
+          onBack: () => go("calendar")
+        }
+      ) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        DispatchBoard,
+        {
+          embedded: true,
+          jobs,
+          crews,
+          mutJob,
+          onOpenJob,
+          toast: toast2,
+          onBack: () => go("dispatch")
+        }
+      )
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 16 }, children: (() => {
+      const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
+      const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
+      const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
+      const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
+      const RINGS = [
+        ["L", "Leads", "#F0B429", ["s1"]],
+        ["P", "Pipeline", "#F2711C", ["s2", "s3", "s4"]],
+        ["A", "Approved", "#63B54B", ["s5", "s6", "s7"]],
+        ["C", "Production", "#2BA4DE", ["s8", "s9"]],
+        ["I", "Invoicing", "#E0464B", ["s10"]]
+      ];
+      const ringData = RINGS.map(([letter, label, color, ids]) => ({
+        letter,
+        label,
+        color,
+        ids,
+        count: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.count, 0),
+        value: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.value, 0)
+      }));
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          paddingBottom: 12,
+          marginBottom: 4,
+          borderBottom: `1px solid ${S.line}`
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: "Current pipeline" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13, color: S.sub }, children: [
+            "Active jobs: ",
+            activeTotal
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", justifyContent: "space-around", gap: 4, padding: "14px 0 16px", flexWrap: "wrap" }, children: ringData.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          "button",
+          {
+            onClick: () => onOpenStage && onOpenStage(r.ids[0]),
+            "aria-label": `${r.label}: ${r.count} jobs`,
+            style: {
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              padding: "0 2px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 6,
+              minWidth: 56
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+                width: 46,
+                height: 46,
+                borderRadius: "50%",
+                background: r.color,
+                display: "grid",
+                placeItems: "center",
+                color: "#fff",
+                fontSize: 21,
+                fontWeight: 800
+              }, children: r.letter }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 17, fontWeight: 800, color: r.count ? "#F2711C" : "#C7CBD1" }, children: r.count }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub, whiteSpace: "nowrap" }, children: r.value > 0 ? money(r.value) : "\u2014" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 10.5, color: S.sub, letterSpacing: ".02em" }, children: r.label })
+            ]
+          },
+          r.letter
+        )) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => go("jobs"), style: {
+          ...linkBtn,
+          display: "block",
+          width: "100%",
+          textAlign: "center",
+          padding: "6px 0 10px",
+          fontSize: 13
+        }, children: "Open board \u2192" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: S.sub, borderTop: `1px solid ${S.line}`, paddingTop: 12, marginBottom: 2 }, children: [
+          "BY STAGE \xB7 ",
+          money(totalPipeline)
+        ] }),
+        liveStages.map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          "button",
+          {
+            onClick: () => onOpenStage && onOpenStage(st.id),
+            style: {
+              display: "block",
+              width: "100%",
+              textAlign: "left",
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              padding: "7px 0",
+              borderTop: `1px solid ${S.line}`
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: st.label }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }, children: st.value > 0 ? money(st.value) : "" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }, children: st.count })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 5, borderRadius: 99, background: S.soft, marginTop: 5, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+                width: `${st.count / maxCount * 100}%`,
+                height: "100%",
+                borderRadius: 99,
+                background: st.count ? T.accent : "transparent"
+              } }) })
+            ]
+          },
+          st.id
+        )),
+        lost > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 9 }, children: [
+          lost,
+          " lost or unqualified \u2014 not counted above"
+        ] })
+      ] });
+    })() }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 18 }, children: [
       ["Pipeline value", money(totalPipeline), "Open jobs, all stages"],
       ["Signed value", money(signedValue), "Approved and beyond"],
@@ -3374,7 +3500,7 @@ function timeMinutes(value) {
   return hours * 60 + minutes;
 }
 function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast: toast2, onQueueMessage, onLog = () => {
-}, users = [] }) {
+}, users = [], embedded = false }) {
   const today = /* @__PURE__ */ new Date();
   const [month, setMonth] = (0, import_react.useState)(new Date(today.getFullYear(), today.getMonth(), 1));
   const [view, setView] = (0, import_react.useState)("all");
@@ -3486,8 +3612,14 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     setNewType("");
   };
   const jobOf = (id) => jobs.find((j) => j.id === id);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: embedded ? { padding: 0 } : { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
+    embedded ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 16, fontWeight: 800, color: S.ink }, children: "Calendar" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, onClick: () => openAdd(null), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }),
+        " Add"
+      ] })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       SubHeader,
       {
         title: "Calendar",
@@ -6423,7 +6555,7 @@ function WarrantyCenter({ jobs, onOpenJob, onBack }) {
     ] }) }, j.id))
   ] });
 }
-function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast: toast2 }) {
+function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast: toast2, embedded = false }) {
   const [weekStart, setWeekStart] = (0, import_react.useState)(() => {
     const d = /* @__PURE__ */ new Date();
     d.setDate(d.getDate() - (d.getDay() + 6) % 7);
@@ -6453,9 +6585,20 @@ function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast: toast2 }
     toast2(`${assigning.name} \u2192 ${(activeCrews.find((c) => c.id === crewId) || {}).name} on ${fmtDay(d)}`);
     setAssigning(null);
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 0 110px", background: S.bg, minHeight: "100vh" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "0 16px" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: embedded ? { padding: 0 } : { padding: "16px 0 110px", background: S.bg, minHeight: "100vh" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: embedded ? { padding: 0 } : { padding: "0 16px" }, children: [
+      embedded ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 16, fontWeight: 800, color: S.ink }, children: "Dispatch" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => shiftWeek(-1), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronLeft, { size: 15 }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 12, fontWeight: 700, color: S.ink, whiteSpace: "nowrap" }, children: [
+            days[0].toLocaleDateString(void 0, { month: "short", day: "numeric" }),
+            " \u2013 ",
+            days[6].toLocaleDateString(void 0, { month: "short", day: "numeric" })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => shiftWeek(1), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 15 }) })
+        ] })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         SubHeader,
         {
           title: "Dispatch",
@@ -13290,7 +13433,14 @@ function SupremeCRM() {
           brand: brand2,
           appointments,
           apptTypes,
-          crews
+          crews,
+          setAppointments,
+          setApptTypes,
+          toast: toast2,
+          onQueueMessage: (jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] })),
+          onLog: logAct,
+          users,
+          mutJob
         }
       )
     ] }) : nav === "jobs" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
