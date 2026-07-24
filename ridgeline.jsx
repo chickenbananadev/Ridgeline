@@ -8353,7 +8353,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
             : `Invite sent to ${f.email.trim()}`);
         } else {
           setUsers([...users, { ...f, id: uid("u"), email: f.email.trim(), name: f.name.trim(), addedAt: new Date().toISOString().slice(0, 10) }]);
-          toast("Seat created (demo mode — no invite sent)");
+          toast("No backend connected — seat saved on this device only, no email sent");
         }
       } else {
         const next = { ...editing, ...f, name: f.name.trim(), email: f.email.trim() };
@@ -9338,6 +9338,16 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} brandErr={brandErr} />
       ) : null}
 
+      {!liveDb() && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 95,
+          background: "#7A1D12", color: "#fff", fontSize: 12.5, lineHeight: 1.45,
+          padding: "9px 14px", textAlign: "center",
+        }}>
+          Demo mode — not connected to the database. Nothing saves, no emails send.
+          Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to this Vercel project, then redeploy.
+        </div>
+      )}
       {(syncErr || brandErr) && (
         <div style={{
           position: "fixed", top: 0, left: 0, right: 0, zIndex: 90,

@@ -9654,7 +9654,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast: toast2
           toast2(viaLink ? `Sign-in link sent to ${f.email.trim()}` : `Invite sent to ${f.email.trim()}`);
         } else {
           setUsers([...users, { ...f, id: uid("u"), email: f.email.trim(), name: f.name.trim(), addedAt: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) }]);
-          toast2("Seat created (demo mode \u2014 no invite sent)");
+          toast2("No backend connected \u2014 seat saved on this device only, no email sent");
         }
       } else {
         const next = { ...editing, ...f, name: f.name.trim(), email: f.email.trim() };
@@ -10813,6 +10813,19 @@ function SupremeCRM() {
         brand: brand2
       }
     ) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand: brand2, setBrand, onBack: () => setNav("more"), toast: toast2, brandErr }) : null,
+    !liveDb() && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 95,
+      background: "#7A1D12",
+      color: "#fff",
+      fontSize: 12.5,
+      lineHeight: 1.45,
+      padding: "9px 14px",
+      textAlign: "center"
+    }, children: "Demo mode \u2014 not connected to the database. Nothing saves, no emails send. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to this Vercel project, then redeploy." }),
     (syncErr || brandErr) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
       position: "fixed",
       top: 0,
