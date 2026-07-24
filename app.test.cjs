@@ -8944,6 +8944,40 @@ function Inbox({ jobs, onOpenJob, onCompose }) {
 var DB = () => typeof window !== "undefined" ? window.__SUPABASE__ || null : null;
 var liveDb = () => !!DB();
 var EMPTY_FIN = () => ({ costLines: [], reimbursements: [] });
+function useBrandSync(brand, setBrand, hasSession) {
+  const lastSaved = (0, import_react.useRef)(null);
+  const loadedOnce = (0, import_react.useRef)(false);
+  const timer = (0, import_react.useRef)(null);
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db) return;
+    let alive = true;
+    db.from("crm_brand").select("data").eq("id", 1).maybeSingle().then(({ data, error }) => {
+      if (!alive) return;
+      if (!error && data && data.data && Object.keys(data.data).length) {
+        lastSaved.current = data.data;
+        setBrand((prev) => ({ ...prev, ...data.data }));
+      }
+      loadedOnce.current = true;
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db || !hasSession || !loadedOnce.current) return;
+    if (JSON.stringify(brand) === JSON.stringify(lastSaved.current)) return;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      lastSaved.current = brand;
+      db.from("crm_brand").upsert({ id: 1, data: brand, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+    }, 900);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [brand, hasSession]);
+}
 function useDbSync(st) {
   const {
     ready,
@@ -9244,9 +9278,8 @@ function SupremeCRM() {
     followUpDays: 3,
     template: "Hi {first_name}, thank you for trusting {company} with your home! If we earned it, a quick Google review means the world to our small team: {review_link}"
   });
-  const orgDeps = [brand, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings];
+  const orgDeps = [stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings];
   const orgPack = () => ({
-    brand,
     stages,
     leadSources,
     apptTypes,
@@ -9260,7 +9293,6 @@ function SupremeCRM() {
     version: 1
   });
   const unpackOrg = (d) => {
-    if (d.brand) setBrand(d.brand);
     if (d.stages) setStages(d.stages);
     if (d.leadSources) setLeadSources(d.leadSources);
     if (d.apptTypes) setApptTypes(d.apptTypes);
@@ -9273,6 +9305,7 @@ function SupremeCRM() {
     if (d.reviewSettings) setReviewSettings(d.reviewSettings);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
+  useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true);
   const { hydrated, syncErr } = useDbSync({
     ready: liveAuth() ? !!currentUser : true,
     isCrew: !!(currentUser && currentUser.role === "crew"),

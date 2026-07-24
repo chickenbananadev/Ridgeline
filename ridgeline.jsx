@@ -7740,6 +7740,44 @@ const liveDb = () => !!DB();
 
 const EMPTY_FIN = () => ({ costLines: [], reimbursements: [] });
 
+function useBrandSync(brand, setBrand, hasSession) {
+  const lastSaved = useRef(null);
+  const loadedOnce = useRef(false);
+  const timer = useRef(null);
+
+  /* Public read: works before login, which is the whole point — the
+     login screen needs the logo before anyone has signed in. */
+  useEffect(() => {
+    const db = DB();
+    if (!db) return;
+    let alive = true;
+    db.from("crm_brand").select("data").eq("id", 1).maybeSingle().then(({ data, error }) => {
+      if (!alive) return;
+      if (!error && data && data.data && Object.keys(data.data).length) {
+        lastSaved.current = data.data;
+        setBrand((prev) => ({ ...prev, ...data.data }));
+      }
+      loadedOnce.current = true;
+    });
+    return () => { alive = false; };
+  }, []);
+
+  /* Write requires a session (RLS), and only after the read above has
+     had a chance to run, so a fresh login doesn't stomp saved branding
+     with whatever the in-file defaults happened to be. */
+  useEffect(() => {
+    const db = DB();
+    if (!db || !hasSession || !loadedOnce.current) return;
+    if (JSON.stringify(brand) === JSON.stringify(lastSaved.current)) return;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      lastSaved.current = brand;
+      db.from("crm_brand").upsert({ id: 1, data: brand, updated_at: new Date().toISOString() });
+    }, 900);
+    return () => { if (timer.current) clearTimeout(timer.current); };
+  }, [brand, hasSession]);
+}
+
 function useDbSync(st) {
   const {
     ready, isCrew, userName,
@@ -8024,13 +8062,12 @@ export default function SupremeCRM() {
   });
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [brand, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings];
+  const orgDeps = [stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings];
   const orgPack = () => ({
-    brand, stages, leadSources, apptTypes, templates, estimateTemplates,
+    stages, leadSources, apptTypes, templates, estimateTemplates,
     priceList, companyDocs, crews, vendors, reviewSettings, version: 1,
   });
   const unpackOrg = (d) => {
-    if (d.brand) setBrand(d.brand);
     if (d.stages) setStages(d.stages);
     if (d.leadSources) setLeadSources(d.leadSources);
     if (d.apptTypes) setApptTypes(d.apptTypes);
@@ -8043,6 +8080,7 @@ export default function SupremeCRM() {
     if (d.reviewSettings) setReviewSettings(d.reviewSettings);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
+  useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true);
   const { hydrated, syncErr } = useDbSync({
     ready: liveAuth() ? !!currentUser : true,
     isCrew: !!(currentUser && currentUser.role === "crew"),
