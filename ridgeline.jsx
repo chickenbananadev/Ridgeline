@@ -1758,6 +1758,13 @@ const inputStyle = {
   fontFamily: "inherit",
 };
 const selStyle = { ...inputStyle, appearance: "auto" };
+/* iOS renders type=date taller than a text input and ignores a fixed
+   height, which overlapped the neighbouring field. Neutralising the
+   native appearance and using minHeight keeps it in its column. */
+const dateInputStyle = {
+  ...inputStyle, WebkitAppearance: "none", MozAppearance: "none", appearance: "none",
+  minHeight: 44, boxSizing: "border-box", width: "100%", minWidth: 0,
+};
 
 function Card({ children, style, pad = 18, onClick }) {
   return (
@@ -2208,7 +2215,7 @@ function Login({ brand, users, onLogin }) {
    DASHBOARD
    ================================================================ */
 function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND,
-  appointments = [], apptTypes = [], crews = [], setAppointments, setApptTypes, toast, onQueueMessage, onLog, users = [], mutJob }) {
+  appointments = [], apptTypes = [], crews = [], setAppointments, setApptTypes, toast, onQueueMessage, onLog, users = [], mutJob, onToggleTask }) {
   const [homeBoard, setHomeBoard] = useState("calendar");
   const todayIso = new Date().toISOString().slice(0, 10);
   const todaysAppts = appointments
@@ -2315,42 +2322,26 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
             </button>
           ))}
 
-          {overdue.map(({ job, t }) => (
-            <button key={t.id} onClick={() => onOpenJob(job.id)} style={{
-              display: "flex", gap: 10, alignItems: "center", width: "100%", textAlign: "left",
-              border: "none", background: "none", cursor: "pointer", padding: "8px 0",
-              borderTop: `1px solid ${S.line}`,
-            }}>
+          {[...overdue.map((x) => ({ ...x, kind: "overdue" })), ...dueToday.map((x) => ({ ...x, kind: "today" }))].map(({ job, t, kind }) => (
+            <div key={t.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
+              <button aria-label={t.done ? "Mark not done" : "Mark done"}
+                onClick={() => onToggleTask && onToggleTask(job.id, t.id)}
+                style={{ border: "none", background: "none", cursor: "pointer", padding: 0, flexShrink: 0, lineHeight: 0 }}>
+                {t.done ? <CheckCircle2 size={20} color="#177245" /> : <Circle size={20} color="#C7CBD1" />}
+              </button>
               <span style={{
-                minWidth: 66, fontSize: 12, fontWeight: 800, color: "#B42318",
-                background: "#FDECEA", border: "1px solid #F5C6C0", borderRadius: 8,
-                padding: "5px 0", textAlign: "center",
-              }}>Overdue</span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }}>{t.label}</span>
-                <span style={{ fontSize: 11.5, color: S.sub }}>{job.name} · was due {t.due}</span>
-              </span>
+                minWidth: 66, fontSize: 12, fontWeight: 800,
+                color: kind === "overdue" ? "#B42318" : "#177245",
+                background: kind === "overdue" ? "#FDECEA" : "#EAF6EE",
+                border: `1px solid ${kind === "overdue" ? "#F5C6C0" : "#CDE8D6"}`,
+                borderRadius: 8, padding: "5px 0", textAlign: "center", flexShrink: 0,
+              }}>{kind === "overdue" ? "Overdue" : "Due today"}</span>
+              <button onClick={() => onOpenJob(job.id)} style={{ flex: 1, minWidth: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block", textDecoration: t.done ? "line-through" : "none" }}>{t.label}</span>
+                <span style={{ fontSize: 11.5, color: S.sub }}>{job.name}{kind === "overdue" ? ` · was due ${t.due}` : (t.time ? ` · by ${fmtTime(t.time)}` : "")}</span>
+              </button>
               <ChevronRight size={14} color="#C7CBD1" />
-            </button>
-          ))}
-
-          {dueToday.map(({ job, t }) => (
-            <button key={t.id} onClick={() => onOpenJob(job.id)} style={{
-              display: "flex", gap: 10, alignItems: "center", width: "100%", textAlign: "left",
-              border: "none", background: "none", cursor: "pointer", padding: "8px 0",
-              borderTop: `1px solid ${S.line}`,
-            }}>
-              <span style={{
-                minWidth: 66, fontSize: 12, fontWeight: 800, color: "#177245",
-                background: "#EAF6EE", border: "1px solid #CDE8D6", borderRadius: 8,
-                padding: "5px 0", textAlign: "center",
-              }}>Due today</span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }}>{t.label}</span>
-                <span style={{ fontSize: 11.5, color: S.sub }}>{job.name}{t.time ? ` · by ${fmtTime(t.time)}` : ""}</span>
-              </span>
-              <ChevronRight size={14} color="#C7CBD1" />
-            </button>
+            </div>
           ))}
         </Card>
       )}
@@ -2641,13 +2632,74 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         ))}
       </Card>
 
-      <Card style={{ marginTop: 14 }}>
-        <CardTitle right={<Chip tone="blue">{reviewsSent} sent</Chip>}>Reviews</CardTitle>
-        <div style={{ fontSize: 13, color: S.sub }}>
-          Completed jobs with SMS or email consent get an automatic Google review request. Manage settings under
-          More → Review automation.
-        </div>
-      </Card>
+      {(() => {
+        /* Every client who has been sent a review request, and where
+           they are: requested, opened the link, or posted. The old card
+           only showed a count, which answered nothing. */
+        const tracked = jobs
+          .filter((j) => j.review && (j.review.sent || j.review.posted))
+          .map((j) => ({ j, r: j.review }))
+          .sort((a, b) => Number(a.r.posted) - Number(b.r.posted));
+        const posted = tracked.filter((x) => x.r.posted).length;
+        const awaiting = tracked.filter((x) => x.r.sent && !x.r.posted).length;
+        const eligible = jobs.filter((j) => {
+          const st = stages.find((s) => s.id === j.stageId);
+          return st && /complete|completed/i.test(st.name) && !(j.review && j.review.sent);
+        });
+        return (
+          <Card style={{ marginTop: 14 }}>
+            <CardTitle right={<button style={linkBtn} onClick={() => go("reviews")}>Settings →</button>}>Reviews</CardTitle>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <div style={{ flex: 1, background: "#EAF6EE", borderRadius: 10, padding: "9px 0", textAlign: "center" }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "#177245" }}>{posted}</div>
+                <div style={{ fontSize: 11, color: S.sub }}>posted</div>
+              </div>
+              <div style={{ flex: 1, background: "#FFF6E5", borderRadius: 10, padding: "9px 0", textAlign: "center" }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "#9A6B00" }}>{awaiting}</div>
+                <div style={{ fontSize: 11, color: S.sub }}>awaiting</div>
+              </div>
+              <div style={{ flex: 1, background: T.accentSoft, borderRadius: 10, padding: "9px 0", textAlign: "center" }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: T.accent }}>{eligible.length}</div>
+                <div style={{ fontSize: 11, color: S.sub }}>ready to ask</div>
+              </div>
+            </div>
+            {eligible.length > 0 && (
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: S.sub, letterSpacing: ".04em", margin: "4px 0 2px" }}>NOT YET ASKED</div>
+            )}
+            {eligible.slice(0, 3).map((j) => (
+              <button key={j.id} onClick={() => onOpenJob(j.id)} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }}>{j.name}</span>
+                  <span style={{ fontSize: 11.5, color: S.sub }}>Job complete — no request sent yet</span>
+                </span>
+                <Chip tone="blue">Ask</Chip>
+              </button>
+            ))}
+            {tracked.length > 0 && (
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: S.sub, letterSpacing: ".04em", margin: "12px 0 2px" }}>REQUESTS SENT</div>
+            )}
+            {tracked.slice(0, 6).map(({ j, r }) => {
+              const stage = r.posted ? "posted" : r.clicked ? "clicked" : "sent";
+              const tone = r.posted ? "green" : r.clicked ? "amber" : "gray";
+              const label = r.posted ? "Posted ★" : r.clicked ? "Opened link" : "Requested";
+              return (
+                <button key={j.id} onClick={() => onOpenJob(j.id)} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }}>{j.name}</span>
+                    <span style={{ fontSize: 11.5, color: S.sub }}>{j.address}</span>
+                  </span>
+                  <Chip tone={tone}>{label}</Chip>
+                </button>
+              );
+            })}
+            {tracked.length === 0 && eligible.length === 0 && (
+              <div style={{ fontSize: 13, color: S.sub }}>
+                No review activity yet. When a job is marked complete it will appear here to request a Google review.
+              </div>
+            )}
+          </Card>
+        );
+      })()}
     </div>
   );
 }
@@ -4409,6 +4461,34 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           <div style={{ fontSize: 13, color: S.sub, margin: "8px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>
             <MapPin size={13} /> {job.address}
           </div>
+          {/* Quick actions on the job: call, text, directions, upload —
+              the four things a rep reaches for standing in a driveway. */}
+          <div style={{ display: "flex", gap: 7, margin: "12px 0 10px" }}>
+            {(() => {
+              const tel = String(job.phone || job.contact?.phone || "").replace(/\D/g, "");
+              const Act = ({ href, onClick, icon: Icon, label, disabled }) => {
+                const inner = (
+                  <span style={{
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                    padding: "9px 0", borderRadius: 10, border: `1px solid ${S.line}`,
+                    background: disabled ? "#F7F8FA" : "#fff", color: disabled ? "#C7CBD1" : T.accent,
+                    fontSize: 11, fontWeight: 700, cursor: disabled ? "default" : "pointer", width: "100%",
+                  }}><Icon size={17} /> {label}</span>
+                );
+                if (disabled) return <div style={{ flex: 1 }}>{inner}</div>;
+                if (href) return <a href={href} target={href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" style={{ flex: 1, textDecoration: "none" }}>{inner}</a>;
+                return <button onClick={onClick} style={{ flex: 1, border: "none", background: "none", padding: 0, cursor: "pointer" }}>{inner}</button>;
+              };
+              return (
+                <>
+                  <Act href={tel ? `tel:${tel}` : null} icon={Phone} label="Call" disabled={!tel} />
+                  <Act href={tel ? `sms:${tel}` : null} icon={MessageCircle} label="Text" disabled={!tel} />
+                  <Act href={directionsLink(job.address)} icon={MapPin} label="Directions" disabled={!job.address} />
+                  <Act onClick={() => setTab("files")} icon={Upload} label="Upload" />
+                </>
+              );
+            })()}
+          </div>
           <div style={{ display: "flex", gap: 8, margin: "10px 0 12px", flexWrap: "wrap" }}>
             <Chip tone={job.claimType === "Insurance" ? "blue" : "gray"}>{job.claimType === "Unknown" ? "Claim TBD" : job.claimType}</Chip>
             <Chip tone="slate">{job.state}</Chip>
@@ -5936,11 +6016,11 @@ function WarrantyCard({ job, mut }) {
       )}>Warranty</CardTitle>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 12, alignItems: "start" }}>
         <Field label="Install date">
-          <input style={{ ...inputStyle, width: "100%", minWidth: 0, boxSizing: "border-box", height: 42 }} type="date"
+          <input style={dateInputStyle} type="date"
             value={w.installDate || ""} onChange={(e) => set("installDate", e.target.value)} />
         </Field>
         <Field label="Labor warranty (years)">
-          <select style={{ ...selStyle, height: 42, boxSizing: "border-box" }} value={w.laborYears || ""} onChange={(e) => set("laborYears", e.target.value)}>
+          <select style={{ ...selStyle, minHeight: 44, boxSizing: "border-box" }} value={w.laborYears || ""} onChange={(e) => set("laborYears", e.target.value)}>
             <option value="">—</option>
             {[1, 2, 3, 5, 10, 15, 25].map((n) => <option key={n} value={n}>{n} year{n > 1 ? "s" : ""}</option>)}
           </select>
@@ -8724,24 +8804,96 @@ function TabTasks({ job, mut, toast }) {
 
 /* ---------- Files ---------- */
 const FILE_CATS = ["Signed paperwork", "Insurance", "Permits", "Delivery tickets", "Receipts", "Measurements", "Photos", "Other"];
+
+/* ------------------------------------------------------------------
+   File uploads.
+
+   Tries Supabase Storage first (bucket "job-files"), which is the
+   right home for real files. Until that bucket exists — it needs the
+   Pro plan — it falls back to an inline data URL so uploads work
+   today, with a hard size cap because a data URL lives in the row and
+   a large one would bloat every sync. The return shape is identical
+   either way, so nothing downstream changes when Storage comes online.
+------------------------------------------------------------------- */
+const INLINE_FILE_CAP = 3 * 1024 * 1024; // 3 MB ceiling for the fallback
+
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error("read failed"));
+    r.readAsDataURL(file);
+  });
+}
+
+async function uploadJobFile(jobId, file) {
+  const db = DB();
+  const safe = String(file.name || "file").replace(/[^\w.\-]+/g, "_");
+  const key = `${jobId}/${Date.now()}_${safe}`;
+  if (db && db.storage) {
+    try {
+      const { error } = await db.storage.from("job-files").upload(key, file, { upsert: false });
+      if (!error) {
+        const { data } = db.storage.from("job-files").getPublicUrl(key);
+        return { storage: "supabase", key, url: (data && data.publicUrl) || "", size: file.size, mime: file.type };
+      }
+      /* Missing bucket / not on Pro: fall through to the inline path. */
+    } catch (e) { /* fall through */ }
+  }
+  if (file.size > INLINE_FILE_CAP) {
+    const mb = (file.size / (1024 * 1024)).toFixed(1);
+    throw new Error(`That file is ${mb} MB. Until file storage is switched on, uploads are capped at 3 MB — connect Supabase Storage under Setup & keys for full-size files.`);
+  }
+  const url = await readAsDataUrl(file);
+  return { storage: "inline", key, url, size: file.size, mime: file.type };
+}
+
 function TabFiles({ job, mut, toast }) {
   const [cat, setCat] = useState(FILE_CATS[0]);
-  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const fileRef = useRef(null);
+
+  const pick = () => fileRef.current && fileRef.current.click();
+  const onFiles = async (list) => {
+    const files = Array.from(list || []);
+    if (!files.length) return;
+    setBusy(true); setErr("");
+    for (const file of files) {
+      try {
+        const up = await uploadJobFile(job.id, file);
+        mut((j) => ({ ...j, files: [...j.files, {
+          id: uid("f"), name: file.name, cat, at: nowStamp(), by: j.assignee, shared: false,
+          url: up.url, storage: up.storage, storageKey: up.key, size: up.size, mime: up.mime,
+        }] }));
+      } catch (e) {
+        setErr((e && e.message) || "Upload failed.");
+      }
+    }
+    setBusy(false);
+    toast("File attached to job");
+  };
+
   return (
     <>
       <Card>
         <CardTitle>Upload a file</CardTitle>
-        <Field label="File name"><input style={inputStyle} value={name} placeholder="e.g. Signed contract.pdf"
-          onChange={(e) => setName(e.target.value)} /></Field>
         <Field label="Category">
           <select style={selStyle} value={cat} onChange={(e) => setCat(e.target.value)}>
             {FILE_CATS.map((c) => <option key={c}>{c}</option>)}
           </select>
         </Field>
-        <Btn style={{ width: "100%" }} disabled={!name.trim()} onClick={() => {
-          mut((j) => ({ ...j, files: [...j.files, { id: uid("f"), name: name.trim(), cat, at: nowStamp(), by: j.assignee, shared: false }] }));
-          setName(""); toast("File attached to job");
-        }}><Upload size={15} /> Upload</Btn>
+        <input ref={fileRef} type="file" multiple style={{ display: "none" }}
+          accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.heic"
+          onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} />
+        <Btn style={{ width: "100%" }} disabled={busy} onClick={pick}>
+          <Upload size={15} /> {busy ? "Uploading…" : "Choose files"}
+        </Btn>
+        {err && <Callout label="Upload" tone="amber">{err}</Callout>}
+        <div style={{ fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
+          Photos, PDFs and documents. Files go to Supabase Storage once it is
+          connected; until then they are held in the job with a 3 MB cap.
+        </div>
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="blue">{job.files.length}</Chip>}>Job files</CardTitle>
@@ -8749,10 +8901,14 @@ function TabFiles({ job, mut, toast }) {
         {job.files.map((f) => (
           <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: `1px solid ${S.line}` }}>
             <FileText size={18} color={T.accent} style={{ flexShrink: 0 }} />
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{f.name}</div>
               <div style={{ fontSize: 12, color: S.sub }}>{f.cat} · {f.at} · {f.by}</div>
             </div>
+            {f.url && (
+              <a href={f.url} target="_blank" rel="noreferrer" download={f.name}
+                style={{ color: T.accent, fontSize: 12.5, fontWeight: 700, textDecoration: "none", flexShrink: 0 }}>Open</a>
+            )}
             <button onClick={() => mut((j) => ({ ...j, files: j.files.map((x) => x.id === f.id ? { ...x, shared: !x.shared } : x) }))}
               title={f.shared ? "Remove from customer portal" : "Share in customer portal"}
               style={{ border: "none", background: "none", cursor: "pointer", padding: 2 }}>
@@ -12944,7 +13100,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             appointments={appointments} apptTypes={apptTypes} crews={crews}
             setAppointments={setAppointments} setApptTypes={setApptTypes} toast={toast}
             onQueueMessage={(jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))}
-            onLog={logAct} users={users} mutJob={mutJob} />
+            onLog={logAct} users={users} mutJob={mutJob}
+            onToggleTask={(jobId, taskId) => mutJob(jobId, (j) => ({ ...j, tasks: j.tasks.map((x) => x.id === taskId ? { ...x, done: !x.done, doneAt: !x.done ? new Date().toISOString().slice(0, 16).replace("T", " ") : null } : x) }))} />
         </>
       ) : nav === "jobs" ? (
         <JobBoard jobs={jobs} stages={stages} filters={filters}
