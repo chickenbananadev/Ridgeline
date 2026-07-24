@@ -2338,7 +2338,20 @@ function SignaturePad({ open, onClose, title, onApply }) {
 }
 function Login({ brand: brand2, users, onLogin }) {
   const [mode, setMode] = (0, import_react.useState)("login");
-  const [email, setEmail] = (0, import_react.useState)("");
+  const [email, setEmail] = (0, import_react.useState)(() => {
+    try {
+      return window.localStorage.getItem("ridgeline.email") || "";
+    } catch {
+      return "";
+    }
+  });
+  const [remember, setRemember] = (0, import_react.useState)(() => {
+    try {
+      return !!window.localStorage.getItem("ridgeline.email");
+    } catch {
+      return false;
+    }
+  });
   const [pw, setPw] = (0, import_react.useState)("");
   const [busy, setBusy] = (0, import_react.useState)(false);
   const [err, setErr] = (0, import_react.useState)("");
@@ -2349,6 +2362,11 @@ function Login({ brand: brand2, users, onLogin }) {
     setBusy(true);
     try {
       await AUTH().signIn(email.trim(), pw);
+      try {
+        if (remember) window.localStorage.setItem("ridgeline.email", email.trim());
+        else window.localStorage.removeItem("ridgeline.email");
+      } catch {
+      }
     } catch (e) {
       setErr(e && e.message ? e.message : "Could not sign in. Check the email and password.");
       setBusy(false);
@@ -2466,6 +2484,18 @@ function Login({ brand: brand2, users, onLogin }) {
           }
         ) }),
         err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Sign-in failed", tone: "red", children: err }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 9, alignItems: "center", fontSize: 13.5, color: S.ink, cursor: "pointer", margin: "4px 0 14px" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              type: "checkbox",
+              checked: remember,
+              onChange: (e) => setRemember(e.target.checked),
+              style: { width: 17, height: 17, accentColor: T.accent }
+            }
+          ),
+          "Remember my email on this device"
+        ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           Btn,
           {
@@ -4514,12 +4544,15 @@ function docShell(title, brand2, bodyHtml) {
   <span>Choose "Save to Files" or "Save as PDF" in the print dialog.</span>
 </div>
 <div class="head">
-  <div>${logo}<div class="co">${esc2(brand2.address)}
-${esc2(brand2.phone)}   ${esc2(brand2.email)}${brand2.license ? "\n" + esc2(brand2.license) : ""}</div></div>
+  <div>${logo}<div class="co">${[
+    brand2.showAddress !== false ? esc2(brand2.address) : "",
+    [brand2.showPhone !== false ? esc2(brand2.phone) : "", brand2.showEmail !== false ? esc2(brand2.email) : ""].filter(Boolean).join("   "),
+    brand2.showLicense !== false && brand2.license ? esc2(brand2.license) : ""
+  ].filter(Boolean).join("\n")}</div></div>
   <div><div class="title">${esc2(title)}</div></div>
 </div>
 ${bodyHtml}
-<div class="foot">${esc2(brand2.company)} \xB7 ${esc2(brand2.slogan)}</div>
+<div class="foot">${esc2(brand2.company)}${brand2.showSlogan !== false ? " \xB7 " + esc2(brand2.slogan) : ""}</div>
 </body></html>`;
 }
 function openDoc(title, brand2, bodyHtml, toast2) {
@@ -7674,16 +7707,32 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
                 setFbText(j.review.feedback || "");
               }
             }, style: { border: "none", background: "none", cursor: "pointer", padding: 2 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Star, { size: 19, color: n <= r ? "#D3860A" : "#D6D9DE", fill: n <= r ? "#D3860A" : "none" }) }, n)),
-            r === 5 && brand2.googleReviewLink && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "a",
-              {
-                href: brand2.googleReviewLink,
-                target: "_blank",
-                rel: "noreferrer",
-                style: { fontSize: 12.5, color: T.accent, fontWeight: 700, marginLeft: 6 },
-                children: "Google link \u2192"
-              }
-            )
+            r === 5 && brand2.googleReviewLink && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "a",
+                {
+                  href: brand2.googleReviewLink,
+                  target: "_blank",
+                  rel: "noreferrer",
+                  style: { fontSize: 12.5, color: T.accent, fontWeight: 700, marginLeft: 6 },
+                  children: "Open link"
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: { ...linkBtn, fontSize: 12.5, marginLeft: 8 }, onClick: () => {
+                const first = (j.name || "").split(" ")[0];
+                const body = `Hi ${first}, thank you again for trusting ${brand2.company} with your roof. If you have a moment, a short Google review helps our small team more than you know: ${brand2.googleReviewLink}`;
+                if (j.consent.sms.granted && j.phone) {
+                  window.location.href = `sms:${String(j.phone).replace(/\D/g, "")}&body=${encodeURIComponent(body)}`;
+                } else if (j.consent.email.granted && j.email) {
+                  window.location.href = `mailto:${j.email}?subject=${encodeURIComponent("Thank you from " + brand2.company)}&body=${encodeURIComponent(body)}`;
+                } else {
+                  if (navigator.clipboard) navigator.clipboard.writeText(body);
+                  toast2("No consent on file \u2014 message copied instead");
+                  return;
+                }
+                setReview(j, { sent: true, sentAt: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) });
+              }, children: "Send request" })
+            ] })
           ] }),
           j.review.feedback && fbOpen !== j.id && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 8, background: "#FDF6EC", border: "1px solid #F0DFC5", borderRadius: 10, padding: "9px 12px", fontSize: 12.5, color: "#92600A" }, children: [
             "Internal feedback (",
@@ -8233,6 +8282,31 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast: toast2 }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Accent color", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "color", value: brand2.accent, onChange: set("accent"), style: { ...inputStyle, height: 46, padding: 4 } }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: "The soft accent (chips, highlights) is derived from the accent automatically." })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "What appears on documents" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 4, lineHeight: 1.5 }, children: "Controls the header of every estimate, contract, invoice, work order, and report." }),
+      [
+        ["showPhone", "Phone number"],
+        ["showEmail", "Email address"],
+        ["showAddress", "Office address"],
+        ["showLicense", "License number"],
+        ["showSlogan", "Slogan in the footer"]
+      ].map(([k, label]) => {
+        const on = brand2[k] !== false;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${S.line}` }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14 }, children: label }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setBrand({ ...brand2, [k]: !on }), style: {
+            width: 46,
+            height: 27,
+            borderRadius: 99,
+            border: "none",
+            cursor: "pointer",
+            background: on ? T.accent : "#D6D9DE",
+            position: "relative"
+          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" } }) })
+        ] }, k);
+      })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: addLoc, children: [

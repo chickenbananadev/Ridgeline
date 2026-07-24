@@ -1892,7 +1892,12 @@ function SignaturePad({ open, onClose, title, onApply }) {
    ================================================================ */
 function Login({ brand, users, onLogin }) {
   const [mode, setMode] = useState("login");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => {
+    try { return window.localStorage.getItem("ridgeline.email") || ""; } catch { return ""; }
+  });
+  const [remember, setRemember] = useState(() => {
+    try { return !!window.localStorage.getItem("ridgeline.email"); } catch { return false; }
+  });
   const [pw, setPw] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -1903,6 +1908,10 @@ function Login({ brand, users, onLogin }) {
     setErr(""); setBusy(true);
     try {
       await AUTH().signIn(email.trim(), pw);
+      try {
+        if (remember) window.localStorage.setItem("ridgeline.email", email.trim());
+        else window.localStorage.removeItem("ridgeline.email");
+      } catch { /* private browsing blocks storage; not fatal */ }
       // The session listener in the root component takes it from here.
     } catch (e) {
       setErr(e && e.message ? e.message : "Could not sign in. Check the email and password.");
@@ -1992,6 +2001,11 @@ function Login({ brand, users, onLogin }) {
                 onKeyDown={(e) => { if (e.key === "Enter" && live && email && pw) submit(); }} />
             </Field>
             {err && <Callout label="Sign-in failed" tone="red">{err}</Callout>}
+              <label style={{ display: "flex", gap: 9, alignItems: "center", fontSize: 13.5, color: S.ink, cursor: "pointer", margin: "4px 0 14px" }}>
+                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}
+                  style={{ width: 17, height: 17, accentColor: T.accent }} />
+                Remember my email on this device
+              </label>
             <Btn
               onClick={live ? submit : () => setMode("account")}
               disabled={busy || (live && (!email.trim() || !pw))}
@@ -3756,11 +3770,15 @@ function docShell(title, brand, bodyHtml) {
   <span>Choose "Save to Files" or "Save as PDF" in the print dialog.</span>
 </div>
 <div class="head">
-  <div>${logo}<div class="co">${esc(brand.address)}\n${esc(brand.phone)}   ${esc(brand.email)}${brand.license ? "\n" + esc(brand.license) : ""}</div></div>
+  <div>${logo}<div class="co">${[
+      brand.showAddress !== false ? esc(brand.address) : "",
+      [brand.showPhone !== false ? esc(brand.phone) : "", brand.showEmail !== false ? esc(brand.email) : ""].filter(Boolean).join("   "),
+      brand.showLicense !== false && brand.license ? esc(brand.license) : "",
+    ].filter(Boolean).join("\n")}</div></div>
   <div><div class="title">${esc(title)}</div></div>
 </div>
 ${bodyHtml}
-<div class="foot">${esc(brand.company)} · ${esc(brand.slogan)}</div>
+<div class="foot">${esc(brand.company)}${brand.showSlogan !== false ? " · " + esc(brand.slogan) : ""}</div>
 </body></html>`;
 }
 
@@ -6697,8 +6715,24 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
                   </button>
                 ))}
                 {r === 5 && brand.googleReviewLink && (
-                  <a href={brand.googleReviewLink} target="_blank" rel="noreferrer"
-                    style={{ fontSize: 12.5, color: T.accent, fontWeight: 700, marginLeft: 6 }}>Google link →</a>
+                  <>
+                    <a href={brand.googleReviewLink} target="_blank" rel="noreferrer"
+                      style={{ fontSize: 12.5, color: T.accent, fontWeight: 700, marginLeft: 6 }}>Open link</a>
+                    <button style={{ ...linkBtn, fontSize: 12.5, marginLeft: 8 }} onClick={() => {
+                      const first = (j.name || "").split(" ")[0];
+                      const body = `Hi ${first}, thank you again for trusting ${brand.company} with your roof. If you have a moment, a short Google review helps our small team more than you know: ${brand.googleReviewLink}`;
+                      if (j.consent.sms.granted && j.phone) {
+                        window.location.href = `sms:${String(j.phone).replace(/\D/g, "")}&body=${encodeURIComponent(body)}`;
+                      } else if (j.consent.email.granted && j.email) {
+                        window.location.href = `mailto:${j.email}?subject=${encodeURIComponent("Thank you from " + brand.company)}&body=${encodeURIComponent(body)}`;
+                      } else {
+                        if (navigator.clipboard) navigator.clipboard.writeText(body);
+                        toast("No consent on file — message copied instead");
+                        return;
+                      }
+                      setReview(j, { sent: true, sentAt: new Date().toISOString().slice(0, 10) });
+                    }}>Send request</button>
+                  </>
                 )}
               </div>
               {j.review.feedback && fbOpen !== j.id && (
@@ -7120,6 +7154,28 @@ function BrandingEditor({ brand, setBrand, onBack, toast }) {
           </Field>
         </div>
         <div style={{ fontSize: 12, color: S.sub }}>The soft accent (chips, highlights) is derived from the accent automatically.</div>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>What appears on documents</CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, marginBottom: 4, lineHeight: 1.5 }}>
+          Controls the header of every estimate, contract, invoice, work order, and report.
+        </div>
+        {[["showPhone", "Phone number"], ["showEmail", "Email address"], ["showAddress", "Office address"],
+          ["showLicense", "License number"], ["showSlogan", "Slogan in the footer"]].map(([k, label]) => {
+          const on = brand[k] !== false;
+          return (
+            <div key={k} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${S.line}` }}>
+              <span style={{ fontSize: 14 }}>{label}</span>
+              <button onClick={() => setBrand({ ...brand, [k]: !on })} style={{
+                width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer",
+                background: on ? T.accent : "#D6D9DE", position: "relative",
+              }}>
+                <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" }} />
+              </button>
+            </div>
+          );
+        })}
       </Card>
 
       <Card style={{ marginTop: 12 }}>
