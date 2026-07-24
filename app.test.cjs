@@ -2594,7 +2594,7 @@ function Login({ brand: brand2, users, onLogin }) {
     ] })
   ] });
 }
-function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand: brand2 = DEFAULT_BRAND, appointments = [], apptTypes = [] }) {
+function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand: brand2 = DEFAULT_BRAND, appointments = [], apptTypes = [], crews = [] }) {
   const todayIso = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
   const todaysAppts = appointments.filter((ap) => ap.date === todayIso).map((ap) => ({ ap, job: jobs.find((j) => j.id === ap.jobId) })).sort((a, b) => String(a.ap.time || "99").localeCompare(String(b.ap.time || "99")));
   const todaysCrews = jobs.filter((j) => j.schedDate === todayIso);
@@ -2761,6 +2761,116 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 14, color: "#C7CBD1" })
       ] }, t.id))
     ] }),
+    (() => {
+      const days = [];
+      for (let i = 0; i < 7; i++) {
+        const dt = /* @__PURE__ */ new Date();
+        dt.setHours(0, 0, 0, 0);
+        dt.setDate(dt.getDate() + i);
+        const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+        const appts = appointments.filter((ap) => ap.date === iso).map((ap) => ({ ap, job: jobs.find((j) => j.id === ap.jobId) })).sort((a, b) => String(a.ap.time || "99").localeCompare(String(b.ap.time || "99")));
+        const roofs = jobs.filter((j) => j.schedDate === iso);
+        if (appts.length || roofs.length) days.push({ iso, dt, appts, roofs, i });
+      }
+      const unassigned = jobs.filter((j) => j.schedDate && !j.crewId);
+      if (!days.length && !unassigned.length) return null;
+      const dayLabel = (d) => d.i === 0 ? "Today" : d.i === 1 ? "Tomorrow" : d.dt.toLocaleDateString(void 0, { weekday: "short", month: "short", day: "numeric" });
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("dispatch"), children: "Dispatch \u2192" }), children: "Week ahead" }),
+        !days.length && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, paddingBottom: 4 }, children: "Nothing scheduled in the next seven days." }),
+        days.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: `1px solid ${S.line}`, padding: "9px 0 4px" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12.5, fontWeight: 800, color: d.i === 0 ? T.accent : S.ink }, children: dayLabel(d) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11.5, color: S.sub }, children: [
+              d.roofs.length ? `${d.roofs.length} on roofs` : "",
+              d.roofs.length && d.appts.length ? " \xB7 " : "",
+              d.appts.length ? `${d.appts.length} appt${d.appts.length === 1 ? "" : "s"}` : ""
+            ] })
+          ] }),
+          d.appts.map(({ ap, job }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => job && onOpenJob(job.id), style: {
+            display: "flex",
+            gap: 9,
+            alignItems: "center",
+            width: "100%",
+            textAlign: "left",
+            border: "none",
+            background: "none",
+            cursor: "pointer",
+            padding: "6px 0"
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+              minWidth: 62,
+              fontSize: 11.5,
+              fontWeight: 700,
+              color: T.accent,
+              background: T.accentSoft,
+              borderRadius: 7,
+              padding: "4px 0",
+              textAlign: "center"
+            }, children: ap.time ? fmtTime(ap.time) : "All day" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, fontWeight: 600, color: S.ink }, children: ap.title || ap.type || "Appointment" }),
+              job && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11.5, color: S.sub }, children: [
+                " \xB7 ",
+                job.name
+              ] })
+            ] })
+          ] }, ap.id)),
+          d.roofs.map((j) => {
+            const cr = crews.find((c) => c.id === j.crewId);
+            return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: {
+              display: "flex",
+              gap: 9,
+              alignItems: "center",
+              width: "100%",
+              textAlign: "left",
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              padding: "6px 0"
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+                minWidth: 62,
+                fontSize: 11.5,
+                fontWeight: 700,
+                color: cr ? "#177245" : "#9A6B00",
+                background: cr ? "#EAF6EE" : "#FFF6E5",
+                border: `1px solid ${cr ? "#CDE8D6" : "#F0D9A8"}`,
+                borderRadius: 7,
+                padding: "4px 0",
+                textAlign: "center"
+              }, children: cr ? "Crew" : "No crew" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, fontWeight: 600, color: S.ink }, children: j.name }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11.5, color: S.sub }, children: [
+                  " \xB7 ",
+                  cr ? cr.name : "unassigned"
+                ] })
+              ] })
+            ] }, j.id);
+          })
+        ] }, d.iso)),
+        unassigned.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => go("dispatch"), style: {
+          display: "block",
+          width: "100%",
+          textAlign: "left",
+          marginTop: 8,
+          border: "1px solid #F0D9A8",
+          background: "#FFF6E5",
+          borderRadius: 9,
+          padding: "9px 11px",
+          cursor: "pointer",
+          fontSize: 12.5,
+          color: S.ink,
+          fontFamily: "inherit"
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: unassigned.length }),
+          " scheduled ",
+          unassigned.length === 1 ? "roof has" : "roofs have",
+          " no crew assigned \u2014 open dispatch"
+        ] })
+      ] });
+    })(),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("jobs"), children: "Open board \u2192" }), children: "Pipeline" }),
       (() => {
@@ -3603,6 +3713,39 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     )
   ] });
 }
+var ADDR_WORDS = {
+  st: "street",
+  str: "street",
+  rd: "road",
+  ave: "avenue",
+  av: "avenue",
+  dr: "drive",
+  ln: "lane",
+  ct: "court",
+  cir: "circle",
+  blvd: "boulevard",
+  pkwy: "parkway",
+  hwy: "highway",
+  ter: "terrace",
+  pl: "place",
+  sq: "square",
+  n: "north",
+  s: "south",
+  e: "east",
+  w: "west",
+  ne: "northeast",
+  nw: "northwest",
+  se: "southeast",
+  sw: "southwest",
+  apt: "unit",
+  ste: "unit",
+  suite: "unit",
+  "#": "unit"
+};
+function addrFingerprint(raw) {
+  if (!raw) return "";
+  return String(raw).toLowerCase().replace(/[.,#]/g, " ").replace(/\s+/g, " ").trim().split(" ").map((w) => ADDR_WORDS[w] || w).filter((w) => w && !/^(oh|ohio|ky|kentucky|il|illinois|usa|us)$/.test(w)).join(" ");
+}
 function contactKey(job) {
   if (job.contactId) return job.contactId;
   const email = (job.email || "").trim().toLowerCase();
@@ -3645,8 +3788,18 @@ function buildContactDirectory(jobs) {
     }])).values())
   })).sort((a, b) => a.name.localeCompare(b.name));
 }
-function Contacts({ jobs, onBack, onOpenJob, onAddProject }) {
+function Contacts({ jobs, onBack, onOpenJob, onAddProject, currentUser, onDeleteJobs, toast: toast2 }) {
   const [q, setQ] = (0, import_react.useState)("");
+  const isAdmin = !!(currentUser && currentUser.role === "admin");
+  const [confirm, setConfirm] = (0, import_react.useState)(null);
+  const [typed, setTyped] = (0, import_react.useState)("");
+  const doDelete = () => {
+    if (!confirm) return;
+    onDeleteJobs(confirm.ids, confirm.label);
+    toast2 && toast2(confirm.ids.length === 1 ? "Project deleted" : confirm.ids.length + " projects deleted");
+    setConfirm(null);
+    setTyped("");
+  };
   const contacts = (0, import_react.useMemo)(() => buildContactDirectory(jobs), [jobs]);
   const needle = q.trim().toLowerCase();
   const list = contacts.filter((contact) => [contact.name, contact.phone, contact.email, ...contact.jobs.flatMap((j) => [j.address, j.intake?.reasonForCalling, ...j.intake?.workRequested || []])].filter(Boolean).join(" ").toLowerCase().includes(needle));
@@ -3694,31 +3847,115 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject }) {
               properties === 1 ? "y" : "ies"
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { borderTop: `1px solid ${S.line}`, marginTop: 13, paddingTop: 6 }, children: contact.jobs.map((job) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(job.id), style: {
-            width: "100%",
-            border: "none",
-            background: "none",
-            cursor: "pointer",
-            textAlign: "left",
-            padding: "9px 0",
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12
-          }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 13.5, fontWeight: 650, color: S.ink }, children: job.address }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 12, color: S.sub, marginTop: 2 }, children: (job.intake?.workRequested || []).join(", ") || job.claimType || "Project" })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { borderTop: `1px solid ${S.line}`, marginTop: 13, paddingTop: 6 }, children: contact.jobs.map((job) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(job.id), style: {
+              flex: 1,
+              minWidth: 0,
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              textAlign: "left",
+              padding: "9px 0",
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { minWidth: 0 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 13.5, fontWeight: 650, color: S.ink }, children: job.address }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 12, color: S.sub, marginTop: 2 }, children: (job.intake?.workRequested || []).join(", ") || job.claimType || "Project" })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 16, color: S.sub, style: { marginTop: 3, flexShrink: 0 } })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 16, color: S.sub, style: { marginTop: 3, flexShrink: 0 } })
+            isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "button",
+              {
+                "aria-label": "Delete " + job.address,
+                onClick: () => {
+                  setTyped("");
+                  setConfirm({ kind: "job", ids: [job.id], label: job.address });
+                },
+                style: {
+                  border: "none",
+                  background: "none",
+                  cursor: "pointer",
+                  padding: "8px 6px",
+                  flexShrink: 0,
+                  color: "#B3261E",
+                  lineHeight: 0
+                },
+                children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15 })
+              }
+            )
           ] }, job.id)) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { width: "100%", marginTop: 8 }, onClick: () => onAddProject(contact.id), children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
-            " Add another project"
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { flex: 1 }, onClick: () => onAddProject(contact.id), children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+              " Add another project"
+            ] }),
+            isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+              Btn,
+              {
+                kind: "ghost",
+                small: true,
+                onClick: () => {
+                  setTyped("");
+                  setConfirm({ kind: "contact", ids: contact.jobs.map((j) => j.id), label: contact.name });
+                },
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 13 }),
+                  " Delete customer"
+                ]
+              }
+            )
           ] })
         ] }) }, contact.id);
       }),
       list.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 18, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "No contacts match that search." }) })
-    ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      Sheet,
+      {
+        open: !!confirm,
+        onClose: () => {
+          setConfirm(null);
+          setTyped("");
+        },
+        title: confirm && confirm.kind === "contact" ? "Delete customer" : "Delete project",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => {
+            setConfirm(null);
+            setTyped("");
+          }, children: "Cancel" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            Btn,
+            {
+              "data-testid": "confirm-delete",
+              style: { flex: 1, background: "#B3261E", borderColor: "#B3261E" },
+              disabled: typed.trim().toUpperCase() !== "DELETE",
+              onClick: doDelete,
+              children: "Delete"
+            }
+          )
+        ] }),
+        children: confirm && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "This cannot be undone", tone: "red", children: [
+            confirm.kind === "contact" ? `Deleting ${confirm.label} removes all ${confirm.ids.length} of their projects, along with every note, photo, estimate, contract, task and message attached to them.` : `Deleting ${confirm.label} removes that project and every note, photo, estimate, contract, task and message attached to it.`,
+            " ",
+            "Published customer portals for these jobs stop working immediately."
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Type DELETE to confirm", hint: "Deliberately awkward \u2014 this is permanent.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: inputStyle,
+              value: typed,
+              onChange: (e) => setTyped(e.target.value),
+              autoCapitalize: "characters",
+              placeholder: "DELETE"
+            }
+          ) })
+        ] })
+      }
+    )
   ] });
 }
 function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LEAD_SOURCES, users = [], jobs = [], seed = null }) {
@@ -3830,6 +4067,12 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
   };
   const juris = jurisdictionForZip(f.zip);
   const canCreate = f.first.trim() && f.last.trim() && f.street.trim() && f.zip.trim();
+  const typedFp = addrFingerprint([f.street, f.city, f.zip].filter(Boolean).join(" "));
+  const dupes = !f.existingPropertyId && typedFp.length > 6 ? jobs.filter((j) => {
+    const fp = addrFingerprint([j.property?.street || j.address, j.property?.city, j.property?.zip || j.zip].filter(Boolean).join(" "));
+    return fp && fp === typedFp;
+  }) : [];
+  const dupBlocked = dupes.length > 0;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
     Sheet,
     {
@@ -3839,12 +4082,36 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
       wide: true,
       footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: onClose, children: "Cancel" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { "data-testid": "create-lead", style: { flex: 2 }, disabled: !canCreate || !f.leadSource, onClick: () => {
-          onCreate(f);
-          onClose();
-        }, children: "Create lead" })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Btn,
+          {
+            "data-testid": "create-lead",
+            style: { flex: 2 },
+            disabled: !canCreate || !f.leadSource || dupBlocked,
+            onClick: () => {
+              if (dupBlocked) return;
+              onCreate(f);
+              onClose();
+            },
+            children: dupBlocked ? "Duplicate address" : "Create lead"
+          }
+        )
       ] }),
       children: [
+        dupBlocked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: dupes.length === 1 ? "This address is already in Ridgeline" : "This address is already in Ridgeline " + dupes.length + " times", tone: "red", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginBottom: 8 }, children: "Saving is blocked so you do not end up with two records for the same roof." }),
+          dupes.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, marginBottom: 4 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: j.name }),
+            " \u2014 ",
+            j.address,
+            j.contact?.phone || j.phone ? ` \xB7 ${j.contact?.phone || j.phone}` : ""
+          ] }, j.id)),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, marginTop: 8 }, children: [
+            "If this really is a second project at the same address, choose",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: " Existing customer" }),
+            " above and pick the property from their list instead."
+          ] })
+        ] }),
         contacts.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: "#F7F8FA", border: `1px solid ${S.line}`, borderRadius: 12, padding: 12, margin: "4px 0 16px" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginBottom: f.contactMode === "existing" ? 10 : 0 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -4683,6 +4950,7 @@ var pill = {
 var JOB_TABS = [
   ["overview", "Overview"],
   ["checklist", "Checklist"],
+  ["ventilation", "Ventilation"],
   ["measure", "Measurements"],
   ["materials", "Materials"],
   ["estimate", "Estimate"],
@@ -4793,6 +5061,7 @@ function JobDetail({
         }
       ),
       tab === "checklist" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChecklist, { job, mut, toast: toast2 }),
+      tab === "ventilation" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabVentilation, { job, mut, toast: toast2 }),
       tab === "measure" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabMeasure, { job, mut, toast: toast2 }),
       tab === "materials" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabMaterials, { job, mut, toast: toast2 }),
       tab === "estimate" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -6596,6 +6865,182 @@ function PillGroup({ options, value, onPick, multi = false }) {
       touchAction: "manipulation"
     }, children: o }, o);
   }) });
+}
+var VENT_EXHAUST = [
+  { id: "oc-ventsure", label: "OC VentSure strip ridge vent", nfa: 18, per: "ft", note: "Owens Corning VentSure 4-ft strip \u2014 18 in\xB2/ft" },
+  { id: "oc-ventsure-rigid", label: "OC VentSure rigid roll", nfa: 12.5, per: "ft", note: "Rolled ridge product \u2014 12.5 in\xB2/ft" },
+  { id: "gaf-cobra3", label: "GAF Cobra Exhaust Vent III", nfa: 18, per: "ft", note: "GAF Cobra III \u2014 18 in\xB2/ft" },
+  { id: "gaf-snowcountry", label: "GAF Cobra SnowCountry", nfa: 13.7, per: "ft", note: "Cold-climate profile \u2014 13.7 in\xB2/ft" },
+  { id: "gaf-rigid", label: "GAF Cobra Rigid Vent 3", nfa: 18, per: "ft", note: "Rigid ridge vent \u2014 18 in\xB2/ft" },
+  { id: "box750", label: "Box vent (750 / slant back)", nfa: 50, per: "each", note: "Typical 50 in\xB2 each" },
+  { id: "box-large", label: "Box vent (large, 60 in\xB2)", nfa: 60, per: "each", note: "Larger box profile" },
+  { id: "turbine", label: "Turbine vent (12 in)", nfa: 113, per: "each", note: "Wind turbine \u2014 113 in\xB2 typical" },
+  { id: "powered", label: "Powered attic fan", nfa: 0, per: "each", note: "Rated in CFM, not NFA \u2014 excluded from the balance math" }
+];
+var VENT_INTAKE = [
+  { id: "soffit-cont", label: "Continuous perforated vinyl soffit", nfa: 9, per: "ft", note: "About 9 in\xB2/ft of run" },
+  { id: "soffit-alum", label: "Continuous perforated aluminium soffit", nfa: 7.5, per: "ft", note: "About 7.5 in\xB2/ft" },
+  { id: "soffit-panel", label: "Rectangular soffit vent 8 x 16", nfa: 56, per: "each", note: "56 in\xB2 each typical" },
+  { id: "soffit-plug", label: "Round soffit plug (2 in)", nfa: 3.1, per: "each", note: "3.1 in\xB2 each" },
+  { id: "edge-vent", label: "Roof-edge / drip-edge intake vent", nfa: 9, per: "ft", note: "Used where there is no soffit \u2014 about 9 in\xB2/ft" },
+  { id: "smart-vent", label: "Shingle-over intake vent", nfa: 9, per: "ft", note: "About 9 in\xB2/ft" }
+];
+function ventMath(v) {
+  const area = Number(v.atticSqFt) || 0;
+  const ratio = v.ratio === "300" ? 300 : 150;
+  const requiredIn2 = area > 0 ? area / ratio * 144 : 0;
+  const findEx = VENT_EXHAUST.find((x) => x.id === v.exhaustId) || VENT_EXHAUST[0];
+  const findIn = VENT_INTAKE.find((x) => x.id === v.intakeId) || VENT_INTAKE[0];
+  const exhaustIn2 = (Number(v.exhaustQty) || 0) * findEx.nfa;
+  const intakeIn2 = (Number(v.intakeQty) || 0) * findIn.nfa;
+  const totalIn2 = exhaustIn2 + intakeIn2;
+  const upperPct = totalIn2 > 0 ? exhaustIn2 / totalIn2 * 100 : 0;
+  const balanced = upperPct >= 40 && upperPct <= 60;
+  const effectiveRatio = ratio === 300 && !balanced ? 150 : ratio;
+  const effectiveRequired = area > 0 ? area / effectiveRatio * 144 : 0;
+  const meets = totalIn2 >= effectiveRequired && effectiveRequired > 0;
+  const shortfall = Math.max(0, effectiveRequired - totalIn2);
+  const starved = exhaustIn2 > 0 && intakeIn2 < exhaustIn2;
+  const half = effectiveRequired / 2;
+  const needExhaustUnits = findEx.nfa > 0 ? Math.ceil(half / findEx.nfa) : 0;
+  const needIntakeUnits = findIn.nfa > 0 ? Math.ceil(half / findIn.nfa) : 0;
+  return {
+    area,
+    ratio,
+    requiredIn2,
+    effectiveRatio,
+    effectiveRequired,
+    exhaustIn2,
+    intakeIn2,
+    totalIn2,
+    upperPct,
+    balanced,
+    meets,
+    shortfall,
+    starved,
+    findEx,
+    findIn,
+    needExhaustUnits,
+    needIntakeUnits,
+    half
+  };
+}
+function TabVentilation({ job, mut, toast: toast2 }) {
+  const v = job.ventilation || { atticSqFt: "", ratio: "150", exhaustId: "oc-ventsure", exhaustQty: "", intakeId: "soffit-cont", intakeQty: "" };
+  const set = (k) => (val) => mut((j) => ({ ...j, ventilation: { ...j.ventilation || v, [k]: val } }));
+  const m = ventMath(v);
+  const n1 = (x) => Math.round(x).toLocaleString();
+  const supplementText = () => {
+    const cite = "IRC / RCO R806.2";
+    return `Attic ventilation \u2014 ${n1(m.area)} sq ft ventilated area. Per ${cite}, required net free area at 1/${m.effectiveRatio} is ${n1(m.effectiveRequired)} in\xB2. Existing system provides ${n1(m.totalIn2)} in\xB2 (${n1(m.exhaustIn2)} in\xB2 exhaust, ${n1(m.intakeIn2)} in\xB2 intake). ` + (m.meets ? `System meets the required ratio.` : `System is short by ${n1(m.shortfall)} in\xB2. Reinstalling the existing non-compliant system on the new roof would violate code. Requested scope: ${m.needExhaustUnits} ${m.findEx.per === "ft" ? "LF" : "ea"} ${m.findEx.label} and ${m.needIntakeUnits} ${m.findIn.per === "ft" ? "LF" : "ea"} ${m.findIn.label}, plus baffles at each rafter bay where required. Ordinance & Law coverage applies where included in the policy.`) + (m.starved ? ` Note: intake is below exhaust, which starves the system and voids major shingle warranties regardless of total area.` : "");
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: m.area > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: m.meets ? "green" : "red", children: m.meets ? "Meets code" : "Short" }) : null, children: "Attic ventilation calculator" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: "Sizes intake and exhaust against the net-free-area ratio in R806.2 \u2014 the same rule the insurance hub cites when a carrier calls ventilation betterment." })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Attic" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Ventilated attic area (sq ft)", hint: "Attic floor area, not roof surface area.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: inputStyle,
+          inputMode: "decimal",
+          value: v.atticSqFt,
+          onChange: (e) => set("atticSqFt")(e.target.value),
+          placeholder: "e.g. 1800"
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Required ratio", hint: "1/300 is only allowed with a balanced system \u2014 40 to 60 percent of net free area in the upper portion.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["150", "300"], value: v.ratio, onPick: set("ratio") }) }),
+      v.ratio === "300" && !m.balanced && m.totalIn2 > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "1/300 does not apply here", tone: "amber", children: [
+        "The split is ",
+        Math.round(m.upperPct),
+        " percent upper, outside the 40 to 60 percent band, so 1/150 governs. The requirement below has been recalculated at 1/150."
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Exhaust (upper portion)" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Product", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: v.exhaustId, onChange: (e) => set("exhaustId")(e.target.value), children: VENT_EXHAUST.map((x) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: x.id, children: x.label }, x.id)) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: m.findEx.per === "ft" ? "Lineal feet installed" : "Units installed", hint: m.findEx.note, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: inputStyle,
+          inputMode: "decimal",
+          value: v.exhaustQty,
+          onChange: (e) => set("exhaustQty")(e.target.value),
+          placeholder: "0"
+        }
+      ) }),
+      m.findEx.nfa === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Powered fans are not counted", tone: "amber", children: "A powered fan is rated in CFM, not net free area, and mixing one with ridge vent short-circuits the airflow. It is excluded from the totals below." })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Intake (at the eaves)" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Product", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: v.intakeId, onChange: (e) => set("intakeId")(e.target.value), children: VENT_INTAKE.map((x) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: x.id, children: x.label }, x.id)) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: m.findIn.per === "ft" ? "Lineal feet installed" : "Units installed", hint: m.findIn.note, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: inputStyle,
+          inputMode: "decimal",
+          value: v.intakeQty,
+          onChange: (e) => set("intakeQty")(e.target.value),
+          placeholder: "0"
+        }
+      ) })
+    ] }),
+    m.area > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Result" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: `Required at 1/${m.effectiveRatio}`, v: `${n1(m.effectiveRequired)} in\xB2`, strong: true }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Exhaust provided", v: `${n1(m.exhaustIn2)} in\xB2` }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Intake provided", v: `${n1(m.intakeIn2)} in\xB2` }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Total provided", v: `${n1(m.totalIn2)} in\xB2`, strong: true }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Upper portion", v: `${Math.round(m.upperPct)}%` }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12 }, children: [
+        m.meets ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Meets the required ratio", tone: "green", children: [
+          n1(m.totalIn2),
+          " in\xB2 against ",
+          n1(m.effectiveRequired),
+          " in\xB2 required."
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: `Short by ${n1(m.shortfall)} in\xB2`, tone: "red", children: [
+          "To balance the system at half the requirement each side:",
+          " ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("strong", { children: [
+            m.needExhaustUnits,
+            " ",
+            m.findEx.per === "ft" ? "LF" : "ea"
+          ] }),
+          " of ",
+          m.findEx.label,
+          " and",
+          " ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("strong", { children: [
+            m.needIntakeUnits,
+            " ",
+            m.findIn.per === "ft" ? "LF" : "ea"
+          ] }),
+          " of ",
+          m.findIn.label,
+          "."
+        ] }),
+        m.starved && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Intake is below exhaust", tone: "red", children: "Exhaust that outruns intake pulls make-up air from the living space instead of the eaves. Intake should equal or exceed exhaust. This condition voids every major shingle warranty even when the total area passes." })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        Btn,
+        {
+          kind: "soft",
+          small: true,
+          style: { width: "100%", marginTop: 12 },
+          onClick: () => {
+            const t = supplementText();
+            if (navigator.clipboard) navigator.clipboard.writeText(t);
+            mut((j) => ({ ...j, ventilation: { ...j.ventilation || v, supplement: t } }));
+            toast2 && toast2("Supplement wording copied");
+          },
+          children: "Copy supplement wording"
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "Net-free-area figures are typical published values for these product families. Verify against the current data sheet before sending anything to a carrier \u2014 SKUs and profiles change." })
+    ] })
+  ] });
 }
 function TabChecklist({ job, mut, toast: toast2 }) {
   const c = job.checklist;
@@ -12844,7 +13289,8 @@ function SupremeCRM() {
           },
           brand: brand2,
           appointments,
-          apptTypes
+          apptTypes,
+          crews
         }
       )
     ] }) : nav === "jobs" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -12906,6 +13352,15 @@ function SupremeCRM() {
         jobs,
         onBack: () => setNav("more"),
         onOpenJob: openJobScreen,
+        currentUser: liveUser,
+        toast: toast2,
+        onDeleteJobs: (ids, label) => {
+          setJobs((prev) => prev.filter((j) => !ids.includes(j.id)));
+          logAct({
+            type: "delete",
+            text: `Deleted ${ids.length === 1 ? "project" : ids.length + " projects"}: ${label}`
+          });
+        },
         onAddProject: (contactId) => {
           setLeadSeed({ contactId });
           setNewLeadOpen(true);

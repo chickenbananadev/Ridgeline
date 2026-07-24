@@ -2081,7 +2081,7 @@ function Login({ brand, users, onLogin }) {
 /* ================================================================
    DASHBOARD
    ================================================================ */
-function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND, appointments = [], apptTypes = [] }) {
+function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND, appointments = [], apptTypes = [], crews = [] }) {
   const todayIso = new Date().toISOString().slice(0, 10);
   const todaysAppts = appointments
     .filter((ap) => ap.date === todayIso)
@@ -2218,6 +2218,91 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
           ))}
         </Card>
       )}
+
+      {/* Week ahead — the next seven days of appointments and crew
+          assignments, so the calendar and the dispatch board are answered
+          from the home screen instead of two taps away. */}
+      {(() => {
+        const days = [];
+        for (let i = 0; i < 7; i++) {
+          const dt = new Date();
+          dt.setHours(0, 0, 0, 0);
+          dt.setDate(dt.getDate() + i);
+          const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+          const appts = appointments.filter((ap) => ap.date === iso)
+            .map((ap) => ({ ap, job: jobs.find((j) => j.id === ap.jobId) }))
+            .sort((a, b) => String(a.ap.time || "99").localeCompare(String(b.ap.time || "99")));
+          const roofs = jobs.filter((j) => j.schedDate === iso);
+          if (appts.length || roofs.length) days.push({ iso, dt, appts, roofs, i });
+        }
+        const unassigned = jobs.filter((j) => j.schedDate && !j.crewId);
+        if (!days.length && !unassigned.length) return null;
+        const dayLabel = (d) => d.i === 0 ? "Today" : d.i === 1 ? "Tomorrow"
+          : d.dt.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+        return (
+          <Card style={{ marginTop: 16 }}>
+            <CardTitle right={<button style={linkBtn} onClick={() => go("dispatch")}>Dispatch →</button>}>Week ahead</CardTitle>
+            {!days.length && (
+              <div style={{ fontSize: 13, color: S.sub, paddingBottom: 4 }}>Nothing scheduled in the next seven days.</div>
+            )}
+            {days.map((d) => (
+              <div key={d.iso} style={{ borderTop: `1px solid ${S.line}`, padding: "9px 0 4px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: d.i === 0 ? T.accent : S.ink }}>{dayLabel(d)}</span>
+                  <span style={{ fontSize: 11.5, color: S.sub }}>
+                    {d.roofs.length ? `${d.roofs.length} on roofs` : ""}{d.roofs.length && d.appts.length ? " · " : ""}
+                    {d.appts.length ? `${d.appts.length} appt${d.appts.length === 1 ? "" : "s"}` : ""}
+                  </span>
+                </div>
+                {d.appts.map(({ ap, job }) => (
+                  <button key={ap.id} onClick={() => job && onOpenJob(job.id)} style={{
+                    display: "flex", gap: 9, alignItems: "center", width: "100%", textAlign: "left",
+                    border: "none", background: "none", cursor: "pointer", padding: "6px 0",
+                  }}>
+                    <span style={{
+                      minWidth: 62, fontSize: 11.5, fontWeight: 700, color: T.accent,
+                      background: T.accentSoft, borderRadius: 7, padding: "4px 0", textAlign: "center",
+                    }}>{ap.time ? fmtTime(ap.time) : "All day"}</span>
+                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: S.ink }}>{ap.title || ap.type || "Appointment"}</span>
+                      {job && <span style={{ fontSize: 11.5, color: S.sub }}> · {job.name}</span>}
+                    </span>
+                  </button>
+                ))}
+                {d.roofs.map((j) => {
+                  const cr = crews.find((c) => c.id === j.crewId);
+                  return (
+                    <button key={j.id} onClick={() => onOpenJob(j.id)} style={{
+                      display: "flex", gap: 9, alignItems: "center", width: "100%", textAlign: "left",
+                      border: "none", background: "none", cursor: "pointer", padding: "6px 0",
+                    }}>
+                      <span style={{
+                        minWidth: 62, fontSize: 11.5, fontWeight: 700,
+                        color: cr ? "#177245" : "#9A6B00", background: cr ? "#EAF6EE" : "#FFF6E5",
+                        border: `1px solid ${cr ? "#CDE8D6" : "#F0D9A8"}`,
+                        borderRadius: 7, padding: "4px 0", textAlign: "center",
+                      }}>{cr ? "Crew" : "No crew"}</span>
+                      <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: S.ink }}>{j.name}</span>
+                        <span style={{ fontSize: 11.5, color: S.sub }}> · {cr ? cr.name : "unassigned"}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+            {unassigned.length > 0 && (
+              <button onClick={() => go("dispatch")} style={{
+                display: "block", width: "100%", textAlign: "left", marginTop: 8,
+                border: "1px solid #F0D9A8", background: "#FFF6E5", borderRadius: 9,
+                padding: "9px 11px", cursor: "pointer", fontSize: 12.5, color: S.ink, fontFamily: "inherit",
+              }}>
+                <strong>{unassigned.length}</strong> scheduled {unassigned.length === 1 ? "roof has" : "roofs have"} no crew assigned — open dispatch
+              </button>
+            )}
+          </Card>
+        );
+      })()}
 
       {/* Pipeline at a glance — counts and dollars per stage, tap to filter the board */}
       <Card style={{ marginTop: 16 }}>
@@ -2976,6 +3061,31 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   );
 }
 
+/* Address fingerprint for duplicate detection. Strips punctuation,
+   folds common street-suffix and unit abbreviations, and drops the
+   state and country so "1247 Maple Ave." and "1247 Maple Avenue"
+   collide the way a human would expect. */
+const ADDR_WORDS = {
+  st: "street", str: "street", rd: "road", ave: "avenue", av: "avenue",
+  dr: "drive", ln: "lane", ct: "court", cir: "circle", blvd: "boulevard",
+  pkwy: "parkway", hwy: "highway", ter: "terrace", pl: "place", sq: "square",
+  n: "north", s: "south", e: "east", w: "west",
+  ne: "northeast", nw: "northwest", se: "southeast", sw: "southwest",
+  apt: "unit", ste: "unit", suite: "unit", "#": "unit",
+};
+function addrFingerprint(raw) {
+  if (!raw) return "";
+  return String(raw)
+    .toLowerCase()
+    .replace(/[.,#]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map((w) => ADDR_WORDS[w] || w)
+    .filter((w) => w && !/^(oh|ohio|ky|kentucky|il|illinois|usa|us)$/.test(w))
+    .join(" ");
+}
+
 function contactKey(job) {
   if (job.contactId) return job.contactId;
   const email = (job.email || "").trim().toLowerCase();
@@ -3021,8 +3131,19 @@ function buildContactDirectory(jobs) {
   })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function Contacts({ jobs, onBack, onOpenJob, onAddProject }) {
+function Contacts({ jobs, onBack, onOpenJob, onAddProject, currentUser, onDeleteJobs, toast }) {
   const [q, setQ] = useState("");
+  const isAdmin = !!(currentUser && currentUser.role === "admin");
+  /* { kind: "job"|"contact", ids: [], label: "" } — a confirmation step
+     that names what disappears, because this is not undoable. */
+  const [confirm, setConfirm] = useState(null);
+  const [typed, setTyped] = useState("");
+  const doDelete = () => {
+    if (!confirm) return;
+    onDeleteJobs(confirm.ids, confirm.label);
+    toast && toast(confirm.ids.length === 1 ? "Project deleted" : confirm.ids.length + " projects deleted");
+    setConfirm(null); setTyped("");
+  };
   const contacts = useMemo(() => buildContactDirectory(jobs), [jobs]);
   const needle = q.trim().toLowerCase();
   const list = contacts.filter((contact) =>
@@ -3061,23 +3182,43 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject }) {
               </div>
               <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 13, paddingTop: 6 }}>
                 {contact.jobs.map((job) => (
-                  <button key={job.id} onClick={() => onOpenJob(job.id)} style={{
-                    width: "100%", border: "none", background: "none", cursor: "pointer",
-                    textAlign: "left", padding: "9px 0", display: "flex", justifyContent: "space-between", gap: 12,
-                  }}>
-                    <span>
-                      <span style={{ display: "block", fontSize: 13.5, fontWeight: 650, color: S.ink }}>{job.address}</span>
-                      <span style={{ display: "block", fontSize: 12, color: S.sub, marginTop: 2 }}>
-                        {(job.intake?.workRequested || []).join(", ") || job.claimType || "Project"}
+                  <div key={job.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <button onClick={() => onOpenJob(job.id)} style={{
+                      flex: 1, minWidth: 0, border: "none", background: "none", cursor: "pointer",
+                      textAlign: "left", padding: "9px 0", display: "flex", justifyContent: "space-between", gap: 12,
+                    }}>
+                      <span style={{ minWidth: 0 }}>
+                        <span style={{ display: "block", fontSize: 13.5, fontWeight: 650, color: S.ink }}>{job.address}</span>
+                        <span style={{ display: "block", fontSize: 12, color: S.sub, marginTop: 2 }}>
+                          {(job.intake?.workRequested || []).join(", ") || job.claimType || "Project"}
+                        </span>
                       </span>
-                    </span>
-                    <ChevronRight size={16} color={S.sub} style={{ marginTop: 3, flexShrink: 0 }} />
-                  </button>
+                      <ChevronRight size={16} color={S.sub} style={{ marginTop: 3, flexShrink: 0 }} />
+                    </button>
+                    {isAdmin && (
+                      <button aria-label={"Delete " + job.address}
+                        onClick={() => { setTyped(""); setConfirm({ kind: "job", ids: [job.id], label: job.address }); }}
+                        style={{
+                          border: "none", background: "none", cursor: "pointer", padding: "8px 6px",
+                          flexShrink: 0, color: "#B3261E", lineHeight: 0,
+                        }}>
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
-              <Btn kind="soft" small style={{ width: "100%", marginTop: 8 }} onClick={() => onAddProject(contact.id)}>
-                <Plus size={13} /> Add another project
-              </Btn>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <Btn kind="soft" small style={{ flex: 1 }} onClick={() => onAddProject(contact.id)}>
+                  <Plus size={13} /> Add another project
+                </Btn>
+                {isAdmin && (
+                  <Btn kind="ghost" small
+                    onClick={() => { setTyped(""); setConfirm({ kind: "contact", ids: contact.jobs.map((j) => j.id), label: contact.name }); }}>
+                    <Trash2 size={13} /> Delete customer
+                  </Btn>
+                )}
+              </div>
             </div>
           </Card>
         );})}
@@ -3085,6 +3226,31 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject }) {
           <Card pad={18}><div style={{ fontSize: 13.5, color: S.sub }}>No contacts match that search.</div></Card>
         )}
       </div>
+
+      <Sheet open={!!confirm} onClose={() => { setConfirm(null); setTyped(""); }}
+        title={confirm && confirm.kind === "contact" ? "Delete customer" : "Delete project"}
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={() => { setConfirm(null); setTyped(""); }}>Cancel</Btn>
+            <Btn data-testid="confirm-delete" style={{ flex: 1, background: "#B3261E", borderColor: "#B3261E" }}
+              disabled={typed.trim().toUpperCase() !== "DELETE"} onClick={doDelete}>Delete</Btn>
+          </div>
+        }>
+        {confirm && (
+          <div>
+            <Callout label="This cannot be undone" tone="red">
+              {confirm.kind === "contact"
+                ? `Deleting ${confirm.label} removes all ${confirm.ids.length} of their projects, along with every note, photo, estimate, contract, task and message attached to them.`
+                : `Deleting ${confirm.label} removes that project and every note, photo, estimate, contract, task and message attached to it.`}
+              {" "}Published customer portals for these jobs stop working immediately.
+            </Callout>
+            <Field label="Type DELETE to confirm" hint="Deliberately awkward — this is permanent.">
+              <input style={inputStyle} value={typed} onChange={(e) => setTyped(e.target.value)}
+                autoCapitalize="characters" placeholder="DELETE" />
+            </Field>
+          </div>
+        )}
+      </Sheet>
     </div>
   );
 }
@@ -3157,14 +3323,48 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
   };
   const juris = jurisdictionForZip(f.zip);
   const canCreate = f.first.trim() && f.last.trim() && f.street.trim() && f.zip.trim();
+
+  /* Duplicate address guard. A property already selected from this
+     customer's own list is an intentional repeat project, not a
+     duplicate — only unrecognised addresses are checked. */
+  const typedFp = addrFingerprint([f.street, f.city, f.zip].filter(Boolean).join(" "));
+  const dupes = (!f.existingPropertyId && typedFp.length > 6)
+    ? jobs.filter((j) => {
+        const fp = addrFingerprint([j.property?.street || j.address, j.property?.city, j.property?.zip || j.zip].filter(Boolean).join(" "));
+        return fp && fp === typedFp;
+      })
+    : [];
+  const dupBlocked = dupes.length > 0;
+
   return (
     <Sheet open={open} onClose={onClose} title="New lead" wide
       footer={
         <div style={{ display: "flex", gap: 10 }}>
           <Btn kind="ghost" style={{ flex: 1 }} onClick={onClose}>Cancel</Btn>
-          <Btn data-testid="create-lead" style={{ flex: 2 }} disabled={!canCreate || !f.leadSource} onClick={() => { onCreate(f); onClose(); }}>Create lead</Btn>
+          <Btn data-testid="create-lead" style={{ flex: 2 }} disabled={!canCreate || !f.leadSource || dupBlocked}
+            onClick={() => { if (dupBlocked) return; onCreate(f); onClose(); }}>
+            {dupBlocked ? "Duplicate address" : "Create lead"}
+          </Btn>
         </div>
       }>
+      {dupBlocked && (
+        <Callout label={dupes.length === 1 ? "This address is already in Ridgeline" : "This address is already in Ridgeline " + dupes.length + " times"} tone="red">
+          <div style={{ marginBottom: 8 }}>
+            Saving is blocked so you do not end up with two records for the same roof.
+          </div>
+          {dupes.map((j) => (
+            <div key={j.id} style={{ fontSize: 12.5, marginBottom: 4 }}>
+              <strong>{j.name}</strong> — {j.address}
+              {j.contact?.phone || j.phone ? ` · ${j.contact?.phone || j.phone}` : ""}
+            </div>
+          ))}
+          <div style={{ fontSize: 12.5, marginTop: 8 }}>
+            If this really is a second project at the same address, choose
+            <strong> Existing customer</strong> above and pick the property
+            from their list instead.
+          </div>
+        </Callout>
+      )}
       {contacts.length > 0 && (
         <div style={{ background: "#F7F8FA", border: `1px solid ${S.line}`, borderRadius: 12, padding: 12, margin: "4px 0 16px" }}>
           <div style={{ display: "flex", gap: 8, marginBottom: f.contactMode === "existing" ? 10 : 0 }}>
@@ -3836,7 +4036,7 @@ const pill = {
    JOB DETAIL — tabbed workspace for a single job
    ================================================================ */
 const JOB_TABS = [
-  ["overview", "Overview"], ["checklist", "Checklist"], ["measure", "Measurements"],
+  ["overview", "Overview"], ["checklist", "Checklist"], ["ventilation", "Ventilation"], ["measure", "Measurements"],
   ["materials", "Materials"], ["estimate", "Estimate"], ["contract", "Contract"],
   ["report", "Report"], ["messages", "Messages"],
   ["photos", "Photos"], ["financials", "Financials"],
@@ -3891,6 +4091,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
         {tab === "overview" && <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand}
           currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} />}
         {tab === "checklist" && <TabChecklist job={job} mut={mut} toast={toast} />}
+        {tab === "ventilation" && <TabVentilation job={job} mut={mut} toast={toast} />}
         {tab === "measure" && <TabMeasure job={job} mut={mut} toast={toast} />}
         {tab === "materials" && <TabMaterials job={job} mut={mut} toast={toast} />}
         {tab === "estimate" && <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
@@ -5597,6 +5798,204 @@ function PillGroup({ options, value, onPick, multi = false }) {
         );
       })}
     </div>
+  );
+}
+
+
+/* ==================================================================
+   ATTIC VENTILATION CALCULATOR
+
+   Sizes intake and exhaust against the net-free-area ratio in
+   IRC/RCO R806.2, the same rule the insurance hub cites: 1/150 of the
+   ventilated attic area by default, or 1/300 only where a balanced
+   system puts 40-60 percent of the net free area in the upper portion
+   with the balance at the eaves.
+
+   NFA figures below are typical published values for the named
+   product families. They are close enough to size a job and to write
+   a supplement, but SKUs change — the screen says so, and anything
+   going to a carrier should be checked against the current data
+   sheet. Nothing here is a manufacturer endorsement or a warranty
+   determination.
+================================================================== */
+const VENT_EXHAUST = [
+  { id: "oc-ventsure", label: "OC VentSure strip ridge vent", nfa: 18, per: "ft", note: "Owens Corning VentSure 4-ft strip — 18 in²/ft" },
+  { id: "oc-ventsure-rigid", label: "OC VentSure rigid roll", nfa: 12.5, per: "ft", note: "Rolled ridge product — 12.5 in²/ft" },
+  { id: "gaf-cobra3", label: "GAF Cobra Exhaust Vent III", nfa: 18, per: "ft", note: "GAF Cobra III — 18 in²/ft" },
+  { id: "gaf-snowcountry", label: "GAF Cobra SnowCountry", nfa: 13.7, per: "ft", note: "Cold-climate profile — 13.7 in²/ft" },
+  { id: "gaf-rigid", label: "GAF Cobra Rigid Vent 3", nfa: 18, per: "ft", note: "Rigid ridge vent — 18 in²/ft" },
+  { id: "box750", label: "Box vent (750 / slant back)", nfa: 50, per: "each", note: "Typical 50 in² each" },
+  { id: "box-large", label: "Box vent (large, 60 in²)", nfa: 60, per: "each", note: "Larger box profile" },
+  { id: "turbine", label: "Turbine vent (12 in)", nfa: 113, per: "each", note: "Wind turbine — 113 in² typical" },
+  { id: "powered", label: "Powered attic fan", nfa: 0, per: "each", note: "Rated in CFM, not NFA — excluded from the balance math" },
+];
+const VENT_INTAKE = [
+  { id: "soffit-cont", label: "Continuous perforated vinyl soffit", nfa: 9, per: "ft", note: "About 9 in²/ft of run" },
+  { id: "soffit-alum", label: "Continuous perforated aluminium soffit", nfa: 7.5, per: "ft", note: "About 7.5 in²/ft" },
+  { id: "soffit-panel", label: "Rectangular soffit vent 8 x 16", nfa: 56, per: "each", note: "56 in² each typical" },
+  { id: "soffit-plug", label: "Round soffit plug (2 in)", nfa: 3.1, per: "each", note: "3.1 in² each" },
+  { id: "edge-vent", label: "Roof-edge / drip-edge intake vent", nfa: 9, per: "ft", note: "Used where there is no soffit — about 9 in²/ft" },
+  { id: "smart-vent", label: "Shingle-over intake vent", nfa: 9, per: "ft", note: "About 9 in²/ft" },
+];
+
+function ventMath(v) {
+  const area = Number(v.atticSqFt) || 0;
+  const ratio = v.ratio === "300" ? 300 : 150;
+  const requiredIn2 = area > 0 ? (area / ratio) * 144 : 0;
+  const findEx = VENT_EXHAUST.find((x) => x.id === v.exhaustId) || VENT_EXHAUST[0];
+  const findIn = VENT_INTAKE.find((x) => x.id === v.intakeId) || VENT_INTAKE[0];
+  const exhaustIn2 = (Number(v.exhaustQty) || 0) * findEx.nfa;
+  const intakeIn2 = (Number(v.intakeQty) || 0) * findIn.nfa;
+  const totalIn2 = exhaustIn2 + intakeIn2;
+  const upperPct = totalIn2 > 0 ? (exhaustIn2 / totalIn2) * 100 : 0;
+  /* The 1/300 reduction is only available with a balanced system. If
+     the split is outside 40-60 percent upper, 1/150 governs whatever
+     the user picked. */
+  const balanced = upperPct >= 40 && upperPct <= 60;
+  const effectiveRatio = ratio === 300 && !balanced ? 150 : ratio;
+  const effectiveRequired = area > 0 ? (area / effectiveRatio) * 144 : 0;
+  const meets = totalIn2 >= effectiveRequired && effectiveRequired > 0;
+  const shortfall = Math.max(0, effectiveRequired - totalIn2);
+  /* Intake starvation: exhaust that outruns intake pulls air from the
+     living space instead of the eaves. Intake should equal or exceed
+     exhaust. */
+  const starved = exhaustIn2 > 0 && intakeIn2 < exhaustIn2;
+  const half = effectiveRequired / 2;
+  const needExhaustUnits = findEx.nfa > 0 ? Math.ceil(half / findEx.nfa) : 0;
+  const needIntakeUnits = findIn.nfa > 0 ? Math.ceil(half / findIn.nfa) : 0;
+  return {
+    area, ratio, requiredIn2, effectiveRatio, effectiveRequired, exhaustIn2, intakeIn2,
+    totalIn2, upperPct, balanced, meets, shortfall, starved, findEx, findIn,
+    needExhaustUnits, needIntakeUnits, half,
+  };
+}
+
+function TabVentilation({ job, mut, toast }) {
+  const v = job.ventilation || { atticSqFt: "", ratio: "150", exhaustId: "oc-ventsure", exhaustQty: "", intakeId: "soffit-cont", intakeQty: "" };
+  const set = (k) => (val) => mut((j) => ({ ...j, ventilation: { ...(j.ventilation || v), [k]: val } }));
+  const m = ventMath(v);
+  const n1 = (x) => Math.round(x).toLocaleString();
+
+  const supplementText = () => {
+    const cite = "IRC / RCO R806.2";
+    return `Attic ventilation — ${n1(m.area)} sq ft ventilated area. Per ${cite}, required net free area at 1/${m.effectiveRatio} is ${n1(m.effectiveRequired)} in². `
+      + `Existing system provides ${n1(m.totalIn2)} in² (${n1(m.exhaustIn2)} in² exhaust, ${n1(m.intakeIn2)} in² intake). `
+      + (m.meets
+        ? `System meets the required ratio.`
+        : `System is short by ${n1(m.shortfall)} in². Reinstalling the existing non-compliant system on the new roof would violate code. `
+          + `Requested scope: ${m.needExhaustUnits} ${m.findEx.per === "ft" ? "LF" : "ea"} ${m.findEx.label} and ${m.needIntakeUnits} ${m.findIn.per === "ft" ? "LF" : "ea"} ${m.findIn.label}, plus baffles at each rafter bay where required. `
+          + `Ordinance & Law coverage applies where included in the policy.`)
+      + (m.starved ? ` Note: intake is below exhaust, which starves the system and voids major shingle warranties regardless of total area.` : "");
+  };
+
+  return (
+    <>
+      <Card>
+        <CardTitle right={m.area > 0 ? <Chip tone={m.meets ? "green" : "red"}>{m.meets ? "Meets code" : "Short"}</Chip> : null}>
+          Attic ventilation calculator
+        </CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+          Sizes intake and exhaust against the net-free-area ratio in R806.2 —
+          the same rule the insurance hub cites when a carrier calls
+          ventilation betterment.
+        </div>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Attic</CardTitle>
+        <Field label="Ventilated attic area (sq ft)" hint="Attic floor area, not roof surface area.">
+          <input style={inputStyle} inputMode="decimal" value={v.atticSqFt}
+            onChange={(e) => set("atticSqFt")(e.target.value)} placeholder="e.g. 1800" />
+        </Field>
+        <Field label="Required ratio" hint="1/300 is only allowed with a balanced system — 40 to 60 percent of net free area in the upper portion.">
+          <PillGroup options={["150", "300"]} value={v.ratio} onPick={set("ratio")} />
+        </Field>
+        {v.ratio === "300" && !m.balanced && m.totalIn2 > 0 && (
+          <Callout label="1/300 does not apply here" tone="amber">
+            The split is {Math.round(m.upperPct)} percent upper, outside the 40
+            to 60 percent band, so 1/150 governs. The requirement below has
+            been recalculated at 1/150.
+          </Callout>
+        )}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Exhaust (upper portion)</CardTitle>
+        <Field label="Product">
+          <select style={selStyle} value={v.exhaustId} onChange={(e) => set("exhaustId")(e.target.value)}>
+            {VENT_EXHAUST.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+          </select>
+        </Field>
+        <Field label={m.findEx.per === "ft" ? "Lineal feet installed" : "Units installed"} hint={m.findEx.note}>
+          <input style={inputStyle} inputMode="decimal" value={v.exhaustQty}
+            onChange={(e) => set("exhaustQty")(e.target.value)} placeholder="0" />
+        </Field>
+        {m.findEx.nfa === 0 && (
+          <Callout label="Powered fans are not counted" tone="amber">
+            A powered fan is rated in CFM, not net free area, and mixing one
+            with ridge vent short-circuits the airflow. It is excluded from
+            the totals below.
+          </Callout>
+        )}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Intake (at the eaves)</CardTitle>
+        <Field label="Product">
+          <select style={selStyle} value={v.intakeId} onChange={(e) => set("intakeId")(e.target.value)}>
+            {VENT_INTAKE.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+          </select>
+        </Field>
+        <Field label={m.findIn.per === "ft" ? "Lineal feet installed" : "Units installed"} hint={m.findIn.note}>
+          <input style={inputStyle} inputMode="decimal" value={v.intakeQty}
+            onChange={(e) => set("intakeQty")(e.target.value)} placeholder="0" />
+        </Field>
+      </Card>
+
+      {m.area > 0 && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle>Result</CardTitle>
+          <KV k={`Required at 1/${m.effectiveRatio}`} v={`${n1(m.effectiveRequired)} in²`} strong />
+          <KV k="Exhaust provided" v={`${n1(m.exhaustIn2)} in²`} />
+          <KV k="Intake provided" v={`${n1(m.intakeIn2)} in²`} />
+          <KV k="Total provided" v={`${n1(m.totalIn2)} in²`} strong />
+          <KV k="Upper portion" v={`${Math.round(m.upperPct)}%`} />
+          <div style={{ marginTop: 12 }}>
+            {m.meets
+              ? <Callout label="Meets the required ratio" tone="green">
+                  {n1(m.totalIn2)} in² against {n1(m.effectiveRequired)} in² required.
+                </Callout>
+              : <Callout label={`Short by ${n1(m.shortfall)} in²`} tone="red">
+                  To balance the system at half the requirement each side:{" "}
+                  <strong>{m.needExhaustUnits} {m.findEx.per === "ft" ? "LF" : "ea"}</strong> of {m.findEx.label} and{" "}
+                  <strong>{m.needIntakeUnits} {m.findIn.per === "ft" ? "LF" : "ea"}</strong> of {m.findIn.label}.
+                </Callout>}
+            {m.starved && (
+              <Callout label="Intake is below exhaust" tone="red">
+                Exhaust that outruns intake pulls make-up air from the living
+                space instead of the eaves. Intake should equal or exceed
+                exhaust. This condition voids every major shingle warranty
+                even when the total area passes.
+              </Callout>
+            )}
+          </div>
+          <Btn kind="soft" small style={{ width: "100%", marginTop: 12 }}
+            onClick={() => {
+              const t = supplementText();
+              if (navigator.clipboard) navigator.clipboard.writeText(t);
+              mut((j) => ({ ...j, ventilation: { ...(j.ventilation || v), supplement: t } }));
+              toast && toast("Supplement wording copied");
+            }}>
+            Copy supplement wording
+          </Btn>
+          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
+            Net-free-area figures are typical published values for these
+            product families. Verify against the current data sheet before
+            sending anything to a carrier — SKUs and profiles change.
+          </div>
+        </Card>
+      )}
+    </>
   );
 }
 
@@ -11211,7 +11610,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav}
             onNewLead={() => { setLeadSeed(null); setNewLeadOpen(true); }} onQuickTask={() => setQuickTaskOpen(true)}
             onOpenStage={(id) => { setBoardStage(id); setNav("jobs"); }} brand={brand}
-            appointments={appointments} apptTypes={apptTypes} />
+            appointments={appointments} apptTypes={apptTypes} crews={crews} />
         </>
       ) : nav === "jobs" ? (
         <JobBoard jobs={jobs} stages={stages} filters={filters}
@@ -11235,6 +11634,16 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onQueueMessage={(jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))} />
       ) : nav === "contacts" ? (
         <Contacts jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}
+          currentUser={liveUser} toast={toast}
+          onDeleteJobs={(ids, label) => {
+            /* Removing the rows here is enough — the sync layer diffs the
+               jobs array and issues the matching crm_jobs delete. */
+            setJobs((prev) => prev.filter((j) => !ids.includes(j.id)));
+            logAct({
+              type: "delete",
+              text: `Deleted ${ids.length === 1 ? "project" : ids.length + " projects"}: ${label}`,
+            });
+          }}
           onAddProject={(contactId) => { setLeadSeed({ contactId }); setNewLeadOpen(true); }} />
       ) : nav === "reviews" ? (
         <ReviewSettings settings={reviewSettings} setSettings={setReviewSettings} jobs={jobs}
