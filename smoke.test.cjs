@@ -48,8 +48,9 @@ const bodyLen = () => document.body.textContent.length;
   clickText("Jobs"); // nav
   clickText("More");
   console.log("more:", bodyLen());
-  for (const m of ["Activity feed","Team chat","Insurance","Performance","Calendar","Contacts","Team & seats","Crews","Documents","Price list","Message templates","Integrations","Import jobs","Lead sources","Vendors","Review automation","Company branding"]) {
+  for (const m of ["Activity feed","Calls & attribution","Dispatch board","Purchase orders","Warranties","Team chat","Insurance","Performance","Calendar","Contacts","Team & seats","Crews","Documents","Price list","Message templates","Integrations","Import jobs","Lead sources","Vendors","Review automation","Company branding"]) {
     clickText("More");
+    clickText("COMPANY"); clickText("SETUP");
     clickText(m);
     console.log(`screen ${m}:`, bodyLen());
   }
@@ -61,7 +62,7 @@ const bodyLen = () => document.body.textContent.length;
   console.log("new lead sheet:", bodyLen());
 
   // --- team chat: send a mentioned + job-tagged message (regressions: TDZ crash, blank page) ---
-  clickText("More"); clickText("Team chat");
+  clickText("More"); clickText("COMPANY"); clickText("SETUP"); clickText("Team chat");
   const ta = document.querySelector("textarea");
   if (ta) {
     const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;

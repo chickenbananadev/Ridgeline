@@ -2067,7 +2067,7 @@ function Login({ brand, users, onLogin }) {
 /* ================================================================
    DASHBOARD
    ================================================================ */
-function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage }) {
+function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND }) {
   const totalPipeline = jobs.filter((j) => !DEAD_STAGES.includes(j.stageId) && j.stageId !== "s10").reduce((s, j) => s + j.value, 0);
   const stale = jobs.filter((j) => j.daysInStage >= 14 && !["s10","s11","s12"].includes(j.stageId));
   const approvedPlus = jobs.filter((j) => WON_STAGES.includes(j.stageId));
@@ -2084,11 +2084,25 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
 
   return (
     <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
-      <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>
-        Welcome back, {userName.split(" ")[0]}
-      </div>
-      <div style={{ fontSize: 14, color: S.sub, marginTop: 4 }}>
-        {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>
+            Welcome back, {userName.split(" ")[0]}
+          </div>
+          <div style={{ fontSize: 14, color: S.sub, marginTop: 4 }}>
+            {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+          </div>
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0, maxWidth: 130 }}>
+          {brand.logo
+            ? <img src={brand.logo} alt={brand.company} style={{ height: 40, maxWidth: 130, objectFit: "contain", display: "block", marginLeft: "auto" }} />
+            : <div style={{ fontSize: 14, fontWeight: 800, color: T.primary }}>{brand.short}</div>}
+          {brand.address && (
+            <div style={{ fontSize: 10, color: S.sub, marginTop: 3, lineHeight: 1.35 }}>
+              {String(brand.address).split(",")[1] ? String(brand.address).split(",").slice(-2).join(",").trim() : brand.address}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Pipeline at a glance — counts and dollars per stage, tap to filter the board */}
@@ -3501,6 +3515,8 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
         </Field>
       </Card>
 
+      <WarrantyCard job={job} mut={mut} />
+
       <Card style={{ marginBottom: 12 }}>
         <CardTitle>Notes & updates</CardTitle>
         <textarea style={{ ...inputStyle, minHeight: 64, resize: "vertical", fontFamily: "inherit" }}
@@ -4308,6 +4324,453 @@ function SystemCheck({ currentUser, onBack }) {
           const txt = rows.map((r) => `${r.ok ? "OK  " : "FAIL"} ${r.label} — ${r.detail}`).join("\n");
           if (navigator.clipboard) navigator.clipboard.writeText(txt);
         }}>Copy results</Btn>
+      )}
+    </div>
+  );
+}
+
+const MFR_WARRANTIES = ["GAF System Plus", "GAF Golden Pledge", "OC Platinum", "OC Preferred", "CertainTeed SureStart", "CertainTeed 5-Star", "Atlas Signature Select", "IKO Pro4", "Standard material only", "Other"];
+
+function warrantyEnd(installDate, years) {
+  if (!installDate || !years) return null;
+  const d = new Date(installDate + "T00:00:00");
+  if (isNaN(d)) return null;
+  d.setFullYear(d.getFullYear() + Number(years));
+  return d.toISOString().slice(0, 10);
+}
+
+function WarrantyCard({ job, mut }) {
+  const w = job.warranty || {};
+  const set = (k, v) => mut((j) => ({ ...j, warranty: { ...(j.warranty || {}), [k]: v } }));
+  const laborEnd = warrantyEnd(w.installDate, w.laborYears);
+  const expired = laborEnd && laborEnd < new Date().toISOString().slice(0, 10);
+  return (
+    <Card style={{ marginBottom: 12 }}>
+      <CardTitle right={laborEnd && (
+        <Chip tone={expired ? "red" : "green"}>{expired ? "Labor expired" : `Labor thru ${laborEnd}`}</Chip>
+      )}>Warranty</CardTitle>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Field label="Install date">
+          <input style={inputStyle} type="date" value={w.installDate || ""} onChange={(e) => set("installDate", e.target.value)} />
+        </Field>
+        <Field label="Labor warranty (years)">
+          <select style={selStyle} value={w.laborYears || ""} onChange={(e) => set("laborYears", e.target.value)}>
+            <option value="">—</option>
+            {[1, 2, 3, 5, 10, 15, 25].map((n) => <option key={n} value={n}>{n} year{n > 1 ? "s" : ""}</option>)}
+          </select>
+        </Field>
+      </div>
+      <Field label="Manufacturer warranty">
+        <select style={selStyle} value={w.mfr || ""} onChange={(e) => set("mfr", e.target.value)}>
+          <option value="">Select…</option>
+          {MFR_WARRANTIES.map((m) => <option key={m}>{m}</option>)}
+        </select>
+      </Field>
+      <Field label="Registration number (optional)">
+        <input style={inputStyle} value={w.registration || ""} placeholder="From the manufacturer's confirmation"
+          onChange={(e) => set("registration", e.target.value)} />
+      </Field>
+    </Card>
+  );
+}
+
+function WarrantyCenter({ jobs, onOpenJob, onBack }) {
+  const [q, setQ] = useState("");
+  const [mfr, setMfr] = useState("All");
+  const [status, setStatus] = useState("All");
+  const today = new Date().toISOString().slice(0, 10);
+  const soon = new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10);
+  const rows = jobs
+    .filter((j) => j.warranty && (j.warranty.installDate || j.warranty.mfr))
+    .map((j) => {
+      const w = j.warranty;
+      const laborEnd = warrantyEnd(w.installDate, w.laborYears);
+      const st = !laborEnd ? "No labor term"
+        : laborEnd < today ? "Expired"
+        : laborEnd < soon ? "Expiring soon" : "Active";
+      return { j, w, laborEnd, st };
+    })
+    .filter((r) => mfr === "All" || (r.w.mfr || "") === mfr)
+    .filter((r) => status === "All" || r.st === status)
+    .filter((r) => !q.trim() || (r.j.name + " " + r.j.address).toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) => String(a.laborEnd || "9999").localeCompare(String(b.laborEnd || "9999")));
+  const mfrs = ["All", ...new Set(jobs.map((j) => j.warranty && j.warranty.mfr).filter(Boolean))];
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Warranties" onBack={onBack} />
+      <div style={{ fontSize: 13, color: S.sub, margin: "10px 0 12px", lineHeight: 1.5 }}>
+        Every roof with a warranty on record. Set them on the job's Overview tab once the install is done.
+      </div>
+      <input style={{ ...inputStyle, marginBottom: 10 }} placeholder="Search name or address…"
+        value={q} onChange={(e) => setQ(e.target.value)} />
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <select style={{ ...selStyle, flex: 1 }} value={mfr} onChange={(e) => setMfr(e.target.value)}>
+          {mfrs.map((m) => <option key={m}>{m}</option>)}
+        </select>
+        <select style={{ ...selStyle, flex: 1 }} value={status} onChange={(e) => setStatus(e.target.value)}>
+          {["All", "Active", "Expiring soon", "Expired", "No labor term"].map((x) => <option key={x}>{x}</option>)}
+        </select>
+      </div>
+      {rows.length === 0 && (
+        <Card><div style={{ fontSize: 14, color: S.sub }}>No warranties on record match.</div></Card>
+      )}
+      {rows.map(({ j, w, laborEnd, st }) => (
+        <Card key={j.id} pad={14} style={{ marginTop: 8 }}>
+          <button onClick={() => onOpenJob(j.id)} style={{ width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{j.name}</div>
+              <Chip tone={st === "Expired" ? "red" : st === "Expiring soon" ? "amber" : st === "Active" ? "green" : "gray"}>{st}</Chip>
+            </div>
+            <div style={{ fontSize: 12.5, color: S.sub, marginTop: 3 }}>{j.address}</div>
+            <div style={{ fontSize: 12.5, color: S.sub, marginTop: 6 }}>
+              Installed {w.installDate || "—"}{laborEnd ? ` · labor through ${laborEnd}` : ""}{w.mfr ? ` · ${w.mfr}` : ""}
+              {w.registration ? ` · reg ${w.registration}` : ""}
+            </div>
+          </button>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast }) {
+  const [weekStart, setWeekStart] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday
+    d.setHours(0, 0, 0, 0); return d;
+  });
+  const [assigning, setAssigning] = useState(null); // job being scheduled
+  const days = [...Array(7)].map((_, i) => { const d = new Date(weekStart); d.setDate(d.getDate() + i); return d; });
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const today = iso(new Date());
+  const activeCrews = crews.filter((c) => c.active !== false);
+  const cellJobs = (crewId, d) => jobs.filter((j) => j.crewId === crewId && j.schedDate === iso(d));
+  const unscheduled = jobs.filter((j) =>
+    ["s7", "s8"].includes(j.stageId) ? (!j.schedDate || !j.crewId) : (j.schedDate && !j.crewId));
+  const fmtDay = (d) => d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" });
+  const shiftWeek = (n) => setWeekStart((w) => { const d = new Date(w); d.setDate(d.getDate() + n * 7); return d; });
+  const assign = (crewId, d) => {
+    if (!assigning) return;
+    mutJob(assigning.id, (j) => ({ ...j, crewId, schedDate: iso(d) }));
+    toast(`${assigning.name} → ${(activeCrews.find((c) => c.id === crewId) || {}).name} on ${fmtDay(d)}`);
+    setAssigning(null);
+  };
+  return (
+    <div style={{ padding: "16px 0 110px", background: S.bg, minHeight: "100vh" }}>
+      <div style={{ padding: "0 16px" }}>
+        <SubHeader title="Dispatch" onBack={onBack}
+          right={
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <Btn small kind="ghost" onClick={() => shiftWeek(-1)}><ChevronLeft size={15} /></Btn>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: S.ink, whiteSpace: "nowrap" }}>
+                {days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – {days[6].toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+              </span>
+              <Btn small kind="ghost" onClick={() => shiftWeek(1)}><ChevronRight size={15} /></Btn>
+            </div>
+          } />
+        {assigning && (
+          <div style={{ marginTop: 10, background: T.accentSoft, border: `1.5px solid ${T.accent}`, borderRadius: 11, padding: "10px 13px", fontSize: 13, color: T.accent, fontWeight: 600 }}>
+            Placing <b>{assigning.name}</b> — tap a crew's day below.
+            <button onClick={() => setAssigning(null)} style={{ ...linkBtn, marginLeft: 10, color: T.accent }}>Cancel</button>
+          </div>
+        )}
+      </div>
+
+      <div style={{ overflowX: "auto", marginTop: 12, WebkitOverflowScrolling: "touch" }}>
+        <div style={{ minWidth: 120 + 7 * 118, padding: "0 16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: `112px repeat(7, 110px)`, gap: 6 }}>
+            <div />
+            {days.map((d) => (
+              <div key={iso(d)} style={{
+                textAlign: "center", fontSize: 12, fontWeight: 800, padding: "6px 0", borderRadius: 8,
+                color: iso(d) === today ? "#fff" : S.sub, background: iso(d) === today ? T.accent : "transparent",
+              }}>{fmtDay(d)}</div>
+            ))}
+            {activeCrews.map((c) => (
+              <React.Fragment key={c.id}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: S.ink, padding: "10px 4px 0", lineHeight: 1.3 }}>
+                  {c.name}
+                  <div style={{ fontSize: 10.5, fontWeight: 500, color: S.sub }}>{(c.trades || []).slice(0, 2).join(", ")}</div>
+                </div>
+                {days.map((d) => {
+                  const here = cellJobs(c.id, d);
+                  return (
+                    <button key={iso(d)} onClick={() => assigning ? assign(c.id, d) : undefined}
+                      style={{
+                        minHeight: 62, border: `1.5px ${assigning ? "dashed " + T.accent : "solid " + S.line}`,
+                        background: "#fff", borderRadius: 10, padding: 4, cursor: assigning ? "pointer" : "default",
+                        display: "flex", flexDirection: "column", gap: 3, textAlign: "left",
+                      }}>
+                      {here.map((j) => (
+                        <span key={j.id} onClick={(e) => { if (!assigning) { e.stopPropagation(); onOpenJob(j.id); } }}
+                          style={{
+                            background: T.accentSoft, color: T.accent, borderRadius: 7, padding: "4px 6px",
+                            fontSize: 10.5, fontWeight: 700, lineHeight: 1.25, cursor: "pointer",
+                            overflow: "hidden", display: "block",
+                          }}>
+                          {j.name}
+                        </span>
+                      ))}
+                    </button>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ padding: "16px 16px 0" }}>
+        <Card>
+          <CardTitle>Needs scheduling ({unscheduled.length})</CardTitle>
+          {unscheduled.length === 0 && <div style={{ fontSize: 13.5, color: S.sub }}>Everything in production is placed.</div>}
+          {unscheduled.map((j) => (
+            <div key={j.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderTop: `1px solid ${S.line}` }}>
+              <button onClick={() => onOpenJob(j.id)} style={{ border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{j.name}</div>
+                <div style={{ fontSize: 12, color: S.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {j.address}{j.schedDate ? ` · ${j.schedDate} (no crew)` : ""}
+                </div>
+              </button>
+              <Btn small kind={assigning && assigning.id === j.id ? "primary" : "ghost"}
+                onClick={() => setAssigning(assigning && assigning.id === j.id ? null : j)}>
+                {assigning && assigning.id === j.id ? "Placing…" : "Place"}
+              </Btn>
+            </div>
+          ))}
+        </Card>
+        <div style={{ fontSize: 12, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
+          Tap Place on a job, then tap the crew and day it belongs to. Jobs land here once they reach Approved or
+          Scheduled without a crew and date.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const PO_STATUSES = ["Draft", "Ordered", "Partially received", "Received", "Reconciled"];
+
+function PurchaseOrders({ jobs, mutJob, vendors, onOpenJob, onBack, toast, currentUser }) {
+  const [editing, setEditing] = useState(null); // {jobId, po} or null
+  const [statusFilter, setStatusFilter] = useState("Open");
+  const allPos = jobs.flatMap((j) => (j.pos || []).map((po) => ({ job: j, po })));
+  const shown = allPos.filter(({ po }) =>
+    statusFilter === "All" ? true :
+    statusFilter === "Open" ? po.status !== "Reconciled" :
+    po.status === statusFilter);
+  const savePo = (jobId, po) => {
+    mutJob(jobId, (j) => ({
+      ...j,
+      pos: (j.pos || []).some((x) => x.id === po.id)
+        ? (j.pos || []).map((x) => (x.id === po.id ? po : x))
+        : [...(j.pos || []), po],
+    }));
+  };
+  const receiveLine = (jobId, po, lineId) => {
+    const lines = po.lines.map((l) => (l.id === lineId ? { ...l, received: !l.received, receivedAt: !l.received ? new Date().toISOString().slice(0, 10) : null } : l));
+    const allIn = lines.every((l) => l.received);
+    const someIn = lines.some((l) => l.received);
+    const status = allIn ? "Received" : someIn ? "Partially received" : po.status === "Draft" ? "Draft" : "Ordered";
+    const next = { ...po, lines, status };
+    savePo(jobId, next);
+    setEditing({ jobId, po: next });
+  };
+  const startNew = (job) => setEditing({
+    jobId: job.id,
+    po: { id: uid("po"), number: `PO-${new Date().getFullYear()}-${String(allPos.length + 1).padStart(3, "0")}`,
+      vendorId: "", status: "Draft", createdAt: new Date().toISOString().slice(0, 10),
+      by: currentUser.name, lines: [], notes: "" },
+  });
+  const [pickJob, setPickJob] = useState(false);
+  const e = editing;
+  const eJob = e ? jobs.find((j) => j.id === e.jobId) : null;
+  const setPo = (patch) => setEditing({ ...e, po: { ...e.po, ...patch } });
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Purchase orders" onBack={onBack}
+        right={<Btn small onClick={() => setPickJob(true)}><Plus size={14} /> New PO</Btn>} />
+      <div style={{ display: "flex", gap: 6, margin: "12px 0", flexWrap: "wrap" }}>
+        {["Open", "All", ...PO_STATUSES].map((st) => (
+          <button key={st} onClick={() => setStatusFilter(st)} style={{
+            border: `1.5px solid ${statusFilter === st ? T.accent : S.line}`,
+            background: statusFilter === st ? T.accentSoft : "#fff",
+            color: statusFilter === st ? T.accent : S.ink,
+            borderRadius: 999, padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+          }}>{st}</button>
+        ))}
+      </div>
+      {shown.length === 0 && (
+        <Card><div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
+          No purchase orders here yet. A PO tracks an order from placed to delivered to reconciled against the
+          job's costs — so nothing gets paid for twice or never shows up.
+        </div></Card>
+      )}
+      {shown.map(({ job, po }) => {
+        const rec = po.lines.filter((l) => l.received).length;
+        const vend = vendors.find((v) => v.id === po.vendorId);
+        return (
+          <Card key={po.id} pad={14} style={{ marginTop: 8 }}>
+            <button onClick={() => setEditing({ jobId: job.id, po })} style={{ width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 800, color: S.ink }}>{po.number}</div>
+                <Chip tone={po.status === "Reconciled" ? "gray" : po.status === "Received" ? "green" : po.status === "Partially received" ? "amber" : "blue"}>{po.status}</Chip>
+              </div>
+              <div style={{ fontSize: 12.5, color: S.sub, marginTop: 3 }}>
+                {job.name}{vend ? ` · ${vend.name}` : ""} · {po.lines.length} line{po.lines.length === 1 ? "" : "s"}{po.lines.length ? ` (${rec} received)` : ""}
+              </div>
+            </button>
+          </Card>
+        );
+      })}
+
+      <Sheet open={pickJob} onClose={() => setPickJob(false)} title="PO for which job?">
+        {jobs.filter((j) => !DEAD_STAGES.includes(j.stageId)).map((j, i2) => (
+          <button key={j.id} onClick={() => { setPickJob(false); startNew(j); }} style={{
+            width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer",
+            padding: "12px 4px", borderTop: i2 ? `1px solid ${S.line}` : "none",
+          }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700 }}>{j.name}</div>
+            <div style={{ fontSize: 12.5, color: S.sub }}>{j.address}</div>
+          </button>
+        ))}
+      </Sheet>
+
+      <Sheet open={!!e} onClose={() => setEditing(null)} title={e ? e.po.number : ""}
+        footer={e && (
+          <Btn style={{ width: "100%" }} onClick={() => { savePo(e.jobId, e.po); setEditing(null); toast("PO saved"); }}>Save</Btn>
+        )}>
+        {e && (
+          <>
+            <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10 }}>{eJob ? eJob.name : ""} · opened {e.po.createdAt} by {e.po.by}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Field label="PO number"><input style={inputStyle} value={e.po.number} onChange={(ev) => setPo({ number: ev.target.value })} /></Field>
+              <Field label="Status">
+                <select style={selStyle} value={e.po.status} onChange={(ev) => setPo({ status: ev.target.value })}>
+                  {PO_STATUSES.map((st) => <option key={st}>{st}</option>)}
+                </select>
+              </Field>
+            </div>
+            <Field label="Vendor">
+              <select style={selStyle} value={e.po.vendorId} onChange={(ev) => setPo({ vendorId: ev.target.value })}>
+                <option value="">Select…</option>
+                {vendors.filter((v) => v.active !== false).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Lines" hint="Tap the circle when material arrives on site — that's the receiving record.">
+              {e.po.lines.map((l) => (
+                <div key={l.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "7px 0", borderBottom: `1px solid ${S.line}` }}>
+                  <button onClick={() => receiveLine(e.jobId, e.po, l.id)} style={{ border: "none", background: "none", cursor: "pointer", padding: 0 }}>
+                    {l.received ? <CheckCircle2 size={19} color="#177245" /> : <Circle size={19} color="#C7CBD1" />}
+                  </button>
+                  <input style={{ ...inputStyle, flex: 1, padding: "8px 10px" }} value={l.desc}
+                    onChange={(ev) => setPo({ lines: e.po.lines.map((x) => (x.id === l.id ? { ...x, desc: ev.target.value } : x)) })} />
+                  <input style={{ ...inputStyle, width: 64, padding: "8px 10px", textAlign: "right" }} value={l.qty}
+                    onChange={(ev) => setPo({ lines: e.po.lines.map((x) => (x.id === l.id ? { ...x, qty: ev.target.value } : x)) })} />
+                  <button onClick={() => setPo({ lines: e.po.lines.filter((x) => x.id !== l.id) })}
+                    style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={14} color="#B42318" /></button>
+                </div>
+              ))}
+              <Btn kind="soft" small style={{ marginTop: 8 }}
+                onClick={() => setPo({ lines: [...e.po.lines, { id: uid("pol"), desc: "", qty: "1", received: false }] })}>
+                <Plus size={13} /> Add line
+              </Btn>
+            </Field>
+            <Field label="Notes"><textarea style={{ ...inputStyle, minHeight: 54, resize: "vertical", fontFamily: "inherit" }}
+              value={e.po.notes} onChange={(ev) => setPo({ notes: ev.target.value })} /></Field>
+            {e.po.lines.some((l) => l.received && l.receivedAt) && (
+              <div style={{ fontSize: 12, color: S.sub, lineHeight: 1.6 }}>
+                {e.po.lines.filter((l) => l.received && l.receivedAt).map((l) => (
+                  <div key={l.id}>✓ {l.desc || "line"} received {l.receivedAt}</div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </Sheet>
+    </div>
+  );
+}
+
+function CallLog({ jobs, leadSources, calls, setCalls, onOpenJob, onBack, currentUser, onCreateLead }) {
+  const [f, setF] = useState({ name: "", phone: "", source: "", about: "" });
+  const log = () => {
+    if (!f.phone.trim() && !f.name.trim()) return;
+    setCalls([{ id: uid("call"), at: new Date().toISOString().slice(0, 16).replace("T", " "),
+      by: currentUser.name, ...f }, ...calls]);
+    setF({ name: "", phone: "", source: "", about: "" });
+  };
+  /* Attribution: every job's lead source rolled up with count + value. */
+  const bySource = leadSources.map((src) => {
+    const here = jobs.filter((j) => j.leadSource === src);
+    const won = here.filter((j) => WON_STAGES.includes(j.stageId) || j.stageId === "s12");
+    return { src, leads: here.length, won: won.length,
+      value: won.reduce((a, j) => a + ((j.contract && j.contract.price) || j.value || 0), 0) };
+  }).filter((r) => r.leads > 0).sort((a, b) => b.value - a.value);
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Calls & attribution" onBack={onBack} />
+      <Card style={{ marginTop: 14 }}>
+        <CardTitle>Log an incoming call</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
+          Thirty seconds while it's fresh: who called, and — always — where they heard about you.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Name"><input style={inputStyle} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+          <Field label="Phone"><input style={inputStyle} inputMode="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: formatPhone(e.target.value) })} /></Field>
+        </div>
+        <Field label="How did they hear about us? *">
+          <select style={selStyle} value={f.source} onChange={(e) => setF({ ...f, source: e.target.value })}>
+            <option value="">Ask them — then pick</option>
+            {leadSources.map((l) => <option key={l}>{l}</option>)}
+          </select>
+        </Field>
+        <Field label="What about"><input style={inputStyle} value={f.about} placeholder="Storm damage, estimate request, warranty…" onChange={(e) => setF({ ...f, about: e.target.value })} /></Field>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn style={{ flex: 1 }} disabled={!f.source || (!f.name.trim() && !f.phone.trim())} onClick={log}>Log call</Btn>
+          <Btn kind="ghost" style={{ flex: 1 }} disabled={!f.source || !f.name.trim()}
+            onClick={() => { log(); onCreateLead({ name: f.name.trim(), phone: f.phone, leadSource: f.source }); }}>
+            Log + new lead
+          </Btn>
+        </div>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Where the money comes from</CardTitle>
+        {bySource.length === 0 ? (
+          <div style={{ fontSize: 13.5, color: S.sub }}>Once jobs carry lead sources, this ranks them by revenue won.</div>
+        ) : (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 52px 44px 90px", gap: 6, fontSize: 10.5, fontWeight: 800, color: S.sub, letterSpacing: ".05em", padding: "0 0 6px" }}>
+              <span>SOURCE</span><span style={{ textAlign: "right" }}>LEADS</span><span style={{ textAlign: "right" }}>WON</span><span style={{ textAlign: "right" }}>REVENUE</span>
+            </div>
+            {bySource.map((r) => (
+              <div key={r.src} style={{ display: "grid", gridTemplateColumns: "1fr 52px 44px 90px", gap: 6, fontSize: 13, padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
+                <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.src}</span>
+                <span style={{ textAlign: "right", color: S.sub }}>{r.leads}</span>
+                <span style={{ textAlign: "right", color: S.sub }}>{r.won}</span>
+                <span style={{ textAlign: "right", fontWeight: 700 }}>{money(r.value)}</span>
+              </div>
+            ))}
+          </>
+        )}
+        <div style={{ fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
+          True per-source tracking numbers (a different phone number on each yard sign and ad) can come later
+          through Twilio — this report gets its answers from reps asking the question, which costs nothing.
+        </div>
+      </Card>
+
+      {calls.length > 0 && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle>Recent calls</CardTitle>
+          {calls.slice(0, 30).map((c) => (
+            <div key={c.id} style={{ padding: "9px 0", borderTop: `1px solid ${S.line}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 700 }}>{c.name || c.phone || "Unknown"}</span>
+                <Chip tone="blue">{c.source}</Chip>
+              </div>
+              <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>{c.at} · {c.by}{c.about ? ` · ${c.about}` : ""}{c.phone && c.name ? ` · ${c.phone}` : ""}</div>
+            </div>
+          ))}
+        </Card>
       )}
     </div>
   );
@@ -7176,9 +7639,9 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
     });
     if (inputRef.current) inputRef.current.focus();
   };
-  const renderText = (t) => String(t || "").split(/(@[A-Za-z][\w'-]*(?: [A-Za-z][\w'-]*)?)/g).map((part, i2) =>
+  const renderText = (t, onDark) => String(t || "").split(/(@[A-Za-z][\w'-]*(?: [A-Za-z][\w'-]*)?)/g).map((part, i2) =>
     part && part.startsWith("@")
-      ? <b key={i2} style={{ color: T.accent }}>{part}</b>
+      ? <b key={i2} style={{ color: onDark ? "#9DC4F8" : T.accent }}>{part}</b>
       : <span key={i2}>{part}</span>);
   const jobOf = (id) => (jobs || []).find((j) => j.id === id);
   /* Defensive: a profile with a blank name used to crash the whole
@@ -7194,34 +7657,61 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
       {msgs.length === 0 && (
         <Card><div style={{ fontSize: 14, color: S.sub }}>No messages yet — say something.</div></Card>
       )}
-      {(msgs || []).map((m) => {
+      {(msgs || []).map((m, mi) => {
         const j = m.jobId ? jobOf(m.jobId) : null;
         const mine = m.by === me;
         const mentioned = Array.isArray(m.mentions) && m.mentions.includes(me);
+        const prev = mi > 0 ? msgs[mi - 1] : null;
+        const day = String(m.at || "").slice(0, 10);
+        const newDay = !prev || String(prev.at || "").slice(0, 10) !== day;
+        const sameAuthor = prev && prev.by === m.by && !newDay;
+        const AV_COLORS = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
+        const avColor = AV_COLORS[Math.abs(String(m.by || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV_COLORS.length];
         return (
-          <div key={m.id} style={{ display: "flex", gap: 10, marginTop: 10, flexDirection: mine ? "row-reverse" : "row" }}>
-            <span style={{
-              width: 34, height: 34, borderRadius: 99, background: mine ? T.primary : T.accentSoft,
-              color: mine ? "#fff" : T.accent, display: "grid", placeItems: "center",
-              fontSize: 12, fontWeight: 800, flexShrink: 0,
-            }}>{initials(m.by)}</span>
+          <React.Fragment key={m.id}>
+          {newDay && (
+            <div style={{ textAlign: "center", margin: "16px 0 4px" }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: S.sub, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 99, padding: "4px 12px" }}>
+                {day === new Date().toISOString().slice(0, 10) ? "Today" : day}
+              </span>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 9, marginTop: sameAuthor ? 3 : 12, flexDirection: mine ? "row-reverse" : "row" }}>
+            {sameAuthor ? <span style={{ width: 32, flexShrink: 0 }} /> : (
+              <span style={{
+                width: 32, height: 32, borderRadius: 99, background: mine ? T.primary : avColor,
+                color: "#fff", display: "grid", placeItems: "center",
+                fontSize: 11.5, fontWeight: 800, flexShrink: 0, marginTop: 2,
+              }}>{initials(m.by)}</span>
+            )}
             <div style={{
-              maxWidth: "78%", background: mentioned ? "#FDF6EC" : "#fff",
-              border: `1px solid ${mentioned ? "#F0DFC5" : S.line}`,
-              borderRadius: 14, padding: "10px 13px",
+              maxWidth: "80%", background: mine ? T.primary : mentioned ? "#FDF6EC" : "#fff",
+              border: mine ? "none" : `1px solid ${mentioned ? "#F0DFC5" : S.line}`,
+              color: mine ? "#fff" : S.ink,
+              borderRadius: mine ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+              padding: "9px 13px",
+              boxShadow: "0 1px 2px rgba(16,24,40,.04)",
             }}>
-              <div style={{ fontSize: 11.5, color: S.sub, marginBottom: 3 }}>{m.by} · {m.at}</div>
-              <div style={{ fontSize: 14, lineHeight: 1.5 }}>{renderText(m.text)}</div>
+              {!sameAuthor && !mine && (
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: avColor, marginBottom: 2 }}>{m.by}</div>
+              )}
+              <div style={{ fontSize: 14.5, lineHeight: 1.45 }}>{renderText(m.text, mine)}</div>
+              <div style={{ fontSize: 10, color: mine ? "rgba(255,255,255,.65)" : "#B4B9C0", marginTop: 3, textAlign: "right" }}>
+                {String(m.at || "").slice(11, 16)}
+              </div>
               {j && (
                 <button onClick={() => onOpenJob(j.id)} style={{
-                  marginTop: 7, border: `1px solid ${S.line}`, background: S.bg, borderRadius: 9,
-                  padding: "6px 10px", fontSize: 12.5, cursor: "pointer", display: "flex", gap: 6, alignItems: "center",
+                  marginTop: 7, border: `1px solid ${mine ? "rgba(255,255,255,.3)" : S.line}`,
+                  background: mine ? "rgba(255,255,255,.12)" : S.bg, color: mine ? "#fff" : S.ink,
+                  borderRadius: 9, padding: "6px 10px", fontSize: 12.5, cursor: "pointer",
+                  display: "flex", gap: 6, alignItems: "center",
                 }}>
                   <Home size={12} color={T.accent} /> {j.name} — {j.address}
                 </button>
               )}
             </div>
           </div>
+          </React.Fragment>
         );
       })}
 
@@ -8197,6 +8687,17 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
    client secret; the browser cannot hold it safely. This screen owns
    the connection state and is honest about what isn't live yet.
    ================================================================ */
+function CompanyCamConnect({ onConnect }) {
+  const [token, setToken] = useState("");
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      <input style={{ ...inputStyle, flex: 1 }} type="password" placeholder="Paste your access token"
+        value={token} onChange={(e) => setToken(e.target.value)} />
+      <Btn small disabled={!token.trim()} onClick={() => { onConnect(token.trim()); setToken(""); }}>Connect</Btn>
+    </div>
+  );
+}
+
 function Integrations({ integrations, setIntegrations, currentUser, users = [], onBack, toast }) {
   const isAdmin = currentUser.role === "admin";
   const byUser = integrations.gmailByUser || {};
@@ -8356,6 +8857,52 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           </>
         )}
       </Sheet>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={((integrations.companyCamByUser || {})[currentUser.id] || {}).connected
+          ? <Chip tone="green">Connected</Chip> : <Chip tone="gray">Not connected</Chip>}>CompanyCam</CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 10 }}>
+          Each rep connects their own CompanyCam login, so photos stay attributed to whoever took them.
+          Paste your personal access token from CompanyCam → Profile → Access Tokens.
+        </div>
+        {((integrations.companyCamByUser || {})[currentUser.id] || {}).connected ? (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ flex: 1, fontSize: 13.5 }}>
+              Connected as <b>{((integrations.companyCamByUser || {})[currentUser.id] || {}).email || currentUser.name}</b>
+            </div>
+            <Btn small kind="danger" onClick={() => setIntegrations({
+              ...integrations,
+              companyCamByUser: { ...(integrations.companyCamByUser || {}), [currentUser.id]: { connected: false } },
+            })}>Disconnect</Btn>
+          </div>
+        ) : (
+          <CompanyCamConnect onConnect={(token) => setIntegrations({
+            ...integrations,
+            companyCamByUser: { ...(integrations.companyCamByUser || {}), [currentUser.id]: { connected: true, token, at: new Date().toISOString().slice(0, 10) } },
+          })} />
+        )}
+        <div style={{ fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
+          Today this stores your token per seat; pulling project photos into jobs automatically is the next step
+          of this integration and will use it.
+        </div>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>On the roadmap</CardTitle>
+        {[["QuickBooks", "Invoices and payments sync both ways — no re-keying"],
+          ["Stripe payments", "Take cards and ACH at the kitchen table"],
+          ["Wisetack financing", "Customer applies from the estimate in about a minute"],
+          ["EagleView / Roofr measurements", "Order reports, measurements land on the job"]].map(([name, blurb], i2) => (
+          <div key={name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>{name}</div>
+              <div style={{ fontSize: 12, color: S.sub }}>{blurb}</div>
+            </div>
+            <Chip tone="gray">Planned</Chip>
+          </div>
+        ))}
+      </Card>
+
     </div>
   );
 }
@@ -8771,28 +9318,41 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
 }
 
 function MoreMenu({ onNav, onLogout, brand, currentUser }) {
-  const items = [
-    ["announcements", Megaphone, "Company announcements", "Posted to everyone's home screen"],
-    ["activity", ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
-    ["chat", MessageCircle, "Team chat", "Talk to the team — @ someone, tag a job"],
-    ["insurance", Shield, "Insurance", "Clients, supplements, code lookup"],
-    ["performance", PieChart, "Performance", "Rep scoreboard & funnel"],
-    ["calendar", CalIcon, "Calendar", "Schedule & material drops"],
-    ["contacts", Users, "Contacts", "Every client, with consent status"],
-    ["team", HardHat, "Team & seats", canManageSeats(currentUser) ? "Add users, roles, logins" : "Who's on the team"],
-    ["crews", Wrench, "Crews", "Dispatch directory for work orders"],
-    ["documents", FileText, "Documents", "Contracts, COIs, licenses, warranties"],
-    ["pricelist", Package, "Price list", "Material costs and margins — CSV import"],
-    ["templates", ScrollText, "Message templates", "Email and text, customer and crew"],
-    ["integrations", Share2, "Integrations", "Gmail and text messaging"],
-    ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
-    ["leadsources", Filter, "Lead sources", "Add or remove the options reps pick from"],
-    ["vendors", Building2, "Vendors & suppliers", "Material suppliers and their account details"],
-    ["reviews", Star, "Review automation", "Google review requests"],
-    ["branding", Settings, "Company branding", "Name, colors, review link"],
-    ["password", Lock, "Change my password", "Update your sign-in password"],
-    ["syscheck", AlertTriangle, "System check", "Test the database connection and setup"],
+  const groups = [
+    ["Sales", [
+      ["activity", ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
+      ["calls", Phone, "Calls & attribution", "Log calls, see which sources make money"],
+      ["performance", PieChart, "Performance", "Rep scoreboard & funnel"],
+      ["contacts", Users, "Contacts", "Every client, with consent status"],
+      ["leadsources", Filter, "Lead sources", "Add, remove, and reorder the options"],
+      ["reviews", Star, "Review automation", "Google review requests"],
+    ]],
+    ["Production", [
+      ["dispatch", HardHat, "Dispatch board", "Who's on which roof, day by day"],
+      ["calendar", CalIcon, "Calendar", "Schedule & material drops"],
+      ["pos", Package, "Purchase orders", "Order, receive, reconcile materials"],
+      ["crews", Wrench, "Crews", "Dispatch directory for work orders"],
+      ["warranties", Shield, "Warranties", "Every roof's labor and manufacturer terms"],
+      ["insurance", Shield, "Insurance", "Clients, supplements, code lookup"],
+    ]],
+    ["Company", [
+      ["chat", MessageCircle, "Team chat", "Talk to the team — @ someone, tag a job"],
+      ["announcements", Megaphone, "Company announcements", "Posted to everyone's home screen"],
+      ["team", HardHat, "Team & seats", canManageSeats(currentUser) ? "Add users, roles, logins" : "Who's on the team"],
+      ["documents", FileText, "Documents", "Contracts, COIs, licenses, warranties"],
+      ["vendors", Building2, "Vendors & suppliers", "Material suppliers and account details"],
+      ["pricelist", Package, "Price list", "Material costs and margins — CSV import"],
+      ["templates", ScrollText, "Message templates", "Email and text, customer and crew"],
+    ]],
+    ["Setup", [
+      ["branding", Settings, "Company branding", "Name, logo, colors, what prints on documents"],
+      ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam"],
+      ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
+      ["password", Lock, "Change my password", "Update your sign-in password"],
+      ["syscheck", AlertTriangle, "System check", "Test the database connection and setup"],
+    ]],
   ];
+  const [open, setOpen] = useState({ Sales: true, Production: true, Company: false, Setup: false });
   return (
     <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
       <div style={{ fontSize: 24, fontWeight: 800, color: S.ink, marginBottom: 4 }}>More</div>
@@ -8803,24 +9363,38 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
           <Chip tone={currentUser.role === "admin" ? "slate" : "blue"}>{currentUser.title}</Chip>
         </div>
       )}
-      {items.map(([id, Icon, label, sub]) => (
-        <Card key={id} pad={16} style={{ marginBottom: 10, cursor: "pointer" }}>
-          <button onClick={() => onNav(id)} style={{
-            display: "flex", alignItems: "center", gap: 14, width: "100%",
-            border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0,
+      {groups.map(([group, items]) => (
+        <div key={group} style={{ marginBottom: 10 }}>
+          <button onClick={() => setOpen({ ...open, [group]: !open[group] })} style={{
+            width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+            border: "none", background: "none", cursor: "pointer", padding: "10px 2px",
           }}>
-            <span style={{ width: 40, height: 40, borderRadius: 12, background: T.accentSoft, display: "grid", placeItems: "center", flexShrink: 0 }}>
-              <Icon size={19} color={T.accent} />
-            </span>
-            <span style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{label}</div>
-              <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>{sub}</div>
-            </span>
-            <ChevronRight size={17} color="#C7CBD1" />
+            <span style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: ".07em", color: S.sub }}>{group.toUpperCase()}</span>
+            <ChevronDown size={16} color={S.sub} style={{ transform: open[group] ? "none" : "rotate(-90deg)", transition: "transform .15s" }} />
           </button>
-        </Card>
+          {open[group] && (
+            <Card pad={0} style={{ overflow: "hidden" }}>
+              {items.map(([id, Icon, label, sub], i2) => (
+                <button key={id} onClick={() => onNav(id)} style={{
+                  display: "flex", alignItems: "center", gap: 13, width: "100%",
+                  border: "none", background: "none", cursor: "pointer", textAlign: "left",
+                  padding: "13px 14px", borderTop: i2 ? `1px solid ${S.line}` : "none",
+                }}>
+                  <span style={{ width: 36, height: 36, borderRadius: 10, background: T.accentSoft, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                    <Icon size={17} color={T.accent} />
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{label}</div>
+                    <div style={{ fontSize: 11.5, color: S.sub, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sub}</div>
+                  </span>
+                  <ChevronRight size={15} color="#C7CBD1" />
+                </button>
+              ))}
+            </Card>
+          )}
+        </div>
       ))}
-      <Btn kind="danger" style={{ width: "100%", marginTop: 8 }} onClick={onLogout}><LogOut size={15} /> Sign out</Btn>
+      <Btn kind="ghost" style={{ width: "100%", marginTop: 8 }} onClick={onLogout}>Sign out</Btn>
     </div>
   );
 }
@@ -9257,6 +9831,7 @@ export default function SupremeCRM() {
   const [activity, setActivity] = useState([]);
   const [chatMsgs, setChatMsgs] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
+  const [calls, setCalls] = useState([]);
   const [chatSeenCount, setChatSeenCount] = useState(0);
   const [pwDone, setPwDone] = useState(false);
   const [changePwOpen, setChangePwOpen] = useState(false);
@@ -9279,6 +9854,7 @@ export default function SupremeCRM() {
   const [quickTaskOpen, setQuickTaskOpen] = useState(false);
   const [inboxPick, setInboxPick] = useState(false);
   const [boardStage, setBoardStage] = useState(null);
+  const [leadSeed, setLeadSeed] = useState(null);
   const [qt, setQt] = useState({ jobId: "", label: "", due: "", time: "" });
   const [toastMsg, setToastMsg] = useState("");
   const [filters, setFilters] = useState({ sort: "updated", assignees: [], stages: [], sources: [] });
@@ -9288,13 +9864,14 @@ export default function SupremeCRM() {
   });
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings];
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings];
   const orgPack = () => ({
-    announcements, stages, leadSources, apptTypes, templates, estimateTemplates,
+    announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates,
     priceList, companyDocs, crews, vendors, reviewSettings, version: 1,
   });
   const unpackOrg = (d) => {
     if (d.announcements) setAnnouncements(d.announcements);
+    if (d.calls) setCalls(d.calls);
     if (d.stages) setStages(d.stages);
     if (d.leadSources) setLeadSources(d.leadSources);
     if (d.apptTypes) setApptTypes(d.apptTypes);
@@ -9519,7 +10096,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           <div style={{ paddingTop: 14 }}><AnnouncementBar announcements={announcements} /></div>
           <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav}
             onNewLead={() => setNewLeadOpen(true)} onQuickTask={() => setQuickTaskOpen(true)}
-            onOpenStage={(id) => { setBoardStage(id); setNav("jobs"); }} />
+            onOpenStage={(id) => { setBoardStage(id); setNav("jobs"); }} brand={brand} />
         </>
       ) : nav === "jobs" ? (
         <JobBoard jobs={jobs} stages={stages} filters={filters}
@@ -9550,6 +10127,18 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "announcements" ? (
         <AnnouncementManager announcements={announcements} setAnnouncements={setAnnouncements}
           currentUser={liveUser} onBack={() => setNav("more")} toast={toast} />
+      ) : nav === "dispatch" ? (
+        <DispatchBoard jobs={jobs} crews={crews} mutJob={mutJob} onOpenJob={openJobScreen}
+          onBack={() => setNav("more")} toast={toast} />
+      ) : nav === "pos" ? (
+        <PurchaseOrders jobs={jobs} mutJob={mutJob} vendors={vendors} onOpenJob={openJobScreen}
+          onBack={() => setNav("more")} toast={toast} currentUser={liveUser} />
+      ) : nav === "warranties" ? (
+        <WarrantyCenter jobs={jobs} onOpenJob={openJobScreen} onBack={() => setNav("more")} />
+      ) : nav === "calls" ? (
+        <CallLog jobs={jobs} leadSources={leadSources} calls={calls} setCalls={setCalls}
+          onOpenJob={openJobScreen} onBack={() => setNav("more")} currentUser={liveUser}
+          onCreateLead={(seed) => { setNewLeadOpen(true); setLeadSeed(seed); }} />
       ) : nav === "activity" ? (
         <ActivityFeed activity={activity} currentUser={liveUser} onOpenJob={openJobScreen} onBack={() => setNav("more")} />
       ) : nav === "chat" ? (
