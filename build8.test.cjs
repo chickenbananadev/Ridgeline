@@ -29,5 +29,9 @@ ok(!src.includes("Completed jobs with SMS or email consent get an automatic Goog
 ok(src.includes("const dateInputStyle"), "date input has a mobile-safe style");
 ok(src.includes('WebkitAppearance: "none"'), "date input neutralises iOS native sizing");
 
+ok(src.includes("const [boardView, setBoardView]"), "board view state lifted to app level");
+ok(!src.includes('const [view, setView] = useState("board")'), "JobBoard no longer owns view state");
+ok(src.includes('rl_board_view'), "board view persists across reloads");
+
 if (fails) { console.log("\nbuild 8: " + fails + " FAILED"); process.exit(1); }
 console.log("build 8 tests passed");

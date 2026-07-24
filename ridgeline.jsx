@@ -4198,7 +4198,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
 /* ================================================================
    JOB BOARD — kanban with drag between stages + tap-to-move
    ================================================================ */
-function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus }) {
+function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView }) {
   const dragJob = useRef(null);
   const focusRef = useRef(null);
   useEffect(() => {
@@ -4206,7 +4206,6 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       focusRef.current.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
     }
   }, [focusStage]);
-  const [view, setView] = useState("board");
   const [moveMenuFor, setMoveMenuFor] = useState(null);
   const [q, setQ] = useState("");
   const [showSearch, setShowSearch] = useState(false);
@@ -12735,6 +12734,15 @@ export default function SupremeCRM() {
   const [quickJobId, setQuickJobId] = useState(null);
   const [inboxPick, setInboxPick] = useState(false);
   const [boardStage, setBoardStage] = useState(null);
+  /* Board vs list view lived inside JobBoard, so opening a job unmounted
+     it and reset the choice to "board". Lifted here so it persists across
+     navigation, and seeded from localStorage so it also survives a reload. */
+  const [boardView, setBoardView] = useState(() => {
+    try { return localStorage.getItem("rl_board_view") || "board"; } catch (e) { return "board"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("rl_board_view", boardView); } catch (e) { /* private mode */ }
+  }, [boardView]);
   const [leadSeed, setLeadSeed] = useState(null);
   const [qt, setQt] = useState({ jobId: "", label: "", due: "", time: "" });
   const [toastMsg, setToastMsg] = useState("");
@@ -13108,7 +13116,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onOpenFilters={() => setFiltersOpen(true)} onOpenWorkflow={() => setWorkflowOpen(true)}
           onOpenJob={openJobScreen} onMoveStage={moveStage} onNewLead={() => { setLeadSeed(null); setNewLeadOpen(true); }}
           onQuickAction={(jobId) => setQuickJobId(jobId)}
-          focusStage={boardStage} onClearFocus={() => setBoardStage(null)} />
+          focusStage={boardStage} onClearFocus={() => setBoardStage(null)}
+          view={boardView} setView={setBoardView} />
       ) : nav === "inbox" ? (
         <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)} />
       ) : nav === "more" ? (

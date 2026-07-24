@@ -71599,7 +71599,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
     }, children: "Open full job" })
   ] });
 }
-function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus }) {
+function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView }) {
   const dragJob = (0, import_react.useRef)(null);
   const focusRef = (0, import_react.useRef)(null);
   (0, import_react.useEffect)(() => {
@@ -71607,7 +71607,6 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       focusRef.current.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
     }
   }, [focusStage]);
-  const [view, setView] = (0, import_react.useState)("board");
   const [moveMenuFor, setMoveMenuFor] = (0, import_react.useState)(null);
   const [q, setQ] = (0, import_react.useState)("");
   const [showSearch, setShowSearch] = (0, import_react.useState)(false);
@@ -80951,6 +80950,19 @@ function SupremeCRM() {
   const [quickJobId, setQuickJobId] = (0, import_react.useState)(null);
   const [inboxPick, setInboxPick] = (0, import_react.useState)(false);
   const [boardStage, setBoardStage] = (0, import_react.useState)(null);
+  const [boardView, setBoardView] = (0, import_react.useState)(() => {
+    try {
+      return localStorage.getItem("rl_board_view") || "board";
+    } catch (e) {
+      return "board";
+    }
+  });
+  (0, import_react.useEffect)(() => {
+    try {
+      localStorage.setItem("rl_board_view", boardView);
+    } catch (e) {
+    }
+  }, [boardView]);
   const [leadSeed, setLeadSeed] = (0, import_react.useState)(null);
   const [qt, setQt] = (0, import_react.useState)({ jobId: "", label: "", due: "", time: "" });
   const [toastMsg, setToastMsg] = (0, import_react.useState)("");
@@ -81438,7 +81450,9 @@ function SupremeCRM() {
         },
         onQuickAction: (jobId) => setQuickJobId(jobId),
         focusStage: boardStage,
-        onClearFocus: () => setBoardStage(null)
+        onClearFocus: () => setBoardStage(null),
+        view: boardView,
+        setView: setBoardView
       }
     ) : nav === "inbox" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Inbox, { jobs, onOpenJob: openJobScreen, onCompose: () => setInboxPick(true) }) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand: brand2, onNav: (id) => id === "password" ? setChangePwOpen(true) : setNav(id), onLogout: async () => {
       const a = AUTH();
