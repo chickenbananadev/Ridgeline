@@ -4939,14 +4939,31 @@ function SystemCheck({ currentUser, onBack }) {
         }
       }
       try {
-        const { error } = await db.from("crm_brand").upsert({ id: 1, data: { _probe: Date.now() }, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+        const { error } = await db.from("crm_brand").upsert({ id: 99, data: { _probe: Date.now() }, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
         out.push({
-          label: "Can save branding",
+          label: "Can save settings",
           ok: !error,
           detail: error ? `Write blocked: ${error.message}` : "Write succeeded"
         });
+        if (!error) await db.from("crm_brand").delete().eq("id", 99);
       } catch (e) {
-        out.push({ label: "Can save branding", ok: false, detail: String(e && e.message || e) });
+        out.push({ label: "Can save settings", ok: false, detail: String(e && e.message || e) });
+      }
+      try {
+        const { data: bRow } = await db.from("crm_brand").select("data").eq("id", 1).maybeSingle();
+        const d = bRow && bRow.data || null;
+        const size = d ? JSON.stringify(d).length : 0;
+        const logoKb = d && d.logo ? Math.round(String(d.logo).length / 1024) : 0;
+        out.push({
+          label: "Stored branding",
+          ok: !!(d && d.company),
+          detail: d ? `company: ${d.company || "(none)"} \xB7 logo: ${logoKb ? logoKb + " KB" : "none"} \xB7 locations: ${(d.locations || []).length} \xB7 total ${Math.round(size / 1024)} KB` : "Nothing saved yet \u2014 make a change in Company branding, wait a second, then re-run this check."
+        });
+        if (logoKb > 700) {
+          out.push({ label: "Logo size", ok: false, detail: `${logoKb} KB is large enough to break saves. Re-upload it \u2014 the app now shrinks logos automatically.` });
+        }
+      } catch (e) {
+        out.push({ label: "Stored branding", ok: false, detail: String(e && e.message || e) });
       }
     }
     setRows(out);
@@ -8431,8 +8448,32 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast: toast2, brandE
     }
     const r = new FileReader();
     r.onload = () => {
-      setBrand({ ...brand2, logo: String(r.result) });
-      toast2("Logo updated");
+      const img = new Image();
+      img.onload = () => {
+        const maxW = 480;
+        const scale = Math.min(1, maxW / (img.width || maxW));
+        const w = Math.max(1, Math.round((img.width || maxW) * scale));
+        const h = Math.max(1, Math.round((img.height || maxW) * scale));
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, w, h);
+          const out = canvas.toDataURL("image/png");
+          const chosen = out.length < String(r.result).length ? out : String(r.result);
+          setBrand({ ...brand2, logo: chosen });
+          toast2(`Logo updated (${Math.round(chosen.length / 1024)} KB)`);
+        } catch {
+          setBrand({ ...brand2, logo: String(r.result) });
+          toast2("Logo updated");
+        }
+      };
+      img.onerror = () => {
+        setBrand({ ...brand2, logo: String(r.result) });
+        toast2("Logo updated");
+      };
+      img.src = String(r.result);
     };
     r.readAsDataURL(file);
     e.target.value = "";
@@ -10048,45 +10089,56 @@ var liveDb = () => !!DB();
 var EMPTY_FIN = () => ({ costLines: [], reimbursements: [] });
 function useBrandSync(brand2, setBrand, hasSession) {
   const lastSaved = (0, import_react.useRef)(null);
-  const loadedOnce = (0, import_react.useRef)(false);
   const timer = (0, import_react.useRef)(null);
+  const [loaded, setLoaded] = (0, import_react.useState)(!DB());
   const [brandErr, setBrandErr] = (0, import_react.useState)("");
   (0, import_react.useEffect)(() => {
     const db = DB();
     if (!db) return;
     let alive = true;
+    const finish = () => {
+      if (alive) setLoaded(true);
+    };
     db.from("crm_brand").select("data").eq("id", 1).maybeSingle().then(({ data, error }) => {
       if (!alive) return;
-      if (!error && data && data.data && Object.keys(data.data).length) {
-        lastSaved.current = data.data;
-        setBrand((prev) => ({ ...prev, ...data.data }));
+      const d = data && data.data;
+      const real = d && Object.keys(d).some((k) => !k.startsWith("_"));
+      if (!error && real) {
+        lastSaved.current = d;
+        setBrand((prev) => ({ ...prev, ...d }));
       }
-      loadedOnce.current = true;
-    });
+      finish();
+    }).catch(() => finish());
+    const t = setTimeout(finish, 4e3);
     return () => {
       alive = false;
+      clearTimeout(t);
     };
   }, []);
   (0, import_react.useEffect)(() => {
     const db = DB();
-    if (!db || !hasSession || !loadedOnce.current) return;
+    if (!db || !hasSession || !loaded) return;
     if (JSON.stringify(brand2) === JSON.stringify(lastSaved.current)) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
-      db.from("crm_brand").upsert({ id: 1, data: brand2, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).then(({ error }) => {
+      const payload = brand2;
+      db.from("crm_brand").upsert({ id: 1, data: payload, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).then(({ error }) => {
         if (error) {
           const missing = /relation .*crm_brand.* does not exist|schema cache/i.test(error.message || "");
-          setBrandErr(missing ? "Branding can't save: the crm_brand table doesn't exist yet. Run the branding migration in Supabase \u2192 SQL Editor, then reload." : "Branding save failed: " + (error.message || "unknown error"));
+          const toobig = /payload|too large|value too long|entity too large/i.test(error.message || "");
+          setBrandErr(
+            missing ? "Branding can't save: the crm_brand table doesn't exist. Run the branding migration in Supabase, then reload." : toobig ? "Branding can't save: the logo file is too large. Upload a smaller image." : "Branding save failed: " + (error.message || "unknown error")
+          );
         } else {
-          lastSaved.current = brand2;
+          lastSaved.current = payload;
           setBrandErr("");
         }
-      });
+      }).catch((e) => setBrandErr("Branding save failed: " + (e && e.message || "network error")));
     }, 900);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [brand2, hasSession]);
+  }, [brand2, hasSession, loaded]);
   return brandErr;
 }
 function useDbSync(st) {
