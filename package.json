@@ -11,11 +11,13 @@
     "test:features": "node feature.test.cjs",
     "test:build2": "node build2.test.cjs",
     "test:build3": "node build3.test.cjs",
-    "test:build4": "node build4.test.cjs"
+    "test:build4": "node build4.test.cjs",
+    "test:build5": "node build5.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "lucide-react": "^0.383.0",
+    "pdfjs-dist": "^3.11.174",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

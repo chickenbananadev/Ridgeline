@@ -51,6 +51,8 @@ function setSelect(selector, value) {
   clickText("Jacob Henderson");
   clickText("Jobs");
   clickText("Roger Perry");
+  // Job tabs are grouped; Portal sits under the Customer group.
+  clickText("Customer");
   clickText("Portal");
 
   assert(document.body.textContent.includes("Customer project tracker"), "Portal tracker should render");
@@ -62,12 +64,15 @@ function setSelect(selector, value) {
   assert(document.body.textContent.includes("Materials ordered"), "Customer tracker should accept a manual milestone");
   assert(document.body.textContent.includes("Customer can request quote changes and future project pricing"), "Portal preview should show customer request tools");
 
+  // Files sits under the Build group.
+  clickText("Build");
   clickText("Files");
   const internal = [...document.querySelectorAll("button")].find((button) => button.textContent.trim() === "Internal");
   assert(internal, "Job documents should expose an Internal/Shared portal control");
   act(() => internal.dispatchEvent(new window.MouseEvent("click", { bubbles: true })));
   assert([...document.querySelectorAll("button")].some((button) => button.textContent.trim() === "Shared"), "A document should be shareable with the customer");
 
+  clickText("Customer");
   clickText("Portal");
   assert(document.body.textContent.includes("1 shared"), "Portal should count shared documents");
 

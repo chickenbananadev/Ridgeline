@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Home, Briefcase, Plus, MessageCircle, Menu, Search, SlidersHorizontal,
-  ChevronDown, ChevronRight, ChevronLeft, X, Check, GripVertical, Camera,
+  ChevronDown, ChevronRight, ChevronLeft, ChevronUp, X, Check, GripVertical, Camera,
   FileText, DollarSign, ClipboardList, Settings, Star, Phone, Mail,
   MapPin, Download, LogOut, Users, Calendar as CalIcon, PieChart, Pencil, Trash2,
   ArrowUpDown, Image as ImageIcon, CheckCircle2, Circle, Send, Eye, Shield,
@@ -1014,10 +1014,55 @@ const BLANK_INTAKE = {
   roofTypes: [], roofAge: "", layers: "", workRequested: [], reasonForCalling: "",
   propertyUse: "Primary residence", decisionTimeline: "", notes: "",
 };
+/* Portal sections in the order the homeowner sees them. The order is
+   per-job and editable from the Portal tab; anything added to the
+   registry later appends automatically for jobs saved before it
+   existed. */
+const PORTAL_SECTIONS = [
+  ["tracker", "Project tracker"],
+  ["rep", "Your project contact"],
+  ["updates", "Updates from your team"],
+  ["estimate", "Your estimate"],
+  ["contract", "Your contract"],
+  ["invoice", "Invoice & balance"],
+  ["documents", "Documents"],
+  ["photos", "Project photos"],
+  ["requests", "Quotes & future projects"],
+  ["messages", "Messages"],
+  ["yourinfo", "Your contact details"],
+  ["contact", "Questions?"],
+];
+const PORTAL_ORDER_DEFAULT = PORTAL_SECTIONS.map(([id]) => id);
+/* Existing jobs may hold a shorter order than the registry. Merge
+   rather than replace so a new section never silently disappears. */
+function portalOrderOf(portal) {
+  const saved = Array.isArray(portal && portal.order) ? portal.order : [];
+  const known = saved.filter((id) => PORTAL_ORDER_DEFAULT.includes(id));
+  return [...known, ...PORTAL_ORDER_DEFAULT.filter((id) => !known.includes(id))];
+}
+
 const DEFAULT_PORTAL_SETTINGS = {
   estimate: false, contract: false, photos: false, invoice: false, documents: false,
   quoteRequests: true, addOnQuotes: true, notifyStage: true,
+  showRep: true, allowContactEdit: true, order: PORTAL_ORDER_DEFAULT,
+  /* Every section is switchable, not just the document ones. A company
+     that does not want a tracker or a messaging thread in front of its
+     customers can turn them off. */
+  tracker: true, updates: true, messages: true, yourinfo: true, contact: true, requests: true,
 };
+/* Section id -> settings key. Most match by name; the ones that predate
+   the registry keep their original keys so saved jobs are unaffected. */
+const PORTAL_SECTION_KEY = {
+  tracker: "tracker", rep: "showRep", updates: "updates", estimate: "estimate",
+  contract: "contract", invoice: "invoice", documents: "documents", photos: "photos",
+  requests: "requests", messages: "messages", yourinfo: "yourinfo", contact: "contact",
+};
+function portalSectionOn(portal, sid) {
+  const key = PORTAL_SECTION_KEY[sid];
+  if (!key) return true;
+  const merged = { ...DEFAULT_PORTAL_SETTINGS, ...(portal || {}) };
+  return merged[key] !== false;
+}
 
 const BLANK_CHECKLIST = {
   complete: false, structure: "", roofAge: "", method: "", layers: "", roofType: "",
@@ -4136,6 +4181,17 @@ const JOB_TABS = [
   ["tasks", "Tasks"], ["files", "Files"], ["portal", "Portal"],
 ];
 
+/* Seventeen tabs in one scrolling strip meant hunting. They are the
+   same tabs, grouped by what you are actually doing: inspecting,
+   selling, building, or talking to the customer. */
+const JOB_TAB_GROUPS = [
+  ["Inspect", ["overview", "checklist", "ventilation", "measure", "photos"]],
+  ["Sell", ["estimate", "contract", "materials", "report"]],
+  ["Build", ["workorder", "tasks", "files"]],
+  ["Money", ["financials", "payments", "invoice"]],
+  ["Customer", ["messages", "portal"]],
+];
+
 function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [],
   estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [] }) {
   const [tab, setTab] = useState("overview");
@@ -4168,16 +4224,41 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
             </select>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 4, overflowX: "auto", padding: "0 12px" }}>
-          {visibleTabs.map(([id, label]) => (
-            <button key={id} onClick={() => setTab(id)} style={{
-              border: "none", background: "none", cursor: "pointer", whiteSpace: "nowrap",
-              padding: "10px 12px", fontSize: 14, fontWeight: 700,
-              color: tab === id ? T.accent : S.sub,
-              borderBottom: tab === id ? `2.5px solid ${T.accent}` : "2.5px solid transparent",
-            }}>{label}</button>
-          ))}
-        </div>
+        {(() => {
+          const allowed = new Set(visibleTabs.map(([id]) => id));
+          const labelOf = (id) => (JOB_TABS.find(([tid]) => tid === id) || [id, id])[1];
+          const groups = JOB_TAB_GROUPS
+            .map(([name, ids]) => [name, ids.filter((id) => allowed.has(id))])
+            .filter(([, ids]) => ids.length);
+          const activeGroup = (groups.find(([, ids]) => ids.includes(tab)) || groups[0] || ["", []]);
+          return (
+            <>
+              <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "0 12px 8px" }}>
+                {groups.map(([name, ids]) => {
+                  const on = activeGroup[0] === name;
+                  return (
+                    <button key={name} onClick={() => { if (!ids.includes(tab)) setTab(ids[0]); }} style={{
+                      border: `1.5px solid ${on ? T.accent : S.line}`,
+                      background: on ? T.accentSoft : "#fff", color: on ? T.accent : S.ink,
+                      borderRadius: 999, padding: "6px 13px", fontSize: 12.5, fontWeight: 800,
+                      cursor: "pointer", whiteSpace: "nowrap",
+                    }}>{name}</button>
+                  );
+                })}
+              </div>
+              <div style={{ display: "flex", gap: 4, overflowX: "auto", padding: "0 12px" }}>
+                {activeGroup[1].map((id) => (
+                  <button key={id} onClick={() => setTab(id)} style={{
+                    border: "none", background: "none", cursor: "pointer", whiteSpace: "nowrap",
+                    padding: "10px 12px", fontSize: 14, fontWeight: 700,
+                    color: tab === id ? T.accent : S.sub,
+                    borderBottom: tab === id ? `2.5px solid ${T.accent}` : "2.5px solid transparent",
+                  }}>{labelOf(id)}</button>
+                ))}
+              </div>
+            </>
+          );
+        })()}
       </div>
       <div style={{ padding: 16 }}>
         {tab === "overview" && <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand}
@@ -4860,15 +4941,41 @@ function PortalThread({ token, meRole, meName, accent }) {
     db.from("crm_portal_msgs").select("*").eq("token", token).order("at", { ascending: true }).limit(200)
       .then(({ data }) => { if (data) setMsgs(data); });
   };
+  /* Opening the thread marks the other side's messages read. The
+     column is best-effort: on a database that has not run migration
+     009 the update fails harmlessly and the thread still works. */
+  const markRead = () => {
+    const db = DB(); if (!db || !token) return;
+    const col = meRole === "team" ? "read_by_team" : "read_by_customer";
+    const other = meRole === "team" ? "customer" : "team";
+    db.from("crm_portal_msgs").update({ [col]: true })
+      .eq("token", token).eq("by_role", other).eq(col, false)
+      .then(() => {}, () => {});
+  };
   useEffect(() => {
     load();
+    markRead();
     const db = DB(); if (!db || !token) return;
     const ch = db.channel("portal-" + token)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_portal_msgs", filter: `token=eq.${token}` },
-        (payload) => setMsgs((prev) => prev.some((m) => m.id === payload.new.id) ? prev : [...prev, payload.new]))
+        (payload) => {
+          setMsgs((prev) => prev.some((m) => m.id === payload.new.id) ? prev : [...prev, payload.new]);
+          if (payload.new.by_role !== meRole) {
+            markRead();
+            /* Browser notification while the tab is open. Real push
+               needs a service worker and a push service; this is the
+               honest in-page equivalent. */
+            try {
+              if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.hidden) {
+                new Notification(meRole === "team" ? "New message from your customer" : "New message from your contractor",
+                  { body: String(payload.new.body || "").slice(0, 120) });
+              }
+            } catch (e) { /* notifications unavailable — badge still updates */ }
+          }
+        })
       .subscribe();
     return () => { db.removeChannel(ch); };
-  }, [token]);
+  }, [token]); // eslint-disable-line
   const send = async () => {
     const db = DB(); const t = txt.trim();
     if (!db || !t) return;
@@ -5066,6 +5173,23 @@ function buildPortalSnapshot(job, brand, token) {
       slogan: brand.slogan, phone: brand.phone, email: brand.email,
       jobId: job.id, name: job.name, address: job.address,
       stageLabel: job.stageLabel || "",
+      order: portalOrderOf(portal).filter((sid) => portalSectionOn(portal, sid)),
+      /* Rep block: a per-job override wins over the assigned seat, so a
+         different face can be put in front of a customer without
+         reassigning the job. */
+      rep: portal.showRep ? {
+        name: job.repOverride?.name || job.assigneeContact?.name || job.assignee || "",
+        email: job.repOverride?.email || job.assigneeContact?.email || "",
+        phone: job.repOverride?.phone || job.assigneeContact?.phone || "",
+        title: job.repOverride?.title || job.assigneeContact?.title || "",
+      } : null,
+      customer: {
+        name: job.contact?.name || job.name || "",
+        phone: job.contact?.phone || job.phone || "",
+        email: job.contact?.email || job.email || "",
+        address: job.address || "",
+        editable: portal.allowContactEdit !== false,
+      },
       progress: portalProgressFor(job), steps: PORTAL_STEPS,
       portal,
       notes: (job.notes || []).filter((n) => n.customerVisible).map((n) => ({ at: n.at, text: n.text })),
@@ -5080,6 +5204,115 @@ function buildPortalSnapshot(job, brand, token) {
       updatedAt: new Date().toISOString(),
     },
   };
+}
+
+
+/* Homeowner-facing contact block. Changes are proposed, never applied:
+   the row lands in crm_portal_requests as a contact_update and the
+   team approves it from the job's Portal tab. A customer correcting a
+   typo should not be able to silently repoint the number we dispatch
+   and bill against. */
+function PortalContactCard({ token, jobId, customer, accent }) {
+  const [editing, setEditing] = useState(false);
+  const [f, setF] = useState({ name: customer.name || "", phone: customer.phone || "", email: customer.email || "" });
+  const [pending, setPending] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    const db = DB();
+    if (!db || !token) return;
+    let alive = true;
+    db.from("crm_portal_requests").select("*").eq("token", token)
+      .eq("request_type", "contact_update").order("created_at", { ascending: false }).limit(1)
+      .then(({ data }) => {
+        if (!alive || !data || !data.length) return;
+        if (data[0].status === "New" || data[0].status === "Reviewing") setPending(data[0]);
+      });
+    return () => { alive = false; };
+  }, [token]);
+
+  const changed = f.name !== (customer.name || "") || f.phone !== (customer.phone || "") || f.email !== (customer.email || "");
+
+  const submit = async () => {
+    const db = DB();
+    if (!db) { setErr("No connection. Please call us instead."); return; }
+    setBusy(true); setErr("");
+    const row = {
+      id: uid("req"), token, job_id: jobId, request_type: "contact_update",
+      category: "Contact details", status: "New", requested_by: customer.name || "Customer",
+      details: [
+        f.name !== (customer.name || "") ? `Name: ${customer.name || "—"} → ${f.name}` : "",
+        f.phone !== (customer.phone || "") ? `Phone: ${customer.phone || "—"} → ${f.phone}` : "",
+        f.email !== (customer.email || "") ? `Email: ${customer.email || "—"} → ${f.email}` : "",
+      ].filter(Boolean).join("\n"),
+      proposed: { name: f.name, phone: f.phone, email: f.email },
+    };
+    const { error } = await db.from("crm_portal_requests").insert(row);
+    setBusy(false);
+    if (error) { setErr("That didn't send. Please call us instead."); return; }
+    setPending(row); setEditing(false);
+  };
+
+  return (
+    <Card>
+      <CardTitle>Your contact details</CardTitle>
+      {pending ? (
+        <div>
+          <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.55 }}>
+            Thanks — we have your requested change and someone will confirm it shortly.
+          </div>
+          <div style={{ background: S.soft, borderRadius: 9, padding: "10px 12px", marginTop: 10, fontSize: 13, whiteSpace: "pre-wrap", color: S.ink }}>
+            {pending.details}
+          </div>
+          <div style={{ fontSize: 12, color: S.sub, marginTop: 8 }}>
+            Until it is confirmed we will keep using the details below.
+          </div>
+          <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 10, paddingTop: 10 }}>
+            <KV k="Name" v={customer.name || "—"} />
+            <KV k="Phone" v={customer.phone || "—"} />
+            <KV k="Email" v={customer.email || "—"} />
+          </div>
+        </div>
+      ) : editing ? (
+        <div>
+          <Field label="Name">
+            <input style={inputStyle} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+          </Field>
+          <Field label="Phone">
+            <input style={inputStyle} type="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+          </Field>
+          <Field label="Email">
+            <input style={inputStyle} type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+          </Field>
+          <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+            Changes are reviewed by our office before they take effect, so
+            nothing on your project is interrupted.
+          </div>
+          {err && <div style={{ fontSize: 13, color: "#B42318", marginBottom: 8 }}>{err}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => { setEditing(false); setErr(""); }}>Cancel</Btn>
+            <Btn small style={{ flex: 1, background: accent, borderColor: accent }}
+              disabled={busy || !changed} onClick={submit}>
+              {busy ? "Sending…" : "Send for review"}
+            </Btn>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <KV k="Name" v={customer.name || "—"} />
+          <KV k="Phone" v={customer.phone || "—"} />
+          <KV k="Email" v={customer.email || "—"} />
+          <KV k="Project address" v={customer.address || "—"} />
+          {customer.editable !== false && (
+            <Btn kind="ghost" small style={{ width: "100%", marginTop: 10 }} onClick={() => setEditing(true)}>
+              Something wrong? Request a change
+            </Btn>
+          )}
+        </div>
+      )}
+    </Card>
+  );
 }
 
 function PublicPortal({ token }) {
@@ -5118,111 +5351,154 @@ function PublicPortal({ token }) {
         <div style={{ fontSize: 13.5, opacity: 0.85, marginTop: 3 }}>{d.address}</div>
       </div>
       <div style={{ padding: "16px 16px 60px" }}>
-        <Card>
-          <CardTitle right={<Chip tone="blue">{d.stageLabel || PORTAL_STEPS[d.progress || 0]}</Chip>}>Project tracker</CardTitle>
-          <PortalTracker step={d.progress || 0} accent={prim} />
-          {d.schedDate && <div style={{ fontSize: 13.5, color: S.ink, marginTop: 10 }}>Installation scheduled for <b>{d.schedDate}</b></div>}
-        </Card>
+        {(d.order && d.order.length ? d.order : PORTAL_ORDER_DEFAULT).map((sid, idx) => {
+          const first = idx === 0;
+          const wrap = (node) => node ? <div key={sid} style={first ? undefined : { marginTop: 12 }}>{node}</div> : null;
 
-        {(d.notes || []).length > 0 && (
-          <Card style={{ marginTop: 12 }}>
-            <CardTitle>Updates from your team</CardTitle>
-            {d.notes.map((n, i2) => (
-              <div key={i2} style={{ borderTop: i2 ? `1px solid ${S.line}` : "none", padding: "10px 0" }}>
-                <div style={{ fontSize: 11.5, color: S.sub }}>{n.at}</div>
-                <div style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 3, whiteSpace: "pre-wrap" }}>{n.text}</div>
-              </div>
-            ))}
-          </Card>
-        )}
+          if (sid === "tracker") return wrap(
+            <Card>
+              <CardTitle right={<Chip tone="blue">{d.stageLabel || PORTAL_STEPS[d.progress || 0]}</Chip>}>Project tracker</CardTitle>
+              <PortalTracker step={d.progress || 0} accent={prim} />
+              {d.schedDate && <div style={{ fontSize: 13.5, color: S.ink, marginTop: 10 }}>Installation scheduled for <b>{d.schedDate}</b></div>}
+            </Card>
+          );
 
-        {d.estimate && (
-          <Card style={{ marginTop: 12 }}>
-            <CardTitle right={<span style={{ fontWeight: 800 }}>{money(d.estimate.total)}</span>}>Your estimate</CardTitle>
-            <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>{d.estimate.number} · {d.estimate.date}</div>
-            {(d.estimate.items || []).map((it, i2) => (
-              <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13.5, padding: "7px 0", borderTop: `1px solid ${S.line}` }}>
-                <span>{it.desc} — {it.qty} {it.unit}</span>
-                <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{money(num(it.qty) * num(it.price))}</span>
-              </div>
-            ))}
-          </Card>
-        )}
-
-        {d.contract && (
-          <Card style={{ marginTop: 12 }}>
-            <CardTitle right={<Chip tone={d.contract.status === "Signed" ? "green" : "gray"}>{d.contract.status}</Chip>}>Your contract</CardTitle>
-            <KV k="Contract" v={d.contract.number || "—"} />
-            <KV k="Price" v={money(d.contract.price || 0)} strong />
-          </Card>
-        )}
-
-        {d.invoice && (
-          <Card style={{ marginTop: 12 }}>
-            <CardTitle>Invoice & balance</CardTitle>
-            <KV k="Project total" v={money(d.invoice.contract || 0)} />
-            <KV k="Payments received" v={money(d.invoice.received || 0)} />
-            <KV k="Balance" v={money(d.invoice.balance || 0)} strong />
-          </Card>
-        )}
-
-        {(d.documents || []).length > 0 && (
-          <Card style={{ marginTop: 12 }}>
-            <CardTitle>Documents</CardTitle>
-            {d.documents.map((file, index) => (
-              <div key={`${file.name}-${index}`} style={{ display: "flex", gap: 10, alignItems: "center", borderTop: index ? `1px solid ${S.line}` : "none", padding: "10px 0" }}>
-                <FileText size={18} color={prim} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 700 }}>{file.name}</div>
-                  <div style={{ fontSize: 11.5, color: S.sub }}>{file.category}{file.date ? ` · ${file.date}` : ""}</div>
+          if (sid === "rep") {
+            const r = d.rep;
+            if (!r || !(r.name || r.phone || r.email)) return null;
+            return wrap(
+              <Card>
+                <CardTitle>Your project contact</CardTitle>
+                <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{r.name}</div>
+                {r.title && <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>{r.title}</div>}
+                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 7 }}>
+                  {r.phone && (
+                    <a href={`tel:${String(r.phone).replace(/\D/g, "")}`}
+                      style={{ display: "flex", alignItems: "center", gap: 9, color: prim, fontWeight: 700, fontSize: 14, textDecoration: "none" }}>
+                      <Phone size={15} /> {r.phone}
+                    </a>
+                  )}
+                  {r.email && (
+                    <a href={`mailto:${r.email}`}
+                      style={{ display: "flex", alignItems: "center", gap: 9, color: prim, fontSize: 14, textDecoration: "none", wordBreak: "break-all" }}>
+                      <Mail size={15} /> {r.email}
+                    </a>
+                  )}
                 </div>
-                {file.url && <a href={file.url} target="_blank" rel="noreferrer" style={{ color: prim, fontSize: 12.5, fontWeight: 700 }}>Open</a>}
-              </div>
-            ))}
-          </Card>
-        )}
+              </Card>
+            );
+          }
 
-        {(d.photos || []).length > 0 && (
-          <Card style={{ marginTop: 12 }}>
-            <CardTitle>Project photos</CardTitle>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {d.photos.map((ph, i2) => (
-                <div key={i2}>
-                  <img src={ph.url} alt="" style={{ width: "100%", borderRadius: 9, display: "block" }} />
-                  {ph.label && <div style={{ fontSize: 11.5, color: S.sub, marginTop: 3 }}>{ph.label}</div>}
+          if (sid === "updates") return (d.notes || []).length ? wrap(
+            <Card>
+              <CardTitle>Updates from your team</CardTitle>
+              {d.notes.map((n, i2) => (
+                <div key={i2} style={{ borderTop: i2 ? `1px solid ${S.line}` : "none", padding: "10px 0" }}>
+                  <div style={{ fontSize: 11.5, color: S.sub }}>{n.at}</div>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 3, whiteSpace: "pre-wrap" }}>{n.text}</div>
                 </div>
               ))}
-            </div>
-          </Card>
-        )}
+            </Card>
+          ) : null;
 
-        {(d.portal?.quoteRequests || d.portal?.addOnQuotes) && (
-          <Card style={{ marginTop: 12 }}>
-            <CardTitle>Quotes & future projects</CardTitle>
-            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 12 }}>
-              Request a change to your current quote or ask us to price another project without making a phone call.
-            </div>
-            <PortalRequestCenter token={token} jobId={d.jobId || null} role="customer" customerName={d.name} accent={prim}
-              allowQuoteChanges={d.portal?.quoteRequests} allowAddOns={d.portal?.addOnQuotes} />
-          </Card>
-        )}
+          if (sid === "estimate") return d.estimate ? wrap(
+            <Card>
+              <CardTitle right={<span style={{ fontWeight: 800 }}>{money(d.estimate.total)}</span>}>Your estimate</CardTitle>
+              <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>{d.estimate.number} · {d.estimate.date}</div>
+              {(d.estimate.items || []).map((it, i2) => (
+                <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13.5, padding: "7px 0", borderTop: `1px solid ${S.line}` }}>
+                  <span>{it.desc} — {it.qty} {it.unit}</span>
+                  <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{money(num(it.qty) * num(it.price))}</span>
+                </div>
+              ))}
+            </Card>
+          ) : null;
 
-        <Card style={{ marginTop: 12 }}>
-          <CardTitle>Messages</CardTitle>
-          <PortalThread token={token} meRole="customer" meName={d.name} accent={prim} />
-        </Card>
+          if (sid === "contract") return d.contract ? wrap(
+            <Card>
+              <CardTitle right={<Chip tone={d.contract.status === "Signed" ? "green" : "gray"}>{d.contract.status}</Chip>}>Your contract</CardTitle>
+              <KV k="Contract" v={d.contract.number || "—"} />
+              <KV k="Price" v={money(d.contract.price || 0)} strong />
+            </Card>
+          ) : null;
 
-        <Card style={{ marginTop: 12 }}>
-          <CardTitle>Questions?</CardTitle>
-          <div style={{ fontSize: 14, lineHeight: 1.6 }}>
-            <div><b>{d.company}</b></div>
-            <div style={{ color: S.sub }}>{d.slogan}</div>
-            <div style={{ marginTop: 8 }}>
-              <a href={`tel:${String(d.phone || "").replace(/\D/g, "")}`} style={{ color: prim, fontWeight: 700 }}>{d.phone}</a>
-            </div>
-            <div><a href={`mailto:${d.email}`} style={{ color: prim }}>{d.email}</a></div>
-          </div>
-        </Card>
+          if (sid === "invoice") return d.invoice ? wrap(
+            <Card>
+              <CardTitle>Invoice & balance</CardTitle>
+              <KV k="Project total" v={money(d.invoice.contract || 0)} />
+              <KV k="Payments received" v={money(d.invoice.received || 0)} />
+              <KV k="Balance" v={money(d.invoice.balance || 0)} strong />
+            </Card>
+          ) : null;
+
+          if (sid === "documents") return (d.documents || []).length ? wrap(
+            <Card>
+              <CardTitle>Documents</CardTitle>
+              {d.documents.map((file, index) => (
+                <div key={`${file.name}-${index}`} style={{ display: "flex", gap: 10, alignItems: "center", borderTop: index ? `1px solid ${S.line}` : "none", padding: "10px 0" }}>
+                  <FileText size={18} color={prim} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700 }}>{file.name}</div>
+                    <div style={{ fontSize: 11.5, color: S.sub }}>{file.category}{file.date ? ` · ${file.date}` : ""}</div>
+                  </div>
+                  {file.url && <a href={file.url} target="_blank" rel="noreferrer" style={{ color: prim, fontSize: 12.5, fontWeight: 700 }}>Open</a>}
+                </div>
+              ))}
+            </Card>
+          ) : null;
+
+          if (sid === "photos") return (d.photos || []).length ? wrap(
+            <Card>
+              <CardTitle>Project photos</CardTitle>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {d.photos.map((ph, i2) => (
+                  <div key={i2}>
+                    <img src={ph.url} alt="" style={{ width: "100%", borderRadius: 9, display: "block" }} />
+                    {ph.label && <div style={{ fontSize: 11.5, color: S.sub, marginTop: 3 }}>{ph.label}</div>}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ) : null;
+
+          if (sid === "requests") return (d.portal?.quoteRequests || d.portal?.addOnQuotes) ? wrap(
+            <Card>
+              <CardTitle>Quotes & future projects</CardTitle>
+              <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 12 }}>
+                Request a change to your current quote or ask us to price another project without making a phone call.
+              </div>
+              <PortalRequestCenter token={token} jobId={d.jobId || null} role="customer" customerName={d.name} accent={prim}
+                allowQuoteChanges={d.portal?.quoteRequests} allowAddOns={d.portal?.addOnQuotes} />
+            </Card>
+          ) : null;
+
+          if (sid === "messages") return wrap(
+            <Card>
+              <CardTitle>Messages</CardTitle>
+              <PortalThread token={token} meRole="customer" meName={d.name} accent={prim} />
+            </Card>
+          );
+
+          if (sid === "yourinfo") return wrap(
+            <PortalContactCard token={token} jobId={d.jobId || null} customer={d.customer || {}} accent={prim} />
+          );
+
+          if (sid === "contact") return wrap(
+            <Card>
+              <CardTitle>Questions?</CardTitle>
+              <div style={{ fontSize: 14, lineHeight: 1.6 }}>
+                <div><b>{d.company}</b></div>
+                <div style={{ color: S.sub }}>{d.slogan}</div>
+                <div style={{ marginTop: 8 }}>
+                  <a href={`tel:${String(d.phone || "").replace(/\D/g, "")}`} style={{ color: prim, fontWeight: 700 }}>{d.phone}</a>
+                </div>
+                <div><a href={`mailto:${d.email}`} style={{ color: prim }}>{d.email}</a></div>
+              </div>
+            </Card>
+          );
+
+          return null;
+        })}
       </div>
     </div>
   );
@@ -6187,6 +6463,171 @@ function TabChecklist({ job, mut, toast }) {
 }
 
 /* ---------- Measurements ---------- */
+
+/* ------------------------------------------------------------------
+   Measurement report import.
+
+   Aerial reports (EagleView, Roofr, Hover, GAF QuickMeasure) come as
+   either a CSV export or a generated PDF. Both are handled by pulling
+   text and matching against the labels those vendors actually print.
+   A scanned or image-only PDF has no text layer and cannot be read —
+   the UI says so rather than silently importing zeros.
+
+   Nothing is written straight to the job: values land in a review
+   step so a mis-parsed number gets caught before it drives an
+   estimate.
+------------------------------------------------------------------- */
+const MEASURE_PATTERNS = [
+  ["squares", /(?:total\s+(?:roof\s+)?area|total\s+squares|roof\s+area)\D{0,20}?([\d,]+(?:\.\d+)?)/i],
+  ["pitch", /(?:predominant\s+pitch|primary\s+pitch|pitch)\D{0,15}?(\d{1,2})\s*[\/:]\s*12/i],
+  ["ridges", /ridges?\b\D{0,20}?([\d,]+(?:\.\d+)?)/i],
+  ["hips", /hips?\b\D{0,20}?([\d,]+(?:\.\d+)?)/i],
+  ["valleys", /valleys?\b\D{0,20}?([\d,]+(?:\.\d+)?)/i],
+  ["eaves", /(?:eaves?|drip\s*edge)\b\D{0,20}?([\d,]+(?:\.\d+)?)/i],
+  ["rakes", /rakes?\b\D{0,20}?([\d,]+(?:\.\d+)?)/i],
+  ["stepFlash", /step\s*flash(?:ing)?\b\D{0,20}?([\d,]+(?:\.\d+)?)/i],
+  ["wallFlash", /(?:wall\s*flash(?:ing)?|headwall)\b\D{0,20}?([\d,]+(?:\.\d+)?)/i],
+  ["penetrations", /penetrations?\b\D{0,20}?([\d,]+)/i],
+];
+const MEASURE_LABELS = {
+  squares: "Total roof area (SQ)", pitch: "Predominant pitch", ridges: "Ridges (LF)",
+  hips: "Hips (LF)", valleys: "Valleys (LF)", eaves: "Eaves (LF)", rakes: "Rakes (LF)",
+  stepFlash: "Step flashing (LF)", wallFlash: "Wall flashing (LF)", penetrations: "Penetrations",
+};
+
+function parseMeasureText(text) {
+  const found = {};
+  const flat = String(text || "").replace(/\s+/g, " ");
+  MEASURE_PATTERNS.forEach(([key, re]) => {
+    const hit = flat.match(re);
+    if (hit && hit[1]) {
+      const clean = hit[1].replace(/,/g, "");
+      if (clean && !Number.isNaN(Number(clean))) found[key] = clean;
+    }
+  });
+  /* "Total area 2,431 sq ft" is square feet, not squares. Convert when
+     the number is large enough that squares would be implausible. */
+  if (found.squares && Number(found.squares) > 300 && /sq\.?\s*ft|square\s*feet/i.test(flat)) {
+    found.squares = (Number(found.squares) / 100).toFixed(1);
+  }
+  return found;
+}
+
+/* CSV exports are two-column label/value far more often than a header
+   row, so both shapes are handled. */
+function parseMeasureCsv(text) {
+  const lines = String(text || "").split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return {};
+  const cells = lines.map((l) => l.split(",").map((c) => c.replace(/^"|"$/g, "").trim()));
+  const twoCol = cells.filter((r) => r.length >= 2);
+  if (twoCol.length >= 3) {
+    const asText = twoCol.map((r) => `${r[0]} ${r[1]}`).join("\n");
+    const found = parseMeasureText(asText);
+    if (Object.keys(found).length) return found;
+  }
+  const header = cells[0].map((c) => c.toLowerCase());
+  const row = cells[1] || [];
+  const out = {};
+  MEASURE_PATTERNS.forEach(([key]) => {
+    const idx = header.findIndex((h) => h.includes(key.toLowerCase().replace("flash", "flash")));
+    if (idx >= 0 && row[idx]) out[key] = row[idx].replace(/,/g, "");
+  });
+  return out;
+}
+
+async function extractPdfText(file) {
+  /* Legacy build: the modern one ships top-level await, which would
+     force a build target that drops older mobile Safari. */
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf");
+  const workerSrc = (await import("pdfjs-dist/legacy/build/pdf.worker.min.js?url")).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjs.getDocument({ data: buf }).promise;
+  let text = "";
+  const pages = Math.min(doc.numPages, 8);
+  for (let i = 1; i <= pages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    text += content.items.map((it) => it.str).join(" ") + "\n";
+  }
+  return text;
+}
+
+function MeasureImport({ onApply, toast }) {
+  const [busy, setBusy] = useState(false);
+  const [found, setFound] = useState(null);
+  const [err, setErr] = useState("");
+  const inputRef = useRef(null);
+
+  const handle = async (file) => {
+    if (!file) return;
+    setBusy(true); setErr(""); setFound(null);
+    try {
+      const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+      let hits;
+      if (isPdf) {
+        const text = await extractPdfText(file);
+        if (!text.trim()) {
+          setErr("That PDF has no readable text — it is probably a scan or an image export. Enter the numbers by hand, or ask the vendor for the CSV.");
+          setBusy(false); return;
+        }
+        hits = parseMeasureText(text);
+      } else {
+        const text = await file.text();
+        hits = parseMeasureCsv(text);
+        if (!Object.keys(hits).length) hits = parseMeasureText(text);
+      }
+      if (!Object.keys(hits).length) {
+        setErr("Nothing recognisable in that file. It may be a layout I have not seen — enter the numbers by hand and send me the file so I can add it.");
+      } else {
+        setFound(hits);
+      }
+    } catch (e) {
+      setErr("Could not read that file: " + ((e && e.message) || "unknown error"));
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle>Import a measurement report</CardTitle>
+      <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 12 }}>
+        EagleView, Roofr, Hover or QuickMeasure — PDF or CSV. Values are
+        shown for review before anything is written to the job.
+      </div>
+      <input ref={inputRef} type="file" accept=".pdf,.csv,.tsv,text/csv,application/pdf"
+        style={{ display: "none" }}
+        onChange={(e) => { handle(e.target.files && e.target.files[0]); e.target.value = ""; }} />
+      <Btn kind="soft" small style={{ width: "100%" }} disabled={busy}
+        onClick={() => inputRef.current && inputRef.current.click()}>
+        <Upload size={14} /> {busy ? "Reading…" : "Choose a PDF or CSV"}
+      </Btn>
+      {err && <Callout label="Could not import" tone="amber">{err}</Callout>}
+      {found && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: S.sub, letterSpacing: ".04em", marginBottom: 6 }}>
+            FOUND {Object.keys(found).length} {Object.keys(found).length === 1 ? "VALUE" : "VALUES"}
+          </div>
+          {Object.entries(found).map(([k, v]) => (
+            <KV key={k} k={MEASURE_LABELS[k] || k} v={v} />
+          ))}
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => setFound(null)}>Discard</Btn>
+            <Btn small data-testid="apply-measure" style={{ flex: 1 }}
+              onClick={() => { onApply(found); setFound(null); toast && toast("Measurements applied"); }}>
+              Apply to this job
+            </Btn>
+          </div>
+          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
+            Check these against the report before you estimate from them.
+            Fields the report did not label are left untouched.
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function TabMeasure({ job, mut, toast }) {
   const m = job.measurements;
   const set = (k) => (e) => mut((j) => ({ ...j, measurements: { ...j.measurements, [k]: e.target.value } }));
@@ -6201,7 +6642,7 @@ function TabMeasure({ job, mut, toast }) {
       <Card>
         <CardTitle>Roof measurements</CardTitle>
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 14 }}>
-          Enter manually or from an aerial measurement report (Roofr / EagleView PDF upload attaches under Files).
+          Enter manually, or import an aerial report below — PDF or CSV.
           These drive the material list and estimate quantities.
         </div>
         {rows.map(([k, label, unit]) => (
@@ -6217,6 +6658,8 @@ function TabMeasure({ job, mut, toast }) {
           <div style={{ width: 44, fontSize: 12, color: S.sub }}>%</div>
         </div>
       </Card>
+      <MeasureImport toast={toast}
+        onApply={(vals) => mut((j) => ({ ...j, measurements: { ...j.measurements, ...vals } }))} />
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
         <Btn kind="ghost" style={{ flex: 1 }} onClick={() => toast("Attach the measurement PDF under Files")}>
           <Upload size={15} /> Upload report
@@ -7931,6 +8374,69 @@ function TabFiles({ job, mut, toast }) {
 }
 
 /* ---------- Client portal sharing ---------- */
+
+/* Team-side review of customer-proposed contact changes. Approving
+   writes the values onto the job and closes the request; declining
+   closes it without touching the record. Either way the customer's
+   portal stops showing "pending" on its next load. */
+function PortalContactApprovals({ token, job, mut, toast }) {
+  const [rows, setRows] = useState([]);
+  const [busy, setBusy] = useState("");
+
+  const load = () => {
+    const db = DB();
+    if (!db || !token) return;
+    db.from("crm_portal_requests").select("*").eq("token", token)
+      .eq("request_type", "contact_update").in("status", ["New", "Reviewing"])
+      .order("created_at", { ascending: false })
+      .then(({ data }) => setRows(data || []));
+  };
+  useEffect(load, [token]); // eslint-disable-line
+
+  const settle = async (row, approve) => {
+    const db = DB();
+    if (!db) return;
+    setBusy(row.id);
+    if (approve) {
+      const pr = row.proposed || {};
+      mut((j) => ({
+        ...j,
+        name: pr.name || j.name,
+        phone: pr.phone || j.phone,
+        email: pr.email || j.email,
+        contact: { ...(j.contact || {}), ...(pr.name ? { name: pr.name } : {}), ...(pr.phone ? { phone: pr.phone } : {}), ...(pr.email ? { email: pr.email } : {}) },
+      }));
+    }
+    await db.from("crm_portal_requests")
+      .update({ status: "Closed", team_response: approve ? "Approved" : "Declined", updated_at: new Date().toISOString() })
+      .eq("id", row.id);
+    setBusy("");
+    toast && toast(approve ? "Contact details updated" : "Change declined");
+    load();
+  };
+
+  if (!rows.length) return null;
+  return (
+    <div>
+      <CardTitle right={<Chip tone="amber">{rows.length} pending</Chip>}>Contact changes to confirm</CardTitle>
+      {rows.map((r) => (
+        <div key={r.id} style={{ border: `1px solid ${S.line}`, borderRadius: 10, padding: 12, marginTop: 8 }}>
+          <div style={{ fontSize: 11.5, color: S.sub }}>
+            Requested by {r.requested_by || "the customer"}
+          </div>
+          <div style={{ fontSize: 13.5, color: S.ink, whiteSpace: "pre-wrap", marginTop: 6, lineHeight: 1.55 }}>{r.details}</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
+            <Btn kind="ghost" small style={{ flex: 1 }} disabled={busy === r.id} onClick={() => settle(r, false)}>Decline</Btn>
+            <Btn small style={{ flex: 1 }} disabled={busy === r.id} onClick={() => settle(r, true)}>
+              {busy === r.id ? "Saving…" : "Approve"}
+            </Btn>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "" }) {
   const [busy, setBusy] = useState(false);
   const portalUrl = (tok) => `${window.location.origin}/?portal=${tok}`;
@@ -8006,29 +8512,59 @@ function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "" }) {
           The client sees their project at a private link: current stage, shared documents, and shared photos —
           nothing else. Toggle what's visible.
         </div>
-        {rows.map(([k, label, sub]) => (
-          <div key={k} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 0", borderBottom: `1px solid ${S.line}` }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{label}</div>
-              {sub && <div style={{ fontSize: 12, color: S.sub }}>{sub}</div>}
+        {/* One list: what the customer sees, whether each section is on,
+            and the order it appears in. Visibility and ordering used to
+            be two separate lists saying the same thing. */}
+        {portalOrderOf(portalSettings).map((sid, idx, arr) => {
+          const label = (PORTAL_SECTIONS.find(([id]) => id === sid) || [sid, sid])[1];
+          const key = PORTAL_SECTION_KEY[sid];
+          const on = portalSectionOn(portalSettings, sid);
+          const sub = (rows.find(([k]) => k === sid) || [])[2] || "";
+          const patch = (extra) => mut((j) => ({ ...j, portal: { ...DEFAULT_PORTAL_SETTINGS, ...(j.portal || {}), ...extra } }));
+          const move = (delta) => {
+            const next = [...arr];
+            const to = idx + delta;
+            if (to < 0 || to >= next.length) return;
+            [next[idx], next[to]] = [next[to], next[idx]];
+            patch({ order: next });
+          };
+          return (
+            <div key={sid} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderBottom: `1px solid ${S.line}` }}>
+              <span style={{ fontSize: 11.5, color: S.sub, minWidth: 16 }}>{idx + 1}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: on ? S.ink : S.sub }}>{label}</div>
+                {sub && <div style={{ fontSize: 12, color: S.sub }}>{sub}</div>}
+              </div>
+              <button aria-label={`Move ${label} up`} disabled={idx === 0} onClick={() => move(-1)}
+                style={{ border: `1px solid ${S.line}`, background: "#fff", borderRadius: 7, width: 28, height: 28,
+                  display: "grid", placeItems: "center", cursor: idx === 0 ? "default" : "pointer", opacity: idx === 0 ? 0.3 : 1 }}>
+                <ChevronUp size={13} />
+              </button>
+              <button aria-label={`Move ${label} down`} disabled={idx === arr.length - 1} onClick={() => move(1)}
+                style={{ border: `1px solid ${S.line}`, background: "#fff", borderRadius: 7, width: 28, height: 28,
+                  display: "grid", placeItems: "center", cursor: idx === arr.length - 1 ? "default" : "pointer", opacity: idx === arr.length - 1 ? 0.3 : 1 }}>
+                <ChevronDown size={13} />
+              </button>
+              <button aria-label={`${on ? "Hide" : "Show"} ${label}`} onClick={() => patch({ [key]: !on })} style={{
+                width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer", flexShrink: 0,
+                background: on ? T.accent : "#D6D9DE", position: "relative", transition: "background .15s",
+              }}>
+                <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" }} />
+              </button>
             </div>
-            <button onClick={() => mut((j) => ({ ...j, portal: { ...j.portal, [k]: !j.portal[k] } }))} style={{
-              width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer",
-              background: portalSettings[k] ? T.accent : "#D6D9DE", position: "relative", transition: "background .15s",
-            }}>
-              <span style={{
-                position: "absolute", top: 3, left: portalSettings[k] ? 22 : 3,
-                width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s",
-              }} />
-            </button>
-          </div>
-        ))}
+          );
+        })}
+        <Btn kind="ghost" small style={{ width: "100%", marginTop: 10 }}
+          onClick={() => mut((j) => ({ ...j, portal: { ...DEFAULT_PORTAL_SETTINGS, ...(j.portal || {}), order: PORTAL_ORDER_DEFAULT } }))}>
+          Reset to the default order
+        </Btn>
         <div style={{ marginTop: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", marginBottom: 4 }}>CUSTOMER TOOLS</div>
           {[
             ["quoteRequests", "Request changes to the current quote"],
             ["addOnQuotes", "Request pricing for future work"],
             ["notifyStage", "Queue text/email updates when the stage changes"],
+            ["allowContactEdit", "Let the customer request a contact correction"],
           ].map(([key, label]) => (
             <label key={key} style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0", borderBottom: `1px solid ${S.line}`, fontSize: 13.5 }}>
               <input type="checkbox" checked={!!portalSettings[key]}
@@ -8038,6 +8574,44 @@ function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "" }) {
             </label>
           ))}
         </div>
+        {portalSettings.showRep && (
+          <div style={{ marginTop: 16 }}>
+            <CardTitle>Project contact shown to the customer</CardTitle>
+            <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+              Blank fields fall back to the assigned rep, {job.assignee || "unassigned"}.
+              Fill these in to put a different person in front of this customer
+              without reassigning the job.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <Field label="Name">
+                <input style={inputStyle} value={job.repOverride?.name || ""}
+                  onChange={(e) => mut((j) => ({ ...j, repOverride: { ...(j.repOverride || {}), name: e.target.value } }))}
+                  placeholder={job.assignee || ""} />
+              </Field>
+              <Field label="Title">
+                <input style={inputStyle} value={job.repOverride?.title || ""}
+                  onChange={(e) => mut((j) => ({ ...j, repOverride: { ...(j.repOverride || {}), title: e.target.value } }))}
+                  placeholder="Project manager" />
+              </Field>
+            </div>
+            <Field label="Phone">
+              <input style={inputStyle} type="tel" value={job.repOverride?.phone || ""}
+                onChange={(e) => mut((j) => ({ ...j, repOverride: { ...(j.repOverride || {}), phone: e.target.value } }))} />
+            </Field>
+            <Field label="Email">
+              <input style={inputStyle} type="email" value={job.repOverride?.email || ""}
+                onChange={(e) => mut((j) => ({ ...j, repOverride: { ...(j.repOverride || {}), email: e.target.value } }))} />
+            </Field>
+          </div>
+        )}
+
+
+        {job.portalToken && (
+          <div style={{ marginTop: 16 }}>
+            <PortalContactApprovals token={job.portalToken} job={job} mut={mut} toast={toast} />
+          </div>
+        )}
+
         {job.portalToken && (
           <div style={{ marginTop: 14 }}>
             <CardTitle>Messages with the homeowner</CardTitle>
@@ -10888,6 +11462,14 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
     ]],
   ];
   const [open, setOpen] = useState({ Sales: true, Production: true, Company: false, Setup: false });
+  const [q, setQ] = useState("");
+  const needle = q.trim().toLowerCase();
+  /* Searching flattens the groups — hunting through four accordions on
+     a phone was the complaint. */
+  const matches = needle
+    ? groups.flatMap(([, items]) => items.filter(Boolean)
+        .filter(([, , label, sub]) => (label + " " + (sub || "")).toLowerCase().includes(needle)))
+    : null;
   return (
     <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
       <div style={{ fontSize: 24, fontWeight: 800, color: S.ink, marginBottom: 4 }}>More</div>
@@ -10898,7 +11480,34 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
           <Chip tone={currentUser.role === "admin" ? "slate" : "blue"}>{currentUser.title}</Chip>
         </div>
       )}
-      {groups.map(([group, items]) => (
+      <div style={{ margin: "12px 0 4px" }}>
+        <input style={inputStyle} value={q} onChange={(e) => setQ(e.target.value)}
+          placeholder="Search settings and screens" />
+      </div>
+      {matches && (
+        <Card pad={0} style={{ overflow: "hidden", marginTop: 8 }}>
+          {matches.map(([id, Icon, label, sub], i2) => (
+            <button key={id} onClick={() => onNav(id)} style={{
+              display: "flex", alignItems: "center", gap: 13, width: "100%",
+              border: "none", background: "none", cursor: "pointer", textAlign: "left",
+              padding: "13px 14px", borderTop: i2 ? `1px solid ${S.line}` : "none",
+            }}>
+              <span style={{ width: 36, height: 36, borderRadius: 10, background: T.accentSoft, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                <Icon size={17} color={T.accent} />
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{label}</div>
+                <div style={{ fontSize: 11.5, color: S.sub, marginTop: 1 }}>{sub}</div>
+              </span>
+              <ChevronRight size={15} color="#C7CBD1" />
+            </button>
+          ))}
+          {!matches.length && (
+            <div style={{ padding: 16, fontSize: 13.5, color: S.sub }}>Nothing matches that.</div>
+          )}
+        </Card>
+      )}
+      {!matches && groups.map(([group, items]) => (
         <div key={group} style={{ marginBottom: 10 }}>
           <button onClick={() => setOpen({ ...open, [group]: !open[group] })} style={{
             width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
