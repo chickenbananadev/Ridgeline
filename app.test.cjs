@@ -9629,16 +9629,29 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast: toast2
     try {
       if (editing === "new") {
         if (auth) {
-          await auth.inviteSeat({
+          const payload = {
             name: f.name.trim(),
             email: f.email.trim(),
             role: f.role,
             title: f.title,
             commission_rate: f.commissionRate
-          });
-          const all = await auth.listProfiles();
-          setUsers(all.map(fromProfile));
-          toast2(`Invite sent to ${f.email.trim()}`);
+          };
+          let viaLink = false;
+          try {
+            await auth.inviteSeat(payload);
+          } catch (fnErr) {
+            const msg = fnErr && fnErr.message || "";
+            const missing = /Failed to send a request|FunctionsFetchError|not found|Failed to fetch|non-2xx|404/i.test(msg);
+            if (!missing || !auth.inviteSeatViaLink) throw fnErr;
+            await auth.inviteSeatViaLink(payload);
+            viaLink = true;
+          }
+          try {
+            const all = await auth.listProfiles();
+            setUsers(all.map(fromProfile));
+          } catch {
+          }
+          toast2(viaLink ? `Sign-in link sent to ${f.email.trim()}` : `Invite sent to ${f.email.trim()}`);
         } else {
           setUsers([...users, { ...f, id: uid("u"), email: f.email.trim(), name: f.name.trim(), addedAt: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) }]);
           toast2("Seat created (demo mode \u2014 no invite sent)");
@@ -9652,8 +9665,8 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast: toast2
       setEditing(null);
     } catch (e) {
       const msg = e && e.message ? e.message : "Could not save the seat.";
-      const noFn = /Failed to send a request|FunctionsFetchError|not found|Failed to fetch|non-2xx/i.test(msg);
-      setSeatErr(noFn ? "INVITE_FALLBACK" : msg);
+      const signupsOff = /signups? not allowed|disabled|email_provider_disabled/i.test(msg);
+      setSeatErr(signupsOff ? "SIGNUPS_OFF" : msg);
     }
     setSaving(false);
   };
@@ -9782,16 +9795,12 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast: toast2
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 2 }, disabled: !valid || saving, onClick: save, children: saving ? "Saving\u2026" : editing === "new" ? "Create seat & send invite" : "Save changes" })
         ] }),
         children: [
-          seatErr === "INVITE_FALLBACK" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Two-step invite", tone: "amber", children: [
-            "The one-tap invite isn't set up on this project yet, so use this for now:",
+          seatErr === "SIGNUPS_OFF" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "One setting is blocking this", tone: "amber", children: [
+            "Supabase is refusing to create the account because email sign-ups are switched off.",
             "\n",
-            "1. Supabase \u2192 Authentication \u2192 Users \u2192 Invite user \u2192 enter ",
-            f.email || "their email",
-            ".",
+            'Go to Authentication \u2192 Sign In / Providers \u2192 Email, turn on "Enable email sign-ups", and save.',
             "\n",
-            "2. They set a password from the email and appear here automatically.",
-            "\n",
-            "Running migration 005 makes step 2 instant \u2014 ask Claude for it if you haven't."
+            "Nobody can sign up on their own \u2014 they still need a link from you \u2014 so this stays invite-only."
           ] }) : seatErr ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Could not save", tone: "red", children: seatErr }) : null,
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Full name *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.name, onChange: set("name") }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Work email *", hint: emailTaken ? "That email already has a seat." : "This is their login. An invite to set a password goes here.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, borderColor: emailTaken ? "#B42318" : S.line }, type: "email", value: f.email, onChange: set("email") }) }),

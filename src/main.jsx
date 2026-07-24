@@ -72,6 +72,24 @@ if (url && anon) {
       if (error) throw error;
       return data;
     },
+    /* Fallback used when the invite Edge Function isn't deployed.
+       signInWithOtp with shouldCreateUser creates the account and mails
+       a sign-in link using only the public key — no server function.
+       The metadata rides along so the auto-profile trigger fills in
+       name, role, and title. Requires email signups to be enabled in
+       Authentication -> Sign In / Providers. */
+    async inviteSeatViaLink({ name, email, role, title, commission_rate }) {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: window.location.origin,
+          data: { name, role: role || "rep", title: title || "Sales Rep", commission_rate: commission_rate ?? 60 },
+        },
+      });
+      if (error) throw error;
+      return { ok: true, viaLink: true };
+    },
   };
 }
 

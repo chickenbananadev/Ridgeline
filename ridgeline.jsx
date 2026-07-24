@@ -8327,13 +8327,30 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
     try {
       if (editing === "new") {
         if (auth) {
-          await auth.inviteSeat({
+          const payload = {
             name: f.name.trim(), email: f.email.trim(), role: f.role,
             title: f.title, commission_rate: f.commissionRate,
-          });
-          const all = await auth.listProfiles();
-          setUsers(all.map(fromProfile));
-          toast(`Invite sent to ${f.email.trim()}`);
+          };
+          let viaLink = false;
+          try {
+            await auth.inviteSeat(payload);
+          } catch (fnErr) {
+            /* The Edge Function is optional. When it isn't deployed we
+               fall back to a sign-in link, which creates the account and
+               emails them using only the public key. */
+            const msg = (fnErr && fnErr.message) || "";
+            const missing = /Failed to send a request|FunctionsFetchError|not found|Failed to fetch|non-2xx|404/i.test(msg);
+            if (!missing || !auth.inviteSeatViaLink) throw fnErr;
+            await auth.inviteSeatViaLink(payload);
+            viaLink = true;
+          }
+          try {
+            const all = await auth.listProfiles();
+            setUsers(all.map(fromProfile));
+          } catch { /* profile appears once they accept */ }
+          toast(viaLink
+            ? `Sign-in link sent to ${f.email.trim()}`
+            : `Invite sent to ${f.email.trim()}`);
         } else {
           setUsers([...users, { ...f, id: uid("u"), email: f.email.trim(), name: f.name.trim(), addedAt: new Date().toISOString().slice(0, 10) }]);
           toast("Seat created (demo mode — no invite sent)");
@@ -8347,8 +8364,8 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
       setEditing(null);
     } catch (e) {
       const msg = e && e.message ? e.message : "Could not save the seat.";
-      const noFn = /Failed to send a request|FunctionsFetchError|not found|Failed to fetch|non-2xx/i.test(msg);
-      setSeatErr(noFn ? "INVITE_FALLBACK" : msg);
+      const signupsOff = /signups? not allowed|disabled|email_provider_disabled/i.test(msg);
+      setSeatErr(signupsOff ? "SIGNUPS_OFF" : msg);
     }
     setSaving(false);
   };
@@ -8463,12 +8480,11 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
             </Btn>
           </div>
         }>
-        {seatErr === "INVITE_FALLBACK" ? (
-          <Callout label="Two-step invite" tone="amber">
-            The one-tap invite isn't set up on this project yet, so use this for now:
-            {"\n"}1. Supabase → Authentication → Users → Invite user → enter {f.email || "their email"}.
-            {"\n"}2. They set a password from the email and appear here automatically.
-            {"\n"}Running migration 005 makes step 2 instant — ask Claude for it if you haven't.
+        {seatErr === "SIGNUPS_OFF" ? (
+          <Callout label="One setting is blocking this" tone="amber">
+            Supabase is refusing to create the account because email sign-ups are switched off.
+            {"\n"}Go to Authentication → Sign In / Providers → Email, turn on "Enable email sign-ups", and save.
+            {"\n"}Nobody can sign up on their own — they still need a link from you — so this stays invite-only.
           </Callout>
         ) : seatErr ? (
           <Callout label="Could not save" tone="red">{seatErr}</Callout>
