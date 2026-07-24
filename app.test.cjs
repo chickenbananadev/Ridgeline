@@ -4310,7 +4310,7 @@ function JobDetail({
       ),
       tab === "tasks" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabTasks, { job: job2, mut }),
       tab === "files" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFiles, { job: job2, mut, toast: toast2 }),
-      tab === "portal" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPortal, { job: job2, brand: brand2, mut, toast: toast2 })
+      tab === "portal" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPortal, { job: job2, brand: brand2, mut, toast: toast2, currentUser })
     ] })
   ] });
 }
@@ -4921,6 +4921,98 @@ function contractDocHtml(job2, brand2) {
   </div>`;
   return out;
 }
+function PortalThread({ token, meRole, meName, accent }) {
+  const [msgs, setMsgs] = (0, import_react.useState)([]);
+  const [txt, setTxt] = (0, import_react.useState)("");
+  const load = () => {
+    const db = DB();
+    if (!db || !token) return;
+    db.from("crm_portal_msgs").select("*").eq("token", token).order("at", { ascending: true }).limit(200).then(({ data }) => {
+      if (data) setMsgs(data);
+    });
+  };
+  (0, import_react.useEffect)(() => {
+    load();
+    const db = DB();
+    if (!db || !token) return;
+    const ch = db.channel("portal-" + token).on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "crm_portal_msgs", filter: `token=eq.${token}` },
+      (payload) => setMsgs((prev) => prev.some((m) => m.id === payload.new.id) ? prev : [...prev, payload.new])
+    ).subscribe();
+    return () => {
+      db.removeChannel(ch);
+    };
+  }, [token]);
+  const send = async () => {
+    const db = DB();
+    const t = txt.trim();
+    if (!db || !t) return;
+    const row = { id: uid("pm"), token, by_role: meRole, by_name: meName, body: t };
+    setTxt("");
+    const { error } = await db.from("crm_portal_msgs").insert(row);
+    if (!error) setMsgs((prev) => prev.some((m) => m.id === row.id) ? prev : [...prev, { ...row, at: (/* @__PURE__ */ new Date()).toISOString() }]);
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { maxHeight: 260, overflowY: "auto" }, children: [
+      msgs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: meRole === "customer" ? "Have a question? Write to your project team here." : "Messages the homeowner sends from their portal land here." }),
+      msgs.map((m) => {
+        const mine = m.by_role === meRole;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+          maxWidth: "82%",
+          padding: "8px 12px",
+          background: mine ? accent : "#fff",
+          color: mine ? "#fff" : S.ink,
+          border: mine ? "none" : `1px solid ${S.line}`,
+          borderRadius: mine ? "14px 14px 4px 14px" : "14px 14px 14px 4px"
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, fontWeight: 700, opacity: 0.75, marginBottom: 1 }, children: m.by_role === "customer" ? m.by_name || "Homeowner" : m.by_name || "Your team" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, lineHeight: 1.45, whiteSpace: "pre-wrap" }, children: m.body }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 9.5, opacity: 0.6, marginTop: 2, textAlign: "right" }, children: String(m.at || "").slice(11, 16) })
+        ] }) }, m.id);
+      })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: { ...inputStyle, flex: 1 },
+          value: txt,
+          placeholder: "Write a message\u2026",
+          onChange: (e) => setTxt(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === "Enter") send();
+          }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, onClick: send, disabled: !txt.trim(), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 14 }) })
+    ] })
+  ] });
+}
+function buildPortalSnapshot(job2, brand2, token) {
+  return {
+    token,
+    job_id: job2.id,
+    data: {
+      company: brand2.company,
+      logo: brand2.logo || null,
+      primary: brand2.primary,
+      slogan: brand2.slogan,
+      phone: brand2.phone,
+      email: brand2.email,
+      name: job2.name,
+      address: job2.address,
+      stageLabel: job2.stageLabel || "",
+      portal: job2.portal,
+      notes: (job2.notes || []).filter((n) => n.customerVisible).map((n) => ({ at: n.at, text: n.text })),
+      photos: job2.portal && job2.portal.photos ? (job2.photos || []).filter((ph) => ph.shared).map((ph) => ({ url: ph.url || ph.dataUrl, label: ph.label || "" })) : [],
+      estimate: job2.portal && job2.portal.estimate ? { number: job2.estimate.number, date: job2.estimate.date, total: estimateTotal(job2.estimate), items: job2.estimate.items } : null,
+      contract: job2.portal && job2.portal.contract ? { number: job2.contract.number, price: job2.contract.price, status: job2.contract.status } : null,
+      schedDate: job2.schedDate || null,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    }
+  };
+}
 function PublicPortal({ token }) {
   const [state, setState] = (0, import_react.useState)({ loading: true, data: null, err: "" });
   (0, import_react.useEffect)(() => {
@@ -5002,6 +5094,10 @@ function PublicPortal({ token }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: ph.url, alt: "", style: { width: "100%", borderRadius: 9, display: "block" } }),
           ph.label && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 3 }, children: ph.label })
         ] }, i2)) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Messages" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PortalThread, { token, meRole: "customer", meName: d.name, accent: prim })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Questions?" }),
@@ -5223,9 +5319,17 @@ function WarrantyCard({ job: job2, mut }) {
   const expired = laborEnd && laborEnd < (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 12 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: laborEnd && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: expired ? "red" : "green", children: expired ? "Labor expired" : `Labor thru ${laborEnd}` }), children: "Warranty" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Install date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "date", value: w.installDate || "", onChange: (e) => set("installDate", e.target.value) }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Labor warranty (years)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: w.laborYears || "", onChange: (e) => set("laborYears", e.target.value), children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 12, alignItems: "start" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Install date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: { ...inputStyle, width: "100%", minWidth: 0, boxSizing: "border-box", height: 42 },
+          type: "date",
+          value: w.installDate || "",
+          onChange: (e) => set("installDate", e.target.value)
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Labor warranty (years)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: { ...selStyle, height: 42, boxSizing: "border-box" }, value: w.laborYears || "", onChange: (e) => set("laborYears", e.target.value), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "\u2014" }),
         [1, 2, 3, 5, 10, 15, 25].map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: n, children: [
           n,
@@ -7901,31 +8005,10 @@ function TabFiles({ job: job2, mut, toast: toast2 }) {
     ] })
   ] });
 }
-function TabPortal({ job: job2, brand: brand2, mut, toast: toast2 }) {
+function TabPortal({ job: job2, brand: brand2, mut, toast: toast2, currentUser }) {
   const [busy, setBusy] = (0, import_react.useState)(false);
   const portalUrl = (tok) => `${window.location.origin}/?portal=${tok}`;
-  const snapshot = (tok) => ({
-    token: tok,
-    job_id: job2.id,
-    data: {
-      company: brand2.company,
-      logo: brand2.logo || null,
-      primary: brand2.primary,
-      slogan: brand2.slogan,
-      phone: brand2.phone,
-      email: brand2.email,
-      name: job2.name,
-      address: job2.address,
-      stageLabel: job2.stageLabel || "",
-      portal: job2.portal,
-      notes: (job2.notes || []).filter((n) => n.customerVisible).map((n) => ({ at: n.at, text: n.text })),
-      photos: job2.portal.photos ? (job2.photos || []).filter((ph) => ph.shared).map((ph) => ({ url: ph.url || ph.dataUrl, label: ph.label || "" })) : [],
-      estimate: job2.portal.estimate ? { number: job2.estimate.number, date: job2.estimate.date, total: estimateTotal(job2.estimate), items: job2.estimate.items } : null,
-      contract: job2.portal.contract ? { number: job2.contract.number, price: job2.contract.price, status: job2.contract.status } : null,
-      schedDate: job2.schedDate || null,
-      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-    }
-  });
+  const snapshot = (tok) => buildPortalSnapshot(job2, brand2, tok);
   const publishPortal = async () => {
     const db = DB();
     const tok = job2.portalToken || uid("p") + Math.random().toString(36).slice(2, 10);
@@ -8002,6 +8085,10 @@ function TabPortal({ job: job2, brand: brand2, mut, toast: toast2 }) {
           transition: "left .15s"
         } }) })
       ] }, k)),
+      job2.portalToken && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Messages with the homeowner" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PortalThread, { token: job2.portalToken, meRole: "team", meName: currentUser ? currentUser.name : "Team", accent: T.accent })
+      ] }),
       job2.portalToken && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14, background: S.soft, borderRadius: 10, padding: "10px 12px" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginBottom: 3 }, children: "LIVE LINK" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, wordBreak: "break-all", color: T.accent }, children: portalUrl(job2.portalToken) })
@@ -11096,6 +11183,14 @@ function useDbSync(st) {
           });
           const { error } = await db.from("crm_jobs").upsert(rows);
           if (error) throw error;
+          const published = changed.filter((j) => j.portalToken);
+          if (published.length && st.brandRef) {
+            const snaps = published.map((j) => ({
+              ...buildPortalSnapshot({ ...j, stageLabel: (st.stagesRef || []).find((x) => x.id === j.stageId)?.label || "" }, st.brandRef, j.portalToken),
+              revoked: false
+            }));
+            await db.from("crm_portal").upsert(snaps);
+          }
           if (!isCrew) {
             const finRows = changed.map((j) => ({ job_id: j.id, data: { financials: j.financials, payments: j.payments }, updated_at: (/* @__PURE__ */ new Date()).toISOString() }));
             await db.from("crm_financials").upsert(finRows);
@@ -11341,7 +11436,9 @@ function SupremeCRM() {
     setChatMsgs,
     orgPack,
     unpackOrg,
-    orgDeps
+    orgDeps,
+    brandRef: brand2,
+    stagesRef: stages
   });
   T.primary = brand2.primary || "#28373E";
   T.accent = brand2.accent || "#1B6DE0";

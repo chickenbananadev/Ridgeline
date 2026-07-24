@@ -3507,7 +3507,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           crews={crews} templates={templates} currentUser={currentUser} users={users} />}
         {tab === "tasks" && <TabTasks job={job} mut={mut} />}
         {tab === "files" && <TabFiles job={job} mut={mut} toast={toast} />}
-        {tab === "portal" && <TabPortal job={job} brand={brand} mut={mut} toast={toast} />}
+        {tab === "portal" && <TabPortal job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser} />}
       </div>
     </div>
   );
@@ -4135,6 +4135,89 @@ function reportDocHtml(job, brand) {
   return out;
 }
 
+function PortalThread({ token, meRole, meName, accent }) {
+  const [msgs, setMsgs] = useState([]);
+  const [txt, setTxt] = useState("");
+  const load = () => {
+    const db = DB(); if (!db || !token) return;
+    db.from("crm_portal_msgs").select("*").eq("token", token).order("at", { ascending: true }).limit(200)
+      .then(({ data }) => { if (data) setMsgs(data); });
+  };
+  useEffect(() => {
+    load();
+    const db = DB(); if (!db || !token) return;
+    const ch = db.channel("portal-" + token)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_portal_msgs", filter: `token=eq.${token}` },
+        (payload) => setMsgs((prev) => prev.some((m) => m.id === payload.new.id) ? prev : [...prev, payload.new]))
+      .subscribe();
+    return () => { db.removeChannel(ch); };
+  }, [token]);
+  const send = async () => {
+    const db = DB(); const t = txt.trim();
+    if (!db || !t) return;
+    const row = { id: uid("pm"), token, by_role: meRole, by_name: meName, body: t };
+    setTxt("");
+    const { error } = await db.from("crm_portal_msgs").insert(row);
+    if (!error) setMsgs((prev) => prev.some((m) => m.id === row.id) ? prev : [...prev, { ...row, at: new Date().toISOString() }]);
+  };
+  return (
+    <>
+      <div style={{ maxHeight: 260, overflowY: "auto" }}>
+        {msgs.length === 0 && (
+          <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+            {meRole === "customer" ? "Have a question? Write to your project team here." : "Messages the homeowner sends from their portal land here."}
+          </div>
+        )}
+        {msgs.map((m) => {
+          const mine = m.by_role === meRole;
+          return (
+            <div key={m.id} style={{ display: "flex", justifyContent: mine ? "flex-end" : "flex-start", marginTop: 8 }}>
+              <div style={{
+                maxWidth: "82%", padding: "8px 12px",
+                background: mine ? accent : "#fff",
+                color: mine ? "#fff" : S.ink,
+                border: mine ? "none" : `1px solid ${S.line}`,
+                borderRadius: mine ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.75, marginBottom: 1 }}>
+                  {m.by_role === "customer" ? (m.by_name || "Homeowner") : (m.by_name || "Your team")}
+                </div>
+                <div style={{ fontSize: 13.5, lineHeight: 1.45, whiteSpace: "pre-wrap" }}>{m.body}</div>
+                <div style={{ fontSize: 9.5, opacity: 0.6, marginTop: 2, textAlign: "right" }}>{String(m.at || "").slice(11, 16)}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <input style={{ ...inputStyle, flex: 1 }} value={txt} placeholder="Write a message…"
+          onChange={(e) => setTxt(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") send(); }} />
+        <Btn small onClick={send} disabled={!txt.trim()}><Send size={14} /></Btn>
+      </div>
+    </>
+  );
+}
+
+function buildPortalSnapshot(job, brand, token) {
+  return {
+    token, job_id: job.id,
+    data: {
+      company: brand.company, logo: brand.logo || null, primary: brand.primary,
+      slogan: brand.slogan, phone: brand.phone, email: brand.email,
+      name: job.name, address: job.address,
+      stageLabel: job.stageLabel || "",
+      portal: job.portal,
+      notes: (job.notes || []).filter((n) => n.customerVisible).map((n) => ({ at: n.at, text: n.text })),
+      photos: job.portal && job.portal.photos ? (job.photos || []).filter((ph) => ph.shared).map((ph) => ({ url: ph.url || ph.dataUrl, label: ph.label || "" })) : [],
+      estimate: job.portal && job.portal.estimate ? { number: job.estimate.number, date: job.estimate.date, total: estimateTotal(job.estimate), items: job.estimate.items } : null,
+      contract: job.portal && job.portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
+      schedDate: job.schedDate || null,
+      updatedAt: new Date().toISOString(),
+    },
+  };
+}
+
 function PublicPortal({ token }) {
   const [state, setState] = useState({ loading: true, data: null, err: "" });
   useEffect(() => {
@@ -4223,6 +4306,11 @@ function PublicPortal({ token }) {
             </div>
           </Card>
         )}
+
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle>Messages</CardTitle>
+          <PortalThread token={token} meRole="customer" meName={d.name} accent={prim} />
+        </Card>
 
         <Card style={{ marginTop: 12 }}>
           <CardTitle>Questions?</CardTitle>
@@ -4449,12 +4537,13 @@ function WarrantyCard({ job, mut }) {
       <CardTitle right={laborEnd && (
         <Chip tone={expired ? "red" : "green"}>{expired ? "Labor expired" : `Labor thru ${laborEnd}`}</Chip>
       )}>Warranty</CardTitle>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 12, alignItems: "start" }}>
         <Field label="Install date">
-          <input style={inputStyle} type="date" value={w.installDate || ""} onChange={(e) => set("installDate", e.target.value)} />
+          <input style={{ ...inputStyle, width: "100%", minWidth: 0, boxSizing: "border-box", height: 42 }} type="date"
+            value={w.installDate || ""} onChange={(e) => set("installDate", e.target.value)} />
         </Field>
         <Field label="Labor warranty (years)">
-          <select style={selStyle} value={w.laborYears || ""} onChange={(e) => set("laborYears", e.target.value)}>
+          <select style={{ ...selStyle, height: 42, boxSizing: "border-box" }} value={w.laborYears || ""} onChange={(e) => set("laborYears", e.target.value)}>
             <option value="">—</option>
             {[1, 2, 3, 5, 10, 15, 25].map((n) => <option key={n} value={n}>{n} year{n > 1 ? "s" : ""}</option>)}
           </select>
@@ -6712,24 +6801,10 @@ function TabFiles({ job, mut, toast }) {
 }
 
 /* ---------- Client portal sharing ---------- */
-function TabPortal({ job, brand, mut, toast }) {
+function TabPortal({ job, brand, mut, toast, currentUser }) {
   const [busy, setBusy] = useState(false);
   const portalUrl = (tok) => `${window.location.origin}/?portal=${tok}`;
-  const snapshot = (tok) => ({
-    token: tok, job_id: job.id,
-    data: {
-      company: brand.company, logo: brand.logo || null, primary: brand.primary,
-      slogan: brand.slogan, phone: brand.phone, email: brand.email,
-      name: job.name, address: job.address, stageLabel: job.stageLabel || "",
-      portal: job.portal,
-      notes: (job.notes || []).filter((n) => n.customerVisible).map((n) => ({ at: n.at, text: n.text })),
-      photos: job.portal.photos ? (job.photos || []).filter((ph) => ph.shared).map((ph) => ({ url: ph.url || ph.dataUrl, label: ph.label || "" })) : [],
-      estimate: job.portal.estimate ? { number: job.estimate.number, date: job.estimate.date, total: estimateTotal(job.estimate), items: job.estimate.items } : null,
-      contract: job.portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
-      schedDate: job.schedDate || null,
-      updatedAt: new Date().toISOString(),
-    },
-  });
+  const snapshot = (tok) => buildPortalSnapshot(job, brand, tok);
   const publishPortal = async () => {
     const db = DB();
     const tok = job.portalToken || (uid("p") + Math.random().toString(36).slice(2, 10));
@@ -6805,6 +6880,12 @@ function TabPortal({ job, brand, mut, toast }) {
             </button>
           </div>
         ))}
+        {job.portalToken && (
+          <div style={{ marginTop: 14 }}>
+            <CardTitle>Messages with the homeowner</CardTitle>
+            <PortalThread token={job.portalToken} meRole="team" meName={currentUser ? currentUser.name : "Team"} accent={T.accent} />
+          </div>
+        )}
         {job.portalToken && (
           <div style={{ marginTop: 14, background: S.soft, borderRadius: 10, padding: "10px 12px" }}>
             <div style={{ fontSize: 11.5, color: S.sub, marginBottom: 3 }}>LIVE LINK</div>
@@ -9763,6 +9844,17 @@ function useDbSync(st) {
           });
           const { error } = await db.from("crm_jobs").upsert(rows);
           if (error) throw error;
+          /* Live portals: any published job re-snapshots on every change,
+             so the homeowner sees stage moves and new notes on their next
+             load without anyone re-publishing by hand. */
+          const published = changed.filter((j) => j.portalToken);
+          if (published.length && st.brandRef) {
+            const snaps = published.map((j) => ({
+              ...buildPortalSnapshot({ ...j, stageLabel: (st.stagesRef || []).find((x) => x.id === j.stageId)?.label || "" }, st.brandRef, j.portalToken),
+              revoked: false,
+            }));
+            await db.from("crm_portal").upsert(snaps);
+          }
           if (!isCrew) {
             const finRows = changed.map((j) => ({ job_id: j.id, data: { financials: j.financials, payments: j.payments }, updated_at: new Date().toISOString() }));
             await db.from("crm_financials").upsert(finRows);
@@ -9992,6 +10084,7 @@ export default function SupremeCRM() {
     jobs, setJobs, appointments, setAppointments,
     activity, setActivity, chatMsgs, setChatMsgs,
     orgPack, unpackOrg, orgDeps,
+    brandRef: brand, stagesRef: stages,
   });
 
   /* Copy brand colors into the live theme before anything renders. */
