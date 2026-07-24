@@ -4138,6 +4138,106 @@ function PasswordSetScreen({ brand, mode, onDone, toast }) {
   );
 }
 
+function SystemCheck({ currentUser, onBack }) {
+  const [rows, setRows] = useState([]);
+  const [running, setRunning] = useState(false);
+  const TABLES = [
+    ["crm_org", "Company settings (stages, price list, crews)"],
+    ["crm_jobs", "Jobs and customers"],
+    ["crm_financials", "Job financials"],
+    ["crm_appointments", "Calendar appointments"],
+    ["crm_activity", "Activity feed"],
+    ["crm_chat", "Team chat"],
+    ["crm_brand", "Logo, colors, company info"],
+    ["crm_portal", "Client portal links"],
+    ["profiles", "Team members and roles"],
+  ];
+  const run = async () => {
+    setRunning(true);
+    const out = [];
+    const db = DB();
+    out.push({
+      label: "Database connection",
+      ok: !!db,
+      detail: db ? "Connected to Supabase" : "No connection — the VITE_SUPABASE_URL / ANON_KEY variables aren't reaching this build. Redeploy after adding them.",
+    });
+    if (db) {
+      out.push({
+        label: "Signed-in session",
+        ok: !!currentUser,
+        detail: currentUser ? `${currentUser.name} · ${currentUser.role}` : "No session",
+      });
+      for (const [table, human] of TABLES) {
+        try {
+          const { error } = await db.from(table).select("*", { count: "exact", head: true });
+          if (error) {
+            const missing = /does not exist|schema cache|relation/i.test(error.message || "");
+            out.push({
+              label: human, ok: false,
+              detail: missing
+                ? `Table "${table}" doesn't exist — its migration hasn't been run.`
+                : `Blocked: ${error.message}`,
+            });
+          } else {
+            out.push({ label: human, ok: true, detail: `${table} ready` });
+          }
+        } catch (e) {
+          out.push({ label: human, ok: false, detail: String((e && e.message) || e) });
+        }
+      }
+      /* Write test — proves policies allow saving, not just reading. */
+      try {
+        const { error } = await db.from("crm_brand").upsert({ id: 1, data: { _probe: Date.now() }, updated_at: new Date().toISOString() });
+        out.push({
+          label: "Can save branding",
+          ok: !error,
+          detail: error ? `Write blocked: ${error.message}` : "Write succeeded",
+        });
+      } catch (e) {
+        out.push({ label: "Can save branding", ok: false, detail: String((e && e.message) || e) });
+      }
+    }
+    setRows(out);
+    setRunning(false);
+  };
+  useEffect(() => { run(); }, []);
+  const failing = rows.filter((r) => !r.ok);
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="System check" onBack={onBack}
+        right={<Btn small kind="ghost" onClick={run} disabled={running}>{running ? "Checking…" : "Re-run"}</Btn>} />
+      <Card style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+          Tests every connection the app depends on. Anything red below names the exact thing to fix — no guessing.
+        </div>
+        {rows.length > 0 && (
+          <div style={{ marginTop: 12, fontSize: 14, fontWeight: 700, color: failing.length ? "#B42318" : "#177245" }}>
+            {failing.length === 0 ? "Everything checks out." : `${failing.length} problem${failing.length === 1 ? "" : "s"} found.`}
+          </div>
+        )}
+      </Card>
+      {rows.map((r, i2) => (
+        <Card key={i2} pad={13} style={{ marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            {r.ok ? <CheckCircle2 size={18} color="#177245" style={{ flexShrink: 0, marginTop: 1 }} />
+                  : <AlertTriangle size={18} color="#B42318" style={{ flexShrink: 0, marginTop: 1 }} />}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{r.label}</div>
+              <div style={{ fontSize: 12.5, color: r.ok ? S.sub : "#B42318", marginTop: 2, lineHeight: 1.5, wordBreak: "break-word" }}>{r.detail}</div>
+            </div>
+          </div>
+        </Card>
+      ))}
+      {failing.length > 0 && (
+        <Btn kind="ghost" style={{ width: "100%", marginTop: 12 }} onClick={() => {
+          const txt = rows.map((r) => `${r.ok ? "OK  " : "FAIL"} ${r.label} — ${r.detail}`).join("\n");
+          if (navigator.clipboard) navigator.clipboard.writeText(txt);
+        }}>Copy results</Btn>
+      )}
+    </div>
+  );
+}
+
 function PillGroup({ options, value, onPick, multi = false }) {
   /* Older records stored a single string where several are now allowed,
      so a bare string counts as a one-item selection instead of showing
@@ -8558,6 +8658,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
     ["reviews", Star, "Review automation", "Google review requests"],
     ["branding", Settings, "Company branding", "Name, colors, review link"],
     ["password", Lock, "Change my password", "Update your sign-in password"],
+    ["syscheck", AlertTriangle, "System check", "Test the database connection and setup"],
   ];
   return (
     <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
@@ -9298,6 +9399,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "reviews" ? (
         <ReviewSettings settings={reviewSettings} setSettings={setReviewSettings} jobs={jobs}
           onBack={() => setNav("more")} brand={brand} setBrandFromReviews={setBrand} mut={mutJob} toast={toast} />
+      ) : nav === "syscheck" ? (
+        <SystemCheck currentUser={liveUser} onBack={() => setNav("more")} />
       ) : nav === "announcements" ? (
         <AnnouncementManager announcements={announcements} setAnnouncements={setAnnouncements}
           currentUser={liveUser} onBack={() => setNav("more")} toast={toast} />

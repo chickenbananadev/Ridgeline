@@ -4892,6 +4892,96 @@ function PasswordSetScreen({ brand: brand2, mode, onDone, toast: toast2 }) {
     ] })
   ] }) });
 }
+function SystemCheck({ currentUser, onBack }) {
+  const [rows, setRows] = (0, import_react.useState)([]);
+  const [running, setRunning] = (0, import_react.useState)(false);
+  const TABLES = [
+    ["crm_org", "Company settings (stages, price list, crews)"],
+    ["crm_jobs", "Jobs and customers"],
+    ["crm_financials", "Job financials"],
+    ["crm_appointments", "Calendar appointments"],
+    ["crm_activity", "Activity feed"],
+    ["crm_chat", "Team chat"],
+    ["crm_brand", "Logo, colors, company info"],
+    ["crm_portal", "Client portal links"],
+    ["profiles", "Team members and roles"]
+  ];
+  const run = async () => {
+    setRunning(true);
+    const out = [];
+    const db = DB();
+    out.push({
+      label: "Database connection",
+      ok: !!db,
+      detail: db ? "Connected to Supabase" : "No connection \u2014 the VITE_SUPABASE_URL / ANON_KEY variables aren't reaching this build. Redeploy after adding them."
+    });
+    if (db) {
+      out.push({
+        label: "Signed-in session",
+        ok: !!currentUser,
+        detail: currentUser ? `${currentUser.name} \xB7 ${currentUser.role}` : "No session"
+      });
+      for (const [table, human] of TABLES) {
+        try {
+          const { error } = await db.from(table).select("*", { count: "exact", head: true });
+          if (error) {
+            const missing = /does not exist|schema cache|relation/i.test(error.message || "");
+            out.push({
+              label: human,
+              ok: false,
+              detail: missing ? `Table "${table}" doesn't exist \u2014 its migration hasn't been run.` : `Blocked: ${error.message}`
+            });
+          } else {
+            out.push({ label: human, ok: true, detail: `${table} ready` });
+          }
+        } catch (e) {
+          out.push({ label: human, ok: false, detail: String(e && e.message || e) });
+        }
+      }
+      try {
+        const { error } = await db.from("crm_brand").upsert({ id: 1, data: { _probe: Date.now() }, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+        out.push({
+          label: "Can save branding",
+          ok: !error,
+          detail: error ? `Write blocked: ${error.message}` : "Write succeeded"
+        });
+      } catch (e) {
+        out.push({ label: "Can save branding", ok: false, detail: String(e && e.message || e) });
+      }
+    }
+    setRows(out);
+    setRunning(false);
+  };
+  (0, import_react.useEffect)(() => {
+    run();
+  }, []);
+  const failing = rows.filter((r) => !r.ok);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      SubHeader,
+      {
+        title: "System check",
+        onBack,
+        right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: run, disabled: running, children: running ? "Checking\u2026" : "Re-run" })
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: "Tests every connection the app depends on. Anything red below names the exact thing to fix \u2014 no guessing." }),
+      rows.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 12, fontSize: 14, fontWeight: 700, color: failing.length ? "#B42318" : "#177245" }, children: failing.length === 0 ? "Everything checks out." : `${failing.length} problem${failing.length === 1 ? "" : "s"} found.` })
+    ] }),
+    rows.map((r, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 13, style: { marginTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start" }, children: [
+      r.ok ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 18, color: "#177245", style: { flexShrink: 0, marginTop: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.AlertTriangle, { size: 18, color: "#B42318", style: { flexShrink: 0, marginTop: 1 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, color: S.ink }, children: r.label }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: r.ok ? S.sub : "#B42318", marginTop: 2, lineHeight: 1.5, wordBreak: "break-word" }, children: r.detail })
+      ] })
+    ] }) }, i2)),
+    failing.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%", marginTop: 12 }, onClick: () => {
+      const txt = rows.map((r) => `${r.ok ? "OK  " : "FAIL"} ${r.label} \u2014 ${r.detail}`).join("\n");
+      if (navigator.clipboard) navigator.clipboard.writeText(txt);
+    }, children: "Copy results" })
+  ] });
+}
 function PillGroup({ options, value, onPick, multi = false }) {
   const vals = multi ? Array.isArray(value) ? value : value ? [value] : [] : [];
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 7 }, children: options.map((o) => {
@@ -9857,7 +9947,8 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
     ["vendors", import_lucide_react.Building2, "Vendors & suppliers", "Material suppliers and their account details"],
     ["reviews", import_lucide_react.Star, "Review automation", "Google review requests"],
     ["branding", import_lucide_react.Settings, "Company branding", "Name, colors, review link"],
-    ["password", import_lucide_react.Lock, "Change my password", "Update your sign-in password"]
+    ["password", import_lucide_react.Lock, "Change my password", "Update your sign-in password"],
+    ["syscheck", import_lucide_react.AlertTriangle, "System check", "Test the database connection and setup"]
   ];
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 24, fontWeight: 800, color: S.ink, marginBottom: 4 }, children: "More" }),
@@ -10701,7 +10792,7 @@ function SupremeCRM() {
         mut: mutJob,
         toast: toast2
       }
-    ) : nav === "announcements" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    ) : nav === "syscheck" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SystemCheck, { currentUser: liveUser, onBack: () => setNav("more") }) : nav === "announcements" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       AnnouncementManager,
       {
         announcements,
