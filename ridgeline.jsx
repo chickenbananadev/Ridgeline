@@ -26,7 +26,7 @@ const DEFAULT_BRAND = {
   primary: "#28373E",
   accent: "#1B6DE0",
   accentSoft: "#EAF2FD",
-  googleReviewLink: "https://g.page/r/your-review-link/review",
+  googleReviewLink: "https://tinyurl.com/Supreme-Building-Group-Review",
 };
 
 /* ================================================================
@@ -2494,11 +2494,22 @@ function SubHeader({ title, onBack, right }) {
 /* ================================================================
    CALENDAR — month grid; jobs with a scheduled date appear as dots
    ================================================================ */
-function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast }) {
+function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage }) {
   const today = new Date();
   const [month, setMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null);
   const [f, setF] = useState({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "" });
+  const openAdd = (date) => {
+    setEditingId(null);
+    setF({ jobId: "", type: apptTypes[0] || "Inspection", date: date || "", time: "", notes: "" });
+    setAdding(true);
+  };
+  const openEdit = (ap) => {
+    setEditingId(ap.id);
+    setF({ jobId: ap.jobId, type: ap.type, date: ap.date, time: ap.time || "", notes: ap.notes || "" });
+    setAdding(true);
+  };
   const [newType, setNewType] = useState("");
 
   const y = month.getFullYear(), m = month.getMonth();
@@ -2516,10 +2527,32 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     .sort((a2, b2) => a2.schedDate.localeCompare(b2.schedDate));
 
   const save = () => {
-    setAppointments([...appointments, { ...f, id: uid("ap") }]);
-    setAdding(false);
+    if (editingId) {
+      setAppointments(appointments.map((ap) => (ap.id === editingId ? { ...ap, ...f } : ap)));
+      toast("Appointment updated");
+    } else {
+      setAppointments([...appointments, { ...f, id: uid("ap") }]);
+      toast("Appointment added");
+    }
+    setAdding(false); setEditingId(null);
     setF({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "" });
-    toast("Appointment added");
+  };
+  /* Queue a reminder on the customer's job thread. It sends for real once
+     Gmail/SMS integrations are live; until then it sits in the thread as
+     queued, visible in the Inbox. */
+  const queueReminder = () => {
+    const j = jobs.find((x) => x.id === f.jobId);
+    if (!j) return;
+    const channel = j.consent.sms.granted ? "sms" : j.consent.email.granted ? "email" : null;
+    if (!channel) { toast("No consent on file — can't message this customer"); return; }
+    const when = `${f.date}${f.time ? ` at ${f.time}` : ""}`;
+    const body = `Hi ${j.name.split(" ")[0]}, this is a reminder of your ${f.type.toLowerCase()} with our team on ${when} at ${j.address}. Reply here with any questions.`;
+    onQueueMessage(j.id, {
+      kind: channel, audience: "Customer", to: channel === "sms" ? (j.phone || j.name) : (j.email || j.name),
+      subject: channel === "email" ? `Upcoming ${f.type.toLowerCase()} — ${when}` : "",
+      body, status: "Queued", at: new Date().toISOString().slice(0, 16).replace("T", " "),
+    });
+    toast(`${channel === "sms" ? "Text" : "Email"} reminder queued — see it in the Inbox`);
   };
   const addType = () => {
     const v = newType.trim();
@@ -2533,7 +2566,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   return (
     <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
       <SubHeader title="Calendar" onBack={onBack}
-        right={<Btn small onClick={() => setAdding(true)}><Plus size={14} /> Add</Btn>} />
+        right={<Btn small onClick={() => openAdd(null)}><Plus size={14} /> Add</Btn>} />
       <Card style={{ marginTop: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <button onClick={() => setMonth(new Date(y, m - 1, 1))} style={{ border: "none", background: "none", cursor: "pointer" }}><ChevronLeft size={18} /></button>
@@ -2551,8 +2584,8 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
             const hasAppt = apptsOn(d).length > 0;
             const isToday = today.getFullYear() === y && today.getMonth() === m && today.getDate() === d;
             return (
-              <div key={d} style={{
-                textAlign: "center", padding: "7px 0 4px", borderRadius: 8, fontSize: 13,
+              <div key={d} onClick={() => openAdd(iso(d))} role="button" style={{
+                textAlign: "center", padding: "7px 0 4px", borderRadius: 8, fontSize: 13, cursor: "pointer",
                 background: isToday ? T.accentSoft : "transparent",
                 fontWeight: isToday ? 800 : 500, color: isToday ? T.accent : S.ink,
               }}>
@@ -2577,10 +2610,11 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
         return (
           <Card key={ap.id} pad={14} style={{ marginTop: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
-              <button onClick={() => j && onOpenJob(j.id)} style={{ border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0 }}>
+              <button onClick={() => openEdit(ap)} style={{ border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{ap.type}{j ? ` — ${j.name}` : ""}</div>
                 <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>{ap.date}{ap.time ? ` · ${ap.time}` : ""}{j ? ` · ${j.address}` : ""}</div>
                 {ap.notes && <div style={{ fontSize: 12.5, color: S.sub, marginTop: 4 }}>{ap.notes}</div>}
+                {j && <span onClick={(e) => { e.stopPropagation(); onOpenJob(j.id); }} style={{ fontSize: 12, color: T.accent, fontWeight: 700 }}>Open job →</span>}
               </button>
               <button onClick={() => setAppointments(appointments.filter((x) => x.id !== ap.id))}
                 style={{ border: "none", background: "none", cursor: "pointer", flexShrink: 0 }}>
@@ -2602,8 +2636,20 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
         <Card style={{ marginTop: 8 }}><div style={{ fontSize: 14, color: S.sub }}>Nothing scheduled this month.</div></Card>
       )}
 
-      <Sheet open={adding} onClose={() => setAdding(false)} title="Add appointment"
-        footer={<Btn style={{ width: "100%" }} disabled={!f.jobId || !f.date} onClick={save}>Add to calendar</Btn>}>
+      <Sheet open={adding} onClose={() => { setAdding(false); setEditingId(null); }} title={editingId ? "Edit appointment" : "Add appointment"}
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            {editingId && (
+              <Btn kind="danger" onClick={() => { setAppointments(appointments.filter((x) => x.id !== editingId)); setAdding(false); setEditingId(null); toast("Appointment deleted"); }}>
+                <Trash2 size={14} />
+              </Btn>
+            )}
+            <Btn kind="ghost" disabled={!f.jobId || !f.date} onClick={queueReminder} style={{ flexShrink: 0 }}>
+              <Send size={13} /> Remind
+            </Btn>
+            <Btn style={{ flex: 1 }} disabled={!f.jobId || !f.date} onClick={save}>{editingId ? "Save changes" : "Add to calendar"}</Btn>
+          </div>
+        }>
         <Field label="Customer / job *">
           <select style={selStyle} value={f.jobId} onChange={(e) => setF({ ...f, jobId: e.target.value })}>
             <option value="">Select…</option>
@@ -3177,7 +3223,8 @@ const JOB_TABS = [
   ["tasks", "Tasks"], ["files", "Files"], ["portal", "Portal"],
 ];
 
-function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [] }) {
+function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [],
+  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {} }) {
   const [tab, setTab] = useState("overview");
   const MONEY_TABS = ["estimate", "contract", "financials", "payments", "invoice"];
   const visibleTabs = JOB_TABS.filter(([id]) => showMoney || !MONEY_TABS.includes(id));
@@ -3224,8 +3271,9 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
         {tab === "checklist" && <TabChecklist job={job} mut={mut} toast={toast} />}
         {tab === "measure" && <TabMeasure job={job} mut={mut} toast={toast} />}
         {tab === "materials" && <TabMaterials job={job} toast={toast} />}
-        {tab === "estimate" && <TabEstimate job={job} brand={brand} mut={mut} toast={toast} />}
-        {tab === "contract" && <TabContract job={job} brand={brand} mut={mut} toast={toast} />}
+        {tab === "estimate" && <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
+          estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} />}
+        {tab === "contract" && <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast} />}
         {tab === "report" && <TabReport job={job} brand={brand} juris={juris} />}
         {tab === "messages" && <TabMessages job={job} mut={mut} toast={toast} brand={brand}
           templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />}
@@ -3551,7 +3599,7 @@ function TabMaterials({ job, toast }) {
 }
 
 /* ---------- Estimate builder ---------- */
-function TabEstimate({ job, brand, mut, toast }) {
+function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {} }) {
   const est = job.estimate;
   const [sigOpen, setSigOpen] = useState(false);
   const locked = est.status === "Signed";
@@ -3559,6 +3607,67 @@ function TabEstimate({ job, brand, mut, toast }) {
   const setItem = (id, k, v) =>
     setEst({ items: est.items.map((it) => (it.id === id ? { ...it, [k]: v } : it)) });
   const total = estimateTotal(est);
+
+  const [adjMode, setAdjMode] = useState("margin");
+  const [adjPct, setAdjPct] = useState("");
+  const applyPricing = () => {
+    const pct = num(adjPct);
+    if (!pct) { toast("Enter a percentage first"); return; }
+    setEst({
+      items: est.items.map((it) => {
+        const cost = num(it.cost);
+        const base = cost > 0 ? cost : num(it.price);
+        if (!base) return it;
+        const price = adjMode === "margin" ? (pct < 100 ? base / (1 - pct / 100) : base) : base * (1 + pct / 100);
+        return { ...it, price: +price.toFixed(2) };
+      }),
+    });
+    toast(`${adjMode === "margin" ? "Margin" : "Markup"} of ${pct}% applied`);
+  };
+  const lineMargin = (it) => {
+    const cost = num(it.cost), price = num(it.price);
+    return price > 0 && cost > 0 ? (((price - cost) / price) * 100).toFixed(0) : null;
+  };
+
+  const [tplSheet, setTplSheet] = useState(false);
+  const [tplName, setTplName] = useState("");
+  const saveTemplate = () => {
+    const name = tplName.trim();
+    if (!name || est.items.length === 0) return;
+    setEstimateTemplates([
+      ...estimateTemplates.filter((t) => t.name.toLowerCase() !== name.toLowerCase()),
+      { id: uid("etpl"), name, items: est.items.map(({ id, ...rest }) => rest) },
+    ]);
+    setTplName(""); setTplSheet(false);
+    toast(`Template "${name}" saved`);
+  };
+  const applyTemplate = (t) => {
+    setEst({ items: [...est.items, ...t.items.map((it) => ({ ...it, id: uid("e") }))] });
+    setTplSheet(false);
+    toast(`"${t.name}" added — ${t.items.length} lines`);
+  };
+
+  const doc = est.doc || { sections: ["cover", "items", "notes", "terms"], coverImage: null, notes: "", terms: "" };
+  const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
+  const [docSheet, setDocSheet] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const coverRef = useRef(null);
+  const onCover = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    const r = new FileReader();
+    r.onload = () => { setDoc({ coverImage: String(r.result) }); toast("Cover image set"); };
+    r.readAsDataURL(file);
+    e.target.value = "";
+  };
+  const moveSection = (idx, dir) => {
+    const arr = [...doc.sections];
+    const swap = idx + dir;
+    if (swap < 0 || swap >= arr.length) return;
+    [arr[idx], arr[swap]] = [arr[swap], arr[idx]];
+    setDoc({ sections: arr });
+  };
+  const SECTION_LABELS = { cover: "Cover page", items: "Line items & pricing", notes: "Special notes", terms: "Terms & conditions" };
   const m = job.measurements;
   const prefillFromMeasurements = () => {
     if (!num(m.squares)) { toast("Enter measurements first"); return; }
@@ -3608,6 +3717,46 @@ function TabEstimate({ job, brand, mut, toast }) {
       )}
 
       <Card style={{ marginTop: 12 }}>
+        <CardTitle>Pricing controls</CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
+          Set profit across every line at once. Margin is profit as a share of the sell price; markup is a
+          percentage added on top of cost. Lines with a unit cost are computed from cost; lines without one scale
+          from their current price.
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select style={{ ...selStyle, flex: 1 }} value={adjMode} disabled={locked} onChange={(e) => setAdjMode(e.target.value)}>
+            <option value="margin">Profit margin</option>
+            <option value="markup">Markup</option>
+          </select>
+          <input style={{ ...inputStyle, width: 80, textAlign: "right" }} value={adjPct} disabled={locked}
+            inputMode="decimal" placeholder="30" onChange={(e) => setAdjPct(e.target.value)} />
+          <span style={{ color: S.sub, fontSize: 13 }}>%</span>
+          <Btn small onClick={applyPricing} disabled={locked}>Apply</Btn>
+        </div>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={<Btn kind="soft" small onClick={() => setTplSheet(true)}>Open</Btn>}>Estimate templates</CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+          Save this estimate's lines under a name — "Full replacement — architectural", "Repair minimum" — and drop
+          them into any future estimate in one tap.
+        </div>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={
+          <span style={{ display: "flex", gap: 6 }}>
+            <Btn kind="soft" small onClick={() => setDocSheet(true)}>Layout</Btn>
+            <Btn kind="soft" small onClick={() => setPreviewOpen(true)}>Preview</Btn>
+          </span>
+        }>Estimate document</CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+          The customer-facing document: cover page with your logo, a photo, and their info, then sections in the
+          order you choose — line items, notes, terms.
+        </div>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
         <CardTitle>Scope of work</CardTitle>
         <textarea style={{ ...inputStyle, minHeight: 110 }} disabled={locked} value={est.scope}
           onChange={(e) => setEst({ scope: e.target.value })}
@@ -3634,6 +3783,17 @@ function TabEstimate({ job, brand, mut, toast }) {
               <input style={{ ...inputStyle, width: 92, textAlign: "right" }} value={it.price} disabled={locked}
                 inputMode="decimal" onChange={(e) => setItem(it.id, "price", e.target.value)} />
               <div style={{ marginLeft: "auto", fontWeight: 800, fontSize: 14 }}>{money(num(it.qty) * num(it.price))}</div>
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+              <span style={{ fontSize: 11.5, color: S.sub }}>Unit cost</span>
+              <input style={{ ...inputStyle, width: 92, textAlign: "right", padding: "7px 9px", fontSize: 13 }}
+                value={it.cost ?? ""} disabled={locked} inputMode="decimal" placeholder="—"
+                onChange={(e) => setItem(it.id, "cost", e.target.value)} />
+              {lineMargin(it) != null && (
+                <Chip tone={num(lineMargin(it)) >= 30 ? "green" : num(lineMargin(it)) >= 15 ? "amber" : "red"}>
+                  {lineMargin(it)}% margin
+                </Chip>
+              )}
               {!locked && (
                 <button onClick={() => setEst({ items: est.items.filter((x) => x.id !== it.id) })}
                   style={{ border: "none", background: "none", cursor: "pointer" }}>
@@ -3708,18 +3868,122 @@ function TabEstimate({ job, brand, mut, toast }) {
           setEst({ clientSig: dataUrl, sigAt: at, status: "Signed" });
           toast("Estimate signed and locked");
         }} />
+
+      <Sheet open={tplSheet} onClose={() => setTplSheet(false)} title="Estimate templates">
+        <Field label="Save current lines as">
+          <div style={{ display: "flex", gap: 8 }}>
+            <input style={{ ...inputStyle, flex: 1 }} value={tplName} placeholder="Full replacement — architectural"
+              onChange={(e) => setTplName(e.target.value)} />
+            <Btn onClick={saveTemplate} disabled={!tplName.trim() || est.items.length === 0}>Save</Btn>
+          </div>
+        </Field>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, margin: "14px 0 6px" }}>SAVED TEMPLATES</div>
+        {estimateTemplates.length === 0 && <div style={{ fontSize: 13.5, color: S.sub }}>None yet — build an estimate you like and save it above.</div>}
+        {estimateTemplates.map((t) => (
+          <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderTop: `1px solid ${S.line}` }}>
+            <div>
+              <div style={{ fontSize: 14.5, fontWeight: 700 }}>{t.name}</div>
+              <div style={{ fontSize: 12, color: S.sub }}>{t.items.length} line{t.items.length === 1 ? "" : "s"}</div>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <Btn small onClick={() => applyTemplate(t)} disabled={locked}>Add</Btn>
+              <button onClick={() => setEstimateTemplates(estimateTemplates.filter((x) => x.id !== t.id))}
+                style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={15} color="#B42318" /></button>
+            </div>
+          </div>
+        ))}
+      </Sheet>
+
+      <Sheet open={docSheet} onClose={() => setDocSheet(false)} title="Document layout">
+        <input ref={coverRef} type="file" accept="image/*" onChange={onCover} style={{ display: "none" }} />
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginBottom: 6 }}>SECTION ORDER</div>
+        {doc.sections.map((sec, idx) => (
+          <div key={sec} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: idx ? `1px solid ${S.line}` : "none" }}>
+            <div style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{SECTION_LABELS[sec]}</div>
+            <Btn kind="ghost" small onClick={() => moveSection(idx, -1)} disabled={idx === 0}>↑</Btn>
+            <Btn kind="ghost" small onClick={() => moveSection(idx, 1)} disabled={idx === doc.sections.length - 1}>↓</Btn>
+          </div>
+        ))}
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, margin: "16px 0 6px" }}>COVER PAGE</div>
+        {doc.coverImage
+          ? <img src={doc.coverImage} alt="Cover" style={{ width: "100%", borderRadius: 10, marginBottom: 8 }} />
+          : <div style={{ fontSize: 13, color: S.sub, marginBottom: 8 }}>No photo yet — the house photo works great here.</div>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn kind="ghost" small onClick={() => coverRef.current && coverRef.current.click()}><Upload size={13} /> {doc.coverImage ? "Replace photo" : "Add photo"}</Btn>
+          {doc.coverImage && <Btn kind="danger" small onClick={() => setDoc({ coverImage: null })}>Remove</Btn>}
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <Field label="Special notes">
+            <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} value={doc.notes}
+              onChange={(e) => setDoc({ notes: e.target.value })} placeholder="Color selections, access notes, exclusions…" />
+          </Field>
+          <Field label="Terms & conditions">
+            <textarea style={{ ...inputStyle, minHeight: 110, resize: "vertical", fontFamily: "inherit" }} value={doc.terms}
+              onChange={(e) => setDoc({ terms: e.target.value })} placeholder="Payment terms, warranty, change orders…" />
+          </Field>
+        </div>
+      </Sheet>
+
+      <Sheet open={previewOpen} onClose={() => setPreviewOpen(false)} title="Estimate preview">
+        {doc.sections.map((sec) => {
+          if (sec === "cover") return (
+            <div key={sec} style={{ border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 14 }}>
+              {doc.coverImage && <img src={doc.coverImage} alt="" style={{ width: "100%", display: "block" }} />}
+              <div style={{ padding: 18, background: T.primary, color: "#fff" }}>
+                {brand.logo
+                  ? <img src={brand.logo} alt="" style={{ height: 40, objectFit: "contain", marginBottom: 10, display: "block" }} />
+                  : <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 6 }}>{brand.company}</div>}
+                <div style={{ fontSize: 13, opacity: 0.85 }}>{brand.slogan}</div>
+                <div style={{ marginTop: 14, fontSize: 14 }}>
+                  <div style={{ fontWeight: 700 }}>Prepared for {job.name}</div>
+                  <div style={{ opacity: 0.85 }}>{job.address}</div>
+                  <div style={{ opacity: 0.85, marginTop: 5 }}>{est.number} · {est.date}</div>
+                </div>
+              </div>
+            </div>
+          );
+          if (sec === "items") return (
+            <div key={sec} style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>SCOPE & PRICING</div>
+              {est.items.map((it) => (
+                <div key={it.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5, padding: "6px 0", borderBottom: `1px solid ${S.soft}` }}>
+                  <span style={{ flex: 1 }}>{it.desc} — {it.qty} {it.unit}</span>
+                  <span style={{ fontWeight: 600 }}>{money(num(it.qty) * num(it.price))}</span>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 800, marginTop: 8 }}>
+                <span>Total</span><span>{money(total)}</span>
+              </div>
+            </div>
+          );
+          if (sec === "notes" && doc.notes) return (
+            <div key={sec} style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>SPECIAL NOTES</div>
+              <div style={{ fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{doc.notes}</div>
+            </div>
+          );
+          if (sec === "terms" && doc.terms) return (
+            <div key={sec} style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>TERMS & CONDITIONS</div>
+              <div style={{ fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: S.sub }}>{doc.terms}</div>
+            </div>
+          );
+          return null;
+        })}
+      </Sheet>
     </>
   );
 }
 
 /* ---------- Contract ---------- */
-function TabContract({ job, brand, mut, toast }) {
+function TabContract({ job, brand, setBrand = () => {}, mut, toast }) {
   const con = job.contract;
   const [sigFor, setSigFor] = useState(null); // "client" | "contractor"
   const locked = con.status === "Signed";
   const setCon = (patch) => mut((j) => ({ ...j, contract: { ...j.contract, ...patch } }));
   const estTotal = estimateTotal(job.estimate);
-  const deposit = (con.price || 0) * (con.depositPct / 100);
+  const depositMode = con.depositMode || "pct";
+  const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
   const SigLine = ({ label, value, onSign }) => (
     <div style={{ flex: 1, minWidth: 220 }}>
       <div style={{
@@ -3773,18 +4037,58 @@ function TabContract({ job, brand, mut, toast }) {
             Use estimate total — {money(estTotal)}
           </button>
         )}
-        <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
-          <div style={{ flex: 1, fontSize: 14 }}>Deposit</div>
-          <input style={{ ...inputStyle, width: 72, textAlign: "right" }} value={con.depositPct} disabled={locked}
-            inputMode="decimal" onChange={(e) => setCon({ depositPct: num(e.target.value) })} />
-          <span style={{ color: S.sub, fontSize: 13 }}>%</span>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 14, marginBottom: 7 }}>Deposit</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+            {[["50%", 50], ["1/3", 33.33], ["25%", 25], ["10%", 10]].map(([label, pct]) => (
+              <button key={label} disabled={locked}
+                onClick={() => setCon({ depositMode: "pct", depositPct: pct })}
+                style={{
+                  border: `1.5px solid ${depositMode === "pct" && Math.abs(con.depositPct - pct) < 0.01 ? T.accent : S.line}`,
+                  background: depositMode === "pct" && Math.abs(con.depositPct - pct) < 0.01 ? T.accentSoft : "#fff",
+                  color: depositMode === "pct" && Math.abs(con.depositPct - pct) < 0.01 ? T.accent : S.ink,
+                  borderRadius: 999, padding: "7px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                }}>{label}</button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <select style={{ ...selStyle, width: 130 }} value={depositMode} disabled={locked}
+              onChange={(e) => setCon({ depositMode: e.target.value })}>
+              <option value="pct">Custom %</option>
+              <option value="fixed">Fixed $</option>
+            </select>
+            {depositMode === "fixed" ? (
+              <>
+                <span style={{ color: S.sub }}>$</span>
+                <input style={{ ...inputStyle, width: 110, textAlign: "right" }} value={con.depositFixed ?? ""} disabled={locked}
+                  inputMode="decimal" onChange={(e) => setCon({ depositFixed: num(e.target.value) })} />
+              </>
+            ) : (
+              <>
+                <input style={{ ...inputStyle, width: 84, textAlign: "right" }} value={con.depositPct} disabled={locked}
+                  inputMode="decimal" onChange={(e) => setCon({ depositPct: num(e.target.value) })} />
+                <span style={{ color: S.sub, fontSize: 13 }}>%</span>
+              </>
+            )}
+          </div>
         </div>
-        <KV k={`Due at signing (${con.depositPct}%)`} v={money(deposit)} />
+        <KV k={depositMode === "fixed" ? "Due at signing (fixed)" : `Due at signing (${con.depositPct}%)`} v={money(deposit)} />
         <KV k="Due on substantial completion" v={money((con.price || 0) - deposit)} strong />
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Terms</CardTitle>
-        <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{con.terms}</div>
+        <textarea style={{ ...inputStyle, minHeight: 130, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.6 }}
+          value={con.terms} disabled={locked} onChange={(e) => setCon({ terms: e.target.value })} />
+        {!locked && (
+          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+            <Btn kind="ghost" small onClick={() => { setBrand({ ...brand, contractTerms: con.terms }); toast("Saved as your default terms for new contracts"); }}>
+              Save as company default
+            </Btn>
+            {brand.contractTerms && brand.contractTerms !== con.terms && (
+              <Btn kind="ghost" small onClick={() => setCon({ terms: brand.contractTerms })}>Load company default</Btn>
+            )}
+          </div>
+        )}
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Signatures</CardTitle>
@@ -5426,7 +5730,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
 /* ================================================================
    REVIEW AUTOMATION SETTINGS
    ================================================================ */
-function ReviewSettings({ settings, setSettings, jobs, onBack, brand, mut, toast }) {
+function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFromReviews, mut, toast }) {
   /* Requests manager state: per-job rating capture + internal feedback. */
   const [rating, setRating] = useState({});      // jobId -> 1..5
   const [fbOpen, setFbOpen] = useState(null);    // jobId with feedback form open
@@ -5465,6 +5769,10 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, mut, toast
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="blue">{completed.length} completed</Chip>}>Review requests</CardTitle>
+        <Field label="Your Google review link" hint="Where 5-star customers get sent. Every company's is different — paste yours here or in Company branding; they're the same setting.">
+          <input style={inputStyle} value={brand.googleReviewLink}
+            onChange={(e) => setBrandFromReviews && setBrandFromReviews({ ...brand, googleReviewLink: e.target.value })} />
+        </Field>
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 6, lineHeight: 1.5 }}>
           Every job in "Job completed." Toggle what's been sent and what's posted. Log the customer's rating when
           they answer the "how did we do?" message — anything under 5 opens the internal feedback form so you can
@@ -5590,6 +5898,62 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, mut, toast
 /* ================================================================
    BRANDING EDITOR + MORE MENU + INBOX
    ================================================================ */
+function VendorManager({ vendors, setVendors, currentUser, onBack, toast }) {
+  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const blank = { name: "", contact: "", phone: "", email: "", account: "", notes: "", active: true };
+  const [editing, setEditing] = useState(null);
+  const [f, setF] = useState(blank);
+  const open = (v) => { setEditing(v || "new"); setF(v ? { ...v } : blank); };
+  const save = () => {
+    if (editing === "new") setVendors([...vendors, { ...f, id: uid("v") }]);
+    else setVendors(vendors.map((v) => (v.id === editing.id ? { ...v, ...f } : v)));
+    setEditing(null); toast("Vendor saved");
+  };
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Vendors & suppliers" onBack={onBack}
+        right={canEdit && <Btn small onClick={() => open(null)}><Plus size={14} /> Add vendor</Btn>} />
+      {vendors.map((v) => (
+        <Card key={v.id} pad={15} style={{ marginTop: 10, opacity: v.active ? 1 : 0.6 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>{v.name}</div>
+              {v.contact && <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>{v.contact}</div>}
+            </div>
+            {!v.active && <Chip tone="gray">Inactive</Chip>}
+          </div>
+          <div style={{ display: "flex", gap: 14, marginTop: 9, flexWrap: "wrap", fontSize: 12.5, color: S.sub }}>
+            {v.phone && <span style={{ display: "flex", gap: 5, alignItems: "center" }}><Phone size={12} /> {v.phone}</span>}
+            {v.email && <span style={{ display: "flex", gap: 5, alignItems: "center" }}><Mail size={12} /> {v.email}</span>}
+            {v.account && <span>Acct #{v.account}</span>}
+          </div>
+          {v.notes && <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>{v.notes}</div>}
+          {canEdit && (
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => open(v)}><Pencil size={13} /> Edit</Btn>
+              <Btn kind="ghost" small style={{ flex: 1 }}
+                onClick={() => setVendors(vendors.map((x) => (x.id === v.id ? { ...x, active: !x.active } : x)))}>
+                {v.active ? "Deactivate" : "Reactivate"}
+              </Btn>
+            </div>
+          )}
+        </Card>
+      ))}
+      <Sheet open={!!editing} onClose={() => setEditing(null)} title={editing === "new" ? "Add vendor" : "Edit vendor"}
+        footer={<Btn style={{ width: "100%" }} disabled={!f.name.trim()} onClick={save}>Save vendor</Btn>}>
+        <Field label="Company name *"><input style={inputStyle} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
+        <Field label="Rep / contact"><input style={inputStyle} value={f.contact} onChange={(e) => setF({ ...f, contact: e.target.value })} /></Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Phone"><input style={inputStyle} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
+          <Field label="Email"><input style={inputStyle} type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
+        </div>
+        <Field label="Account number"><input style={inputStyle} value={f.account} onChange={(e) => setF({ ...f, account: e.target.value })} /></Field>
+        <Field label="Notes"><textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical", fontFamily: "inherit" }} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
+      </Sheet>
+    </div>
+  );
+}
+
 function LeadSourceManager({ sources, setSources, jobs, onBack, toast }) {
   const [draft, setDraft] = useState("");
   const usage = (src) => jobs.filter((j) => j.leadSource === src).length;
@@ -6862,6 +7226,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
     ["integrations", Share2, "Integrations", "Gmail and text messaging"],
     ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
     ["leadsources", Filter, "Lead sources", "Add or remove the options reps pick from"],
+    ["vendors", Building2, "Vendors & suppliers", "Material suppliers and their account details"],
     ["reviews", Star, "Review automation", "Google review requests"],
     ["branding", Settings, "Company branding", "Name, colors, review link"],
   ];
@@ -7006,7 +7371,12 @@ export default function SupremeCRM() {
   const [companyDocs, setCompanyDocs] = useState(SEED_COMPANY_DOCS);
   const [priceList, setPriceList] = useState(SEED_PRICE_LIST);
   const [leadSources, setLeadSources] = useState([...LEAD_SOURCES]);
+  const [vendors, setVendors] = useState([
+    { id: "v1", name: "ABC Supply", contact: "", phone: "", email: "", account: "", notes: "", active: true },
+    { id: "v2", name: "SRS Distribution", contact: "", phone: "", email: "", account: "", notes: "", active: true },
+  ]);
   const [appointments, setAppointments] = useState([]);
+  const [estimateTemplates, setEstimateTemplates] = useState([]);
   const [apptTypes, setApptTypes] = useState(["Inspection", "Adjuster meeting", "Estimate presentation", "Production start", "Final walkthrough"]);
   const [integrations, setIntegrations] = useState({
     /* Gmail is per-user: each rep connects their own mailbox so email
@@ -7167,7 +7537,8 @@ export default function SupremeCRM() {
         <JobDetail job={openJob} stages={stages} brand={brand} onBack={backToBoard}
           onMoveStage={moveStage} mut={mutJob(openJob.id)} toast={toast} reviewSettings={reviewSettings}
 currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
-          crews={crews} setCrews={setCrews} templates={templates} integrations={integrations} users={users} />
+          crews={crews} setCrews={setCrews} templates={templates} integrations={integrations} users={users}
+          estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} setBrand={setBrand} />
       ) : nav === "home" ? (
         <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav}
           onNewLead={() => setNewLeadOpen(true)} onQuickTask={() => setQuickTaskOpen(true)} />
@@ -7187,12 +7558,16 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "calendar" ? (
         <CalendarView jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}
           appointments={appointments} setAppointments={setAppointments}
-          apptTypes={apptTypes} setApptTypes={setApptTypes} toast={toast} />
+          apptTypes={apptTypes} setApptTypes={setApptTypes} toast={toast}
+          onQueueMessage={(jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))} />
       ) : nav === "contacts" ? (
         <Contacts jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
       ) : nav === "reviews" ? (
         <ReviewSettings settings={reviewSettings} setSettings={setReviewSettings} jobs={jobs}
-          onBack={() => setNav("more")} brand={brand} mut={mutJob} toast={toast} />
+          onBack={() => setNav("more")} brand={brand} setBrandFromReviews={setBrand} mut={mutJob} toast={toast} />
+      ) : nav === "vendors" ? (
+        <VendorManager vendors={vendors} setVendors={setVendors} currentUser={liveUser}
+          onBack={() => setNav("more")} toast={toast} />
       ) : nav === "leadsources" ? (
         <LeadSourceManager sources={leadSources} setSources={setLeadSources} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} />

@@ -47,7 +47,7 @@ var DEFAULT_BRAND = {
   primary: "#28373E",
   accent: "#1B6DE0",
   accentSoft: "#EAF2FD",
-  googleReviewLink: "https://g.page/r/your-review-link/review"
+  googleReviewLink: "https://tinyurl.com/Supreme-Building-Group-Review"
 };
 var SOURCES = {
   RCO: { name: "Residential Code of Ohio (OAC 4101:8)", url: "https://codes.ohio.gov/ohio-administrative-code/4101:8", publisher: "Ohio Legislative Service Commission \u2014 official text" },
@@ -2455,7 +2455,7 @@ function Login({ brand, users, onLogin }) {
             autoComplete: "current-password",
             value: pw,
             onChange: (e) => setPw(e.target.value),
-            placeholder: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
+            placeholder: "Enter your password",
             onKeyDown: (e) => {
               if (e.key === "Enter" && live && email && pw) submit();
             }
@@ -2973,11 +2973,22 @@ function SubHeader({ title, onBack, right }) {
     right
   ] });
 }
-function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast }) {
+function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage }) {
   const today = /* @__PURE__ */ new Date();
   const [month, setMonth] = (0, import_react.useState)(new Date(today.getFullYear(), today.getMonth(), 1));
   const [adding, setAdding] = (0, import_react.useState)(false);
+  const [editingId, setEditingId] = (0, import_react.useState)(null);
   const [f, setF] = (0, import_react.useState)({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "" });
+  const openAdd = (date) => {
+    setEditingId(null);
+    setF({ jobId: "", type: apptTypes[0] || "Inspection", date: date || "", time: "", notes: "" });
+    setAdding(true);
+  };
+  const openEdit = (ap) => {
+    setEditingId(ap.id);
+    setF({ jobId: ap.jobId, type: ap.type, date: ap.date, time: ap.time || "", notes: ap.notes || "" });
+    setAdding(true);
+  };
   const [newType, setNewType] = (0, import_react.useState)("");
   const y = month.getFullYear(), m = month.getMonth();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
@@ -2988,10 +2999,37 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   const monthAppts = appointments.filter((ap) => ap.date && ap.date.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`)).sort((a2, b2) => (a2.date + (a2.time || "")).localeCompare(b2.date + (b2.time || "")));
   const monthJobs = jobs.filter((j) => j.schedDate && j.schedDate.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`)).sort((a2, b2) => a2.schedDate.localeCompare(b2.schedDate));
   const save = () => {
-    setAppointments([...appointments, { ...f, id: uid("ap") }]);
+    if (editingId) {
+      setAppointments(appointments.map((ap) => ap.id === editingId ? { ...ap, ...f } : ap));
+      toast("Appointment updated");
+    } else {
+      setAppointments([...appointments, { ...f, id: uid("ap") }]);
+      toast("Appointment added");
+    }
     setAdding(false);
+    setEditingId(null);
     setF({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "" });
-    toast("Appointment added");
+  };
+  const queueReminder = () => {
+    const j = jobs.find((x) => x.id === f.jobId);
+    if (!j) return;
+    const channel = j.consent.sms.granted ? "sms" : j.consent.email.granted ? "email" : null;
+    if (!channel) {
+      toast("No consent on file \u2014 can't message this customer");
+      return;
+    }
+    const when = `${f.date}${f.time ? ` at ${f.time}` : ""}`;
+    const body = `Hi ${j.name.split(" ")[0]}, this is a reminder of your ${f.type.toLowerCase()} with our team on ${when} at ${j.address}. Reply here with any questions.`;
+    onQueueMessage(j.id, {
+      kind: channel,
+      audience: "Customer",
+      to: channel === "sms" ? j.phone || j.name : j.email || j.name,
+      subject: channel === "email" ? `Upcoming ${f.type.toLowerCase()} \u2014 ${when}` : "",
+      body,
+      status: "Queued",
+      at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ")
+    });
+    toast(`${channel === "sms" ? "Text" : "Email"} reminder queued \u2014 see it in the Inbox`);
   };
   const addType = () => {
     const v = newType.trim();
@@ -3007,7 +3045,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       {
         title: "Calendar",
         onBack,
-        right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, onClick: () => setAdding(true), children: [
+        right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, onClick: () => openAdd(null), children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }),
           " Add"
         ] })
@@ -3027,11 +3065,12 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
           const hasJob = jobsOn(d).length > 0;
           const hasAppt = apptsOn(d).length > 0;
           const isToday = today.getFullYear() === y && today.getMonth() === m && today.getDate() === d;
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { onClick: () => openAdd(iso(d)), role: "button", style: {
             textAlign: "center",
             padding: "7px 0 4px",
             borderRadius: 8,
             fontSize: 13,
+            cursor: "pointer",
             background: isToday ? T.accentSoft : "transparent",
             fontWeight: isToday ? 800 : 500,
             color: isToday ? T.accent : S.ink
@@ -3059,7 +3098,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     monthAppts.map((ap) => {
       const j = jobOf(ap.jobId);
       return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 14, style: { marginTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => j && onOpenJob(j.id), style: { border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => openEdit(ap), style: { border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14.5, fontWeight: 700, color: S.ink }, children: [
             ap.type,
             j ? ` \u2014 ${j.name}` : ""
@@ -3069,7 +3108,11 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
             ap.time ? ` \xB7 ${ap.time}` : "",
             j ? ` \xB7 ${j.address}` : ""
           ] }),
-          ap.notes && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 4 }, children: ap.notes })
+          ap.notes && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 4 }, children: ap.notes }),
+          j && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { onClick: (e) => {
+            e.stopPropagation();
+            onOpenJob(j.id);
+          }, style: { fontSize: 12, color: T.accent, fontWeight: 700 }, children: "Open job \u2192" })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "button",
@@ -3097,9 +3140,24 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       Sheet,
       {
         open: adding,
-        onClose: () => setAdding(false),
-        title: "Add appointment",
-        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, disabled: !f.jobId || !f.date, onClick: save, children: "Add to calendar" }),
+        onClose: () => {
+          setAdding(false);
+          setEditingId(null);
+        },
+        title: editingId ? "Edit appointment" : "Add appointment",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+          editingId && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", onClick: () => {
+            setAppointments(appointments.filter((x) => x.id !== editingId));
+            setAdding(false);
+            setEditingId(null);
+            toast("Appointment deleted");
+          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14 }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", disabled: !f.jobId || !f.date, onClick: queueReminder, style: { flexShrink: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 13 }),
+            " Remind"
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 1 }, disabled: !f.jobId || !f.date, onClick: save, children: editingId ? "Save changes" : "Add to calendar" })
+        ] }),
         children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Customer / job *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: f.jobId, onChange: (e) => setF({ ...f, jobId: e.target.value }), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Select\u2026" }),
@@ -3821,7 +3879,28 @@ var JOB_TABS = [
   ["files", "Files"],
   ["portal", "Portal"]
 ];
-function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [] }) {
+function JobDetail({
+  job,
+  stages,
+  brand,
+  onBack,
+  onMoveStage,
+  mut,
+  toast,
+  reviewSettings,
+  currentUser,
+  isAdmin,
+  showMoney = true,
+  crews = [],
+  templates = [],
+  integrations = { gmail: {}, sms: {} },
+  users = [],
+  estimateTemplates = [],
+  setEstimateTemplates = () => {
+  },
+  setBrand = () => {
+  }
+}) {
   const [tab, setTab] = (0, import_react.useState)("overview");
   const MONEY_TABS = ["estimate", "contract", "financials", "payments", "invoice"];
   const visibleTabs = JOB_TABS.filter(([id]) => showMoney || !MONEY_TABS.includes(id));
@@ -3879,8 +3958,18 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
       tab === "checklist" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChecklist, { job, mut, toast }),
       tab === "measure" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabMeasure, { job, mut, toast }),
       tab === "materials" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabMaterials, { job, toast }),
-      tab === "estimate" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabEstimate, { job, brand, mut, toast }),
-      tab === "contract" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabContract, { job, brand, mut, toast }),
+      tab === "estimate" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        TabEstimate,
+        {
+          job,
+          brand,
+          mut,
+          toast,
+          estimateTemplates,
+          setEstimateTemplates
+        }
+      ),
+      tab === "contract" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabContract, { job, brand, setBrand, mut, toast }),
       tab === "report" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabReport, { job, brand, juris }),
       tab === "messages" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         TabMessages,
@@ -4184,13 +4273,79 @@ function TabMaterials({ job, toast }) {
     ] })
   ] });
 }
-function TabEstimate({ job, brand, mut, toast }) {
+function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {
+} }) {
   const est = job.estimate;
   const [sigOpen, setSigOpen] = (0, import_react.useState)(false);
   const locked = est.status === "Signed";
   const setEst = (patch) => mut((j) => ({ ...j, estimate: { ...j.estimate, ...patch } }));
   const setItem = (id, k, v) => setEst({ items: est.items.map((it) => it.id === id ? { ...it, [k]: v } : it) });
   const total = estimateTotal(est);
+  const [adjMode, setAdjMode] = (0, import_react.useState)("margin");
+  const [adjPct, setAdjPct] = (0, import_react.useState)("");
+  const applyPricing = () => {
+    const pct = num(adjPct);
+    if (!pct) {
+      toast("Enter a percentage first");
+      return;
+    }
+    setEst({
+      items: est.items.map((it) => {
+        const cost = num(it.cost);
+        const base = cost > 0 ? cost : num(it.price);
+        if (!base) return it;
+        const price = adjMode === "margin" ? pct < 100 ? base / (1 - pct / 100) : base : base * (1 + pct / 100);
+        return { ...it, price: +price.toFixed(2) };
+      })
+    });
+    toast(`${adjMode === "margin" ? "Margin" : "Markup"} of ${pct}% applied`);
+  };
+  const lineMargin = (it) => {
+    const cost = num(it.cost), price = num(it.price);
+    return price > 0 && cost > 0 ? ((price - cost) / price * 100).toFixed(0) : null;
+  };
+  const [tplSheet, setTplSheet] = (0, import_react.useState)(false);
+  const [tplName, setTplName] = (0, import_react.useState)("");
+  const saveTemplate = () => {
+    const name = tplName.trim();
+    if (!name || est.items.length === 0) return;
+    setEstimateTemplates([
+      ...estimateTemplates.filter((t) => t.name.toLowerCase() !== name.toLowerCase()),
+      { id: uid("etpl"), name, items: est.items.map(({ id, ...rest }) => rest) }
+    ]);
+    setTplName("");
+    setTplSheet(false);
+    toast(`Template "${name}" saved`);
+  };
+  const applyTemplate = (t) => {
+    setEst({ items: [...est.items, ...t.items.map((it) => ({ ...it, id: uid("e") }))] });
+    setTplSheet(false);
+    toast(`"${t.name}" added \u2014 ${t.items.length} lines`);
+  };
+  const doc = est.doc || { sections: ["cover", "items", "notes", "terms"], coverImage: null, notes: "", terms: "" };
+  const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
+  const [docSheet, setDocSheet] = (0, import_react.useState)(false);
+  const [previewOpen, setPreviewOpen] = (0, import_react.useState)(false);
+  const coverRef = (0, import_react.useRef)(null);
+  const onCover = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    const r = new FileReader();
+    r.onload = () => {
+      setDoc({ coverImage: String(r.result) });
+      toast("Cover image set");
+    };
+    r.readAsDataURL(file);
+    e.target.value = "";
+  };
+  const moveSection = (idx, dir) => {
+    const arr = [...doc.sections];
+    const swap = idx + dir;
+    if (swap < 0 || swap >= arr.length) return;
+    [arr[idx], arr[swap]] = [arr[swap], arr[idx]];
+    setDoc({ sections: arr });
+  };
+  const SECTION_LABELS = { cover: "Cover page", items: "Line items & pricing", notes: "Special notes", terms: "Terms & conditions" };
   const m = job.measurements;
   const prefillFromMeasurements = () => {
     if (!num(m.squares)) {
@@ -4239,6 +4394,40 @@ function TabEstimate({ job, brand, mut, toast }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub }, children: k }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700 }, children: v || "\u2014" })
       ] }, k)) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Pricing controls" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }, children: "Set profit across every line at once. Margin is profit as a share of the sell price; markup is a percentage added on top of cost. Lines with a unit cost are computed from cost; lines without one scale from their current price." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: { ...selStyle, flex: 1 }, value: adjMode, disabled: locked, onChange: (e) => setAdjMode(e.target.value), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "margin", children: "Profit margin" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "markup", children: "Markup" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            style: { ...inputStyle, width: 80, textAlign: "right" },
+            value: adjPct,
+            disabled: locked,
+            inputMode: "decimal",
+            placeholder: "30",
+            onChange: (e) => setAdjPct(e.target.value)
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "%" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, onClick: applyPricing, disabled: locked, children: "Apply" })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "soft", small: true, onClick: () => setTplSheet(true), children: "Open" }), children: "Estimate templates" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: `Save this estimate's lines under a name \u2014 "Full replacement \u2014 architectural", "Repair minimum" \u2014 and drop them into any future estimate in one tap.` })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "soft", small: true, onClick: () => setDocSheet(true), children: "Layout" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "soft", small: true, onClick: () => setPreviewOpen(true), children: "Preview" })
+      ] }), children: "Estimate document" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: "The customer-facing document: cover page with your logo, a photo, and their info, then sections in the order you choose \u2014 line items, notes, terms." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Scope of work" }),
@@ -4297,7 +4486,25 @@ function TabEstimate({ job, brand, mut, toast }) {
               onChange: (e) => setItem(it.id, "price", e.target.value)
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginLeft: "auto", fontWeight: 800, fontSize: 14 }, children: money(num(it.qty) * num(it.price)) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginLeft: "auto", fontWeight: 800, fontSize: 14 }, children: money(num(it.qty) * num(it.price)) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginTop: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: "Unit cost" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: { ...inputStyle, width: 92, textAlign: "right", padding: "7px 9px", fontSize: 13 },
+              value: it.cost ?? "",
+              disabled: locked,
+              inputMode: "decimal",
+              placeholder: "\u2014",
+              onChange: (e) => setItem(it.id, "cost", e.target.value)
+            }
+          ),
+          lineMargin(it) != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: num(lineMargin(it)) >= 30 ? "green" : num(lineMargin(it)) >= 15 ? "amber" : "red", children: [
+            lineMargin(it),
+            "% margin"
+          ] }),
           !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             "button",
             {
@@ -4399,16 +4606,141 @@ function TabEstimate({ job, brand, mut, toast }) {
           toast("Estimate signed and locked");
         }
       }
-    )
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open: tplSheet, onClose: () => setTplSheet(false), title: "Estimate templates", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Save current lines as", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            style: { ...inputStyle, flex: 1 },
+            value: tplName,
+            placeholder: "Full replacement \u2014 architectural",
+            onChange: (e) => setTplName(e.target.value)
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { onClick: saveTemplate, disabled: !tplName.trim() || est.items.length === 0, children: "Save" })
+      ] }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, margin: "14px 0 6px" }, children: "SAVED TEMPLATES" }),
+      estimateTemplates.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "None yet \u2014 build an estimate you like and save it above." }),
+      estimateTemplates.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "11px 0", borderTop: `1px solid ${S.line}` }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14.5, fontWeight: 700 }, children: t.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub }, children: [
+            t.items.length,
+            " line",
+            t.items.length === 1 ? "" : "s"
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, onClick: () => applyTemplate(t), disabled: locked, children: "Add" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              onClick: () => setEstimateTemplates(estimateTemplates.filter((x) => x.id !== t.id)),
+              style: { border: "none", background: "none", cursor: "pointer" },
+              children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" })
+            }
+          )
+        ] })
+      ] }, t.id))
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open: docSheet, onClose: () => setDocSheet(false), title: "Document layout", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: coverRef, type: "file", accept: "image/*", onChange: onCover, style: { display: "none" } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, marginBottom: 6 }, children: "SECTION ORDER" }),
+      doc.sections.map((sec, idx) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: idx ? `1px solid ${S.line}` : "none" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, fontSize: 14, fontWeight: 600 }, children: SECTION_LABELS[sec] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => moveSection(idx, -1), disabled: idx === 0, children: "\u2191" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => moveSection(idx, 1), disabled: idx === doc.sections.length - 1, children: "\u2193" })
+      ] }, sec)),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, margin: "16px 0 6px" }, children: "COVER PAGE" }),
+      doc.coverImage ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "Cover", style: { width: "100%", borderRadius: 10, marginBottom: 8 } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 8 }, children: "No photo yet \u2014 the house photo works great here." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => coverRef.current && coverRef.current.click(), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
+          " ",
+          doc.coverImage ? "Replace photo" : "Add photo"
+        ] }),
+        doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setDoc({ coverImage: null }), children: "Remove" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Special notes", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "textarea",
+          {
+            style: { ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" },
+            value: doc.notes,
+            onChange: (e) => setDoc({ notes: e.target.value }),
+            placeholder: "Color selections, access notes, exclusions\u2026"
+          }
+        ) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Terms & conditions", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "textarea",
+          {
+            style: { ...inputStyle, minHeight: 110, resize: "vertical", fontFamily: "inherit" },
+            value: doc.terms,
+            onChange: (e) => setDoc({ terms: e.target.value }),
+            placeholder: "Payment terms, warranty, change orders\u2026"
+          }
+        ) })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: previewOpen, onClose: () => setPreviewOpen(false), title: "Estimate preview", children: doc.sections.map((sec) => {
+      if (sec === "cover") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 14 }, children: [
+        doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "", style: { width: "100%", display: "block" } }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: 18, background: T.primary, color: "#fff" }, children: [
+          brand.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand.logo, alt: "", style: { height: 40, objectFit: "contain", marginBottom: 10, display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontWeight: 800, fontSize: 18, marginBottom: 6 }, children: brand.company }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, opacity: 0.85 }, children: brand.slogan }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14, fontSize: 14 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontWeight: 700 }, children: [
+              "Prepared for ",
+              job.name
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { opacity: 0.85 }, children: job.address }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { opacity: 0.85, marginTop: 5 }, children: [
+              est.number,
+              " \xB7 ",
+              est.date
+            ] })
+          ] })
+        ] })
+      ] }, sec);
+      if (sec === "items") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 14 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }, children: "SCOPE & PRICING" }),
+        est.items.map((it) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5, padding: "6px 0", borderBottom: `1px solid ${S.soft}` }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1 }, children: [
+            it.desc,
+            " \u2014 ",
+            it.qty,
+            " ",
+            it.unit
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 600 }, children: money(num(it.qty) * num(it.price)) })
+        ] }, it.id)),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 800, marginTop: 8 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Total" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: money(total) })
+        ] })
+      ] }, sec);
+      if (sec === "notes" && doc.notes) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 14 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }, children: "SPECIAL NOTES" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }, children: doc.notes })
+      ] }, sec);
+      if (sec === "terms" && doc.terms) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 14 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }, children: "TERMS & CONDITIONS" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: S.sub }, children: doc.terms })
+      ] }, sec);
+      return null;
+    }) })
   ] });
 }
-function TabContract({ job, brand, mut, toast }) {
+function TabContract({ job, brand, setBrand = () => {
+}, mut, toast }) {
   const con = job.contract;
   const [sigFor, setSigFor] = (0, import_react.useState)(null);
   const locked = con.status === "Signed";
   const setCon = (patch) => mut((j) => ({ ...j, contract: { ...j.contract, ...patch } }));
   const estTotal = estimateTotal(job.estimate);
-  const deposit = (con.price || 0) * (con.depositPct / 100);
+  const depositMode = con.depositMode || "pct";
+  const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
   const SigLine = ({ label, value, onSign }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 220 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
       height: 74,
@@ -4485,26 +4817,89 @@ function TabContract({ job, brand, mut, toast }) {
         "Use estimate total \u2014 ",
         money(estTotal)
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, fontSize: 14 }, children: "Deposit" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, marginBottom: 7 }, children: "Deposit" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }, children: [["50%", 50], ["1/3", 33.33], ["25%", 25], ["10%", 10]].map(([label, pct]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
           {
-            style: { ...inputStyle, width: 72, textAlign: "right" },
-            value: con.depositPct,
             disabled: locked,
-            inputMode: "decimal",
-            onChange: (e) => setCon({ depositPct: num(e.target.value) })
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "%" })
+            onClick: () => setCon({ depositMode: "pct", depositPct: pct }),
+            style: {
+              border: `1.5px solid ${depositMode === "pct" && Math.abs(con.depositPct - pct) < 0.01 ? T.accent : S.line}`,
+              background: depositMode === "pct" && Math.abs(con.depositPct - pct) < 0.01 ? T.accentSoft : "#fff",
+              color: depositMode === "pct" && Math.abs(con.depositPct - pct) < 0.01 ? T.accent : S.ink,
+              borderRadius: 999,
+              padding: "7px 14px",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer"
+            },
+            children: label
+          },
+          label
+        )) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            "select",
+            {
+              style: { ...selStyle, width: 130 },
+              value: depositMode,
+              disabled: locked,
+              onChange: (e) => setCon({ depositMode: e.target.value }),
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "pct", children: "Custom %" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "fixed", children: "Fixed $" })
+              ]
+            }
+          ),
+          depositMode === "fixed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub }, children: "$" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: { ...inputStyle, width: 110, textAlign: "right" },
+                value: con.depositFixed ?? "",
+                disabled: locked,
+                inputMode: "decimal",
+                onChange: (e) => setCon({ depositFixed: num(e.target.value) })
+              }
+            )
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: { ...inputStyle, width: 84, textAlign: "right" },
+                value: con.depositPct,
+                disabled: locked,
+                inputMode: "decimal",
+                onChange: (e) => setCon({ depositPct: num(e.target.value) })
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "%" })
+          ] })
+        ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: `Due at signing (${con.depositPct}%)`, v: money(deposit) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: depositMode === "fixed" ? "Due at signing (fixed)" : `Due at signing (${con.depositPct}%)`, v: money(deposit) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Due on substantial completion", v: money((con.price || 0) - deposit), strong: true })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Terms" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, lineHeight: 1.6, whiteSpace: "pre-wrap" }, children: con.terms })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "textarea",
+        {
+          style: { ...inputStyle, minHeight: 130, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.6 },
+          value: con.terms,
+          disabled: locked,
+          onChange: (e) => setCon({ terms: e.target.value })
+        }
+      ),
+      !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => {
+          setBrand({ ...brand, contractTerms: con.terms });
+          toast("Saved as your default terms for new contracts");
+        }, children: "Save as company default" }),
+        brand.contractTerms && brand.contractTerms !== con.terms && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => setCon({ terms: brand.contractTerms }), children: "Load company default" })
+      ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Signatures" }),
@@ -6247,7 +6642,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
     ] }) })
   ] });
 }
-function ReviewSettings({ settings, setSettings, jobs, onBack, brand, mut, toast }) {
+function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFromReviews, mut, toast }) {
   const [rating, setRating] = (0, import_react.useState)({});
   const [fbOpen, setFbOpen] = (0, import_react.useState)(null);
   const [fbText, setFbText] = (0, import_react.useState)("");
@@ -6286,6 +6681,14 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, mut, toast
         completed.length,
         " completed"
       ] }), children: "Review requests" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Your Google review link", hint: "Where 5-star customers get sent. Every company's is different \u2014 paste yours here or in Company branding; they're the same setting.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: inputStyle,
+          value: brand.googleReviewLink,
+          onChange: (e) => setBrandFromReviews && setBrandFromReviews({ ...brand, googleReviewLink: e.target.value })
+        }
+      ) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 6, lineHeight: 1.5 }, children: `Every job in "Job completed." Toggle what's been sent and what's posted. Log the customer's rating when they answer the "how did we do?" message \u2014 anything under 5 opens the internal feedback form so you can make it right first.` }),
       completed.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, marginTop: 8 }, children: "No completed jobs yet." }),
       completed.map((j) => {
@@ -6440,6 +6843,96 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, mut, toast
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub, marginLeft: "auto" }, children: j.assignee })
       ] }, j.id))
     ] })
+  ] });
+}
+function VendorManager({ vendors, setVendors, currentUser, onBack, toast }) {
+  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const blank = { name: "", contact: "", phone: "", email: "", account: "", notes: "", active: true };
+  const [editing, setEditing] = (0, import_react.useState)(null);
+  const [f, setF] = (0, import_react.useState)(blank);
+  const open = (v) => {
+    setEditing(v || "new");
+    setF(v ? { ...v } : blank);
+  };
+  const save = () => {
+    if (editing === "new") setVendors([...vendors, { ...f, id: uid("v") }]);
+    else setVendors(vendors.map((v) => v.id === editing.id ? { ...v, ...f } : v));
+    setEditing(null);
+    toast("Vendor saved");
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      SubHeader,
+      {
+        title: "Vendors & suppliers",
+        onBack,
+        right: canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, onClick: () => open(null), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }),
+          " Add vendor"
+        ] })
+      }
+    ),
+    vendors.map((v) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 15, style: { marginTop: 10, opacity: v.active ? 1 : 0.6 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700 }, children: v.name }),
+          v.contact && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 2 }, children: v.contact })
+        ] }),
+        !v.active && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Inactive" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 14, marginTop: 9, flexWrap: "wrap", fontSize: 12.5, color: S.sub }, children: [
+        v.phone && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", gap: 5, alignItems: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Phone, { size: 12 }),
+          " ",
+          v.phone
+        ] }),
+        v.email && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", gap: 5, alignItems: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Mail, { size: 12 }),
+          " ",
+          v.email
+        ] }),
+        v.account && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+          "Acct #",
+          v.account
+        ] })
+      ] }),
+      v.notes && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: v.notes }),
+      canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => open(v), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Pencil, { size: 13 }),
+          " Edit"
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Btn,
+          {
+            kind: "ghost",
+            small: true,
+            style: { flex: 1 },
+            onClick: () => setVendors(vendors.map((x) => x.id === v.id ? { ...x, active: !x.active } : x)),
+            children: v.active ? "Deactivate" : "Reactivate"
+          }
+        )
+      ] })
+    ] }, v.id)),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+      Sheet,
+      {
+        open: !!editing,
+        onClose: () => setEditing(null),
+        title: editing === "new" ? "Add vendor" : "Edit vendor",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, disabled: !f.name.trim(), onClick: save, children: "Save vendor" }),
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Company name *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.name, onChange: (e) => setF({ ...f, name: e.target.value }) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Rep / contact", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.contact, onChange: (e) => setF({ ...f, contact: e.target.value }) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.phone, onChange: (e) => setF({ ...f, phone: e.target.value }) }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: f.email, onChange: (e) => setF({ ...f, email: e.target.value }) }) })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Account number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.account, onChange: (e) => setF({ ...f, account: e.target.value }) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Notes", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { style: { ...inputStyle, minHeight: 60, resize: "vertical", fontFamily: "inherit" }, value: f.notes, onChange: (e) => setF({ ...f, notes: e.target.value }) }) })
+        ]
+      }
+    )
   ] });
 }
 function LeadSourceManager({ sources, setSources, jobs, onBack, toast }) {
@@ -7812,6 +8305,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
     ["integrations", import_lucide_react.Share2, "Integrations", "Gmail and text messaging"],
     ["import", import_lucide_react.Upload, "Import jobs", "Bring a pipeline in from CSV"],
     ["leadsources", import_lucide_react.Filter, "Lead sources", "Add or remove the options reps pick from"],
+    ["vendors", import_lucide_react.Building2, "Vendors & suppliers", "Material suppliers and their account details"],
     ["reviews", import_lucide_react.Star, "Review automation", "Google review requests"],
     ["branding", import_lucide_react.Settings, "Company branding", "Name, colors, review link"]
   ];
@@ -7953,7 +8447,12 @@ function SupremeCRM() {
   const [companyDocs, setCompanyDocs] = (0, import_react.useState)(SEED_COMPANY_DOCS);
   const [priceList, setPriceList] = (0, import_react.useState)(SEED_PRICE_LIST);
   const [leadSources, setLeadSources] = (0, import_react.useState)([...LEAD_SOURCES]);
+  const [vendors, setVendors] = (0, import_react.useState)([
+    { id: "v1", name: "ABC Supply", contact: "", phone: "", email: "", account: "", notes: "", active: true },
+    { id: "v2", name: "SRS Distribution", contact: "", phone: "", email: "", account: "", notes: "", active: true }
+  ]);
   const [appointments, setAppointments] = (0, import_react.useState)([]);
+  const [estimateTemplates, setEstimateTemplates] = (0, import_react.useState)([]);
   const [apptTypes, setApptTypes] = (0, import_react.useState)(["Inspection", "Adjuster meeting", "Estimate presentation", "Production start", "Final walkthrough"]);
   const [integrations, setIntegrations] = (0, import_react.useState)({
     /* Gmail is per-user: each rep connects their own mailbox so email
@@ -8168,7 +8667,10 @@ function SupremeCRM() {
         setCrews,
         templates,
         integrations,
-        users
+        users,
+        estimateTemplates,
+        setEstimateTemplates,
+        setBrand
       }
     ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       Dashboard,
@@ -8223,7 +8725,8 @@ function SupremeCRM() {
         setAppointments,
         apptTypes,
         setApptTypes,
-        toast
+        toast,
+        onQueueMessage: (jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))
       }
     ) : nav === "contacts" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Contacts, { jobs, onBack: () => setNav("more"), onOpenJob: openJobScreen }) : nav === "reviews" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       ReviewSettings,
@@ -8233,7 +8736,17 @@ function SupremeCRM() {
         jobs,
         onBack: () => setNav("more"),
         brand,
+        setBrandFromReviews: setBrand,
         mut: mutJob,
+        toast
+      }
+    ) : nav === "vendors" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      VendorManager,
+      {
+        vendors,
+        setVendors,
+        currentUser: liveUser,
+        onBack: () => setNav("more"),
         toast
       }
     ) : nav === "leadsources" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
