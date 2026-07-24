@@ -3316,7 +3316,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
         {tab === "messages" && <TabMessages job={job} mut={mut} toast={toast} brand={brand}
           templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />}
         {tab === "photos" && <TabPhotos job={job} mut={mut} toast={toast} />}
-        {tab === "financials" && <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} />}
+        {tab === "financials" && <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />}
         {tab === "payments" && <TabPayments job={job} mut={mut} toast={toast} />}
         {tab === "invoice" && <TabInvoice job={job} brand={brand} mut={mut} toast={toast} />}
         {tab === "workorder" && <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
@@ -3700,6 +3700,356 @@ function AnnouncementManager({ announcements, setAnnouncements, currentUser, onB
   );
 }
 
+/* ================================================================
+   DOCUMENT ENGINE
+   Renders a clean, paginated HTML document in a new window and calls
+   print(). On a phone that print dialog includes "Save to Files" /
+   "Save as PDF", which is a genuine PDF — no library, no server, and
+   it works on iOS Safari and Android Chrome alike.
+================================================================ */
+function docShell(title, brand, bodyHtml) {
+  const esc = (x) => String(x == null ? "" : x)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const logo = brand.logo
+    ? `<img src="${brand.logo}" style="height:52px;object-fit:contain" alt="">`
+    : `<div style="font:800 22px Georgia,serif;color:${brand.primary}">${esc(brand.company)}</div>`;
+  return `<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(title)}</title>
+<style>
+  @page { size: letter; margin: 0.6in; }
+  * { box-sizing: border-box; }
+  body { font: 13px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color: #111827; margin: 0; padding: 22px; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;
+          border-bottom: 3px solid ${brand.primary}; padding-bottom: 14px; margin-bottom: 20px; }
+  .co { font-size: 11.5px; color: #6B7280; line-height: 1.5; margin-top: 6px; white-space: pre-line; }
+  .title { font-size: 21px; font-weight: 800; text-align: right; color: ${brand.primary}; }
+  .meta { font-size: 11.5px; color: #6B7280; text-align: right; margin-top: 5px; line-height: 1.6; }
+  h2 { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: #6B7280;
+       margin: 22px 0 8px; font-weight: 800; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+  th { text-align: left; font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase;
+       color: #6B7280; border-bottom: 1.5px solid #E5E7EB; padding: 7px 6px; }
+  td { padding: 8px 6px; border-bottom: 1px solid #F3F4F6; vertical-align: top; font-size: 12.5px; }
+  td.r, th.r { text-align: right; white-space: nowrap; }
+  .tot { display: flex; justify-content: space-between; padding: 7px 6px; font-size: 13px; }
+  .tot.grand { font-weight: 800; font-size: 15px; border-top: 2px solid ${brand.primary}; margin-top: 6px; padding-top: 10px; }
+  .box { border: 1px solid #E5E7EB; border-radius: 9px; padding: 12px 14px; margin-top: 8px; }
+  .muted { color: #6B7280; font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; }
+  .sig { display: flex; gap: 26px; margin-top: 26px; page-break-inside: avoid; }
+  .sig > div { flex: 1; }
+  .sigline { border-bottom: 1.5px solid #111827; height: 42px; }
+  .siglbl { font-size: 10.5px; color: #6B7280; margin-top: 5px; }
+  .foot { margin-top: 26px; padding-top: 12px; border-top: 1px solid #E5E7EB;
+          font-size: 10.5px; color: #9CA3AF; text-align: center; }
+  .cover { text-align: center; padding: 40px 0 30px; page-break-after: always; }
+  .cover img.hero { width: 100%; border-radius: 12px; margin-bottom: 26px; }
+  @media print { .noprint { display: none !important; } body { padding: 0; } }
+  .bar { position: sticky; top: 0; background: #111827; color: #fff; padding: 11px 14px;
+         display: flex; gap: 10px; align-items: center; margin: -22px -22px 20px; }
+  .bar button { background: #fff; color: #111827; border: 0; border-radius: 7px;
+                padding: 9px 15px; font-weight: 700; font-size: 13px; cursor: pointer; }
+  .bar span { font-size: 12.5px; opacity: .85; }
+</style></head><body>
+<div class="bar noprint">
+  <button onclick="window.print()">Save as PDF / Print</button>
+  <span>Choose "Save to Files" or "Save as PDF" in the print dialog.</span>
+</div>
+<div class="head">
+  <div>${logo}<div class="co">${esc(brand.address)}\n${esc(brand.phone)}   ${esc(brand.email)}${brand.license ? "\n" + esc(brand.license) : ""}</div></div>
+  <div><div class="title">${esc(title)}</div></div>
+</div>
+${bodyHtml}
+<div class="foot">${esc(brand.company)} · ${esc(brand.slogan)}</div>
+</body></html>`;
+}
+
+function openDoc(title, brand, bodyHtml, toast) {
+  try {
+    const w = window.open("", "_blank");
+    if (!w) { toast && toast("Allow pop-ups for this site to open documents"); return false; }
+    w.document.write(docShell(title, brand, bodyHtml));
+    w.document.close();
+    return true;
+  } catch (e) {
+    toast && toast("Couldn't open the document window");
+    return false;
+  }
+}
+
+const esc = (x) => String(x == null ? "" : x)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function lineTable(items, opts = {}) {
+  const rows = items.map((it) => `<tr>
+    <td>${esc(it.desc)}</td>
+    <td class="r">${esc(it.qty)} ${esc(it.unit || "")}</td>
+    ${opts.hidePrice ? "" : `<td class="r">${money(num(it.price))}</td><td class="r">${money(num(it.qty) * num(it.price))}</td>`}
+  </tr>`).join("");
+  return `<table><thead><tr>
+    <th>Description</th><th class="r">Qty</th>
+    ${opts.hidePrice ? "" : '<th class="r">Unit</th><th class="r">Amount</th>'}
+  </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function estimateDocHtml(job, brand) {
+  const est = job.estimate;
+  const doc = est.doc || {};
+  const total = estimateTotal(est);
+  const secs = doc.sections || ["cover", "items", "notes", "terms"];
+  let out = "";
+  for (const sec of secs) {
+    if (sec === "cover" && (doc.coverImage || true)) {
+      out += `<div class="cover">
+        ${doc.coverImage ? `<img class="hero" src="${doc.coverImage}" alt="">` : ""}
+        <div style="font-size:26px;font-weight:800;color:${brand.primary}">Roofing Proposal</div>
+        <div style="margin-top:18px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
+        <div class="muted" style="font-size:13px">${esc(job.address)}</div>
+        <div class="muted" style="margin-top:14px">${esc(est.number || "")} · ${esc(est.date || "")}</div>
+      </div>`;
+    }
+    if (sec === "items") {
+      out += `<h2>Scope of work</h2>`;
+      if (est.scope) out += `<div class="muted">${esc(est.scope)}</div>`;
+      out += lineTable(est.items || []);
+      out += `<div class="tot grand"><span>Total</span><span>${money(total)}</span></div>`;
+      if (est.validThrough) out += `<div class="muted" style="margin-top:10px">Valid through ${esc(est.validThrough)}</div>`;
+    }
+    if (sec === "notes" && doc.notes) out += `<h2>Special notes</h2><div class="muted">${esc(doc.notes)}</div>`;
+    if (sec === "terms" && doc.terms) out += `<h2>Terms &amp; conditions</h2><div class="muted">${esc(doc.terms)}</div>`;
+  }
+  out += `<div class="sig">
+    <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
+    <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative</div></div>
+  </div>`;
+  return out;
+}
+
+function invoiceDocHtml(job, brand) {
+  const pay = paymentsSummary(job);
+  const est = job.estimate;
+  const num2 = job.invoiceNo || (job.contract && job.contract.number ? job.contract.number.replace("CON", "INV") : "INV-DRAFT");
+  let out = `<div style="display:flex;justify-content:space-between;gap:20px">
+    <div><h2 style="margin-top:0">Bill to</h2>
+      <div><b>${esc(job.name)}</b></div><div class="muted">${esc(job.address)}</div>
+      ${job.email ? `<div class="muted">${esc(job.email)}</div>` : ""}
+      ${job.phone ? `<div class="muted">${esc(job.phone)}</div>` : ""}
+    </div>
+    <div style="text-align:right">
+      <div class="muted">Invoice ${esc(num2)}</div>
+      ${job.invoiceDue ? `<div class="muted">Due ${esc(job.invoiceDue)}</div>` : ""}
+      ${job.invoicePo ? `<div class="muted">PO ${esc(job.invoicePo)}</div>` : ""}
+    </div>
+  </div>`;
+  out += `<h2>Work performed</h2>` + lineTable((est && est.items) || []);
+  const contractPrice = (job.contract && job.contract.price) || estimateTotal(est);
+  out += `<div class="tot"><span>Contract total</span><span>${money(contractPrice)}</span></div>`;
+  out += `<div class="tot"><span>Payments received</span><span>−${money(pay.received)}</span></div>`;
+  out += `<div class="tot grand"><span>Balance due</span><span>${money(contractPrice - pay.received)}</span></div>`;
+  if ((job.payments || []).length) {
+    out += `<h2>Payment history</h2><table><thead><tr><th>Date</th><th>Method</th><th>Reference</th><th class="r">Amount</th></tr></thead><tbody>` +
+      job.payments.filter((x) => x.type === "Received").map((x) => `<tr><td>${esc(x.date || "")}</td><td>${esc(x.method || "")}</td><td>${esc(x.ref || "")}</td><td class="r">${money(num(x.amt))}</td></tr>`).join("") +
+      `</tbody></table>`;
+  }
+  out += `<div class="box" style="margin-top:20px"><b>Remit to</b><div class="muted">${esc(brand.company)}\n${esc(brand.address)}\n${esc(brand.phone)}</div></div>`;
+  return out;
+}
+
+function workOrderDocHtml(job, brand, crew) {
+  const m = job.measurements || {};
+  const wo = job.workOrder || {};
+  let out = `<div style="display:flex;justify-content:space-between;gap:20px">
+    <div><h2 style="margin-top:0">Job site</h2>
+      <div><b>${esc(job.name)}</b></div><div class="muted">${esc(job.address)}</div>
+    </div>
+    <div style="text-align:right">
+      ${wo.number ? `<div class="muted">WO ${esc(wo.number)}</div>` : ""}
+      ${wo.po ? `<div class="muted">PO ${esc(wo.po)}</div>` : ""}
+      ${job.schedDate ? `<div class="muted">Scheduled ${esc(job.schedDate)}</div>` : ""}
+      ${crew ? `<div class="muted">Crew: ${esc(crew.name)}</div>` : ""}
+    </div>
+  </div>`;
+  out += `<h2>Roof measurements</h2><table><tbody>` +
+    [["Squares", m.squares], ["Pitch", m.pitch], ["Layers", m.layers], ["Stories", m.stories],
+     ["Ridges", m.ridges && m.ridges + " LF"], ["Hips", m.hips && m.hips + " LF"],
+     ["Valleys", m.valleys && m.valleys + " LF"], ["Eaves", m.eaves && m.eaves + " LF"],
+     ["Rakes", m.rakes && m.rakes + " LF"], ["Penetrations", m.penetrations]]
+      .filter(([, v]) => v).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="r">${esc(v)}</td></tr>`).join("") +
+    `</tbody></table>`;
+  const mats = generateRoofingMaterials(m);
+  if (mats && mats.length) {
+    out += `<h2>Materials</h2>` + lineTable(mats.map((x) => ({ desc: x.item, qty: x.qty, unit: x.unit })), { hidePrice: true });
+  }
+  if (wo.notes) out += `<h2>Instructions</h2><div class="muted">${esc(wo.notes)}</div>`;
+  out += `<div class="box" style="margin-top:18px"><b>Pricing is intentionally omitted from work orders.</b>
+    <div class="muted">Questions on scope go to the office at ${esc(brand.phone)}.</div></div>`;
+  return out;
+}
+
+function contractDocHtml(job, brand) {
+  const con = job.contract || {};
+  const mode = con.depositMode || "pct";
+  const deposit = mode === "fixed" ? num(con.depositFixed) : (con.price || 0) * ((con.depositPct || 0) / 100);
+  let out = `<div style="display:flex;justify-content:space-between;gap:20px">
+    <div><h2 style="margin-top:0">Customer</h2>
+      <div><b>${esc(job.name)}</b></div><div class="muted">${esc(job.address)}</div></div>
+    <div style="text-align:right">${con.number ? `<div class="muted">${esc(con.number)}</div>` : ""}
+      ${con.date ? `<div class="muted">${esc(con.date)}</div>` : ""}</div>
+  </div>`;
+  if (con.scope) out += `<h2>Scope of work</h2><div class="muted">${esc(con.scope)}</div>`;
+  out += `<h2>Price &amp; payment schedule</h2>
+    <div class="tot"><span>Contract price</span><span>${money(con.price || 0)}</span></div>
+    <div class="tot"><span>Due at signing${mode === "pct" ? ` (${con.depositPct}%)` : ""}</span><span>${money(deposit)}</span></div>
+    <div class="tot grand"><span>Due on substantial completion</span><span>${money((con.price || 0) - deposit)}</span></div>`;
+  if (con.terms) out += `<h2>Terms &amp; conditions</h2><div class="muted">${esc(con.terms)}</div>`;
+  out += `<div class="sig">
+    <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
+    <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative / date</div></div>
+  </div>`;
+  return out;
+}
+
+function reportDocHtml(job, brand) {
+  const c = job.checklist || {};
+  const m = job.measurements || {};
+  let out = `<div style="display:flex;justify-content:space-between;gap:20px">
+    <div><h2 style="margin-top:0">Property</h2>
+      <div><b>${esc(job.name)}</b></div><div class="muted">${esc(job.address)}</div>
+    </div>
+    <div style="text-align:right"><div class="muted">Inspected ${esc(c.date || new Date().toLocaleDateString())}</div>
+      ${c.inspector ? `<div class="muted">By ${esc(c.inspector)}</div>` : ""}</div>
+  </div>`;
+  const rows = [
+    ["Inspection method", c.method], ["Primary pitch", c.pitch], ["Layers", c.layers],
+    ["Decking type", c.deckType], ["Decking condition", c.deckCondition],
+    ["Ventilation present", Array.isArray(c.ventilation) ? c.ventilation.join(", ") : c.ventilation],
+    ["Soffit intake", c.soffit], ["Ventilation condition", c.ventCondition],
+    ["Shingle type", c.shingleType], ["Damage observed", Array.isArray(c.damage) ? c.damage.join(", ") : c.damage],
+  ].filter(([, v]) => v && String(v).length);
+  if (rows.length) {
+    out += `<h2>Findings</h2><table><tbody>` +
+      rows.map(([k, v]) => `<tr><td style="width:38%"><b>${esc(k)}</b></td><td>${esc(v)}</td></tr>`).join("") + `</tbody></table>`;
+  }
+  if (m.squares) {
+    out += `<h2>Measurements</h2><table><tbody>` +
+      [["Squares", m.squares], ["Pitch", m.pitch], ["Ridges", m.ridges], ["Valleys", m.valleys], ["Eaves", m.eaves], ["Rakes", m.rakes]]
+        .filter(([, v]) => v).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="r">${esc(v)}</td></tr>`).join("") + `</tbody></table>`;
+  }
+  if (c.notes) out += `<h2>Inspector notes</h2><div class="muted">${esc(c.notes)}</div>`;
+  const photos = (job.photos || []).slice(0, 12);
+  if (photos.length) {
+    out += `<h2>Photo documentation</h2><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">` +
+      photos.map((ph) => `<div><img src="${ph.url || ph.dataUrl || ""}" style="width:100%;border-radius:7px" alt="">
+        <div class="muted" style="margin-top:3px">${esc(ph.label || ph.caption || "")}</div></div>`).join("") + `</div>`;
+  }
+  return out;
+}
+
+function PublicPortal({ token }) {
+  const [state, setState] = useState({ loading: true, data: null, err: "" });
+  useEffect(() => {
+    const db = DB();
+    if (!db) { setState({ loading: false, data: null, err: "This link needs a live connection." }); return; }
+    db.from("crm_portal").select("data, revoked").eq("token", token).maybeSingle().then(({ data, error }) => {
+      if (error || !data) { setState({ loading: false, data: null, err: "This link isn't valid or has been turned off." }); return; }
+      setState({ loading: false, data: data.data, err: "" });
+    });
+  }, [token]);
+
+  if (state.loading) {
+    return <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: S.bg, fontFamily: "'Inter',system-ui,sans-serif", color: S.sub }}>Loading…</div>;
+  }
+  if (!state.data) {
+    return (
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: S.bg, padding: 24, fontFamily: "'Inter',system-ui,sans-serif" }}>
+        <div style={{ textAlign: "center", maxWidth: 340 }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: S.ink }}>Link unavailable</div>
+          <div style={{ fontSize: 14, color: S.sub, marginTop: 8, lineHeight: 1.55 }}>{state.err} Please contact your contractor for a new one.</div>
+        </div>
+      </div>
+    );
+  }
+  const d = state.data;
+  const prim = d.primary || "#28373E";
+  return (
+    <div style={{ minHeight: "100vh", background: S.bg, fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif" }}>
+      <div style={{ background: prim, color: "#fff", padding: "22px 18px 26px" }}>
+        {d.logo
+          ? <img src={d.logo} alt="" style={{ height: 44, objectFit: "contain", marginBottom: 10, display: "block" }} />
+          : <div style={{ fontSize: 13, opacity: 0.8 }}>{d.company}</div>}
+        <div style={{ fontSize: 21, fontWeight: 800, marginTop: 4 }}>Your roofing project</div>
+        <div style={{ fontSize: 13.5, opacity: 0.85, marginTop: 3 }}>{d.address}</div>
+      </div>
+      <div style={{ padding: "16px 16px 60px" }}>
+        <Card>
+          <CardTitle>Project status</CardTitle>
+          <Chip tone="blue">{d.stageLabel || "In progress"}</Chip>
+          {d.schedDate && <div style={{ fontSize: 13.5, color: S.ink, marginTop: 10 }}>Installation scheduled for <b>{d.schedDate}</b></div>}
+        </Card>
+
+        {(d.notes || []).length > 0 && (
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle>Updates from your team</CardTitle>
+            {d.notes.map((n, i2) => (
+              <div key={i2} style={{ borderTop: i2 ? `1px solid ${S.line}` : "none", padding: "10px 0" }}>
+                <div style={{ fontSize: 11.5, color: S.sub }}>{n.at}</div>
+                <div style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 3, whiteSpace: "pre-wrap" }}>{n.text}</div>
+              </div>
+            ))}
+          </Card>
+        )}
+
+        {d.estimate && (
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle right={<span style={{ fontWeight: 800 }}>{money(d.estimate.total)}</span>}>Your estimate</CardTitle>
+            <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>{d.estimate.number} · {d.estimate.date}</div>
+            {(d.estimate.items || []).map((it, i2) => (
+              <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13.5, padding: "7px 0", borderTop: `1px solid ${S.line}` }}>
+                <span>{it.desc} — {it.qty} {it.unit}</span>
+                <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{money(num(it.qty) * num(it.price))}</span>
+              </div>
+            ))}
+          </Card>
+        )}
+
+        {d.contract && (
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle right={<Chip tone={d.contract.status === "Signed" ? "green" : "gray"}>{d.contract.status}</Chip>}>Your contract</CardTitle>
+            <KV k="Contract" v={d.contract.number || "—"} />
+            <KV k="Price" v={money(d.contract.price || 0)} strong />
+          </Card>
+        )}
+
+        {(d.photos || []).length > 0 && (
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle>Project photos</CardTitle>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {d.photos.map((ph, i2) => (
+                <div key={i2}>
+                  <img src={ph.url} alt="" style={{ width: "100%", borderRadius: 9, display: "block" }} />
+                  {ph.label && <div style={{ fontSize: 11.5, color: S.sub, marginTop: 3 }}>{ph.label}</div>}
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle>Questions?</CardTitle>
+          <div style={{ fontSize: 14, lineHeight: 1.6 }}>
+            <div><b>{d.company}</b></div>
+            <div style={{ color: S.sub }}>{d.slogan}</div>
+            <div style={{ marginTop: 8 }}>
+              <a href={`tel:${String(d.phone || "").replace(/\D/g, "")}`} style={{ color: prim, fontWeight: 700 }}>{d.phone}</a>
+            </div>
+            <div><a href={`mailto:${d.email}`} style={{ color: prim }}>{d.email}</a></div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 function PillGroup({ options, value, onPick, multi = false }) {
   const vals = multi ? (Array.isArray(value) ? value : []) : [];
   return (
@@ -3886,7 +4236,7 @@ function TabMaterials({ job, mut, toast }) {
       {list && (
         <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
           <Btn kind="ghost" style={{ flex: 1 }} onClick={copyText}><Copy size={15} /> Copy list</Btn>
-          <Btn kind="ghost" style={{ flex: 1 }} onClick={() => toast("Sent to printer / PDF")}><Printer size={15} /> Print</Btn>
+          <Btn kind="ghost" style={{ flex: 1 }} onClick={() => openDoc(`Material order — ${job.name}`, brand, workOrderDocHtml(job, brand, null), toast)}><Printer size={15} /> Print / PDF</Btn>
         </div>
       )}
       <Card style={{ marginTop: 14 }}>
@@ -4158,7 +4508,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
       </Card>
 
       <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-        <Btn kind="ghost" onClick={() => toast("Estimate PDF generated")}><Printer size={15} /> PDF</Btn>
+        <Btn kind="ghost" onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand), toast)}><Printer size={15} /> PDF</Btn>
         {!locked && (
           <>
             <Btn kind="ghost" onClick={() => { setEst({ status: "Sent" }); toast("Estimate emailed to client"); }}>
@@ -4412,7 +4762,7 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast }) {
         {locked && <div style={{ fontSize: 13, color: "#177245", marginTop: 12, fontWeight: 600 }}>Executed {con.signedAt}. Changes require a written change order.</div>}
       </Card>
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-        <Btn kind="ghost" onClick={() => toast("Contract PDF generated")}><Printer size={15} /> PDF</Btn>
+        <Btn kind="ghost" onClick={() => openDoc(`Contract — ${job.name}`, brand, contractDocHtml(job, brand), toast)}><Printer size={15} /> PDF</Btn>
         <Btn kind="ghost" onClick={() => toast("Contract emailed to client")}><Send size={15} /> Email to client</Btn>
       </div>
       <SignaturePad open={!!sigFor} onClose={() => setSigFor(null)}
@@ -4533,7 +4883,7 @@ function TabReport({ job, brand, juris }) {
         </div>
       </Section>
       <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-        <Btn kind="ghost"><Printer size={15} /> Print / PDF</Btn>
+        <Btn kind="ghost" onClick={() => openDoc(`Work order — ${job.name}`, brand, workOrderDocHtml(job, brand, crew), toast)}><Printer size={15} /> Print / PDF</Btn>
         <Btn kind="ghost"><Send size={15} /> Email to client</Btn>
         <Btn kind="ghost"><Share2 size={15} /> Share link</Btn>
       </div>
@@ -4876,7 +5226,7 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
   );
 }
 
-function TabFinancials({ job, mut, toast, isAdmin, currentUser }) {
+function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_BRAND }) {
   const cap = computeCapOut(job);
   const fin = job.fin;
   const structure = fin.structure || "grossProfit";
@@ -4892,6 +5242,40 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser }) {
   const delLine = (bucket, id) => mut((j) => ({
     ...j, fin: { ...j.fin, [bucket]: j.fin[bucket].filter((l) => l.id !== id) },
   }));
+  const printCapOut = () => {
+    const row = (k, v, bold) => `<div class="tot${bold ? " grand" : ""}"><span>${esc(k)}</span><span>${esc(v)}</span></div>`;
+    const sec = (title, lines, total) => `<h2>${esc(title)}</h2>` +
+      `<table><thead><tr><th>Item</th><th>Paid to / by</th><th class="r">Amount</th></tr></thead><tbody>` +
+      lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.by || "")}</td><td class="r">${money(num(l.amt))}</td></tr>`).join("") +
+      `</tbody></table>` + row(`${title} total`, money(total));
+    let html = `<div style="display:flex;justify-content:space-between;gap:20px">
+        <div><h2 style="margin-top:0">Job</h2><div><b>${esc(job.name)}</b></div>
+          <div class="muted">${esc(job.address)}</div></div>
+        <div style="text-align:right"><div class="muted">Rep: ${esc(job.assignee || "")}</div>
+          <div class="muted">${esc(new Date().toLocaleDateString())}</div></div>
+      </div>`;
+    html += `<h2>Contract</h2>` + row("Contract price", money(cap.contract), true);
+    html += sec("Material costs", fin.materials, cap.materials);
+    html += sec("Labor costs", fin.labor, cap.labor);
+    html += sec("Other costs", fin.other, cap.other);
+    html += `<h2>Profit</h2>` +
+      row("Total job costs", money(cap.cogs)) +
+      row("Gross profit", money(cap.gross)) +
+      row("Gross margin", cap.grossMargin.toFixed(1) + "%");
+    html += `<h2>Commission — ${esc(st.label)}</h2>` +
+      row(cap.baseLabel, money(cap.base)) +
+      row("Rep commission", money(cap.commission), true) +
+      row("Net to company", money(cap.netCompany));
+    if (fin.reimbursements.length) {
+      html += sec("Reimbursements", fin.reimbursements, cap.reimbTotal);
+    }
+    html += `<div class="tot grand" style="margin-top:14px"><span>Total payout to rep</span><span>${money(cap.payout)}</span></div>`;
+    html += `<div class="sig">
+      <div><div class="sigline"></div><div class="siglbl">Rep signature / date</div></div>
+      <div><div class="sigline"></div><div class="siglbl">Approved by / date</div></div>
+    </div>`;
+    openDoc(`Cap out — ${job.name}`, brand, html, toast);
+  };
   const exportCsv = () => {
     downloadCsv(`capout-${job.name.replace(/\s+/g, "-").toLowerCase()}.csv`, [
       ["Job", job.name], ["Address", job.address], [],
@@ -5026,6 +5410,7 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser }) {
       </Card>
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
         <Btn kind="ghost" style={{ flex: 1 }} onClick={exportCsv}><Download size={15} /> Export cap-out CSV</Btn>
+        <Btn kind="ghost" style={{ flex: 1 }} onClick={printCapOut}><Printer size={15} /> Cap-out PDF</Btn>
       </div>
     </>
   );
@@ -5196,7 +5581,7 @@ function TabInvoice({ job, brand, mut, toast }) {
         </div>
       </Card>
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-        <Btn kind="ghost" style={{ flex: 1 }} onClick={() => toast("Invoice PDF generated")}><Printer size={15} /> PDF</Btn>
+        <Btn kind="ghost" style={{ flex: 1 }} onClick={() => openDoc(`Invoice — ${job.name}`, brand, invoiceDocHtml(job, brand), toast)}><Printer size={15} /> PDF</Btn>
         <Btn style={{ flex: 1 }} onClick={() => toast("Invoice emailed to client")}><Send size={15} /> Send invoice</Btn>
       </div>
     </>
@@ -5466,6 +5851,55 @@ function TabFiles({ job, mut, toast }) {
 
 /* ---------- Client portal sharing ---------- */
 function TabPortal({ job, brand, mut, toast }) {
+  const [busy, setBusy] = useState(false);
+  const portalUrl = (tok) => `${window.location.origin}/?portal=${tok}`;
+  const snapshot = (tok) => ({
+    token: tok, job_id: job.id,
+    data: {
+      company: brand.company, logo: brand.logo || null, primary: brand.primary,
+      slogan: brand.slogan, phone: brand.phone, email: brand.email,
+      name: job.name, address: job.address, stageLabel: job.stageLabel || "",
+      portal: job.portal,
+      notes: (job.notes || []).filter((n) => n.customerVisible).map((n) => ({ at: n.at, text: n.text })),
+      photos: job.portal.photos ? (job.photos || []).filter((ph) => ph.shared).map((ph) => ({ url: ph.url || ph.dataUrl, label: ph.label || "" })) : [],
+      estimate: job.portal.estimate ? { number: job.estimate.number, date: job.estimate.date, total: estimateTotal(job.estimate), items: job.estimate.items } : null,
+      contract: job.portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
+      schedDate: job.schedDate || null,
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  const publishPortal = async () => {
+    const db = DB();
+    const tok = job.portalToken || (uid("p") + Math.random().toString(36).slice(2, 10));
+    if (!db) {
+      mut((j) => ({ ...j, portalToken: tok }));
+      toast("Link created — it goes live once the app is connected to the database");
+      return;
+    }
+    setBusy(true);
+    try {
+      const row = snapshot(tok);
+      const { error } = await db.from("crm_portal").upsert({ ...row, revoked: false });
+      if (error) throw error;
+      mut((j) => ({ ...j, portalToken: tok }));
+      const url = portalUrl(tok);
+      if (navigator.clipboard) await navigator.clipboard.writeText(url);
+      toast("Portal link copied — send it to the customer");
+    } catch (e) {
+      toast("Couldn't publish: " + (e && e.message ? e.message : "unknown error"));
+    }
+    setBusy(false);
+  };
+  const revokePortal = async () => {
+    const db = DB();
+    setBusy(true);
+    try {
+      if (db && job.portalToken) await db.from("crm_portal").update({ revoked: true }).eq("token", job.portalToken);
+      mut((j) => ({ ...j, portalToken: null }));
+      toast("Link revoked — it no longer opens");
+    } catch (e) { toast("Couldn't revoke that link"); }
+    setBusy(false);
+  };
   const rows = [
     ["estimate", "Estimate", job.estimate.number || "No estimate yet"],
     ["contract", "Contract", job.contract.number || "No contract yet"],
@@ -5509,9 +5943,24 @@ function TabPortal({ job, brand, mut, toast }) {
             </button>
           </div>
         ))}
-        <Btn kind="ghost" style={{ marginTop: 14, width: "100%" }} onClick={() => toast("Portal link copied")}>
-          <Share2 size={15} /> Copy portal link
-        </Btn>
+        {job.portalToken && (
+          <div style={{ marginTop: 14, background: S.soft, borderRadius: 10, padding: "10px 12px" }}>
+            <div style={{ fontSize: 11.5, color: S.sub, marginBottom: 3 }}>LIVE LINK</div>
+            <div style={{ fontSize: 12, wordBreak: "break-all", color: T.accent }}>{portalUrl(job.portalToken)}</div>
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <Btn kind="ghost" style={{ flex: 1 }} disabled={busy} onClick={publishPortal}>
+            <Share2 size={15} /> {job.portalToken ? "Update & copy link" : "Create portal link"}
+          </Btn>
+          {job.portalToken && (
+            <Btn kind="danger" disabled={busy} onClick={revokePortal}>Revoke</Btn>
+          )}
+        </div>
+        <div style={{ fontSize: 12, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
+          The link works without a login — send it by text or email. Revoking it stops it working immediately.
+          Re-publish after changing what's shared so the client sees the update.
+        </div>
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="blue">Client view</Chip>}>Portal preview</CardTitle>
@@ -8292,6 +8741,12 @@ function useDbSync(st) {
 }
 
 export default function SupremeCRM() {
+  /* A portal link opens for a homeowner with no account, so this check
+     runs before any auth state is considered. */
+  const portalToken = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("portal") : null;
+  if (portalToken) return <PublicPortal token={portalToken} />;
+
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState(SEED_USERS);
   const [booting, setBooting] = useState(liveAuth());
