@@ -71711,6 +71711,7 @@ function JobDetail({
   templates = [],
   integrations = { gmail: {}, sms: {} },
   users = [],
+  ccToken = null,
   estimateTemplates = [],
   setEstimateTemplates = () => {
   },
@@ -71844,7 +71845,7 @@ function JobDetail({
           users
         }
       ),
-      tab === "photos" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPhotos, { job, mut, toast: toast2 }),
+      tab === "photos" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPhotos, { job, mut, toast: toast2, ccToken }),
       tab === "financials" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancials, { job, mut, toast: toast2, isAdmin, currentUser, brand: brand2 }),
       tab === "payments" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPayments, { job, mut, toast: toast2 }),
       tab === "invoice" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabInvoice, { job, brand: brand2, mut, toast: toast2 }),
@@ -75344,7 +75345,114 @@ function TabMessages({ job, mut, toast: toast2, brand: brand2, templates, crews,
     )
   ] });
 }
-function TabPhotos({ job, mut, toast: toast2 }) {
+function CompanyCamJobCard({ job, mut, toast: toast2, ccToken }) {
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const [err, setErr] = (0, import_react.useState)("");
+  const [cors, setCors] = (0, import_react.useState)(false);
+  const [pulled, setPulled] = (0, import_react.useState)(null);
+  const cc = job.companyCam || null;
+  const create = async () => {
+    if (!ccToken) return;
+    setBusy(true);
+    setErr("");
+    setCors(false);
+    try {
+      const proj = await ccCreateProject(ccToken, job);
+      mut((j) => ({ ...j, companyCam: proj }));
+      toast2 && toast2("CompanyCam project created");
+    } catch (e) {
+      if (e && e.cors) setCors(true);
+      else setErr(e && e.message || "Could not create the project.");
+    }
+    setBusy(false);
+  };
+  const pull = async () => {
+    if (!ccToken || !cc) return;
+    setBusy(true);
+    setErr("");
+    setCors(false);
+    try {
+      const photos = await ccProjectPhotos(ccToken, cc.id);
+      setPulled(photos);
+      if (!photos.length) toast2 && toast2("No photos in that project yet");
+    } catch (e) {
+      if (e && e.cors) setCors(true);
+      else setErr(e && e.message || "Could not load photos.");
+    }
+    setBusy(false);
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: cc ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Linked" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Not linked" }), children: "CompanyCam" }),
+    !ccToken && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: "Connect your CompanyCam account under More \u2192 Integrations to create and open projects from here." }),
+    ccToken && !cc && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: [
+        "Creates a CompanyCam project named ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: job.name }),
+        " at",
+        " ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: job.address }),
+        ", and keeps the link here so the crew opens the right one."
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, disabled: busy, onClick: create, children: busy ? "Creating\u2026" : "Create CompanyCam project" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        Btn,
+        {
+          kind: "ghost",
+          small: true,
+          style: { width: "100%", marginTop: 8 },
+          onClick: () => {
+            const id = window.prompt("Paste an existing CompanyCam project ID or URL");
+            if (!id) return;
+            const m = String(id).match(/(\d{4,})/);
+            if (!m) {
+              toast2 && toast2("Could not find a project ID in that");
+              return;
+            }
+            mut((j) => ({ ...j, companyCam: { id: m[1], url: `https://app.companycam.com/projects/${m[1]}`, name: job.name, at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) } }));
+            toast2 && toast2("Linked to that project");
+          },
+          children: "Link an existing project instead"
+        }
+      )
+    ] }),
+    cc && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Project", v: cc.name || job.name }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Linked", v: cc.at || "\u2014" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: cc.url, target: "_blank", rel: "noreferrer", style: { textDecoration: "none", display: "block", marginTop: 10 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ExternalLink, { size: 14 }),
+        " Open in CompanyCam"
+      ] }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, disabled: busy, onClick: pull, children: busy ? "Loading\u2026" : "Preview photos" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Btn,
+          {
+            kind: "ghost",
+            small: true,
+            style: { flex: 1 },
+            onClick: () => {
+              mut((j) => ({ ...j, companyCam: null }));
+              setPulled(null);
+              toast2 && toast2("Unlinked");
+            },
+            children: "Unlink"
+          }
+        )
+      ] }),
+      pulled && pulled.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", marginBottom: 6 }, children: [
+          pulled.length,
+          " IN COMPANYCAM"
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }, children: pulled.slice(0, 9).map((ph) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: ph.url, alt: "", style: { width: "100%", borderRadius: 7, display: "block" } }, ph.id)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: "These stay in CompanyCam. Copying them into the job album waits on Supabase Storage \u2014 holding full-size photos in the database is what the storage migration is for." })
+      ] })
+    ] }),
+    err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "CompanyCam", tone: "red", children: err }),
+    cors && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Your browser blocked the request", tone: "amber", children: "CompanyCam did not send the cross-origin headers a browser needs to call it directly. This needs a small Edge Function to relay the calls server-side \u2014 say the word and I will write it." })
+  ] });
+}
+function TabPhotos({ job, mut, toast: toast2, ccToken }) {
   const [custom, setCustom] = (0, import_react.useState)("");
   const [geo, setGeo] = (0, import_react.useState)(null);
   const [locating, setLocating] = (0, import_react.useState)(false);
@@ -75455,6 +75563,7 @@ function TabPhotos({ job, mut, toast: toast2 }) {
         ] })
       ] })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompanyCamJobCard, { job, mut, toast: toast2, ccToken }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "gray", children: [
         shotsDone.size,
@@ -78798,23 +78907,132 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast: toast2
     )
   ] });
 }
+var CC_API = "https://api.companycam.com/v2";
+async function ccFetch(token, path, opts = {}) {
+  let res;
+  try {
+    res = await fetch(CC_API + path, {
+      ...opts,
+      headers: {
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json",
+        ...opts.headers || {}
+      }
+    });
+  } catch (e) {
+    const err = new Error("blocked");
+    err.cors = true;
+    throw err;
+  }
+  if (res.status === 401 || res.status === 403) throw new Error("That token was rejected by CompanyCam.");
+  if (!res.ok) throw new Error("CompanyCam returned " + res.status + ".");
+  if (res.status === 204) return null;
+  return res.json();
+}
+var ccCompanies = (token) => ccFetch(token, "/companies");
+function ccAddress(job) {
+  const parts = String(job.address || "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (parts.length >= 3) {
+    const stateZip = parts[parts.length - 1].split(/\s+/);
+    return {
+      street_address_1: parts.slice(0, parts.length - 2).join(", "),
+      city: parts[parts.length - 2],
+      state: stateZip[0] || job.state || "",
+      postal_code: stateZip[1] || job.zip || ""
+    };
+  }
+  return {
+    street_address_1: job.address || "",
+    city: job.property?.city || "",
+    state: job.state || "",
+    postal_code: job.zip || ""
+  };
+}
+async function ccCreateProject(token, job) {
+  const body = { project: { name: job.name || job.address || "Ridgeline job", address: ccAddress(job) } };
+  const out = await ccFetch(token, "/projects", { method: "POST", body: JSON.stringify(body) });
+  const proj = out && (out.project || out);
+  if (!proj || !proj.id) throw new Error("CompanyCam did not return a project id.");
+  return {
+    id: String(proj.id),
+    /* public_url is what CompanyCam hands back for sharing; the app
+       URL is the fallback for opening it internally. */
+    url: proj.public_url || `https://app.companycam.com/projects/${proj.id}`,
+    name: proj.name || job.name || "",
+    at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)
+  };
+}
+async function ccProjectPhotos(token, projectId, limit = 24) {
+  const out = await ccFetch(token, `/projects/${projectId}/photos?per_page=${limit}`);
+  const list = Array.isArray(out) ? out : out && out.photos || [];
+  return list.map((ph) => ({
+    id: String(ph.id),
+    url: (ph.uris || []).find((u) => u.type === "web")?.uri || (ph.uris || []).find((u) => u.type === "original")?.uri || "",
+    at: ph.captured_at || ph.created_at || "",
+    by: ph.creator_name || ""
+  })).filter((ph) => ph.url);
+}
+async function ccLoadToken(userId) {
+  const db = DB();
+  if (!db || !userId) return null;
+  try {
+    const { data, error } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    if (error || !data) return null;
+    return (data.data || {}).companyCam || null;
+  } catch (e) {
+    return null;
+  }
+}
+async function ccSaveToken(userId, value) {
+  const db = DB();
+  if (!db || !userId) return false;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    const next = { ...data && data.data || {}, companyCam: value };
+    const { error } = await db.from("crm_user_integrations").upsert({ user_id: userId, data: next, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+    return !error;
+  } catch (e) {
+    return false;
+  }
+}
 function CompanyCamConnect({ onConnect }) {
   const [token, setToken] = (0, import_react.useState)("");
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-      "input",
-      {
-        style: { ...inputStyle, flex: 1 },
-        type: "password",
-        placeholder: "Paste your access token",
-        value: token,
-        onChange: (e) => setToken(e.target.value)
-      }
-    ),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, disabled: !token.trim(), onClick: () => {
-      onConnect(token.trim());
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const [err, setErr] = (0, import_react.useState)("");
+  const [cors, setCors] = (0, import_react.useState)(false);
+  const connect = async () => {
+    setBusy(true);
+    setErr("");
+    setCors(false);
+    try {
+      const out = await ccCompanies(token.trim());
+      const co = Array.isArray(out) ? out[0] : out && (out.company || out.companies?.[0]);
+      await onConnect(token.trim(), co && co.name || "");
       setToken("");
-    }, children: "Connect" })
+    } catch (e) {
+      if (e && e.cors) {
+        setCors(true);
+        setErr("");
+      } else setErr(e && e.message || "Could not reach CompanyCam.");
+    }
+    setBusy(false);
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: { ...inputStyle, flex: 1 },
+          type: "password",
+          placeholder: "Paste your access token",
+          value: token,
+          onChange: (e) => setToken(e.target.value)
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, disabled: !token.trim() || busy, onClick: connect, children: busy ? "Checking\u2026" : "Connect" })
+    ] }),
+    err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "CompanyCam rejected that", tone: "red", children: err }),
+    cors && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Your browser blocked the request", tone: "amber", children: "The token may be perfectly good \u2014 CompanyCam did not send the cross-origin headers a browser needs to call it directly from a web app. This one needs a small Edge Function to relay the calls from the server side. Tell me and I will write it; it is the same shape as the Twilio one." })
   ] });
 }
 function Integrations({ integrations, setIntegrations, currentUser, users = [], onBack, toast: toast2 }) {
@@ -78968,18 +79186,33 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 10 }, children: "Each rep connects their own CompanyCam login, so photos stay attributed to whoever took them. Paste your personal access token from CompanyCam \u2192 Profile \u2192 Access Tokens." }),
       ((integrations.companyCamByUser || {})[currentUser.id] || {}).connected ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, fontSize: 13.5 }, children: [
-          "Connected as ",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: ((integrations.companyCamByUser || {})[currentUser.id] || {}).email || currentUser.name })
+          "Connected",
+          ((integrations.companyCamByUser || {})[currentUser.id] || {}).company ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            " to ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: ((integrations.companyCamByUser || {})[currentUser.id] || {}).company })
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            " as ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: currentUser.name })
+          ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "danger", onClick: () => setIntegrations({
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "danger", onClick: async () => {
+          await ccSaveToken(currentUser.id, null);
+          setIntegrations({
+            ...integrations,
+            companyCamByUser: { ...integrations.companyCamByUser || {}, [currentUser.id]: { connected: false } }
+          });
+          toast2 && toast2("CompanyCam disconnected");
+        }, children: "Disconnect" })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompanyCamConnect, { onConnect: async (token, company) => {
+        const value = { connected: true, token, company, at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) };
+        const saved = await ccSaveToken(currentUser.id, value);
+        setIntegrations({
           ...integrations,
-          companyCamByUser: { ...integrations.companyCamByUser || {}, [currentUser.id]: { connected: false } }
-        }), children: "Disconnect" })
-      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CompanyCamConnect, { onConnect: (token) => setIntegrations({
-        ...integrations,
-        companyCamByUser: { ...integrations.companyCamByUser || {}, [currentUser.id]: { connected: true, token, at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) } }
-      }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "Today this stores your token per seat; pulling project photos into jobs automatically is the next step of this integration and will use it." })
+          companyCamByUser: { ...integrations.companyCamByUser || {}, [currentUser.id]: value }
+        });
+        toast2 && toast2(saved ? "CompanyCam connected" : "Connected \u2014 but the token could not be saved. Run migration 010.");
+      } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "Your token is stored against your seat only. Other seats cannot read it \u2014 that needs migration 010, without which the connection will not survive a refresh." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "On the roadmap" }),
@@ -80186,6 +80419,7 @@ function SupremeCRM() {
     gmailByUser: {},
     sms: { connected: false, provider: "", number: "" }
   });
+  const [ccToken, setCcToken] = (0, import_react.useState)(null);
   const [brand2, setBrand] = (0, import_react.useState)(DEFAULT_BRAND);
   const [stages, setStages] = (0, import_react.useState)(DEFAULT_STAGES);
   const [jobs, setJobs] = (0, import_react.useState)(() => liveDb() ? [] : seedJobs);
@@ -80264,6 +80498,19 @@ function SupremeCRM() {
   T.primary = brand2.primary || "#28373E";
   T.accent = brand2.accent || "#1B6DE0";
   T.accentSoft = brand2.accentSoft && brand2.accentSoftCustom ? brand2.accentSoft : softOf(T.accent);
+  (0, import_react.useEffect)(() => {
+    let alive = true;
+    if (!currentUser || !currentUser.id) {
+      setCcToken(null);
+      return;
+    }
+    ccLoadToken(currentUser.id).then((v) => {
+      if (alive) setCcToken(v && v.connected ? v.token : null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [currentUser && currentUser.id]);
   const logAct = (entry) => setActivity((prev) => [{
     id: uid("act"),
     at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " "),
@@ -80589,7 +80836,8 @@ function SupremeCRM() {
         setBrand,
         onLog: logAct,
         leadSources,
-        activity
+        activity,
+        ccToken
       }
     ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       liveDb() && jobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { margin: "14px 16px 0", background: "#EAF6EE", border: "1px solid #CDE8D6", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "#177245", lineHeight: 1.5 }, children: "Fresh database \u2014 no demo customers here. Everything you create now saves for real. Have a Roofr export? More \u2192 Import jobs pulls your whole pipeline in." }),

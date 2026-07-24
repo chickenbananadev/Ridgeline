@@ -70,5 +70,33 @@ ok(!src.includes("Order the customer sees"), "duplicate ordering block was remov
 ok(src.includes("JOB_TAB_GROUPS"), "job tabs are grouped");
 ok(src.includes("read_by_team"), "message read receipts are wired");
 
+/* --- CompanyCam --- */
+ok(src.includes('const CC_API = "https://api.companycam.com/v2"'), "real CompanyCam API base");
+ok(src.includes("async function ccCreateProject"), "project creation exists");
+ok(src.includes("async function ccProjectPhotos"), "photo pull exists");
+ok(src.includes("err.cors = true"), "CORS failures are distinguished from outages");
+ok(src.includes("crm_user_integrations"), "tokens stored in the RLS-scoped table");
+ok(src.includes("function CompanyCamJobCard"), "job-level CompanyCam card exists");
+ok(src.includes("Open in CompanyCam"), "project link is exposed on the job");
+ok(!src.includes("Today this stores your token per seat; pulling project photos"),
+  "stale placeholder copy removed");
+
+/* address splitting for the CompanyCam payload */
+function ccAddress(job) {
+  const parts = String(job.address || "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (parts.length >= 3) {
+    const stateZip = parts[parts.length - 1].split(/\s+/);
+    return { street_address_1: parts.slice(0, parts.length - 2).join(", "),
+      city: parts[parts.length - 2], state: stateZip[0] || "", postal_code: stateZip[1] || "" };
+  }
+  return { street_address_1: job.address || "", city: "", state: job.state || "", postal_code: job.zip || "" };
+}
+let a1 = ccAddress({ address: "720 5th Avenue, Mansfield, OH 44903" });
+ok(a1.street_address_1 === "720 5th Avenue" && a1.city === "Mansfield" && a1.state === "OH" && a1.postal_code === "44903",
+  "three-part address splits correctly");
+let a2 = ccAddress({ address: "1099 Waycross Road", state: "OH", zip: "45240" });
+ok(a2.street_address_1 === "1099 Waycross Road" && a2.state === "OH" && a2.postal_code === "45240",
+  "single-line address falls back to job fields");
+
 if (fails) { console.log("\nbuild 5: " + fails + " FAILED"); process.exit(1); }
 console.log("build 5 tests passed");

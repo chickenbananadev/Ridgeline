@@ -4192,7 +4192,7 @@ const JOB_TAB_GROUPS = [
   ["Customer", ["messages", "portal"]],
 ];
 
-function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [],
+function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [], ccToken = null,
   estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [] }) {
   const [tab, setTab] = useState("overview");
   const MONEY_TABS = ["estimate", "contract", "financials", "payments", "invoice"];
@@ -4273,7 +4273,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
         {tab === "report" && <TabReport job={job} brand={brand} juris={juris} />}
         {tab === "messages" && <TabMessages job={job} mut={mut} toast={toast} brand={brand}
           templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />}
-        {tab === "photos" && <TabPhotos job={job} mut={mut} toast={toast} />}
+        {tab === "photos" && <TabPhotos job={job} mut={mut} toast={toast} ccToken={ccToken} />}
         {tab === "financials" && <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />}
         {tab === "payments" && <TabPayments job={job} mut={mut} toast={toast} />}
         {tab === "invoice" && <TabInvoice job={job} brand={brand} mut={mut} toast={toast} />}
@@ -7568,7 +7568,123 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
   );
 }
 
-function TabPhotos({ job, mut, toast }) {
+
+/* CompanyCam project link on the job. Creating one here creates it in
+   CompanyCam too, named and addressed from the job, so the crew opens
+   the right project instead of making a duplicate in the field. */
+function CompanyCamJobCard({ job, mut, toast, ccToken }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [cors, setCors] = useState(false);
+  const [pulled, setPulled] = useState(null);
+  const cc = job.companyCam || null;
+
+  const create = async () => {
+    if (!ccToken) return;
+    setBusy(true); setErr(""); setCors(false);
+    try {
+      const proj = await ccCreateProject(ccToken, job);
+      mut((j) => ({ ...j, companyCam: proj }));
+      toast && toast("CompanyCam project created");
+    } catch (e) {
+      if (e && e.cors) setCors(true); else setErr((e && e.message) || "Could not create the project.");
+    }
+    setBusy(false);
+  };
+
+  const pull = async () => {
+    if (!ccToken || !cc) return;
+    setBusy(true); setErr(""); setCors(false);
+    try {
+      const photos = await ccProjectPhotos(ccToken, cc.id);
+      setPulled(photos);
+      if (!photos.length) toast && toast("No photos in that project yet");
+    } catch (e) {
+      if (e && e.cors) setCors(true); else setErr((e && e.message) || "Could not load photos.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle right={cc ? <Chip tone="green">Linked</Chip> : <Chip tone="gray">Not linked</Chip>}>CompanyCam</CardTitle>
+      {!ccToken && (
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+          Connect your CompanyCam account under More → Integrations to create
+          and open projects from here.
+        </div>
+      )}
+      {ccToken && !cc && (
+        <>
+          <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+            Creates a CompanyCam project named <b>{job.name}</b> at{" "}
+            <b>{job.address}</b>, and keeps the link here so the crew opens
+            the right one.
+          </div>
+          <Btn style={{ width: "100%" }} disabled={busy} onClick={create}>
+            {busy ? "Creating…" : "Create CompanyCam project"}
+          </Btn>
+          <Btn kind="ghost" small style={{ width: "100%", marginTop: 8 }}
+            onClick={() => {
+              const id = window.prompt("Paste an existing CompanyCam project ID or URL");
+              if (!id) return;
+              const m = String(id).match(/(\d{4,})/);
+              if (!m) { toast && toast("Could not find a project ID in that"); return; }
+              mut((j) => ({ ...j, companyCam: { id: m[1], url: `https://app.companycam.com/projects/${m[1]}`, name: job.name, at: new Date().toISOString().slice(0, 10) } }));
+              toast && toast("Linked to that project");
+            }}>
+            Link an existing project instead
+          </Btn>
+        </>
+      )}
+      {cc && (
+        <>
+          <KV k="Project" v={cc.name || job.name} />
+          <KV k="Linked" v={cc.at || "—"} />
+          <a href={cc.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none", display: "block", marginTop: 10 }}>
+            <Btn style={{ width: "100%" }}><ExternalLink size={14} /> Open in CompanyCam</Btn>
+          </a>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <Btn kind="ghost" small style={{ flex: 1 }} disabled={busy} onClick={pull}>
+              {busy ? "Loading…" : "Preview photos"}
+            </Btn>
+            <Btn kind="ghost" small style={{ flex: 1 }}
+              onClick={() => { mut((j) => ({ ...j, companyCam: null })); setPulled(null); toast && toast("Unlinked"); }}>
+              Unlink
+            </Btn>
+          </div>
+          {pulled && pulled.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", marginBottom: 6 }}>
+                {pulled.length} IN COMPANYCAM
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+                {pulled.slice(0, 9).map((ph) => (
+                  <img key={ph.id} src={ph.url} alt="" style={{ width: "100%", borderRadius: 7, display: "block" }} />
+                ))}
+              </div>
+              <div style={{ fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+                These stay in CompanyCam. Copying them into the job album waits
+                on Supabase Storage — holding full-size photos in the database
+                is what the storage migration is for.
+              </div>
+            </div>
+          )}
+        </>
+      )}
+      {err && <Callout label="CompanyCam" tone="red">{err}</Callout>}
+      {cors && (
+        <Callout label="Your browser blocked the request" tone="amber">
+          CompanyCam did not send the cross-origin headers a browser needs to
+          call it directly. This needs a small Edge Function to relay the
+          calls server-side — say the word and I will write it.
+        </Callout>
+      )}
+    </Card>
+  );
+}
+
+function TabPhotos({ job, mut, toast, ccToken }) {
   const [custom, setCustom] = useState("");
   const [geo, setGeo] = useState(null);       // last fix
   const [locating, setLocating] = useState(false);
@@ -7654,6 +7770,8 @@ function TabPhotos({ job, mut, toast }) {
           </>
         )}
       </Card>
+
+      <CompanyCamJobCard job={job} mut={mut} toast={toast} ccToken={ccToken} />
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="gray">{shotsDone.size}/{SHOT_LIST.length}</Chip>}>Quick inspection capture</CardTitle>
@@ -10613,13 +10731,166 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
    client secret; the browser cannot hold it safely. This screen owns
    the connection state and is honest about what isn't live yet.
    ================================================================ */
+
+/* ==================================================================
+   COMPANYCAM
+
+   A real client against api.companycam.com/v2 using the rep's own
+   personal access token, so photos stay attributed to whoever took
+   them.
+
+   Two things worth knowing about how this behaves:
+
+   1. Browsers enforce CORS. If CompanyCam does not send permissive
+      headers for this origin the fetch is blocked before it leaves
+      the page, and there is nothing the app can do about it from the
+      client side. That failure is reported plainly, with the
+      Edge-Function proxy named as the fix, rather than being shown as
+      a generic error.
+
+   2. Tokens live in crm_user_integrations, scoped by RLS to the
+      owning seat. They are deliberately not in crm_org, which every
+      signed-in seat can read.
+================================================================== */
+const CC_API = "https://api.companycam.com/v2";
+
+async function ccFetch(token, path, opts = {}) {
+  let res;
+  try {
+    res = await fetch(CC_API + path, {
+      ...opts,
+      headers: {
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json",
+        ...(opts.headers || {}),
+      },
+    });
+  } catch (e) {
+    /* A network-level throw here is nearly always CORS, not an outage. */
+    const err = new Error("blocked");
+    err.cors = true;
+    throw err;
+  }
+  if (res.status === 401 || res.status === 403) throw new Error("That token was rejected by CompanyCam.");
+  if (!res.ok) throw new Error("CompanyCam returned " + res.status + ".");
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+const ccCompanies = (token) => ccFetch(token, "/companies");
+
+/* CompanyCam wants the address split. We only reliably hold a single
+   line, so it is split conservatively and the whole string is kept in
+   street_address_1 when the shape is unfamiliar. */
+function ccAddress(job) {
+  const parts = String(job.address || "").split(",").map((x) => x.trim()).filter(Boolean);
+  if (parts.length >= 3) {
+    const stateZip = parts[parts.length - 1].split(/\s+/);
+    return {
+      street_address_1: parts.slice(0, parts.length - 2).join(", "),
+      city: parts[parts.length - 2],
+      state: stateZip[0] || job.state || "",
+      postal_code: stateZip[1] || job.zip || "",
+    };
+  }
+  return {
+    street_address_1: job.address || "",
+    city: job.property?.city || "",
+    state: job.state || "",
+    postal_code: job.zip || "",
+  };
+}
+
+async function ccCreateProject(token, job) {
+  const body = { project: { name: job.name || job.address || "Ridgeline job", address: ccAddress(job) } };
+  const out = await ccFetch(token, "/projects", { method: "POST", body: JSON.stringify(body) });
+  const proj = out && (out.project || out);
+  if (!proj || !proj.id) throw new Error("CompanyCam did not return a project id.");
+  return {
+    id: String(proj.id),
+    /* public_url is what CompanyCam hands back for sharing; the app
+       URL is the fallback for opening it internally. */
+    url: proj.public_url || `https://app.companycam.com/projects/${proj.id}`,
+    name: proj.name || job.name || "",
+    at: new Date().toISOString().slice(0, 10),
+  };
+}
+
+async function ccProjectPhotos(token, projectId, limit = 24) {
+  const out = await ccFetch(token, `/projects/${projectId}/photos?per_page=${limit}`);
+  const list = Array.isArray(out) ? out : (out && out.photos) || [];
+  return list.map((ph) => ({
+    id: String(ph.id),
+    url: (ph.uris || []).find((u) => u.type === "web")?.uri
+      || (ph.uris || []).find((u) => u.type === "original")?.uri || "",
+    at: ph.captured_at || ph.created_at || "",
+    by: (ph.creator_name || ""),
+  })).filter((ph) => ph.url);
+}
+
+/* Per-seat token storage. Falls back to memory when the table is
+   missing so the app still runs before migration 010. */
+async function ccLoadToken(userId) {
+  const db = DB();
+  if (!db || !userId) return null;
+  try {
+    const { data, error } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    if (error || !data) return null;
+    return (data.data || {}).companyCam || null;
+  } catch (e) { return null; }
+}
+async function ccSaveToken(userId, value) {
+  const db = DB();
+  if (!db || !userId) return false;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    const next = { ...((data && data.data) || {}), companyCam: value };
+    const { error } = await db.from("crm_user_integrations")
+      .upsert({ user_id: userId, data: next, updated_at: new Date().toISOString() });
+    return !error;
+  } catch (e) { return false; }
+}
+
 function CompanyCamConnect({ onConnect }) {
   const [token, setToken] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [cors, setCors] = useState(false);
+
+  /* The token is checked against CompanyCam before it is stored.
+     Marking a seat "connected" without a round trip is what made the
+     old version look like it worked when it did nothing. */
+  const connect = async () => {
+    setBusy(true); setErr(""); setCors(false);
+    try {
+      const out = await ccCompanies(token.trim());
+      const co = Array.isArray(out) ? out[0] : (out && (out.company || out.companies?.[0]));
+      await onConnect(token.trim(), (co && co.name) || "");
+      setToken("");
+    } catch (e) {
+      if (e && e.cors) { setCors(true); setErr(""); }
+      else setErr((e && e.message) || "Could not reach CompanyCam.");
+    }
+    setBusy(false);
+  };
+
   return (
-    <div style={{ display: "flex", gap: 8 }}>
-      <input style={{ ...inputStyle, flex: 1 }} type="password" placeholder="Paste your access token"
-        value={token} onChange={(e) => setToken(e.target.value)} />
-      <Btn small disabled={!token.trim()} onClick={() => { onConnect(token.trim()); setToken(""); }}>Connect</Btn>
+    <div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input style={{ ...inputStyle, flex: 1 }} type="password" placeholder="Paste your access token"
+          value={token} onChange={(e) => setToken(e.target.value)} />
+        <Btn small disabled={!token.trim() || busy} onClick={connect}>{busy ? "Checking…" : "Connect"}</Btn>
+      </div>
+      {err && <Callout label="CompanyCam rejected that" tone="red">{err}</Callout>}
+      {cors && (
+        <Callout label="Your browser blocked the request" tone="amber">
+          The token may be perfectly good — CompanyCam did not send the
+          cross-origin headers a browser needs to call it directly from a
+          web app. This one needs a small Edge Function to relay the calls
+          from the server side. Tell me and I will write it; it is the same
+          shape as the Twilio one.
+        </Callout>
+      )}
     </div>
   );
 }
@@ -10794,22 +11065,34 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
         {((integrations.companyCamByUser || {})[currentUser.id] || {}).connected ? (
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <div style={{ flex: 1, fontSize: 13.5 }}>
-              Connected as <b>{((integrations.companyCamByUser || {})[currentUser.id] || {}).email || currentUser.name}</b>
+              Connected{((integrations.companyCamByUser || {})[currentUser.id] || {}).company
+                ? <> to <b>{((integrations.companyCamByUser || {})[currentUser.id] || {}).company}</b></>
+                : <> as <b>{currentUser.name}</b></>}
             </div>
-            <Btn small kind="danger" onClick={() => setIntegrations({
-              ...integrations,
-              companyCamByUser: { ...(integrations.companyCamByUser || {}), [currentUser.id]: { connected: false } },
-            })}>Disconnect</Btn>
+            <Btn small kind="danger" onClick={async () => {
+              await ccSaveToken(currentUser.id, null);
+              setIntegrations({
+                ...integrations,
+                companyCamByUser: { ...(integrations.companyCamByUser || {}), [currentUser.id]: { connected: false } },
+              });
+              toast && toast("CompanyCam disconnected");
+            }}>Disconnect</Btn>
           </div>
         ) : (
-          <CompanyCamConnect onConnect={(token) => setIntegrations({
-            ...integrations,
-            companyCamByUser: { ...(integrations.companyCamByUser || {}), [currentUser.id]: { connected: true, token, at: new Date().toISOString().slice(0, 10) } },
-          })} />
+          <CompanyCamConnect onConnect={async (token, company) => {
+            const value = { connected: true, token, company, at: new Date().toISOString().slice(0, 10) };
+            const saved = await ccSaveToken(currentUser.id, value);
+            setIntegrations({
+              ...integrations,
+              companyCamByUser: { ...(integrations.companyCamByUser || {}), [currentUser.id]: value },
+            });
+            toast && toast(saved ? "CompanyCam connected" : "Connected — but the token could not be saved. Run migration 010.");
+          }} />
         )}
         <div style={{ fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
-          Today this stores your token per seat; pulling project photos into jobs automatically is the next step
-          of this integration and will use it.
+          Your token is stored against your seat only. Other seats cannot
+          read it — that needs migration 010, without which the connection
+          will not survive a refresh.
         </div>
       </Card>
 
@@ -12007,6 +12290,9 @@ export default function SupremeCRM() {
     gmailByUser: {},
     sms: { connected: false, provider: "", number: "" },
   });
+  /* The seat's CompanyCam token, read from its RLS-scoped row rather
+     than from org settings every seat can see. */
+  const [ccToken, setCcToken] = useState(null);
   const [brand, setBrand] = useState(DEFAULT_BRAND);
   const [stages, setStages] = useState(DEFAULT_STAGES);
   const [jobs, setJobs] = useState(() => (liveDb() ? [] : seedJobs));
@@ -12069,6 +12355,18 @@ export default function SupremeCRM() {
   T.primary = brand.primary || "#28373E";
   T.accent = brand.accent || "#1B6DE0";
   T.accentSoft = brand.accentSoft && brand.accentSoftCustom ? brand.accentSoft : softOf(T.accent);
+
+  /* Read the seat's CompanyCam token once signed in. Failure is silent
+     and non-fatal: without migration 010 the table does not exist yet,
+     and the rest of the app must keep working. */
+  useEffect(() => {
+    let alive = true;
+    if (!currentUser || !currentUser.id) { setCcToken(null); return; }
+    ccLoadToken(currentUser.id).then((v) => {
+      if (alive) setCcToken(v && v.connected ? v.token : null);
+    });
+    return () => { alive = false; };
+  }, [currentUser && currentUser.id]); // eslint-disable-line
 
   const logAct = (entry) =>
     setActivity((prev) => [{
@@ -12311,7 +12609,7 @@ export default function SupremeCRM() {
 currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           crews={crews} setCrews={setCrews} templates={templates} integrations={integrations} users={users}
           estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} setBrand={setBrand}
-          onLog={logAct} leadSources={leadSources} activity={activity} />
+          onLog={logAct} leadSources={leadSources} activity={activity} ccToken={ccToken} />
       ) : nav === "home" ? (
         <>
           {liveDb() && jobs.length === 0 && (
