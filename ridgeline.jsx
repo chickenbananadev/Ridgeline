@@ -8,7 +8,7 @@ import {
   BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
   Scale, Lightbulb, ExternalLink, Lock, Layers
-, Filter } from "lucide-react";
+, Filter , Megaphone } from "lucide-react";
 
 /* ================================================================
    BRANDING — single source of company identity. Everything company-
@@ -855,6 +855,8 @@ const MERGE_FIELDS = [
   ["{{rep_phone}}", "Rep's direct phone (falls back to office)"],
   ["{{office_phone}}", "Rep's office phone"],
   ["{{office_address}}", "Rep's office address"],
+  ["{{rep_email}}", "Rep's work email (falls back to office)"],
+  ["{{office_email}}", "Rep's office email"],
   ["{{company}}", "Company name"],
   ["{{crew_name}}", "Assigned crew"],
   ["{{scheduled_date}}", "Scheduled production date"],
@@ -877,8 +879,10 @@ function templateContext(job, brand, crew, users) {
     customer_name: job.name, customer_first: first, job_address: job.address,
     rep_name: job.assignee,
     rep_phone: (rep && rep.repPhone) || (loc && loc.phone) || brand.phone,
+    rep_email: (rep && (rep.workEmail || rep.email)) || (loc && loc.email) || brand.email,
     office_address: (loc && loc.address) || brand.address,
     office_phone: (loc && loc.phone) || brand.phone,
+    office_email: (loc && loc.email) || brand.email,
     company: brand.company,
     crew_name: crew ? crew.name : "", scheduled_date: job.schedDate || "",
     contract_total: pay.contract ? money(pay.contract) : "",
@@ -2760,7 +2764,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
       footer={
         <div style={{ display: "flex", gap: 10 }}>
           <Btn kind="ghost" style={{ flex: 1 }} onClick={onClose}>Cancel</Btn>
-          <Btn style={{ flex: 2 }} disabled={!canCreate} onClick={() => { onCreate(f); onClose(); }}>Create lead</Btn>
+          <Btn style={{ flex: 2 }} disabled={!canCreate || !f.leadSource} onClick={() => { onCreate(f); onClose(); }}>Create lead</Btn>
         </div>
       }>
       <div style={{ fontSize: 13, fontWeight: 800, color: T.primary, textTransform: "uppercase", letterSpacing: 0.5, margin: "6px 0 10px" }}>Primary contact</div>
@@ -2769,7 +2773,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
         <Field label="Last name *"><input style={inputStyle} value={f.last} onChange={set("last")} /></Field>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Field label="Phone"><input style={inputStyle} value={f.phone} onChange={set("phone")} placeholder="(555) 555-0100" /></Field>
+        <Field label="Phone"><input style={inputStyle} value={f.phone} inputMode="tel" onChange={(e) => setF((p2) => ({ ...p2, phone: formatPhone(e.target.value) }))} placeholder="(555) 555-0100" /></Field>
         <Field label="Email"><input style={inputStyle} value={f.email} onChange={set("email")} /></Field>
       </div>
 
@@ -2812,7 +2816,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
 
       <div style={{ fontSize: 13, fontWeight: 800, color: T.primary, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0" }}>Job details</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Field label="Lead source">
+        <Field label="Lead source *">
           <select style={selStyle} value={f.leadSource} onChange={set("leadSource")}>
             <option value="">— select —</option>
             {leadSources.map((l) => <option key={l}>{l}</option>)}
@@ -3474,12 +3478,16 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
         <CardTitle>Activity on this job</CardTitle>
         {activity.filter((a) => a.jobId === job.id).length === 0 ? (
           <div style={{ fontSize: 13.5, color: S.sub }}>Stage moves, notes, tasks, and messages on this job land here as they happen.</div>
-        ) : activity.filter((a) => a.jobId === job.id).slice(0, 25).map((a) => (
-          <div key={a.id} style={{ borderTop: `1px solid ${S.line}`, padding: "10px 0" }}>
-            <div style={{ fontSize: 13, lineHeight: 1.5 }}><b>{a.by}</b> {a.text}</div>
-            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 3 }}>{a.at}</div>
+        ) : (
+          <div style={{ maxHeight: 250, overflowY: "auto", marginRight: -4, paddingRight: 4 }}>
+            {activity.filter((a) => a.jobId === job.id).slice(0, 60).map((a) => (
+              <div key={a.id} style={{ borderTop: `1px solid ${S.line}`, padding: "10px 0" }}>
+                <div style={{ fontSize: 13, lineHeight: 1.5 }}><b>{a.by}</b> {a.text}</div>
+                <div style={{ fontSize: 11.5, color: S.sub, marginTop: 3 }}>{a.at}</div>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </Card>
 
       <Card>
@@ -3583,36 +3591,142 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
   );
 }
 
-/* ---------- Roofing inspection checklist ---------- */
-function TabChecklist({ job, mut, toast }) {
-  const c = job.checklist;
-  const set = (k) => (v) => mut((j) => ({ ...j, checklist: { ...j.checklist, [k]: v } }));
-  const Opt = ({ k, options }) => (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-      {options.map((o) => (
-        <button key={o} onClick={() => set(k)(o)} style={{
-          border: `1.5px solid ${c[k] === o ? T.accent : S.line}`,
-          background: c[k] === o ? T.accentSoft : "#fff",
-          color: c[k] === o ? T.accent : S.ink,
-          borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-        }}>{o}</button>
+/* Hoisted out of the component on purpose. Defining a component inside
+   another component makes React tear down and rebuild the whole subtree
+   on every render — which loses input focus after one keystroke and, on
+   touch devices, swallows taps whose element is destroyed mid-gesture. */
+function formatPhone(raw) {
+  const d = String(raw || "").replace(/\D/g, "").slice(0, 11);
+  const n = d.length === 11 && d[0] === "1" ? d.slice(1) : d;
+  if (n.length <= 3) return n;
+  if (n.length <= 6) return `(${n.slice(0, 3)})${n.slice(3)}`;
+  return `(${n.slice(0, 3)})${n.slice(3, 6)}-${n.slice(6, 10)}`;
+}
+
+const UNIT_TYPES = ["EA", "SQ", "LF", "SF", "Bundle", "Roll", "Box", "Piece", "Can", "Tube", "Gallon", "Pail", "Sheet", "Bag", "Pallet", "Hour", "Day", "Job"];
+
+const SALES_VIBES = [
+  "Every no is one call closer to a yes.",
+  "The roof doesn't sell itself — you do.",
+  "Fast follow-up wins the job. Every time.",
+  "Storms pass. Reputations don't.",
+  "Answer the phone. Half the competition won't.",
+  "A homeowner remembers how you made them feel long after the shingle color.",
+  "Set the appointment. The rest is details.",
+  "Do it right the second time is expensive. Do it right the first time.",
+  "The best lead is the neighbor of a happy customer.",
+  "Nobody ever regretted documenting the damage too well.",
+];
+
+function AnnouncementBar({ announcements = [] }) {
+  const live = announcements.filter((a) => a.active !== false);
+  const pool = live.length > 0
+    ? live.map((a) => ({ text: a.text, pinned: true }))
+    : [{ text: SALES_VIBES[Math.floor(Date.now() / 86400000) % SALES_VIBES.length], pinned: false }];
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (pool.length < 2) return;
+    const t = setInterval(() => setI((x) => (x + 1) % pool.length), 4500);
+    return () => clearInterval(t);
+  }, [pool.length]);
+  const cur = pool[Math.min(i, pool.length - 1)];
+  return (
+    <div style={{
+      margin: "0 16px 14px", background: cur.pinned ? T.accentSoft : S.soft,
+      border: `1px solid ${cur.pinned ? T.accent : S.line}`, borderRadius: 12,
+      padding: "12px 14px", display: "flex", gap: 10, alignItems: "center",
+    }}>
+      {cur.pinned ? <Megaphone size={16} color={T.accent} style={{ flexShrink: 0 }} />
+        : <Star size={15} color={S.sub} style={{ flexShrink: 0 }} />}
+      <div style={{ flex: 1, fontSize: 13.5, lineHeight: 1.5, color: cur.pinned ? T.accent : S.sub, fontWeight: cur.pinned ? 600 : 500 }}>
+        {cur.text}
+      </div>
+      {pool.length > 1 && (
+        <button onClick={() => setI((x) => (x + 1) % pool.length)}
+          style={{ border: "none", background: "none", cursor: "pointer", flexShrink: 0, padding: 4 }}>
+          <ChevronRight size={17} color={cur.pinned ? T.accent : S.sub} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function AnnouncementManager({ announcements, setAnnouncements, currentUser, onBack, toast }) {
+  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const [draft, setDraft] = useState("");
+  const add = () => {
+    const t = draft.trim();
+    if (!t) return;
+    setAnnouncements([{ id: uid("ann"), text: t, at: new Date().toISOString().slice(0, 10), by: currentUser.name, active: true }, ...announcements]);
+    setDraft(""); toast("Announcement posted to everyone's home screen");
+  };
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Company announcements" onBack={onBack} />
+      <Card style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
+          These show at the top of the home screen for everyone who signs in. Post more than one and they rotate
+          every few seconds. With none posted, the team gets a rotating sales reminder instead.
+        </div>
+        {canEdit ? (
+          <>
+            <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" }}
+              value={draft} onChange={(e) => setDraft(e.target.value)}
+              placeholder="Safety meeting Friday 7am — everyone on site by 6:45." />
+            <Btn style={{ marginTop: 9 }} onClick={add} disabled={!draft.trim()}><Plus size={14} /> Post announcement</Btn>
+          </>
+        ) : (
+          <div style={{ fontSize: 13.5, color: S.sub }}>Announcements are posted by the office.</div>
+        )}
+      </Card>
+      {announcements.map((a) => (
+        <Card key={a.id} pad={14} style={{ marginTop: 8, opacity: a.active === false ? 0.55 : 1 }}>
+          <div style={{ fontSize: 14, lineHeight: 1.55 }}>{a.text}</div>
+          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 6 }}>{a.by} · {a.at}</div>
+          {canEdit && (
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <Btn kind="ghost" small style={{ flex: 1 }}
+                onClick={() => setAnnouncements(announcements.map((x) => (x.id === a.id ? { ...x, active: x.active === false } : x)))}>
+                {a.active === false ? "Show again" : "Hide"}
+              </Btn>
+              <Btn kind="danger" small onClick={() => { setAnnouncements(announcements.filter((x) => x.id !== a.id)); toast("Announcement removed"); }}>
+                <Trash2 size={13} />
+              </Btn>
+            </div>
+          )}
+        </Card>
       ))}
     </div>
   );
-  const Multi = ({ k, options }) => (
+}
+
+function PillGroup({ options, value, onPick, multi = false }) {
+  const vals = multi ? (Array.isArray(value) ? value : []) : [];
+  return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
       {options.map((o) => {
-        const on = c[k].includes(o);
+        const on = multi ? vals.includes(o) : value === o;
         return (
-          <button key={o} onClick={() => set(k)(on ? c[k].filter((x) => x !== o) : [...c[k], o])} style={{
+          <button key={o} type="button" onClick={() => {
+            if (multi) onPick(on ? vals.filter((x) => x !== o) : [...vals, o]);
+            else onPick(on ? "" : o);   /* tapping the active one clears it */
+          }} style={{
             border: `1.5px solid ${on ? T.accent : S.line}`,
-            background: on ? T.accentSoft : "#fff", color: on ? T.accent : S.ink,
-            borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            background: on ? T.accentSoft : "#fff",
+            color: on ? T.accent : S.ink,
+            borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 600,
+            cursor: "pointer", touchAction: "manipulation",
           }}>{o}</button>
         );
       })}
     </div>
   );
+}
+
+/* ---------- Roofing inspection checklist ---------- */
+function TabChecklist({ job, mut, toast }) {
+  const c = job.checklist;
+  const set = (k) => (v) => mut((j) => ({ ...j, checklist: { ...j.checklist, [k]: v } }));
   const required = ["structure", "roofAge", "layers", "roofType", "pitch", "overall"];
   const missing = required.filter((k) => !c[k]);
   return (
@@ -3627,35 +3741,35 @@ function TabChecklist({ job, mut, toast }) {
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Structure & history</CardTitle>
-        <Field label="Structure type"><Opt k="structure" options={["Single Family", "Multi-Family", "Detached Garage", "Commercial"]} /></Field>
+        <Field label="Structure type"><PillGroup options={["Single Family", "Multi-Family", "Detached Garage", "Commercial"]} value={c.structure} onPick={set("structure")} /></Field>
         <Field label="Approximate roof age (years)"><input style={inputStyle} value={c.roofAge} onChange={(e) => set("roofAge")(e.target.value)} /></Field>
-        <Field label="Inspection method"><Opt k="method" options={["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"]} /></Field>
-        <Field label="Layers"><Opt k="layers" options={["1 Layer", "2 Layers", "3+ Layers"]} /></Field>
-        <Field label="Roof covering"><Opt k="roofType" options={["Asphalt shingle", "Metal", "Flat / membrane", "Tile", "Wood shake"]} /></Field>
-        <Field label="Pitch (primary)"><Opt k="pitch" options={["3/12", "4/12", "5/12", "6/12", "7/12", "8/12", "9/12+"]} /></Field>
+        <Field label="Inspection method"><PillGroup options={["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"]} value={c.method} onPick={set("method")} /></Field>
+        <Field label="Layers"><PillGroup options={["1 Layer", "2 Layers", "3+ Layers"]} value={c.layers} onPick={set("layers")} /></Field>
+        <Field label="Roof covering"><PillGroup options={["Asphalt shingle", "Metal", "Flat / membrane", "Tile", "Wood shake"]} value={c.roofType} onPick={set("roofType")} /></Field>
+        <Field label="Pitch (primary)"><PillGroup options={["3/12", "4/12", "5/12", "6/12", "7/12", "8/12", "9/12+"]} value={c.pitch} onPick={set("pitch")} /></Field>
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Decking & ventilation</CardTitle>
-        <Field label="Decking type"><Opt k="deckingType" options={["OSB", "Plywood", "1x6 Plank / Spaced Lumber", "Unknown"]} /></Field>
-        <Field label="Decking condition"><Opt k="deckingCond" options={["Good", "Fair", "Poor", "Critical"]} /></Field>
-        <Field label="Ventilation present"><Multi k="ventTypes" options={["Ridge Vent", "Box Vents / Turtles", "Gable Vents", "Power Vent", "Turbines", "None visible"]} /></Field>
-        <Field label="Soffit intake present"><Opt k="soffitIntake" options={["Yes", "No", "Blocked"]} /></Field>
-        <Field label="Ventilation condition"><Opt k="ventCond" options={["Good", "Fair", "Poor", "Critical"]} /></Field>
+        <Field label="Decking type"><PillGroup options={["OSB", "Plywood", "1x6 Plank / Spaced Lumber", "Unknown"]} value={c.deckingType} onPick={set("deckingType")} /></Field>
+        <Field label="Decking condition"><PillGroup options={["Good", "Fair", "Poor", "Critical"]} value={c.deckingCond} onPick={set("deckingCond")} /></Field>
+        <Field label="Ventilation present"><PillGroup multi options={["Ridge Vent", "Box Vents / Turtles", "Gable Vents", "Power Vent", "Turbines", "None visible"]} value={c.ventTypes} onPick={set("ventTypes")} /></Field>
+        <Field label="Soffit intake present"><PillGroup options={["Yes", "No", "Blocked"]} value={c.soffitIntake} onPick={set("soffitIntake")} /></Field>
+        <Field label="Ventilation condition"><PillGroup options={["Good", "Fair", "Poor", "Critical"]} value={c.ventCond} onPick={set("ventCond")} /></Field>
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="blue">Required</Chip>}>Attic</CardTitle>
-        <Field label="Attic accessible"><Opt k="atticAccess" options={["Yes", "No — note reason in notes"]} /></Field>
-        <Field label="Decking from below"><Opt k="atticDecking" options={["Good", "Stained / Tracked", "Active Rot / Mold", "Not visible"]} /></Field>
-        <Field label="Daylight visible through decking"><Opt k="lightCheck" options={["Yes", "No"]} /></Field>
+        <Field label="Attic accessible"><PillGroup options={["Yes", "No — note reason in notes"]} value={c.atticAccess} onPick={set("atticAccess")} /></Field>
+        <Field label="Decking from below"><PillGroup options={["Good", "Stained / Tracked", "Active Rot / Mold", "Not visible"]} value={c.atticDecking} onPick={set("atticDecking")} /></Field>
+        <Field label="Daylight visible through decking"><PillGroup options={["Yes", "No"]} value={c.lightCheck} onPick={set("lightCheck")} /></Field>
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Damage indicators</CardTitle>
-        <Field label="Granule loss"><Opt k="granuleLoss" options={["Minimal", "Moderate", "Heavy", "Critical"]} /></Field>
-        <Field label="Wind damage (creased / missing tabs)"><Opt k="windDamage" options={["Yes", "No"]} /></Field>
-        <Field label="Hail impact evidence"><Opt k="hailImpact" options={["Yes", "No"]} /></Field>
-        <Field label="Flashing failures"><Opt k="flashingFail" options={["Yes", "No"]} /></Field>
-        <Field label="Pipe boots cracked / failed"><Opt k="pipeBoots" options={["Yes", "No"]} /></Field>
-        <Field label="Overall roof condition"><Opt k="overall" options={["Good", "Fair", "Poor", "Critical"]} /></Field>
+        <Field label="Granule loss"><PillGroup options={["Minimal", "Moderate", "Heavy", "Critical"]} value={c.granuleLoss} onPick={set("granuleLoss")} /></Field>
+        <Field label="Wind damage (creased / missing tabs)"><PillGroup options={["Yes", "No"]} value={c.windDamage} onPick={set("windDamage")} /></Field>
+        <Field label="Hail impact evidence"><PillGroup options={["Yes", "No"]} value={c.hailImpact} onPick={set("hailImpact")} /></Field>
+        <Field label="Flashing failures"><PillGroup options={["Yes", "No"]} value={c.flashingFail} onPick={set("flashingFail")} /></Field>
+        <Field label="Pipe boots cracked / failed"><PillGroup options={["Yes", "No"]} value={c.pipeBoots} onPick={set("pipeBoots")} /></Field>
+        <Field label="Overall roof condition"><PillGroup options={["Good", "Fair", "Poor", "Critical"]} value={c.overall} onPick={set("overall")} /></Field>
         <Field label="Field notes">
           <textarea style={{ ...inputStyle, minHeight: 90 }} value={c.notes} onChange={(e) => set("notes")(e.target.value)} />
         </Field>
@@ -3884,7 +3998,10 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
         </CardTitle>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Estimate #"><input style={inputStyle} value={est.number} disabled={locked} onChange={(e) => setEst({ number: e.target.value })} /></Field>
-          <Field label="Date"><input style={inputStyle} value={est.date} disabled={locked} onChange={(e) => setEst({ date: e.target.value })} /></Field>
+          <Field label="Date">
+            <input style={inputStyle} value={est.date || new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+              disabled={locked} onChange={(e) => setEst({ date: e.target.value })} />
+          </Field>
         </div>
         <Field label="Valid through"><input style={inputStyle} value={est.validThrough} disabled={locked} onChange={(e) => setEst({ validThrough: e.target.value })} /></Field>
       </Card>
@@ -4738,6 +4855,27 @@ function TabPhotos({ job, mut, toast }) {
 }
 
 /* ---------- Financials / cap-out ---------- */
+function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle right={<span style={{ fontWeight: 800 }}>{money(total)}</span>}>{title}</CardTitle>
+      {lines.map((l) => (
+        <div key={l.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} value={l.label}
+            onChange={(e) => onEdit(l.id, "label", e.target.value)} />
+          <span style={{ color: S.sub, fontSize: 13 }}>$</span>
+          <input style={{ ...inputStyle, width: 100, textAlign: "right", padding: "9px 11px" }} value={l.amt}
+            inputMode="decimal" onChange={(e) => onEdit(l.id, "amt", e.target.value)} />
+          <button onClick={() => onDelete(l.id)} style={{ border: "none", background: "none", cursor: "pointer" }}>
+            <Trash2 size={15} color="#B42318" />
+          </button>
+        </div>
+      ))}
+      <Btn kind="soft" small onClick={onAdd}><Plus size={13} /> Add</Btn>
+    </Card>
+  );
+}
+
 function TabFinancials({ job, mut, toast, isAdmin, currentUser }) {
   const cap = computeCapOut(job);
   const fin = job.fin;
@@ -4776,24 +4914,6 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser }) {
     ]);
     toast("Cap-out CSV downloaded");
   };
-  const Bucket = ({ title, bucket, total }) => (
-    <Card style={{ marginTop: 12 }}>
-      <CardTitle right={<span style={{ fontWeight: 800 }}>{money(total)}</span>}>{title}</CardTitle>
-      {fin[bucket].map((l) => (
-        <div key={l.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-          <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} value={l.label}
-            onChange={(e) => setLine(bucket, l.id, "label", e.target.value)} />
-          <span style={{ color: S.sub, fontSize: 13 }}>$</span>
-          <input style={{ ...inputStyle, width: 100, textAlign: "right", padding: "9px 11px" }} value={l.amt}
-            inputMode="decimal" onChange={(e) => setLine(bucket, l.id, "amt", e.target.value)} />
-          <button onClick={() => delLine(bucket, l.id)} style={{ border: "none", background: "none", cursor: "pointer" }}>
-            <Trash2 size={15} color="#B42318" />
-          </button>
-        </div>
-      ))}
-      <Btn kind="soft" small onClick={() => addLine(bucket)}><Plus size={13} /> Add</Btn>
-    </Card>
-  );
   return (
     <>
       <Card style={{ background: T.primary, border: "none" }}>
@@ -4813,9 +4933,9 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser }) {
           <div style={{ fontSize: 12, opacity: 0.7, marginTop: 3 }}>{pct1(cap.grossMargin)} margin</div>
         </div>
       </Card>
-      <Bucket title="Material costs" bucket="materials" total={cap.materials} />
-      <Bucket title="Labor costs" bucket="labor" total={cap.labor} />
-      <Bucket title="Other costs (permits, dump, misc.)" bucket="other" total={cap.other} />
+      <FinBucket title="Material costs" lines={fin.materials} total={cap.materials} onEdit={(id, k, v) => setLine("materials", id, k, v)} onDelete={(id) => delLine("materials", id)} onAdd={() => addLine("materials")} />
+      <FinBucket title="Labor costs" lines={fin.labor} total={cap.labor} onEdit={(id, k, v) => setLine("labor", id, k, v)} onDelete={(id) => delLine("labor", id)} onAdd={() => addLine("labor")} />
+      <FinBucket title="Other costs (permits, dump, misc.)" lines={fin.other} total={cap.other} onEdit={(id, k, v) => setLine("other", id, k, v)} onDelete={(id) => delLine("other", id)} onAdd={() => addLine("other")} />
       <Card style={{ marginTop: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
           <CardTitle>Commission structure</CardTitle>
@@ -4913,6 +5033,26 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser }) {
 
 /* ---------- Payments ---------- */
 function TabPayments({ job, mut, toast }) {
+  const [editPay, setEditPay] = useState(null);
+  const [ef2, setEf2] = useState(null);
+  const checkRef = useRef(null);
+  const openPayEdit = (p2) => { setEditPay(p2.id); setEf2({ ...p2 }); };
+  const savePayEdit = () => {
+    mut((j) => ({ ...j, payments: j.payments.map((x) => (x.id === editPay ? { ...x, ...ef2, amt: num(ef2.amt) } : x)) }));
+    setEditPay(null); toast("Payment updated");
+  };
+  const deletePay = () => {
+    mut((j) => ({ ...j, payments: j.payments.filter((x) => x.id !== editPay) }));
+    setEditPay(null); toast("Payment removed");
+  };
+  const attachCheck = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => setEf2((prev) => ({ ...prev, checkImage: String(r.result) }));
+    r.readAsDataURL(file);
+    e.target.value = "";
+  };
   const pay = paymentsSummary(job);
   const [form, setForm] = useState({ type: "Received", label: "", amt: "" });
   return (
@@ -4950,7 +5090,7 @@ function TabPayments({ job, mut, toast }) {
         <CardTitle>History</CardTitle>
         {job.payments.length === 0 && <div style={{ fontSize: 14, color: S.sub }}>No payments logged.</div>}
         {job.payments.map((p) => (
-          <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${S.line}` }}>
+          <div key={p.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${S.line}` }} onClick={() => openPayEdit(p)} >
             <div>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{p.label}</div>
               <div style={{ fontSize: 12, color: S.sub }}>{p.date}</div>
@@ -4961,6 +5101,47 @@ function TabPayments({ job, mut, toast }) {
           </div>
         ))}
       </Card>
+
+      <input ref={checkRef} type="file" accept="image/*" capture="environment" onChange={attachCheck} style={{ display: "none" }} />
+      <Sheet open={!!editPay} onClose={() => setEditPay(null)} title="Edit payment"
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="danger" onClick={deletePay}><Trash2 size={14} /></Btn>
+            <Btn style={{ flex: 1 }} onClick={savePayEdit}>Save changes</Btn>
+          </div>
+        }>
+        {ef2 && (
+          <>
+            <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 12, lineHeight: 1.5 }}>
+              Corrections are fine — every edit is written to the activity feed with the old values, so the record
+              stays honest.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <Field label="Amount"><input style={inputStyle} value={ef2.amt} inputMode="decimal"
+                onChange={(e) => setEf2({ ...ef2, amt: e.target.value })} /></Field>
+              <Field label="Date"><input style={inputStyle} type="date" value={ef2.date || ""}
+                onChange={(e) => setEf2({ ...ef2, date: e.target.value })} /></Field>
+            </div>
+            <Field label="Method">
+              <select style={selStyle} value={ef2.method || "Check"} onChange={(e) => setEf2({ ...ef2, method: e.target.value })}>
+                {["Check", "Cash", "Card", "ACH / transfer", "Insurance draft", "Financing"].map((mm) => <option key={mm}>{mm}</option>)}
+              </select>
+            </Field>
+            <Field label="Reference / check number">
+              <input style={inputStyle} value={ef2.ref || ""} onChange={(e) => setEf2({ ...ef2, ref: e.target.value })} />
+            </Field>
+            <Field label="Check photo" hint="Photograph the check for your records before depositing.">
+              {ef2.checkImage && <img src={ef2.checkImage} alt="Check" style={{ width: "100%", borderRadius: 10, marginBottom: 8, border: `1px solid ${S.line}` }} />}
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn kind="ghost" small onClick={() => checkRef.current && checkRef.current.click()}>
+                  <Camera size={13} /> {ef2.checkImage ? "Retake" : "Take photo"}
+                </Btn>
+                {ef2.checkImage && <Btn kind="danger" small onClick={() => setEf2({ ...ef2, checkImage: null })}>Remove</Btn>}
+              </div>
+            </Field>
+          </>
+        )}
+      </Sheet>
     </>
   );
 }
@@ -4971,6 +5152,16 @@ function TabInvoice({ job, brand, mut, toast }) {
   return (
     <>
       <Card>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Invoice number">
+            <input style={inputStyle} value={job.invoiceNo || ""} placeholder={`INV-${new Date().getFullYear()}-001`}
+              onChange={(e) => mut((j) => ({ ...j, invoiceNo: e.target.value }))} />
+          </Field>
+          <Field label="Due date">
+            <input style={inputStyle} type="date" value={job.invoiceDue || ""}
+              onChange={(e) => mut((j) => ({ ...j, invoiceDue: e.target.value }))} />
+          </Field>
+        </div>
         <Field label="PO number (optional)" hint="Shown on the invoice — some insurers and commercial clients require one.">
           <input style={inputStyle} value={job.invoicePo || ""} placeholder="PO-2026-0148"
             onChange={(e) => mut((j) => ({ ...j, invoicePo: e.target.value }))} />
@@ -4984,7 +5175,7 @@ function TabInvoice({ job, brand, mut, toast }) {
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontSize: 12, letterSpacing: 2, color: S.sub, fontWeight: 800 }}>INVOICE</div>
-            <div style={{ fontSize: 13, marginTop: 4 }}>{job.contract.number ? job.contract.number.replace("CON", "INV") : "INV-DRAFT"}</div>
+            <div style={{ fontSize: 13, marginTop: 4 }}>{job.invoiceNo || (job.contract.number ? job.contract.number.replace("CON", "INV") : "INV-DRAFT")}</div>
           </div>
         </div>
         <div style={{ borderTop: `1px solid ${S.line}`, paddingTop: 12, marginBottom: 8 }}>
@@ -5174,19 +5365,13 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
   );
 }
 
-function TabTasks({ job, mut }) {
-  const [txt, setTxt] = useState("");
-  const [due, setDue] = useState("");
-  const [time, setTime] = useState("");
-  const today = new Date().toISOString().slice(0, 10);
-  const openTasks = job.tasks.filter((t) => !t.done);
-  const doneTasks = job.tasks.filter((t) => t.done);
-  const TaskRow = ({ t }) => (
-    <button key={t.id} onClick={() => mut((j) => ({ ...j, tasks: j.tasks.map((x) => x.id === t.id ? { ...x, done: !x.done } : x) }))}
+function TaskRow({ t, today, onToggle }) {
+  return (
+    <button onClick={onToggle}
       style={{
         display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "11px 0",
         border: "none", background: "none", cursor: "pointer", textAlign: "left",
-        borderBottom: `1px solid ${S.line}`,
+        borderBottom: `1px solid ${S.line}`, touchAction: "manipulation",
       }}>
       {t.done ? <CheckCircle2 size={20} color="#177245" /> : <Circle size={20} color="#C7CBD1" />}
       <span style={{ flex: 1, minWidth: 0 }}>
@@ -5202,16 +5387,25 @@ function TabTasks({ job, mut }) {
       </span>
     </button>
   );
+}
+
+function TabTasks({ job, mut }) {
+  const [txt, setTxt] = useState("");
+  const [due, setDue] = useState("");
+  const [time, setTime] = useState("");
+  const today = new Date().toISOString().slice(0, 10);
+  const openTasks = job.tasks.filter((t) => !t.done);
+  const doneTasks = job.tasks.filter((t) => t.done);
   return (
     <Card>
       <CardTitle>Project tasks</CardTitle>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 4 }}>OPEN ({openTasks.length})</div>
       {openTasks.length === 0 && <div style={{ fontSize: 13.5, color: S.sub, padding: "10px 0" }}>Nothing open.</div>}
-      {openTasks.map((t) => <TaskRow key={t.id} t={t} />)}
+      {openTasks.map((t) => <TaskRow key={t.id} t={t} today={today} onToggle={() => mut((j) => ({ ...j, tasks: j.tasks.map((x) => x.id === t.id ? { ...x, done: !x.done } : x) }))} />)}
       {doneTasks.length > 0 && (
         <>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 16 }}>COMPLETED ({doneTasks.length})</div>
-          {doneTasks.map((t) => <TaskRow key={t.id} t={t} />)}
+          {doneTasks.map((t) => <TaskRow key={t.id} t={t} today={today} onToggle={() => mut((j) => ({ ...j, tasks: j.tasks.map((x) => x.id === t.id ? { ...x, done: !x.done } : x) }))} />)}
         </>
       )}
       <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
@@ -5375,18 +5569,6 @@ function ShingleFinder() {
   }), [q, mfr, status, type]);
 
   const dim = (n) => (n ? String(n).replace(/\.0$/, "") + '"' : "—");
-  const Seg = ({ opts, val, set }) => (
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-      {opts.map((o) => (
-        <button key={o.v} onClick={() => set(o.v)} style={{
-          border: `1.5px solid ${val === o.v ? T.accent : S.line}`,
-          background: val === o.v ? T.accentSoft : "#fff",
-          color: val === o.v ? T.accent : S.ink,
-          borderRadius: 999, padding: "7px 13px", fontSize: 13, fontWeight: 600, cursor: "pointer",
-        }}>{o.l}</button>
-      ))}
-    </div>
-  );
 
   return (
     <div>
@@ -5961,6 +6143,32 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
 /* ================================================================
    REVIEW AUTOMATION SETTINGS
    ================================================================ */
+function Seg({ opts, val, set }) {
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {opts.map((o) => (
+        <button key={o.v} onClick={() => set(o.v)} style={{
+          border: `1.5px solid ${val === o.v ? T.accent : S.line}`,
+          background: val === o.v ? T.accentSoft : "#fff",
+          color: val === o.v ? T.accent : S.ink,
+          borderRadius: 999, padding: "7px 13px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+        }}>{o.l}</button>
+      ))}
+    </div>
+  );
+}
+
+function Toggle({ on, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer",
+      background: on ? T.accent : "#D6D9DE", position: "relative", flexShrink: 0,
+    }}>
+      <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" }} />
+    </button>
+  );
+}
+
 function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFromReviews, mut, toast }) {
   /* Requests manager state: per-job rating capture + internal feedback. */
   const [rating, setRating] = useState({});      // jobId -> 1..5
@@ -5976,14 +6184,6 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
   const sent = jobs.filter((j) => j.review.sent);
   const posted = jobs.filter((j) => j.review.posted);
   const set = (k) => (v) => setSettings({ ...settings, [k]: v });
-  const Toggle = ({ on, onClick }) => (
-    <button onClick={onClick} style={{
-      width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer",
-      background: on ? T.accent : "#D6D9DE", position: "relative", flexShrink: 0,
-    }}>
-      <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" }} />
-    </button>
-  );
   return (
     <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
       <SubHeader title="Review automation" onBack={onBack} />
@@ -6202,7 +6402,11 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
     setTxt(""); setTagged(null);
   };
   const insert = (frag) => {
-    setTxt((prev) => (prev ? prev.replace(/\s?$/, " ") : "") + frag + " ");
+    setTxt((prev) => {
+      const at = prev.lastIndexOf("@");
+      if (at >= 0 && !prev.slice(at + 1).includes(" ")) return prev.slice(0, at) + frag + " ";
+      return (prev ? prev.replace(/\s?$/, " ") : "") + frag + " ";
+    });
     if (inputRef.current) inputRef.current.focus();
   };
   const renderText = (t) => t.split(/(@[A-Z][a-zA-Z]+ [A-Z][a-zA-Z]+)/g).map((part, i2) =>
@@ -6265,7 +6469,14 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
           <Btn kind="ghost" small onClick={() => { setMentionOpen(true); }}>@</Btn>
           <Btn kind="ghost" small onClick={() => { setTagOpen(true); }}><Home size={13} /></Btn>
           <textarea ref={inputRef} style={{ ...inputStyle, flex: 1, minHeight: 42, maxHeight: 110, resize: "none", fontFamily: "inherit" }}
-            value={txt} placeholder="Message the team…" onChange={(e) => setTxt(e.target.value)}
+            value={txt} placeholder="Message the team…"
+            onChange={(e) => {
+              const v = e.target.value;
+              setTxt(v);
+              /* Typing "@" opens the picker right there, like Slack. */
+              const tail = v.slice(v.lastIndexOf("@") + 1);
+              setMentionOpen(v.includes("@") && !tail.includes(" ") && v.lastIndexOf("@") >= v.length - 20);
+            }}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
           <Btn onClick={send} disabled={!txt.trim()}><Send size={15} /></Btn>
         </div>
@@ -6340,7 +6551,7 @@ function VendorManager({ vendors, setVendors, currentUser, onBack, toast }) {
         <Field label="Company name *"><input style={inputStyle} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
         <Field label="Rep / contact"><input style={inputStyle} value={f.contact} onChange={(e) => setF({ ...f, contact: e.target.value })} /></Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Field label="Phone"><input style={inputStyle} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
+          <Field label="Phone"><input style={inputStyle} value={f.phone} inputMode="tel" onChange={(e) => setF({ ...f, phone: formatPhone(e.target.value) })} /></Field>
           <Field label="Email"><input style={inputStyle} type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
         </div>
         <Field label="Account number"><input style={inputStyle} value={f.account} onChange={(e) => setF({ ...f, account: e.target.value })} /></Field>
@@ -6373,6 +6584,10 @@ function LeadSourceManager({ sources, setSources, jobs, onBack, toast }) {
             onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
           <Btn onClick={add} disabled={!draft.trim()}><Plus size={14} /></Btn>
         </div>
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
+          Use the arrows to set the order reps see. Lead source is required on every new lead — the form won't
+          submit without one, so your Performance numbers stay honest.
+        </div>
       </Card>
       {sources.map((src, i2) => (
         <Card key={src} pad={13} style={{ marginTop: 8 }}>
@@ -6381,10 +6596,16 @@ function LeadSourceManager({ sources, setSources, jobs, onBack, toast }) {
               <div style={{ fontSize: 14.5, fontWeight: 700 }}>{src}</div>
               <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>{usage(src)} job{usage(src) === 1 ? "" : "s"} tagged</div>
             </div>
-            <button onClick={() => { setSources(sources.filter((x) => x !== src)); toast("Source removed"); }}
-              style={{ border: "none", background: "none", cursor: "pointer" }}>
-              <Trash2 size={16} color="#B42318" />
-            </button>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <Btn kind="ghost" small disabled={i2 === 0}
+                onClick={() => { const a = [...sources]; [a[i2 - 1], a[i2]] = [a[i2], a[i2 - 1]]; setSources(a); }}>↑</Btn>
+              <Btn kind="ghost" small disabled={i2 === sources.length - 1}
+                onClick={() => { const a = [...sources]; [a[i2 + 1], a[i2]] = [a[i2], a[i2 + 1]]; setSources(a); }}>↓</Btn>
+              <button onClick={() => { setSources(sources.filter((x) => x !== src)); toast("Source removed"); }}
+                style={{ border: "none", background: "none", cursor: "pointer" }}>
+                <Trash2 size={16} color="#B42318" />
+              </button>
+            </div>
           </div>
         </Card>
       ))}
@@ -6467,9 +6688,10 @@ function BrandingEditor({ brand, setBrand, onBack, toast }) {
             </div>
             <Field label="Label"><input style={inputStyle} value={l.label} onChange={(e) => setLoc(i, "label", e.target.value)} placeholder="Cincinnati office" /></Field>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Field label="Office phone"><input style={inputStyle} value={l.phone} onChange={(e) => setLoc(i, "phone", e.target.value)} /></Field>
-              <Field label="Address"><input style={inputStyle} value={l.address} onChange={(e) => setLoc(i, "address", e.target.value)} /></Field>
+              <Field label="Office phone"><input style={inputStyle} value={l.phone} inputMode="tel" onChange={(e) => setLoc(i, "phone", formatPhone(e.target.value))} /></Field>
+              <Field label="Office email"><input style={inputStyle} type="email" value={l.email || ""} onChange={(e) => setLoc(i, "email", e.target.value)} /></Field>
             </div>
+            <Field label="Address"><input style={inputStyle} value={l.address} onChange={(e) => setLoc(i, "address", e.target.value)} /></Field>
           </div>
         ))}
       </Card>
@@ -6789,7 +7011,11 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
             <Field label="Item *"><input style={inputStyle} value={ef.item} onChange={efSet("item")} /></Field>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Field label="SKU"><input style={inputStyle} value={ef.sku} onChange={efSet("sku")} /></Field>
-              <Field label="Unit"><input style={inputStyle} value={ef.unit} onChange={efSet("unit")} /></Field>
+              <Field label="Unit">
+                <select style={selStyle} value={ef.unit} onChange={efSet("unit")}>
+                  {UNIT_TYPES.map((u) => <option key={u}>{u}</option>)}
+                </select>
+              </Field>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
               <Field label="Cost"><input style={inputStyle} type="number" step="0.01" value={ef.cost} onChange={efSet("cost")} /></Field>
@@ -7000,6 +7226,19 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const [f, setF] = useState(blank);
   const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
   const TRADES = ["Roofing", "Siding", "Gutters", "Metal", "Flashing", "Windows", "Carpentry"];
+  const [customTrade, setCustomTrade] = useState("");
+  const [range, setRange] = useState("all");
+  const docRef = useRef(null);
+  const paidFor = (crewId) => {
+    const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 86400000;
+    return jobs.filter((j) => j.crewId === crewId).reduce((sum, j) => {
+      const lines = (j.financials && j.financials.costLines) || [];
+      return sum + lines
+        .filter((l) => /labor|crew|install|sub/i.test(l.label || ""))
+        .filter((l) => !l.at || new Date(l.at).getTime() >= cutoff)
+        .reduce((t, l) => t + num(l.amt), 0);
+    }, 0);
+  };
   const open = (c) => { setEditing(c || "new"); setF(c ? { ...c } : blank); };
   const save = () => {
     if (editing === "new") setCrews([...crews, { ...f, id: uid("c") }]);
@@ -7010,6 +7249,22 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
     <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
       <SubHeader title="Crews" onBack={onBack}
         right={canEdit && <Btn small onClick={() => open(null)}><Plus size={14} /> Add crew</Btn>} />
+      {canEdit && (
+        <Card style={{ marginTop: 12 }} pad={13}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ fontSize: 13, color: S.sub }}>Paid totals:</span>
+            <select style={{ ...selStyle, flex: 1 }} value={range} onChange={(e) => setRange(e.target.value)}>
+              <option value="all">All time</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="365">Last 12 months</option>
+            </select>
+          </div>
+          <div style={{ fontSize: 12, color: S.sub, marginTop: 7, lineHeight: 1.5 }}>
+            Totals come from labor and subcontractor lines on each crew's jobs in the Financials tab.
+          </div>
+        </Card>
+      )}
       {crews.map((c) => {
         const assigned = jobs.filter((j) => j.crewId === c.id).length;
         return (
@@ -7028,6 +7283,8 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             <div style={{ display: "flex", gap: 6, marginTop: 9, flexWrap: "wrap" }}>
               {c.trades.map((t) => <Chip key={t} tone="gray">{t}</Chip>)}
               <Chip tone="blue">{assigned} job{assigned === 1 ? "" : "s"}</Chip>
+              {canEdit && <Chip tone="green">{money(paidFor(c.id))} paid</Chip>}
+              {(c.docs || []).length > 0 && <Chip tone="gray">{(c.docs || []).length} doc{(c.docs || []).length === 1 ? "" : "s"}</Chip>}
             </div>
             {canEdit && (
               <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -7046,12 +7303,45 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
         <Field label="Crew / company name *"><input style={inputStyle} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
         <Field label="Primary contact"><input style={inputStyle} value={f.contact} onChange={(e) => setF({ ...f, contact: e.target.value })} /></Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Field label="Phone"><input style={inputStyle} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
+          <Field label="Phone"><input style={inputStyle} value={f.phone} inputMode="tel" onChange={(e) => setF({ ...f, phone: formatPhone(e.target.value) })} /></Field>
           <Field label="Email"><input style={inputStyle} type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
         </div>
+        <Field label="Documents" hint="Certificates of insurance, W-9s, licenses — anything you need on file.">
+          <input ref={docRef} type="file" style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files && e.target.files[0];
+              if (!file) return;
+              setF({ ...f, docs: [...(f.docs || []), { id: uid("cd"), name: file.name, at: new Date().toISOString().slice(0, 10) }] });
+              e.target.value = "";
+            }} />
+          {(f.docs || []).map((d) => (
+            <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${S.line}` }}>
+              <span style={{ fontSize: 13.5 }}>{d.name} <span style={{ color: S.sub, fontSize: 12 }}>· {d.at}</span></span>
+              <button onClick={() => setF({ ...f, docs: (f.docs || []).filter((x) => x.id !== d.id) })}
+                style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={14} color="#B42318" /></button>
+            </div>
+          ))}
+          <Btn kind="ghost" small style={{ marginTop: 8 }} onClick={() => docRef.current && docRef.current.click()}>
+            <Upload size={13} /> Add document
+          </Btn>
+        </Field>
         <Field label="Trades">
+          <div style={{ display: "flex", gap: 8, marginBottom: 9 }}>
+            <input style={{ ...inputStyle, flex: 1 }} value={customTrade} placeholder="Add a custom trade…"
+              onChange={(e) => setCustomTrade(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && customTrade.trim()) {
+                  setF({ ...f, trades: [...new Set([...f.trades, customTrade.trim()])] });
+                  setCustomTrade("");
+                }
+              }} />
+            <Btn kind="ghost" small disabled={!customTrade.trim()}
+              onClick={() => { setF({ ...f, trades: [...new Set([...f.trades, customTrade.trim()])] }); setCustomTrade(""); }}>
+              <Plus size={13} />
+            </Btn>
+          </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-            {TRADES.map((t) => {
+            {[...new Set([...TRADES, ...f.trades])].map((t) => {
               const on = f.trades.includes(t);
               return (
                 <button key={t} type="button" onClick={() => setF({ ...f, trades: on ? f.trades.filter((x) => x !== t) : [...f.trades, t] })}
@@ -7113,12 +7403,22 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
               Connect your own mailbox. Your customers get email from you, not a generic office address, and replies
               land where you'll actually see them.
             </div>
-            <Callout label="What this needs to go live">
-              Google OAuth requires a client secret, which can't live in the browser. The company sets up one Google
-              Cloud project (consent screen + Gmail API) and one Supabase Edge Function for the token exchange — then
-              every rep's Connect button does the real Google sign-in. Until that function is deployed, connecting
-              here records your account so everything is configured and ready.
+            <Callout label="How connecting works">
+              Two parts. The office does a one-time setup; after that every rep just taps Connect and signs in with
+              Google like any other app.
             </Callout>
+            <div style={{ marginTop: 12, fontSize: 13, lineHeight: 1.65, color: S.ink }}>
+              <div style={{ fontWeight: 800, fontSize: 12.5, color: S.sub, marginBottom: 6 }}>ONE-TIME, BY THE OFFICE</div>
+              <div style={{ marginBottom: 5 }}><b>1.</b> Go to console.cloud.google.com and create a project named Ridgeline.</div>
+              <div style={{ marginBottom: 5 }}><b>2.</b> APIs &amp; Services → Library → search "Gmail API" → Enable.</div>
+              <div style={{ marginBottom: 5 }}><b>3.</b> OAuth consent screen → choose Internal if you use Google Workspace (recommended — no Google review needed), otherwise External. Fill in the app name and your support email.</div>
+              <div style={{ marginBottom: 5 }}><b>4.</b> Credentials → Create credentials → OAuth client ID → Web application. Under Authorized redirect URIs, add this app's address followed by <b>/auth/gmail</b>.</div>
+              <div style={{ marginBottom: 5 }}><b>5.</b> Copy the Client ID and Client Secret, then send them over so the token-exchange function can be deployed. The secret must live on the server — never in the app.</div>
+              <div style={{ fontWeight: 800, fontSize: 12.5, color: S.sub, margin: "12px 0 6px" }}>THEN, EACH REP</div>
+              <div style={{ marginBottom: 5 }}><b>6.</b> Open this screen and tap Connect my Gmail.</div>
+              <div style={{ marginBottom: 5 }}><b>7.</b> Pick your work Google account and approve the "send email on your behalf" permission.</div>
+              <div>That's it — customer emails then send from your address and replies land in your own inbox.</div>
+            </div>
             <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => setConnecting("gmail")}>
               <Mail size={15} /> Connect my Gmail
             </Btn>
@@ -7571,7 +7871,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
         <Field label="Work email *" hint={emailTaken ? "That email already has a seat." : "This is their login. An invite to set a password goes here."}>
           <input style={{ ...inputStyle, borderColor: emailTaken ? "#B42318" : S.line }} type="email" value={f.email} onChange={set("email")} />
         </Field>
-        <Field label="Mobile"><input style={inputStyle} value={f.phone} onChange={set("phone")} /></Field>
+        <Field label="Mobile"><input style={inputStyle} value={f.phone} inputMode="tel" onChange={(e) => setF((p2) => ({ ...p2, phone: formatPhone(e.target.value) }))} /></Field>
         <Field label="Role">
           <select style={selStyle} value={f.role} onChange={(e) => {
             const r = ROLES.find((x) => x.id === e.target.value);
@@ -7592,7 +7892,14 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
             </select>
           </Field>
         )}
-        <Field label="Direct phone (shown on this rep's documents)"><input style={inputStyle} value={f.repPhone || ""} onChange={(e) => setF((p2) => ({ ...p2, repPhone: e.target.value }))} /></Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Direct phone" hint="Shows on this rep's documents.">
+            <input style={inputStyle} value={f.repPhone || ""} inputMode="tel" onChange={(e) => setF((p2) => ({ ...p2, repPhone: formatPhone(e.target.value) }))} />
+          </Field>
+          <Field label="Work email" hint="Used on their documents; falls back to the office address.">
+            <input style={inputStyle} type="email" value={f.workEmail || ""} onChange={(e) => setF((p2) => ({ ...p2, workEmail: e.target.value }))} />
+          </Field>
+        </div>
         {f.role !== "crew" && (
           <Field label="Default commission rate (%)" hint="Starting rate on new jobs. Can be changed per job by an admin.">
             <input style={inputStyle} inputMode="decimal" value={f.commissionRate}
@@ -7610,6 +7917,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
 
 function MoreMenu({ onNav, onLogout, brand, currentUser }) {
   const items = [
+    ["announcements", Megaphone, "Company announcements", "Posted to everyone's home screen"],
     ["activity", ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
     ["chat", MessageCircle, "Team chat", "Talk to the team — @ someone, tag a job"],
     ["insurance", Shield, "Insurance", "Clients, supplements, code lookup"],
@@ -8034,6 +8342,7 @@ export default function SupremeCRM() {
   const [estimateTemplates, setEstimateTemplates] = useState([]);
   const [activity, setActivity] = useState([]);
   const [chatMsgs, setChatMsgs] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   const [chatSeenCount, setChatSeenCount] = useState(0);
   const [apptTypes, setApptTypes] = useState(["Inspection", "Adjuster meeting", "Estimate presentation", "Production start", "Final walkthrough"]);
   const [integrations, setIntegrations] = useState({
@@ -8062,12 +8371,13 @@ export default function SupremeCRM() {
   });
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings];
+  const orgDeps = [announcements, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings];
   const orgPack = () => ({
-    stages, leadSources, apptTypes, templates, estimateTemplates,
+    announcements, stages, leadSources, apptTypes, templates, estimateTemplates,
     priceList, companyDocs, crews, vendors, reviewSettings, version: 1,
   });
   const unpackOrg = (d) => {
+    if (d.announcements) setAnnouncements(d.announcements);
     if (d.stages) setStages(d.stages);
     if (d.leadSources) setLeadSources(d.leadSources);
     if (d.apptTypes) setApptTypes(d.apptTypes);
@@ -8261,6 +8571,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
               Have a Roofr export? More → Import jobs pulls your whole pipeline in.
             </div>
           )}
+          <div style={{ paddingTop: 14 }}><AnnouncementBar announcements={announcements} /></div>
           <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav}
             onNewLead={() => setNewLeadOpen(true)} onQuickTask={() => setQuickTaskOpen(true)} />
         </>
@@ -8287,6 +8598,9 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "reviews" ? (
         <ReviewSettings settings={reviewSettings} setSettings={setReviewSettings} jobs={jobs}
           onBack={() => setNav("more")} brand={brand} setBrandFromReviews={setBrand} mut={mutJob} toast={toast} />
+      ) : nav === "announcements" ? (
+        <AnnouncementManager announcements={announcements} setAnnouncements={setAnnouncements}
+          currentUser={liveUser} onBack={() => setNav("more")} toast={toast} />
       ) : nav === "activity" ? (
         <ActivityFeed activity={activity} currentUser={liveUser} onOpenJob={openJobScreen} onBack={() => setNav("more")} />
       ) : nav === "chat" ? (

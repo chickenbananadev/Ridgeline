@@ -1051,6 +1051,8 @@ var MERGE_FIELDS = [
   ["{{rep_phone}}", "Rep's direct phone (falls back to office)"],
   ["{{office_phone}}", "Rep's office phone"],
   ["{{office_address}}", "Rep's office address"],
+  ["{{rep_email}}", "Rep's work email (falls back to office)"],
+  ["{{office_email}}", "Rep's office email"],
   ["{{company}}", "Company name"],
   ["{{crew_name}}", "Assigned crew"],
   ["{{scheduled_date}}", "Scheduled production date"],
@@ -1074,8 +1076,10 @@ function templateContext(job2, brand, crew, users) {
     job_address: job2.address,
     rep_name: job2.assignee,
     rep_phone: rep && rep.repPhone || loc && loc.phone || brand.phone,
+    rep_email: rep && (rep.workEmail || rep.email) || loc && loc.email || brand.email,
     office_address: loc && loc.address || brand.address,
     office_phone: loc && loc.phone || brand.phone,
+    office_email: loc && loc.email || brand.email,
     company: brand.company,
     crew_name: crew ? crew.name : "",
     scheduled_date: job2.schedDate || "",
@@ -3304,7 +3308,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
       wide: true,
       footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: onClose, children: "Cancel" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 2 }, disabled: !canCreate, onClick: () => {
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 2 }, disabled: !canCreate || !f.leadSource, onClick: () => {
           onCreate(f);
           onClose();
         }, children: "Create lead" })
@@ -3316,7 +3320,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Last name *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.last, onChange: set("last") }) })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.phone, onChange: set("phone"), placeholder: "(555) 555-0100" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.phone, inputMode: "tel", onChange: (e) => setF((p2) => ({ ...p2, phone: formatPhone(e.target.value) })), placeholder: "(555) 555-0100" }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.email, onChange: set("email") }) })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: T.primary, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0" }, children: "Location" }),
@@ -3359,7 +3363,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: T.primary, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0" }, children: "Job details" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Lead source", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: f.leadSource, onChange: set("leadSource"), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Lead source *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: f.leadSource, onChange: set("leadSource"), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "\u2014 select \u2014" }),
             leadSources.map((l) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: l }, l))
           ] }) }),
@@ -4258,14 +4262,14 @@ function TabOverview({ job: job2, juris, mut, toast, reviewSettings, brand, curr
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Activity on this job" }),
-      activity.filter((a) => a.jobId === job2.id).length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "Stage moves, notes, tasks, and messages on this job land here as they happen." }) : activity.filter((a) => a.jobId === job2.id).slice(0, 25).map((a) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: `1px solid ${S.line}`, padding: "10px 0" }, children: [
+      activity.filter((a) => a.jobId === job2.id).length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "Stage moves, notes, tasks, and messages on this job land here as they happen." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { maxHeight: 250, overflowY: "auto", marginRight: -4, paddingRight: 4 }, children: activity.filter((a) => a.jobId === job2.id).slice(0, 60).map((a) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: `1px solid ${S.line}`, padding: "10px 0" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, lineHeight: 1.5 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: a.by }),
           " ",
           a.text
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 3 }, children: a.at })
-      ] }, a.id))
+      ] }, a.id)) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Contact" }),
@@ -4356,22 +4360,122 @@ function TabOverview({ job: job2, juris, mut, toast, reviewSettings, brand, curr
     ] })
   ] });
 }
-function TabChecklist({ job: job2, mut, toast }) {
-  const c = job2.checklist;
-  const set = (k) => (v) => mut((j) => ({ ...j, checklist: { ...j.checklist, [k]: v } }));
-  const Opt = ({ k, options }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 7 }, children: options.map((o) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => set(k)(o), style: {
-    border: `1.5px solid ${c[k] === o ? T.accent : S.line}`,
-    background: c[k] === o ? T.accentSoft : "#fff",
-    color: c[k] === o ? T.accent : S.ink,
-    borderRadius: 999,
-    padding: "8px 13px",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer"
-  }, children: o }, o)) });
-  const Multi = ({ k, options }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 7 }, children: options.map((o) => {
-    const on = c[k].includes(o);
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => set(k)(on ? c[k].filter((x) => x !== o) : [...c[k], o]), style: {
+function formatPhone(raw) {
+  const d = String(raw || "").replace(/\D/g, "").slice(0, 11);
+  const n = d.length === 11 && d[0] === "1" ? d.slice(1) : d;
+  if (n.length <= 3) return n;
+  if (n.length <= 6) return `(${n.slice(0, 3)})${n.slice(3)}`;
+  return `(${n.slice(0, 3)})${n.slice(3, 6)}-${n.slice(6, 10)}`;
+}
+var UNIT_TYPES = ["EA", "SQ", "LF", "SF", "Bundle", "Roll", "Box", "Piece", "Can", "Tube", "Gallon", "Pail", "Sheet", "Bag", "Pallet", "Hour", "Day", "Job"];
+var SALES_VIBES = [
+  "Every no is one call closer to a yes.",
+  "The roof doesn't sell itself \u2014 you do.",
+  "Fast follow-up wins the job. Every time.",
+  "Storms pass. Reputations don't.",
+  "Answer the phone. Half the competition won't.",
+  "A homeowner remembers how you made them feel long after the shingle color.",
+  "Set the appointment. The rest is details.",
+  "Do it right the second time is expensive. Do it right the first time.",
+  "The best lead is the neighbor of a happy customer.",
+  "Nobody ever regretted documenting the damage too well."
+];
+function AnnouncementBar({ announcements = [] }) {
+  const live = announcements.filter((a) => a.active !== false);
+  const pool = live.length > 0 ? live.map((a) => ({ text: a.text, pinned: true })) : [{ text: SALES_VIBES[Math.floor(Date.now() / 864e5) % SALES_VIBES.length], pinned: false }];
+  const [i, setI] = (0, import_react.useState)(0);
+  (0, import_react.useEffect)(() => {
+    if (pool.length < 2) return;
+    const t = setInterval(() => setI((x) => (x + 1) % pool.length), 4500);
+    return () => clearInterval(t);
+  }, [pool.length]);
+  const cur = pool[Math.min(i, pool.length - 1)];
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+    margin: "0 16px 14px",
+    background: cur.pinned ? T.accentSoft : S.soft,
+    border: `1px solid ${cur.pinned ? T.accent : S.line}`,
+    borderRadius: 12,
+    padding: "12px 14px",
+    display: "flex",
+    gap: 10,
+    alignItems: "center"
+  }, children: [
+    cur.pinned ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Megaphone, { size: 16, color: T.accent, style: { flexShrink: 0 } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Star, { size: 15, color: S.sub, style: { flexShrink: 0 } }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, fontSize: 13.5, lineHeight: 1.5, color: cur.pinned ? T.accent : S.sub, fontWeight: cur.pinned ? 600 : 500 }, children: cur.text }),
+    pool.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "button",
+      {
+        onClick: () => setI((x) => (x + 1) % pool.length),
+        style: { border: "none", background: "none", cursor: "pointer", flexShrink: 0, padding: 4 },
+        children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 17, color: cur.pinned ? T.accent : S.sub })
+      }
+    )
+  ] });
+}
+function AnnouncementManager({ announcements, setAnnouncements, currentUser, onBack, toast }) {
+  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const [draft, setDraft] = (0, import_react.useState)("");
+  const add = () => {
+    const t = draft.trim();
+    if (!t) return;
+    setAnnouncements([{ id: uid("ann"), text: t, at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), by: currentUser.name, active: true }, ...announcements]);
+    setDraft("");
+    toast("Announcement posted to everyone's home screen");
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Company announcements", onBack }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }, children: "These show at the top of the home screen for everyone who signs in. Post more than one and they rotate every few seconds. With none posted, the team gets a rotating sales reminder instead." }),
+      canEdit ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "textarea",
+          {
+            style: { ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" },
+            value: draft,
+            onChange: (e) => setDraft(e.target.value),
+            placeholder: "Safety meeting Friday 7am \u2014 everyone on site by 6:45."
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { marginTop: 9 }, onClick: add, disabled: !draft.trim(), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }),
+          " Post announcement"
+        ] })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "Announcements are posted by the office." })
+    ] }),
+    announcements.map((a) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 14, style: { marginTop: 8, opacity: a.active === false ? 0.55 : 1 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, lineHeight: 1.55 }, children: a.text }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 6 }, children: [
+        a.by,
+        " \xB7 ",
+        a.at
+      ] }),
+      canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Btn,
+          {
+            kind: "ghost",
+            small: true,
+            style: { flex: 1 },
+            onClick: () => setAnnouncements(announcements.map((x) => x.id === a.id ? { ...x, active: x.active === false } : x)),
+            children: a.active === false ? "Show again" : "Hide"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => {
+          setAnnouncements(announcements.filter((x) => x.id !== a.id));
+          toast("Announcement removed");
+        }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 13 }) })
+      ] })
+    ] }, a.id))
+  ] });
+}
+function PillGroup({ options, value, onPick, multi = false }) {
+  const vals = multi ? Array.isArray(value) ? value : [] : [];
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 7 }, children: options.map((o) => {
+    const on = multi ? vals.includes(o) : value === o;
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => {
+      if (multi) onPick(on ? vals.filter((x) => x !== o) : [...vals, o]);
+      else onPick(on ? "" : o);
+    }, style: {
       border: `1.5px solid ${on ? T.accent : S.line}`,
       background: on ? T.accentSoft : "#fff",
       color: on ? T.accent : S.ink,
@@ -4379,9 +4483,14 @@ function TabChecklist({ job: job2, mut, toast }) {
       padding: "8px 13px",
       fontSize: 13,
       fontWeight: 600,
-      cursor: "pointer"
+      cursor: "pointer",
+      touchAction: "manipulation"
     }, children: o }, o);
   }) });
+}
+function TabChecklist({ job: job2, mut, toast }) {
+  const c = job2.checklist;
+  const set = (k) => (v) => mut((j) => ({ ...j, checklist: { ...j.checklist, [k]: v } }));
   const required = ["structure", "roofAge", "layers", "roofType", "pitch", "overall"];
   const missing = required.filter((k) => !c[k]);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -4391,35 +4500,35 @@ function TabChecklist({ job: job2, mut, toast }) {
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Structure & history" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Structure type", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "structure", options: ["Single Family", "Multi-Family", "Detached Garage", "Commercial"] }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Structure type", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Single Family", "Multi-Family", "Detached Garage", "Commercial"], value: c.structure, onPick: set("structure") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Approximate roof age (years)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: c.roofAge, onChange: (e) => set("roofAge")(e.target.value) }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Inspection method", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "method", options: ["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Layers", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "layers", options: ["1 Layer", "2 Layers", "3+ Layers"] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Roof covering", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "roofType", options: ["Asphalt shingle", "Metal", "Flat / membrane", "Tile", "Wood shake"] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Pitch (primary)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "pitch", options: ["3/12", "4/12", "5/12", "6/12", "7/12", "8/12", "9/12+"] }) })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Inspection method", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"], value: c.method, onPick: set("method") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Layers", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["1 Layer", "2 Layers", "3+ Layers"], value: c.layers, onPick: set("layers") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Roof covering", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Asphalt shingle", "Metal", "Flat / membrane", "Tile", "Wood shake"], value: c.roofType, onPick: set("roofType") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Pitch (primary)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["3/12", "4/12", "5/12", "6/12", "7/12", "8/12", "9/12+"], value: c.pitch, onPick: set("pitch") }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Decking & ventilation" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Decking type", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "deckingType", options: ["OSB", "Plywood", "1x6 Plank / Spaced Lumber", "Unknown"] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Decking condition", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "deckingCond", options: ["Good", "Fair", "Poor", "Critical"] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Ventilation present", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Multi, { k: "ventTypes", options: ["Ridge Vent", "Box Vents / Turtles", "Gable Vents", "Power Vent", "Turbines", "None visible"] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Soffit intake present", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "soffitIntake", options: ["Yes", "No", "Blocked"] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Ventilation condition", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "ventCond", options: ["Good", "Fair", "Poor", "Critical"] }) })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Decking type", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["OSB", "Plywood", "1x6 Plank / Spaced Lumber", "Unknown"], value: c.deckingType, onPick: set("deckingType") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Decking condition", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Good", "Fair", "Poor", "Critical"], value: c.deckingCond, onPick: set("deckingCond") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Ventilation present", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ["Ridge Vent", "Box Vents / Turtles", "Gable Vents", "Power Vent", "Turbines", "None visible"], value: c.ventTypes, onPick: set("ventTypes") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Soffit intake present", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Yes", "No", "Blocked"], value: c.soffitIntake, onPick: set("soffitIntake") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Ventilation condition", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Good", "Fair", "Poor", "Critical"], value: c.ventCond, onPick: set("ventCond") }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "Required" }), children: "Attic" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Attic accessible", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "atticAccess", options: ["Yes", "No \u2014 note reason in notes"] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Decking from below", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "atticDecking", options: ["Good", "Stained / Tracked", "Active Rot / Mold", "Not visible"] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Daylight visible through decking", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "lightCheck", options: ["Yes", "No"] }) })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Attic accessible", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Yes", "No \u2014 note reason in notes"], value: c.atticAccess, onPick: set("atticAccess") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Decking from below", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Good", "Stained / Tracked", "Active Rot / Mold", "Not visible"], value: c.atticDecking, onPick: set("atticDecking") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Daylight visible through decking", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Yes", "No"], value: c.lightCheck, onPick: set("lightCheck") }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Damage indicators" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Granule loss", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "granuleLoss", options: ["Minimal", "Moderate", "Heavy", "Critical"] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Wind damage (creased / missing tabs)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "windDamage", options: ["Yes", "No"] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Hail impact evidence", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "hailImpact", options: ["Yes", "No"] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Flashing failures", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "flashingFail", options: ["Yes", "No"] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Pipe boots cracked / failed", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "pipeBoots", options: ["Yes", "No"] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Overall roof condition", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Opt, { k: "overall", options: ["Good", "Fair", "Poor", "Critical"] }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Granule loss", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Minimal", "Moderate", "Heavy", "Critical"], value: c.granuleLoss, onPick: set("granuleLoss") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Wind damage (creased / missing tabs)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Yes", "No"], value: c.windDamage, onPick: set("windDamage") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Hail impact evidence", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Yes", "No"], value: c.hailImpact, onPick: set("hailImpact") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Flashing failures", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Yes", "No"], value: c.flashingFail, onPick: set("flashingFail") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Pipe boots cracked / failed", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Yes", "No"], value: c.pipeBoots, onPick: set("pipeBoots") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Overall roof condition", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Good", "Fair", "Poor", "Critical"], value: c.overall, onPick: set("overall") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Field notes", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { style: { ...inputStyle, minHeight: 90 }, value: c.notes, onChange: (e) => set("notes")(e.target.value) }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 14, display: "flex", gap: 10 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { flex: 1 }, disabled: missing.length > 0, onClick: () => {
@@ -4640,7 +4749,15 @@ function TabEstimate({ job: job2, brand, mut, toast, estimateTemplates = [], set
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Estimate #", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: est.number, disabled: locked, onChange: (e) => setEst({ number: e.target.value }) }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: est.date, disabled: locked, onChange: (e) => setEst({ date: e.target.value }) }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            style: inputStyle,
+            value: est.date || (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { month: "short", day: "numeric", year: "numeric" }),
+            disabled: locked,
+            onChange: (e) => setEst({ date: e.target.value })
+          }
+        ) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Valid through", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: est.validThrough, disabled: locked, onChange: (e) => setEst({ validThrough: e.target.value }) }) })
     ] }),
@@ -5691,6 +5808,36 @@ function TabPhotos({ job: job2, mut, toast }) {
     ] })
   ] });
 }
+function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800 }, children: money(total) }), children: title }),
+    lines.map((l) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: { ...inputStyle, flex: 1, padding: "9px 11px" },
+          value: l.label,
+          onChange: (e) => onEdit(l.id, "label", e.target.value)
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: { ...inputStyle, width: 100, textAlign: "right", padding: "9px 11px" },
+          value: l.amt,
+          inputMode: "decimal",
+          onChange: (e) => onEdit(l.id, "amt", e.target.value)
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onDelete(l.id), style: { border: "none", background: "none", cursor: "pointer" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
+    ] }, l.id)),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: onAdd, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+      " Add"
+    ] })
+  ] });
+}
 function TabFinancials({ job: job2, mut, toast, isAdmin, currentUser }) {
   const cap = computeCapOut(job2);
   const fin = job2.fin;
@@ -5744,34 +5891,6 @@ function TabFinancials({ job: job2, mut, toast, isAdmin, currentUser }) {
     ]);
     toast("Cap-out CSV downloaded");
   };
-  const Bucket = ({ title, bucket, total }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800 }, children: money(total) }), children: title }),
-    fin[bucket].map((l) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "input",
-        {
-          style: { ...inputStyle, flex: 1, padding: "9px 11px" },
-          value: l.label,
-          onChange: (e) => setLine(bucket, l.id, "label", e.target.value)
-        }
-      ),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "input",
-        {
-          style: { ...inputStyle, width: 100, textAlign: "right", padding: "9px 11px" },
-          value: l.amt,
-          inputMode: "decimal",
-          onChange: (e) => setLine(bucket, l.id, "amt", e.target.value)
-        }
-      ),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => delLine(bucket, l.id), style: { border: "none", background: "none", cursor: "pointer" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
-    ] }, l.id)),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => addLine(bucket), children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
-      " Add"
-    ] })
-  ] });
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { background: T.primary, border: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { color: "#fff" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", opacity: 0.85, fontSize: 13 }, children: [
@@ -5802,9 +5921,9 @@ function TabFinancials({ job: job2, mut, toast, isAdmin, currentUser }) {
         " margin"
       ] })
     ] }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Bucket, { title: "Material costs", bucket: "materials", total: cap.materials }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Bucket, { title: "Labor costs", bucket: "labor", total: cap.labor }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Bucket, { title: "Other costs (permits, dump, misc.)", bucket: "other", total: cap.other }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FinBucket, { title: "Material costs", lines: fin.materials, total: cap.materials, onEdit: (id, k, v) => setLine("materials", id, k, v), onDelete: (id) => delLine("materials", id), onAdd: () => addLine("materials") }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FinBucket, { title: "Labor costs", lines: fin.labor, total: cap.labor, onEdit: (id, k, v) => setLine("labor", id, k, v), onDelete: (id) => delLine("labor", id), onAdd: () => addLine("labor") }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FinBucket, { title: "Other costs (permits, dump, misc.)", lines: fin.other, total: cap.other, onEdit: (id, k, v) => setLine("other", id, k, v), onDelete: (id) => delLine("other", id), onAdd: () => addLine("other") }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Commission structure" }),
@@ -5922,6 +6041,31 @@ function TabFinancials({ job: job2, mut, toast, isAdmin, currentUser }) {
   ] });
 }
 function TabPayments({ job: job2, mut, toast }) {
+  const [editPay, setEditPay] = (0, import_react.useState)(null);
+  const [ef2, setEf2] = (0, import_react.useState)(null);
+  const checkRef = (0, import_react.useRef)(null);
+  const openPayEdit = (p2) => {
+    setEditPay(p2.id);
+    setEf2({ ...p2 });
+  };
+  const savePayEdit = () => {
+    mut((j) => ({ ...j, payments: j.payments.map((x) => x.id === editPay ? { ...x, ...ef2, amt: num(ef2.amt) } : x) }));
+    setEditPay(null);
+    toast("Payment updated");
+  };
+  const deletePay = () => {
+    mut((j) => ({ ...j, payments: j.payments.filter((x) => x.id !== editPay) }));
+    setEditPay(null);
+    toast("Payment removed");
+  };
+  const attachCheck = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => setEf2((prev) => ({ ...prev, checkImage: String(r.result) }));
+    r.readAsDataURL(file);
+    e.target.value = "";
+  };
   const pay = paymentsSummary(job2);
   const [form, setForm] = (0, import_react.useState)({ type: "Received", label: "", amt: "" });
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -5975,7 +6119,7 @@ function TabPayments({ job: job2, mut, toast }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "History" }),
       job2.payments.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub }, children: "No payments logged." }),
-      job2.payments.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${S.line}` }, children: [
+      job2.payments.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${S.line}` }, onClick: () => openPayEdit(p), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 600 }, children: p.label }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: p.date })
@@ -5985,13 +6129,82 @@ function TabPayments({ job: job2, mut, toast }) {
           money(p.amt)
         ] })
       ] }, p.id))
-    ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: checkRef, type: "file", accept: "image/*", capture: "environment", onChange: attachCheck, style: { display: "none" } }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      Sheet,
+      {
+        open: !!editPay,
+        onClose: () => setEditPay(null),
+        title: "Edit payment",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", onClick: deletePay, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14 }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 1 }, onClick: savePayEdit, children: "Save changes" })
+        ] }),
+        children: ef2 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 12, lineHeight: 1.5 }, children: "Corrections are fine \u2014 every edit is written to the activity feed with the old values, so the record stays honest." }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Amount", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: inputStyle,
+                value: ef2.amt,
+                inputMode: "decimal",
+                onChange: (e) => setEf2({ ...ef2, amt: e.target.value })
+              }
+            ) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: inputStyle,
+                type: "date",
+                value: ef2.date || "",
+                onChange: (e) => setEf2({ ...ef2, date: e.target.value })
+              }
+            ) })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Method", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: ef2.method || "Check", onChange: (e) => setEf2({ ...ef2, method: e.target.value }), children: ["Check", "Cash", "Card", "ACH / transfer", "Insurance draft", "Financing"].map((mm) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: mm }, mm)) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Reference / check number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: ef2.ref || "", onChange: (e) => setEf2({ ...ef2, ref: e.target.value }) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Check photo", hint: "Photograph the check for your records before depositing.", children: [
+            ef2.checkImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: ef2.checkImage, alt: "Check", style: { width: "100%", borderRadius: 10, marginBottom: 8, border: `1px solid ${S.line}` } }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => checkRef.current && checkRef.current.click(), children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Camera, { size: 13 }),
+                " ",
+                ef2.checkImage ? "Retake" : "Take photo"
+              ] }),
+              ef2.checkImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setEf2({ ...ef2, checkImage: null }), children: "Remove" })
+            ] })
+          ] })
+        ] })
+      }
+    )
   ] });
 }
 function TabInvoice({ job: job2, brand, mut, toast }) {
   const pay = paymentsSummary(job2);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Invoice number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            style: inputStyle,
+            value: job2.invoiceNo || "",
+            placeholder: `INV-${(/* @__PURE__ */ new Date()).getFullYear()}-001`,
+            onChange: (e) => mut((j) => ({ ...j, invoiceNo: e.target.value }))
+          }
+        ) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Due date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            style: inputStyle,
+            type: "date",
+            value: job2.invoiceDue || "",
+            onChange: (e) => mut((j) => ({ ...j, invoiceDue: e.target.value }))
+          }
+        ) })
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "PO number (optional)", hint: "Shown on the invoice \u2014 some insurers and commercial clients require one.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "input",
         {
@@ -6012,7 +6225,7 @@ function TabInvoice({ job: job2, brand, mut, toast }) {
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "right" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, letterSpacing: 2, color: S.sub, fontWeight: 800 }, children: "INVOICE" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, marginTop: 4 }, children: job2.contract.number ? job2.contract.number.replace("CON", "INV") : "INV-DRAFT" })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, marginTop: 4 }, children: job2.invoiceNo || (job2.contract.number ? job2.contract.number.replace("CON", "INV") : "INV-DRAFT") })
         ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: `1px solid ${S.line}`, paddingTop: 12, marginBottom: 8 }, children: [
@@ -6238,17 +6451,11 @@ function TabWorkOrder({ job: job2, mut, toast, brand, crews, templates, currentU
     )
   ] });
 }
-function TabTasks({ job: job2, mut }) {
-  const [txt, setTxt] = (0, import_react.useState)("");
-  const [due, setDue] = (0, import_react.useState)("");
-  const [time, setTime] = (0, import_react.useState)("");
-  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-  const openTasks = job2.tasks.filter((t) => !t.done);
-  const doneTasks = job2.tasks.filter((t) => t.done);
-  const TaskRow = ({ t }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+function TaskRow({ t, today, onToggle }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
     "button",
     {
-      onClick: () => mut((j) => ({ ...j, tasks: j.tasks.map((x) => x.id === t.id ? { ...x, done: !x.done } : x) })),
+      onClick: onToggle,
       style: {
         display: "flex",
         alignItems: "center",
@@ -6259,7 +6466,8 @@ function TabTasks({ job: job2, mut }) {
         background: "none",
         cursor: "pointer",
         textAlign: "left",
-        borderBottom: `1px solid ${S.line}`
+        borderBottom: `1px solid ${S.line}`,
+        touchAction: "manipulation"
       },
       children: [
         t.done ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 20, color: "#177245" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Circle, { size: 20, color: "#C7CBD1" }),
@@ -6277,9 +6485,16 @@ function TabTasks({ job: job2, mut }) {
           ] })
         ] })
       ]
-    },
-    t.id
+    }
   );
+}
+function TabTasks({ job: job2, mut }) {
+  const [txt, setTxt] = (0, import_react.useState)("");
+  const [due, setDue] = (0, import_react.useState)("");
+  const [time, setTime] = (0, import_react.useState)("");
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const openTasks = job2.tasks.filter((t) => !t.done);
+  const doneTasks = job2.tasks.filter((t) => t.done);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Project tasks" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 4 }, children: [
@@ -6288,14 +6503,14 @@ function TabTasks({ job: job2, mut }) {
       ")"
     ] }),
     openTasks.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, padding: "10px 0" }, children: "Nothing open." }),
-    openTasks.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TaskRow, { t }, t.id)),
+    openTasks.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TaskRow, { t, today, onToggle: () => mut((j) => ({ ...j, tasks: j.tasks.map((x) => x.id === t.id ? { ...x, done: !x.done } : x) })) }, t.id)),
     doneTasks.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 16 }, children: [
         "COMPLETED (",
         doneTasks.length,
         ")"
       ] }),
-      doneTasks.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TaskRow, { t }, t.id))
+      doneTasks.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TaskRow, { t, today, onToggle: () => mut((j) => ({ ...j, tasks: j.tasks.map((x) => x.id === t.id ? { ...x, done: !x.done } : x) })) }, t.id))
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -6472,16 +6687,6 @@ function ShingleFinder() {
     return true;
   }), [q, mfr, status, type]);
   const dim = (n) => n ? String(n).replace(/\.0$/, "") + '"' : "\u2014";
-  const Seg = ({ opts, val, set }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: opts.map((o) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => set(o.v), style: {
-    border: `1.5px solid ${val === o.v ? T.accent : S.line}`,
-    background: val === o.v ? T.accentSoft : "#fff",
-    color: val === o.v ? T.accent : S.ink,
-    borderRadius: 999,
-    padding: "7px 13px",
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer"
-  }, children: o.l }, o.v)) });
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Width tells you almost everything" }),
@@ -6964,6 +7169,30 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
     ] }) })
   ] });
 }
+function Seg({ opts, val, set }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: opts.map((o) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => set(o.v), style: {
+    border: `1.5px solid ${val === o.v ? T.accent : S.line}`,
+    background: val === o.v ? T.accentSoft : "#fff",
+    color: val === o.v ? T.accent : S.ink,
+    borderRadius: 999,
+    padding: "7px 13px",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer"
+  }, children: o.l }, o.v)) });
+}
+function Toggle({ on, onClick }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick, style: {
+    width: 46,
+    height: 27,
+    borderRadius: 99,
+    border: "none",
+    cursor: "pointer",
+    background: on ? T.accent : "#D6D9DE",
+    position: "relative",
+    flexShrink: 0
+  }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" } }) });
+}
 function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFromReviews, mut, toast }) {
   const [rating, setRating] = (0, import_react.useState)({});
   const [fbOpen, setFbOpen] = (0, import_react.useState)(null);
@@ -6979,16 +7208,6 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
   const sent = jobs.filter((j) => j.review.sent);
   const posted = jobs.filter((j) => j.review.posted);
   const set = (k) => (v) => setSettings({ ...settings, [k]: v });
-  const Toggle = ({ on, onClick }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick, style: {
-    width: 46,
-    height: 27,
-    borderRadius: 99,
-    border: "none",
-    cursor: "pointer",
-    background: on ? T.accent : "#D6D9DE",
-    position: "relative",
-    flexShrink: 0
-  }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" } }) });
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Review automation", onBack }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
@@ -7241,7 +7460,11 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
     setTagged(null);
   };
   const insert = (frag) => {
-    setTxt((prev) => (prev ? prev.replace(/\s?$/, " ") : "") + frag + " ");
+    setTxt((prev) => {
+      const at = prev.lastIndexOf("@");
+      if (at >= 0 && !prev.slice(at + 1).includes(" ")) return prev.slice(0, at) + frag + " ";
+      return (prev ? prev.replace(/\s?$/, " ") : "") + frag + " ";
+    });
     if (inputRef.current) inputRef.current.focus();
   };
   const renderText = (t) => t.split(/(@[A-Z][a-zA-Z]+ [A-Z][a-zA-Z]+)/g).map((part, i2) => part.startsWith("@") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { style: { color: T.accent }, children: part }, i2) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: part }, i2));
@@ -7331,7 +7554,12 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
             style: { ...inputStyle, flex: 1, minHeight: 42, maxHeight: 110, resize: "none", fontFamily: "inherit" },
             value: txt,
             placeholder: "Message the team\u2026",
-            onChange: (e) => setTxt(e.target.value),
+            onChange: (e) => {
+              const v = e.target.value;
+              setTxt(v);
+              const tail = v.slice(v.lastIndexOf("@") + 1);
+              setMentionOpen(v.includes("@") && !tail.includes(" ") && v.lastIndexOf("@") >= v.length - 20);
+            },
             onKeyDown: (e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -7462,7 +7690,7 @@ function VendorManager({ vendors, setVendors, currentUser, onBack, toast }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Company name *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.name, onChange: (e) => setF({ ...f, name: e.target.value }) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Rep / contact", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.contact, onChange: (e) => setF({ ...f, contact: e.target.value }) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.phone, onChange: (e) => setF({ ...f, phone: e.target.value }) }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.phone, inputMode: "tel", onChange: (e) => setF({ ...f, phone: formatPhone(e.target.value) }) }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: f.email, onChange: (e) => setF({ ...f, email: e.target.value }) }) })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Account number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.account, onChange: (e) => setF({ ...f, account: e.target.value }) }) }),
@@ -7504,7 +7732,8 @@ function LeadSourceManager({ sources, setSources, jobs, onBack, toast }) {
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { onClick: add, disabled: !draft.trim(), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }) })
-      ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "Use the arrows to set the order reps see. Lead source is required on every new lead \u2014 the form won't submit without one, so your Performance numbers stay honest." })
     ] }),
     sources.map((src, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 13, style: { marginTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
@@ -7516,17 +7745,47 @@ function LeadSourceManager({ sources, setSources, jobs, onBack, toast }) {
           " tagged"
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "button",
-        {
-          onClick: () => {
-            setSources(sources.filter((x) => x !== src));
-            toast("Source removed");
-          },
-          style: { border: "none", background: "none", cursor: "pointer" },
-          children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 16, color: "#B42318" })
-        }
-      )
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Btn,
+          {
+            kind: "ghost",
+            small: true,
+            disabled: i2 === 0,
+            onClick: () => {
+              const a = [...sources];
+              [a[i2 - 1], a[i2]] = [a[i2], a[i2 - 1]];
+              setSources(a);
+            },
+            children: "\u2191"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Btn,
+          {
+            kind: "ghost",
+            small: true,
+            disabled: i2 === sources.length - 1,
+            onClick: () => {
+              const a = [...sources];
+              [a[i2 + 1], a[i2]] = [a[i2], a[i2 + 1]];
+              setSources(a);
+            },
+            children: "\u2193"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            onClick: () => {
+              setSources(sources.filter((x) => x !== src));
+              toast("Source removed");
+            },
+            style: { border: "none", background: "none", cursor: "pointer" },
+            children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 16, color: "#B42318" })
+          }
+        )
+      ] })
     ] }) }, src))
   ] });
 }
@@ -7601,9 +7860,10 @@ function BrandingEditor({ brand, setBrand, onBack, toast }) {
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Label", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: l.label, onChange: (e) => setLoc(i, "label", e.target.value), placeholder: "Cincinnati office" }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Office phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: l.phone, onChange: (e) => setLoc(i, "phone", e.target.value) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Address", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: l.address, onChange: (e) => setLoc(i, "address", e.target.value) }) })
-        ] })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Office phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: l.phone, inputMode: "tel", onChange: (e) => setLoc(i, "phone", formatPhone(e.target.value)) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Office email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: l.email || "", onChange: (e) => setLoc(i, "email", e.target.value) }) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Address", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: l.address, onChange: (e) => setLoc(i, "address", e.target.value) }) })
       ] }, l.id))
     ] })
   ] });
@@ -7963,7 +8223,7 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Item *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: ef.item, onChange: efSet("item") }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "SKU", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: ef.sku, onChange: efSet("sku") }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Unit", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: ef.unit, onChange: efSet("unit") }) })
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Unit", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: ef.unit, onChange: efSet("unit"), children: UNIT_TYPES.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: u }, u)) }) })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Cost", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "number", step: "0.01", value: ef.cost, onChange: efSet("cost") }) }),
@@ -8192,6 +8452,16 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const [f, setF] = (0, import_react.useState)(blank);
   const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
   const TRADES = ["Roofing", "Siding", "Gutters", "Metal", "Flashing", "Windows", "Carpentry"];
+  const [customTrade, setCustomTrade] = (0, import_react.useState)("");
+  const [range, setRange] = (0, import_react.useState)("all");
+  const docRef = (0, import_react.useRef)(null);
+  const paidFor = (crewId) => {
+    const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 864e5;
+    return jobs.filter((j) => j.crewId === crewId).reduce((sum, j) => {
+      const lines = j.financials && j.financials.costLines || [];
+      return sum + lines.filter((l) => /labor|crew|install|sub/i.test(l.label || "")).filter((l) => !l.at || new Date(l.at).getTime() >= cutoff).reduce((t, l) => t + num(l.amt), 0);
+    }, 0);
+  };
   const open = (c) => {
     setEditing(c || "new");
     setF(c ? { ...c } : blank);
@@ -8214,6 +8484,18 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
         ] })
       }
     ),
+    canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, pad: 13, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.sub }, children: "Paid totals:" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: { ...selStyle, flex: 1 }, value: range, onChange: (e) => setRange(e.target.value), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "all", children: "All time" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "30", children: "Last 30 days" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "90", children: "Last 90 days" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "365", children: "Last 12 months" })
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 7, lineHeight: 1.5 }, children: "Totals come from labor and subcontractor lines on each crew's jobs in the Financials tab." })
+    ] }),
     crews.map((c) => {
       const assigned = jobs.filter((j) => j.crewId === c.id).length;
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 15, style: { marginTop: 10, opacity: c.active ? 1 : 0.6 }, children: [
@@ -8242,6 +8524,15 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             assigned,
             " job",
             assigned === 1 ? "" : "s"
+          ] }),
+          canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "green", children: [
+            money(paidFor(c.id)),
+            " paid"
+          ] }),
+          (c.docs || []).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "gray", children: [
+            (c.docs || []).length,
+            " doc",
+            (c.docs || []).length === 1 ? "" : "s"
           ] })
         ] }),
         canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
@@ -8273,34 +8564,104 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Crew / company name *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.name, onChange: (e) => setF({ ...f, name: e.target.value }) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Primary contact", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.contact, onChange: (e) => setF({ ...f, contact: e.target.value }) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.phone, onChange: (e) => setF({ ...f, phone: e.target.value }) }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.phone, inputMode: "tel", onChange: (e) => setF({ ...f, phone: formatPhone(e.target.value) }) }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: f.email, onChange: (e) => setF({ ...f, email: e.target.value }) }) })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Trades", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 7 }, children: TRADES.map((t) => {
-            const on = f.trades.includes(t);
-            return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-              "button",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Documents", hint: "Certificates of insurance, W-9s, licenses \u2014 anything you need on file.", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
               {
-                type: "button",
-                onClick: () => setF({ ...f, trades: on ? f.trades.filter((x) => x !== t) : [...f.trades, t] }),
-                style: {
-                  border: `1.5px solid ${on ? T.accent : S.line}`,
-                  background: on ? T.accentSoft : "#fff",
-                  color: on ? T.accent : S.ink,
-                  borderRadius: 999,
-                  padding: "7px 13px",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: "pointer"
+                ref: docRef,
+                type: "file",
+                style: { display: "none" },
+                onChange: (e) => {
+                  const file = e.target.files && e.target.files[0];
+                  if (!file) return;
+                  setF({ ...f, docs: [...f.docs || [], { id: uid("cd"), name: file.name, at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) }] });
+                  e.target.value = "";
+                }
+              }
+            ),
+            (f.docs || []).map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${S.line}` }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5 }, children: [
+                d.name,
+                " ",
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub, fontSize: 12 }, children: [
+                  "\xB7 ",
+                  d.at
+                ] })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "button",
+                {
+                  onClick: () => setF({ ...f, docs: (f.docs || []).filter((x) => x.id !== d.id) }),
+                  style: { border: "none", background: "none", cursor: "pointer" },
+                  children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14, color: "#B42318" })
+                }
+              )
+            ] }, d.id)),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { marginTop: 8 }, onClick: () => docRef.current && docRef.current.click(), children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
+              " Add document"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Trades", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginBottom: 9 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "input",
+                {
+                  style: { ...inputStyle, flex: 1 },
+                  value: customTrade,
+                  placeholder: "Add a custom trade\u2026",
+                  onChange: (e) => setCustomTrade(e.target.value),
+                  onKeyDown: (e) => {
+                    if (e.key === "Enter" && customTrade.trim()) {
+                      setF({ ...f, trades: [.../* @__PURE__ */ new Set([...f.trades, customTrade.trim()])] });
+                      setCustomTrade("");
+                    }
+                  }
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                Btn,
+                {
+                  kind: "ghost",
+                  small: true,
+                  disabled: !customTrade.trim(),
+                  onClick: () => {
+                    setF({ ...f, trades: [.../* @__PURE__ */ new Set([...f.trades, customTrade.trim()])] });
+                    setCustomTrade("");
+                  },
+                  children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 })
+                }
+              )
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 7 }, children: [.../* @__PURE__ */ new Set([...TRADES, ...f.trades])].map((t) => {
+              const on = f.trades.includes(t);
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                "button",
+                {
+                  type: "button",
+                  onClick: () => setF({ ...f, trades: on ? f.trades.filter((x) => x !== t) : [...f.trades, t] }),
+                  style: {
+                    border: `1.5px solid ${on ? T.accent : S.line}`,
+                    background: on ? T.accentSoft : "#fff",
+                    color: on ? T.accent : S.ink,
+                    borderRadius: 999,
+                    padding: "7px 13px",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer"
+                  },
+                  children: [
+                    on ? "\u2713 " : "",
+                    t
+                  ]
                 },
-                children: [
-                  on ? "\u2713 " : "",
-                  t
-                ]
-              },
-              t
-            );
-          }) }) })
+                t
+              );
+            }) })
+          ] })
         ]
       }
     )
@@ -8337,7 +8698,42 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
         )
       ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.55 }, children: "Connect your own mailbox. Your customers get email from you, not a generic office address, and replies land where you'll actually see them." }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "What this needs to go live", children: "Google OAuth requires a client secret, which can't live in the browser. The company sets up one Google Cloud project (consent screen + Gmail API) and one Supabase Edge Function for the token exchange \u2014 then every rep's Connect button does the real Google sign-in. Until that function is deployed, connecting here records your account so everything is configured and ready." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "How connecting works", children: "Two parts. The office does a one-time setup; after that every rep just taps Connect and signs in with Google like any other app." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12, fontSize: 13, lineHeight: 1.65, color: S.ink }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontWeight: 800, fontSize: 12.5, color: S.sub, marginBottom: 6 }, children: "ONE-TIME, BY THE OFFICE" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 5 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "1." }),
+            " Go to console.cloud.google.com and create a project named Ridgeline."
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 5 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "2." }),
+            ' APIs & Services \u2192 Library \u2192 search "Gmail API" \u2192 Enable.'
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 5 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "3." }),
+            " OAuth consent screen \u2192 choose Internal if you use Google Workspace (recommended \u2014 no Google review needed), otherwise External. Fill in the app name and your support email."
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 5 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "4." }),
+            " Credentials \u2192 Create credentials \u2192 OAuth client ID \u2192 Web application. Under Authorized redirect URIs, add this app's address followed by ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "/auth/gmail" }),
+            "."
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 5 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "5." }),
+            " Copy the Client ID and Client Secret, then send them over so the token-exchange function can be deployed. The secret must live on the server \u2014 never in the app."
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontWeight: 800, fontSize: 12.5, color: S.sub, margin: "12px 0 6px" }, children: "THEN, EACH REP" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 5 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "6." }),
+            " Open this screen and tap Connect my Gmail."
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 5 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "7." }),
+            ' Pick your work Google account and approve the "send email on your behalf" permission.'
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: "That's it \u2014 customer emails then send from your address and replies land in your own inbox." })
+        ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%", marginTop: 12 }, onClick: () => setConnecting("gmail"), children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Mail, { size: 15 }),
           " Connect my Gmail"
@@ -8798,7 +9194,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
           seatErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Could not save", tone: "red", children: seatErr }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Full name *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.name, onChange: set("name") }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Work email *", hint: emailTaken ? "That email already has a seat." : "This is their login. An invite to set a password goes here.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, borderColor: emailTaken ? "#B42318" : S.line }, type: "email", value: f.email, onChange: set("email") }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Mobile", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.phone, onChange: set("phone") }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Mobile", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.phone, inputMode: "tel", onChange: (e) => setF((p2) => ({ ...p2, phone: formatPhone(e.target.value) })) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Role", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: f.role, onChange: (e) => {
             const r = ROLES.find((x) => x.id === e.target.value);
             setF((p) => ({ ...p, role: r.id, title: r.label }));
@@ -8809,7 +9205,10 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Head office" }),
             (brand.locations || []).map((l) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: l.id, children: l.label || l.address }, l.id))
           ] }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Direct phone (shown on this rep's documents)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.repPhone || "", onChange: (e) => setF((p2) => ({ ...p2, repPhone: e.target.value })) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Direct phone", hint: "Shows on this rep's documents.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.repPhone || "", inputMode: "tel", onChange: (e) => setF((p2) => ({ ...p2, repPhone: formatPhone(e.target.value) })) }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Work email", hint: "Used on their documents; falls back to the office address.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: f.workEmail || "", onChange: (e) => setF((p2) => ({ ...p2, workEmail: e.target.value })) }) })
+          ] }),
           f.role !== "crew" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Default commission rate (%)", hint: "Starting rate on new jobs. Can be changed per job by an admin.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             "input",
             {
@@ -8830,6 +9229,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
 }
 function MoreMenu({ onNav, onLogout, brand, currentUser }) {
   const items = [
+    ["announcements", import_lucide_react.Megaphone, "Company announcements", "Posted to everyone's home screen"],
     ["activity", import_lucide_react.ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
     ["chat", import_lucide_react.MessageCircle, "Team chat", "Talk to the team \u2014 @ someone, tag a job"],
     ["insurance", import_lucide_react.Shield, "Insurance", "Clients, supplements, code lookup"],
@@ -9250,6 +9650,7 @@ function SupremeCRM() {
   const [estimateTemplates, setEstimateTemplates] = (0, import_react.useState)([]);
   const [activity, setActivity] = (0, import_react.useState)([]);
   const [chatMsgs, setChatMsgs] = (0, import_react.useState)([]);
+  const [announcements, setAnnouncements] = (0, import_react.useState)([]);
   const [chatSeenCount, setChatSeenCount] = (0, import_react.useState)(0);
   const [apptTypes, setApptTypes] = (0, import_react.useState)(["Inspection", "Adjuster meeting", "Estimate presentation", "Production start", "Final walkthrough"]);
   const [integrations, setIntegrations] = (0, import_react.useState)({
@@ -9278,8 +9679,9 @@ function SupremeCRM() {
     followUpDays: 3,
     template: "Hi {first_name}, thank you for trusting {company} with your home! If we earned it, a quick Google review means the world to our small team: {review_link}"
   });
-  const orgDeps = [stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings];
+  const orgDeps = [announcements, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings];
   const orgPack = () => ({
+    announcements,
     stages,
     leadSources,
     apptTypes,
@@ -9293,6 +9695,7 @@ function SupremeCRM() {
     version: 1
   });
   const unpackOrg = (d) => {
+    if (d.announcements) setAnnouncements(d.announcements);
     if (d.stages) setStages(d.stages);
     if (d.leadSources) setLeadSources(d.leadSources);
     if (d.apptTypes) setApptTypes(d.apptTypes);
@@ -9549,6 +9952,7 @@ function SupremeCRM() {
       }
     ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       liveDb() && jobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { margin: "14px 16px 0", background: "#EAF6EE", border: "1px solid #CDE8D6", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "#177245", lineHeight: 1.5 }, children: "Fresh database \u2014 no demo customers here. Everything you create now saves for real. Have a Roofr export? More \u2192 Import jobs pulls your whole pipeline in." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { paddingTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AnnouncementBar, { announcements }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         Dashboard,
         {
@@ -9617,6 +10021,15 @@ function SupremeCRM() {
         brand,
         setBrandFromReviews: setBrand,
         mut: mutJob,
+        toast
+      }
+    ) : nav === "announcements" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      AnnouncementManager,
+      {
+        announcements,
+        setAnnouncements,
+        currentUser: liveUser,
+        onBack: () => setNav("more"),
         toast
       }
     ) : nav === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActivityFeed, { activity, currentUser: liveUser, onOpenJob: openJobScreen, onBack: () => setNav("more") }) : nav === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
