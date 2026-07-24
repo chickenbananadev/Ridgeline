@@ -831,6 +831,51 @@ const DEFAULT_STAGES = [
   { id: "s11", name: "Lost", cat: "Lost" },
   { id: "s12", name: "Unqualified", cat: "Unqualified" },
 ];
+/* Retail, insurance and commercial run different plays. Each path is
+   an ordered list of the tasks that job type actually works through;
+   completing one offers the next. Kept deliberately human — these are
+   the steps a rep would tick off, not internal stage ids. */
+const JOB_TYPES = ["Retail", "Insurance", "Commercial"];
+const JOB_PATHS = {
+  Retail: [
+    "Schedule inspection", "Complete inspection", "Build estimate",
+    "Present estimate to homeowner", "Collect signed contract",
+    "Collect deposit", "Order materials", "Schedule installation",
+    "Complete installation", "Final walkthrough", "Collect final payment",
+    "Request review",
+  ],
+  Insurance: [
+    "Schedule inspection", "Complete inspection", "Document damage with photos",
+    "File claim with carrier", "Meet adjuster on site", "Receive carrier scope",
+    "Review scope for shortfalls", "Submit supplement", "Collect signed contract",
+    "Collect ACV / deposit", "Order materials", "Schedule installation",
+    "Complete installation", "Submit certificate of completion",
+    "Collect depreciation & deductible", "Request review",
+  ],
+  Commercial: [
+    "Site assessment", "Take measurements", "Build scope of work",
+    "Submit proposal / bid", "Contract & insurance certs", "Pre-construction meeting",
+    "Pull permits", "Order materials", "Mobilize crew", "Complete installation",
+    "Punch list", "Final inspection", "Submit closeout documents", "Collect final payment",
+  ],
+};
+function jobPathFor(job) {
+  const t = (job && job.claimType) || "Retail";
+  return JOB_PATHS[t] || JOB_PATHS.Retail;
+}
+/* Given the task just completed, the next step on the path that is not
+   already an open or done task on the job. */
+function nextStepAfter(job, completedLabel) {
+  const path = jobPathFor(job);
+  const idx = path.findIndex((step) => step.toLowerCase() === String(completedLabel || "").trim().toLowerCase());
+  if (idx === -1 || idx === path.length - 1) return null;
+  const existing = new Set((job.tasks || []).map((t) => String(t.label || "").toLowerCase()));
+  for (let i = idx + 1; i < path.length; i++) {
+    if (!existing.has(path[i].toLowerCase())) return path[i];
+  }
+  return null;
+}
+
 const WON_STAGES = ["s5", "s6", "s7", "s8", "s9", "s10"];
 const DEAD_STAGES = ["s11", "s12"];
 
@@ -2908,6 +2953,12 @@ function SubHeader({ title, onBack, right }) {
 const CALENDAR_VIEWS = [
   ["all", "All"], ["sales", "Sales"], ["production", "Production"], ["issues", "Issues"], ["delivery", "Delivery"],
 ];
+function fmtClock(t) {
+  if (!t || !String(t).includes(":")) return t || "";
+  const [h, m] = String(t).split(":").map(Number);
+  const ap = h >= 12 ? "PM" : "AM";
+  return `${((h + 11) % 12) + 1}:${String(m || 0).padStart(2, "0")} ${ap}`;
+}
 function categoryForAppointment(type) {
   const value = String(type || "").toLowerCase();
   if (/deliver|material|dump|trailer|pickup/.test(value)) return "delivery";
@@ -2925,6 +2976,14 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   const today = new Date();
   const [month, setMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [view, setView] = useState("all");
+  const [mode, setMode] = useState("month"); // month | week
+  const [selDay, setSelDay] = useState(null); // ISO string of the tapped day
+  /* Monday-based start of the week containing `month`'s cursor / today. */
+  const [weekStart, setWeekStart] = useState(() => {
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d;
+  });
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [f, setF] = useState({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "", assignedTo: "", durationMin: 60, status: "Scheduled" });
@@ -3037,7 +3096,16 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
         <SubHeader title="Calendar" onBack={onBack}
           right={<Btn small onClick={() => openAdd(null)}><Plus size={14} /> Add</Btn>} />
       )}
-      <div style={{ display: "flex", gap: 7, overflowX: "auto", marginTop: 12, paddingBottom: 2 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        {[["month", "Month"], ["week", "Week"]].map(([id, label]) => (
+          <button key={id} onClick={() => setMode(id)} style={{
+            flex: 1, border: `1.5px solid ${mode === id ? T.accent : S.line}`,
+            background: mode === id ? T.accentSoft : "#fff", color: mode === id ? T.accent : S.ink,
+            borderRadius: 999, padding: "8px 12px", fontSize: 13, fontWeight: 800, cursor: "pointer",
+          }}>{label}</button>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 7, overflowX: "auto", marginTop: 10, paddingBottom: 2 }}>
         {CALENDAR_VIEWS.map(([id, label]) => (
           <button key={id} onClick={() => setView(id)} style={{
             border: `1.5px solid ${view === id ? T.accent : S.line}`,
@@ -3046,44 +3114,125 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
           }}>{label}</button>
         ))}
       </div>
-      <Card style={{ marginTop: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <button onClick={() => setMonth(new Date(y, m - 1, 1))} style={{ border: "none", background: "none", cursor: "pointer" }}><ChevronLeft size={18} /></button>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>{month.toLocaleString("en-US", { month: "long", year: "numeric" })}</div>
-          <button onClick={() => setMonth(new Date(y, m + 1, 1))} style={{ border: "none", background: "none", cursor: "pointer" }}><ChevronRight size={18} /></button>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
-          {["S", "M", "T", "W", "T", "F", "S"].map((d, i2) => (
-            <div key={i2} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: S.sub, padding: "4px 0" }}>{d}</div>
-          ))}
-          {Array.from({ length: firstDow }).map((_, i2) => <div key={`b${i2}`} />)}
-          {Array.from({ length: daysInMonth }).map((_, i2) => {
-            const d = i2 + 1;
-            const hasJob = jobsOn(d).length > 0;
-            const hasAppt = apptsOn(d).length > 0;
-            const isToday = today.getFullYear() === y && today.getMonth() === m && today.getDate() === d;
-            return (
-              <div key={d} onClick={() => openAdd(iso(d))} role="button" style={{
-                textAlign: "center", padding: "7px 0 4px", borderRadius: 8, fontSize: 13, cursor: "pointer",
-                background: isToday ? T.accentSoft : "transparent",
-                fontWeight: isToday ? 800 : 500, color: isToday ? T.accent : S.ink,
-              }}>
-                {d}
-                <div style={{ display: "flex", gap: 3, justifyContent: "center", height: 6, marginTop: 2 }}>
-                  {hasJob && <span style={{ width: 5, height: 5, borderRadius: 99, background: T.accent }} />}
-                  {hasAppt && <span style={{ width: 5, height: 5, borderRadius: 99, background: "#92600A" }} />}
-                  {tasksOn(d).length > 0 && <span style={{ width: 5, height: 5, borderRadius: 99, background: "#177245" }} />}
-                </div>
+      {(() => {
+        /* Dots and the tap target both key off an ISO date, so month
+           and week share the same cell renderer. Tapping selects the
+           day and opens the detail panel; the + on the panel adds. */
+        const isoStr = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+        const dotsFor = (isoDate) => {
+          const dd = Number(isoDate.slice(-2));
+          const hasJob = ((view === "all" || view === "production") ? jobs.filter((j) => j.schedDate === isoDate) : []).length > 0;
+          const hasAppt = visibleAppointments.some((ap) => ap.date === isoDate);
+          const hasTask = visibleTasks.some(({ task }) => task.due === isoDate);
+          return { hasJob, hasAppt, hasTask };
+        };
+        const Cell = ({ isoDate, label, dim, small }) => {
+          const { hasJob, hasAppt, hasTask } = dotsFor(isoDate);
+          const isToday = isoDate === isoStr(today);
+          const isSel = selDay === isoDate;
+          return (
+            <div onClick={() => setSelDay(isSel ? null : isoDate)} role="button" style={{
+              textAlign: "center", padding: small ? "10px 0 6px" : "7px 0 4px", borderRadius: 8,
+              fontSize: 13, cursor: "pointer",
+              background: isSel ? T.accent : isToday ? T.accentSoft : "transparent",
+              fontWeight: isToday || isSel ? 800 : 500,
+              color: isSel ? "#fff" : dim ? "#C7CBD1" : isToday ? T.accent : S.ink,
+            }}>
+              {label}
+              <div style={{ display: "flex", gap: 3, justifyContent: "center", height: 6, marginTop: 2 }}>
+                {hasJob && <span style={{ width: 5, height: 5, borderRadius: 99, background: isSel ? "#fff" : T.accent }} />}
+                {hasAppt && <span style={{ width: 5, height: 5, borderRadius: 99, background: isSel ? "#fff" : "#92600A" }} />}
+                {hasTask && <span style={{ width: 5, height: 5, borderRadius: 99, background: isSel ? "#fff" : "#177245" }} />}
               </div>
-            );
-          })}
-        </div>
-        <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 11.5, color: S.sub }}>
-          <span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: T.accent, marginRight: 5 }} />Production</span>
-          <span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: "#92600A", marginRight: 5 }} />Appointment</span>
-          <span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: "#177245", marginRight: 5 }} />Task due</span>
-        </div>
-      </Card>
+            </div>
+          );
+        };
+        const weekDays = [...Array(7)].map((_, i) => { const dt = new Date(weekStart); dt.setDate(dt.getDate() + i); return dt; });
+        return (
+          <Card style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <button onClick={() => mode === "month" ? setMonth(new Date(y, m - 1, 1)) : setWeekStart((w) => { const d = new Date(w); d.setDate(d.getDate() - 7); return d; })}
+                style={{ border: "none", background: "none", cursor: "pointer" }}><ChevronLeft size={18} /></button>
+              <div style={{ fontSize: 16, fontWeight: 800 }}>
+                {mode === "month"
+                  ? month.toLocaleString("en-US", { month: "long", year: "numeric" })
+                  : `${weekDays[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${weekDays[6].toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}
+              </div>
+              <button onClick={() => mode === "month" ? setMonth(new Date(y, m + 1, 1)) : setWeekStart((w) => { const d = new Date(w); d.setDate(d.getDate() + 7); return d; })}
+                style={{ border: "none", background: "none", cursor: "pointer" }}><ChevronRight size={18} /></button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+              {["M", "T", "W", "T", "F", "S", "S"].map((d, i2) => (
+                <div key={i2} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: S.sub, padding: "4px 0" }}>{d}</div>
+              ))}
+              {mode === "month" ? (
+                <>
+                  {Array.from({ length: (firstDow + 6) % 7 }).map((_, i2) => <div key={`b${i2}`} />)}
+                  {Array.from({ length: daysInMonth }).map((_, i2) => (
+                    <Cell key={i2 + 1} isoDate={iso(i2 + 1)} label={i2 + 1} />
+                  ))}
+                </>
+              ) : (
+                weekDays.map((dt) => <Cell key={isoStr(dt)} isoDate={isoStr(dt)} label={dt.getDate()} small dim={dt.getMonth() !== m && mode === "month"} />)
+              )}
+            </div>
+            <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 11.5, color: S.sub }}>
+              <span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: T.accent, marginRight: 5 }} />Production</span>
+              <span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: "#92600A", marginRight: 5 }} />Appointment</span>
+              <span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: "#177245", marginRight: 5 }} />Task due</span>
+            </div>
+
+            {selDay && (() => {
+              const dayNum = Number(selDay.slice(-2));
+              const dayAppts = visibleAppointments.filter((ap) => ap.date === selDay);
+              const dayJobs = (view === "all" || view === "production") ? jobs.filter((j) => j.schedDate === selDay) : [];
+              const dayTasks = visibleTasks.filter(({ task }) => task.due === selDay);
+              const pretty = new Date(selDay + "T00:00:00").toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+              const nothing = !dayAppts.length && !dayJobs.length && !dayTasks.length;
+              return (
+                <div style={{ marginTop: 14, borderTop: `1px solid ${S.line}`, paddingTop: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: S.ink }}>{pretty}</span>
+                    <Btn small kind="ghost" onClick={() => openAdd(selDay)}><Plus size={13} /> Add</Btn>
+                  </div>
+                  {nothing && <div style={{ fontSize: 13, color: S.sub }}>Nothing scheduled. Tap Add to book something.</div>}
+                  {dayAppts.map((ap) => {
+                    const j = jobOf(ap.jobId);
+                    const cat = ap.category || categoryForAppointment(ap.type);
+                    return (
+                      <button key={ap.id} onClick={() => openEdit(ap)} style={{ display: "flex", gap: 9, alignItems: "center", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 99, flexShrink: 0, background: cat === "issues" ? "#B42318" : cat === "delivery" ? "#92600A" : cat === "production" ? "#177245" : T.accent }} />
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }}>{ap.type}{j ? ` — ${j.name}` : ""}</span>
+                          <span style={{ fontSize: 11.5, color: S.sub }}>{ap.time ? fmtClock(ap.time) : "All day"}{ap.durationMin ? ` · ${ap.durationMin} min` : ""}{ap.assignedTo ? ` · ${ap.assignedTo}` : ""}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {dayJobs.map((j) => (
+                    <button key={j.id} onClick={() => onOpenJob(j.id)} style={{ display: "flex", gap: 9, alignItems: "center", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 99, flexShrink: 0, background: T.accent }} />
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }}>Install — {j.name}</span>
+                        <span style={{ fontSize: 11.5, color: S.sub }}>{j.address}</span>
+                      </span>
+                    </button>
+                  ))}
+                  {dayTasks.map(({ job: j, task: t }) => (
+                    <button key={t.id} onClick={() => onOpenJob(j.id)} style={{ display: "flex", gap: 9, alignItems: "center", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 99, flexShrink: 0, background: "#177245" }} />
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }}>Task — {t.label}</span>
+                        <span style={{ fontSize: 11.5, color: S.sub }}>{j.name}{t.time ? ` · by ${fmtClock(t.time)}` : ""}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
+          </Card>
+        );
+      })()}
 
       <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, margin: "16px 0 8px" }}>THIS MONTH</div>
       {monthAppts.map((ap) => {
@@ -3628,7 +3777,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
       </div>
       <Field label="Claim type *">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {["Insurance", "Retail", "Unknown"].map((c) => (
+          {["Insurance", "Retail", "Commercial", "Unknown"].map((c) => (
             <button key={c} onClick={() => setF({ ...f, claimType: c })} style={{
               border: `1.5px solid ${f.claimType === c ? T.accent : S.line}`,
               background: f.claimType === c ? T.accentSoft : "#fff",
@@ -4193,8 +4342,10 @@ const JOB_TAB_GROUPS = [
 ];
 
 function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [], ccToken = null,
-  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [] }) {
+  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null }) {
   const [tab, setTab] = useState("overview");
+  const [delOpen, setDelOpen] = useState(false);
+  const [delTyped, setDelTyped] = useState("");
   const MONEY_TABS = ["estimate", "contract", "financials", "payments", "invoice"];
   const visibleTabs = JOB_TABS.filter(([id]) => showMoney || !MONEY_TABS.includes(id));
   useEffect(() => {
@@ -4207,7 +4358,18 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
       <div style={{ background: "#fff", borderBottom: `1px solid ${S.line}` }}>
         <div style={{ padding: "16px 16px 0" }}>
           <SubHeader title={job.name} onBack={onBack}
-            right={<Chip tone="blue">{stage ? stage.name : "—"}</Chip>} />
+            right={
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <Chip tone="blue">{stage ? stage.name : "—"}</Chip>
+                {isAdmin && onDelete && (
+                  <button aria-label="Delete job" onClick={() => { setDelTyped(""); setDelOpen(true); }}
+                    style={{ border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
+                      width: 34, height: 34, display: "grid", placeItems: "center", cursor: "pointer", color: "#B3261E" }}>
+                    <Trash2 size={15} />
+                  </button>
+                )}
+              </div>
+            } />
           <div style={{ fontSize: 13, color: S.sub, margin: "8px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>
             <MapPin size={13} /> {job.address}
           </div>
@@ -4260,6 +4422,25 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           );
         })()}
       </div>
+      <Sheet open={delOpen} onClose={() => { setDelOpen(false); setDelTyped(""); }} title="Delete job"
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={() => { setDelOpen(false); setDelTyped(""); }}>Cancel</Btn>
+            <Btn data-testid="confirm-delete-job" style={{ flex: 1, background: "#B3261E", borderColor: "#B3261E" }}
+              disabled={delTyped.trim().toUpperCase() !== "DELETE"}
+              onClick={() => { onDelete(job.id, job.name); setDelOpen(false); setDelTyped(""); }}>Delete</Btn>
+          </div>
+        }>
+        <Callout label="This cannot be undone" tone="red">
+          Deleting {job.name} removes the job and every note, photo, estimate,
+          contract, task and message on it. A published customer portal for it
+          stops working immediately.
+        </Callout>
+        <Field label="Type DELETE to confirm" hint="Deliberately awkward — this is permanent.">
+          <input style={inputStyle} value={delTyped} onChange={(e) => setDelTyped(e.target.value)}
+            autoCapitalize="characters" placeholder="DELETE" />
+        </Field>
+      </Sheet>
       <div style={{ padding: 16 }}>
         {tab === "overview" && <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand}
           currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} />}
@@ -4279,7 +4460,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
         {tab === "invoice" && <TabInvoice job={job} brand={brand} mut={mut} toast={toast} />}
         {tab === "workorder" && <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
           crews={crews} templates={templates} currentUser={currentUser} users={users} />}
-        {tab === "tasks" && <TabTasks job={job} mut={mut} />}
+        {tab === "tasks" && <TabTasks job={job} mut={mut} toast={toast} />}
         {tab === "files" && <TabFiles job={job} mut={mut} toast={toast} />}
         {tab === "portal" && <TabPortal job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser}
           stageLabel={(stages.find((stage) => stage.id === job.stageId) || {}).name || ""} />}
@@ -4348,6 +4529,10 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
               onChange={(e) => mut((j) => ({ ...j, referredBy: e.target.value }))} />
           </Field>
         </div>
+        <Field label="Job type" hint="Sets which task pathway this job follows.">
+          <PillGroup options={["Retail", "Insurance", "Commercial", "Unknown"]} value={job.claimType}
+            onPick={(v) => { mut((j) => ({ ...j, claimType: v })); onLog({ kind: "lead", jobId: job.id, jobName: job.name, text: `set ${job.name} to ${v} path` }); }} />
+        </Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Priority">
             <select style={selStyle} value={job.priority || ""} onChange={(e) => {
@@ -8376,23 +8561,54 @@ function TaskRow({ t, today, onToggle }) {
   );
 }
 
-function TabTasks({ job, mut }) {
+function TabTasks({ job, mut, toast }) {
   const [txt, setTxt] = useState("");
   const [due, setDue] = useState("");
   const [time, setTime] = useState("");
+  const [suggest, setSuggest] = useState(null); // { label } proposed next step
   const today = new Date().toISOString().slice(0, 10);
   const openTasks = job.tasks.filter((t) => !t.done);
   const doneTasks = job.tasks.filter((t) => t.done);
+
+  /* Completing a task both marks it done and, if the job's path has a
+     next step that is not already on the board, offers to add it.
+     Offered, not forced — a rep may skip a step, and silently spawning
+     tasks would train people to ignore the list. */
+  const toggle = (t) => {
+    const becomingDone = !t.done;
+    mut((j) => ({ ...j, tasks: j.tasks.map((x) => x.id === t.id ? { ...x, done: !x.done, doneAt: !x.done ? new Date().toISOString().slice(0, 16).replace("T", " ") : null } : x) }));
+    if (becomingDone) {
+      const next = nextStepAfter(job, t.label);
+      if (next) setSuggest({ label: next });
+    }
+  };
+  const addSuggested = () => {
+    if (!suggest) return;
+    mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: suggest.label, done: false, due: null, time: null, auto: true }] }));
+    toast && toast("Next step added");
+    setSuggest(null);
+  };
+
   return (
     <Card>
-      <CardTitle>Project tasks</CardTitle>
+      <CardTitle right={<Chip tone="gray">{(job.claimType || "Retail")} path</Chip>}>Project tasks</CardTitle>
+      {suggest && (
+        <div style={{ background: T.accentSoft, border: `1px solid ${T.accent}`, borderRadius: 10, padding: "11px 13px", marginBottom: 12 }}>
+          <div style={{ fontSize: 13, color: S.ink, fontWeight: 600 }}>Next step: {suggest.label}</div>
+          <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>Add it to the task list?</div>
+          <div style={{ display: "flex", gap: 8, marginTop: 9 }}>
+            <Btn small kind="ghost" style={{ flex: 1 }} onClick={() => setSuggest(null)}>Skip</Btn>
+            <Btn small style={{ flex: 1 }} onClick={addSuggested}>Add task</Btn>
+          </div>
+        </div>
+      )}
       <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 4 }}>OPEN ({openTasks.length})</div>
       {openTasks.length === 0 && <div style={{ fontSize: 13.5, color: S.sub, padding: "10px 0" }}>Nothing open.</div>}
-      {openTasks.map((t) => <TaskRow key={t.id} t={t} today={today} onToggle={() => mut((j) => ({ ...j, tasks: j.tasks.map((x) => x.id === t.id ? { ...x, done: !x.done } : x) }))} />)}
+      {openTasks.map((t) => <TaskRow key={t.id} t={t} today={today} onToggle={() => toggle(t)} />)}
       {doneTasks.length > 0 && (
         <>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 16 }}>COMPLETED ({doneTasks.length})</div>
-          {doneTasks.map((t) => <TaskRow key={t.id} t={t} today={today} onToggle={() => mut((j) => ({ ...j, tasks: j.tasks.map((x) => x.id === t.id ? { ...x, done: !x.done } : x) }))} />)}
+          {doneTasks.map((t) => <TaskRow key={t.id} t={t} today={today} onToggle={() => toggle(t)} />)}
         </>
       )}
       <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
@@ -12333,6 +12549,16 @@ export default function SupremeCRM() {
     return () => { alive = false; };
   }, [currentUser && currentUser.id]); // eslint-disable-line
 
+  /* Single delete path used by every screen. Admin-gated at each call
+     site; the removal itself flows through the sync diff, which issues
+     the crm_jobs delete. Always logged. */
+  const deleteJobs = (ids, label) => {
+    setJobs((prev) => prev.filter((j) => !ids.includes(j.id)));
+    if (openJobId && ids.includes(openJobId)) { setOpenJobId(null); setNav("jobs"); }
+    logAct({ type: "delete", text: `Deleted ${ids.length === 1 ? "job" : ids.length + " jobs"}: ${label}` });
+    toast(ids.length === 1 ? "Job deleted" : ids.length + " jobs deleted");
+  };
+
   const logAct = (entry) =>
     setActivity((prev) => [{
       id: uid("act"),
@@ -12597,7 +12823,8 @@ export default function SupremeCRM() {
 currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           crews={crews} setCrews={setCrews} templates={templates} integrations={integrations} users={users}
           estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} setBrand={setBrand}
-          onLog={logAct} leadSources={leadSources} activity={activity} ccToken={ccToken} />
+          onLog={logAct} leadSources={leadSources} activity={activity} ccToken={ccToken}
+          onDelete={isAdmin ? deleteJobs : null} />
       ) : nav === "home" ? (
         <>
           {liveDb() && jobs.length === 0 && (
@@ -12638,15 +12865,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "contacts" ? (
         <Contacts jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}
           currentUser={liveUser} toast={toast}
-          onDeleteJobs={(ids, label) => {
-            /* Removing the rows here is enough — the sync layer diffs the
-               jobs array and issues the matching crm_jobs delete. */
-            setJobs((prev) => prev.filter((j) => !ids.includes(j.id)));
-            logAct({
-              type: "delete",
-              text: `Deleted ${ids.length === 1 ? "project" : ids.length + " projects"}: ${label}`,
-            });
-          }}
+          onDeleteJobs={deleteJobs}
           onAddProject={(contactId) => { setLeadSeed({ contactId }); setNewLeadOpen(true); }} />
       ) : nav === "reviews" ? (
         <ReviewSettings settings={reviewSettings} setSettings={setReviewSettings} jobs={jobs}

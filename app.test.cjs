@@ -67574,6 +67574,70 @@ var DEFAULT_STAGES = [
   { id: "s11", name: "Lost", cat: "Lost" },
   { id: "s12", name: "Unqualified", cat: "Unqualified" }
 ];
+var JOB_PATHS = {
+  Retail: [
+    "Schedule inspection",
+    "Complete inspection",
+    "Build estimate",
+    "Present estimate to homeowner",
+    "Collect signed contract",
+    "Collect deposit",
+    "Order materials",
+    "Schedule installation",
+    "Complete installation",
+    "Final walkthrough",
+    "Collect final payment",
+    "Request review"
+  ],
+  Insurance: [
+    "Schedule inspection",
+    "Complete inspection",
+    "Document damage with photos",
+    "File claim with carrier",
+    "Meet adjuster on site",
+    "Receive carrier scope",
+    "Review scope for shortfalls",
+    "Submit supplement",
+    "Collect signed contract",
+    "Collect ACV / deposit",
+    "Order materials",
+    "Schedule installation",
+    "Complete installation",
+    "Submit certificate of completion",
+    "Collect depreciation & deductible",
+    "Request review"
+  ],
+  Commercial: [
+    "Site assessment",
+    "Take measurements",
+    "Build scope of work",
+    "Submit proposal / bid",
+    "Contract & insurance certs",
+    "Pre-construction meeting",
+    "Pull permits",
+    "Order materials",
+    "Mobilize crew",
+    "Complete installation",
+    "Punch list",
+    "Final inspection",
+    "Submit closeout documents",
+    "Collect final payment"
+  ]
+};
+function jobPathFor(job) {
+  const t = job && job.claimType || "Retail";
+  return JOB_PATHS[t] || JOB_PATHS.Retail;
+}
+function nextStepAfter(job, completedLabel) {
+  const path = jobPathFor(job);
+  const idx = path.findIndex((step) => step.toLowerCase() === String(completedLabel || "").trim().toLowerCase());
+  if (idx === -1 || idx === path.length - 1) return null;
+  const existing = new Set((job.tasks || []).map((t) => String(t.label || "").toLowerCase()));
+  for (let i = idx + 1; i < path.length; i++) {
+    if (!existing.has(path[i].toLowerCase())) return path[i];
+  }
+  return null;
+}
 var WON_STAGES = ["s5", "s6", "s7", "s8", "s9", "s10"];
 var DEAD_STAGES = ["s11", "s12"];
 var SEED_CREWS = [
@@ -70077,6 +70141,12 @@ var CALENDAR_VIEWS = [
   ["issues", "Issues"],
   ["delivery", "Delivery"]
 ];
+function fmtClock(t) {
+  if (!t || !String(t).includes(":")) return t || "";
+  const [h, m] = String(t).split(":").map(Number);
+  const ap = h >= 12 ? "PM" : "AM";
+  return `${(h + 11) % 12 + 1}:${String(m || 0).padStart(2, "0")} ${ap}`;
+}
 function categoryForAppointment(type) {
   const value = String(type || "").toLowerCase();
   if (/deliver|material|dump|trailer|pickup/.test(value)) return "delivery";
@@ -70094,6 +70164,14 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   const today = /* @__PURE__ */ new Date();
   const [month, setMonth] = (0, import_react.useState)(new Date(today.getFullYear(), today.getMonth(), 1));
   const [view, setView] = (0, import_react.useState)("all");
+  const [mode, setMode] = (0, import_react.useState)("month");
+  const [selDay, setSelDay] = (0, import_react.useState)(null);
+  const [weekStart, setWeekStart] = (0, import_react.useState)(() => {
+    const d = /* @__PURE__ */ new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - (d.getDay() + 6) % 7);
+    return d;
+  });
   const [adding, setAdding] = (0, import_react.useState)(false);
   const [editingId, setEditingId] = (0, import_react.useState)(null);
   const [f, setF] = (0, import_react.useState)({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "", assignedTo: "", durationMin: 60, status: "Scheduled" });
@@ -70220,7 +70298,18 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
         ] })
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, overflowX: "auto", marginTop: 12, paddingBottom: 2 }, children: CALENDAR_VIEWS.map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setView(id), style: {
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [["month", "Month"], ["week", "Week"]].map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setMode(id), style: {
+      flex: 1,
+      border: `1.5px solid ${mode === id ? T.accent : S.line}`,
+      background: mode === id ? T.accentSoft : "#fff",
+      color: mode === id ? T.accent : S.ink,
+      borderRadius: 999,
+      padding: "8px 12px",
+      fontSize: 13,
+      fontWeight: 800,
+      cursor: "pointer"
+    }, children: label }, id)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, overflowX: "auto", marginTop: 10, paddingBottom: 2 }, children: CALENDAR_VIEWS.map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setView(id), style: {
       border: `1.5px solid ${view === id ? T.accent : S.line}`,
       background: view === id ? T.accentSoft : "#fff",
       color: view === id ? T.accent : S.ink,
@@ -70231,54 +70320,152 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       cursor: "pointer",
       whiteSpace: "nowrap"
     }, children: label }, id)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setMonth(new Date(y, m - 1, 1)), style: { border: "none", background: "none", cursor: "pointer" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronLeft, { size: 18 }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 16, fontWeight: 800 }, children: month.toLocaleString("en-US", { month: "long", year: "numeric" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setMonth(new Date(y, m + 1, 1)), style: { border: "none", background: "none", cursor: "pointer" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 18 }) })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }, children: [
-        ["S", "M", "T", "W", "T", "F", "S"].map((d, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { textAlign: "center", fontSize: 11, fontWeight: 700, color: S.sub, padding: "4px 0" }, children: d }, i2)),
-        Array.from({ length: firstDow }).map((_, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {}, `b${i2}`)),
-        Array.from({ length: daysInMonth }).map((_, i2) => {
-          const d = i2 + 1;
-          const hasJob = jobsOn(d).length > 0;
-          const hasAppt = apptsOn(d).length > 0;
-          const isToday = today.getFullYear() === y && today.getMonth() === m && today.getDate() === d;
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { onClick: () => openAdd(iso(d)), role: "button", style: {
-            textAlign: "center",
-            padding: "7px 0 4px",
-            borderRadius: 8,
-            fontSize: 13,
-            cursor: "pointer",
-            background: isToday ? T.accentSoft : "transparent",
-            fontWeight: isToday ? 800 : 500,
-            color: isToday ? T.accent : S.ink
-          }, children: [
-            d,
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 3, justifyContent: "center", height: 6, marginTop: 2 }, children: [
-              hasJob && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 5, height: 5, borderRadius: 99, background: T.accent } }),
-              hasAppt && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 5, height: 5, borderRadius: 99, background: "#92600A" } }),
-              tasksOn(d).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 5, height: 5, borderRadius: 99, background: "#177245" } })
-            ] })
-          ] }, d);
-        })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 14, marginTop: 10, fontSize: 11.5, color: S.sub }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "inline-block", width: 6, height: 6, borderRadius: 99, background: T.accent, marginRight: 5 } }),
-          "Production"
+    (() => {
+      const isoStr = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+      const dotsFor = (isoDate) => {
+        const dd = Number(isoDate.slice(-2));
+        const hasJob = (view === "all" || view === "production" ? jobs.filter((j) => j.schedDate === isoDate) : []).length > 0;
+        const hasAppt = visibleAppointments.some((ap) => ap.date === isoDate);
+        const hasTask = visibleTasks.some(({ task }) => task.due === isoDate);
+        return { hasJob, hasAppt, hasTask };
+      };
+      const Cell = ({ isoDate, label, dim, small }) => {
+        const { hasJob, hasAppt, hasTask } = dotsFor(isoDate);
+        const isToday = isoDate === isoStr(today);
+        const isSel = selDay === isoDate;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { onClick: () => setSelDay(isSel ? null : isoDate), role: "button", style: {
+          textAlign: "center",
+          padding: small ? "10px 0 6px" : "7px 0 4px",
+          borderRadius: 8,
+          fontSize: 13,
+          cursor: "pointer",
+          background: isSel ? T.accent : isToday ? T.accentSoft : "transparent",
+          fontWeight: isToday || isSel ? 800 : 500,
+          color: isSel ? "#fff" : dim ? "#C7CBD1" : isToday ? T.accent : S.ink
+        }, children: [
+          label,
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 3, justifyContent: "center", height: 6, marginTop: 2 }, children: [
+            hasJob && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 5, height: 5, borderRadius: 99, background: isSel ? "#fff" : T.accent } }),
+            hasAppt && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 5, height: 5, borderRadius: 99, background: isSel ? "#fff" : "#92600A" } }),
+            hasTask && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 5, height: 5, borderRadius: 99, background: isSel ? "#fff" : "#177245" } })
+          ] })
+        ] });
+      };
+      const weekDays = [...Array(7)].map((_, i) => {
+        const dt = new Date(weekStart);
+        dt.setDate(dt.getDate() + i);
+        return dt;
+      });
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              onClick: () => mode === "month" ? setMonth(new Date(y, m - 1, 1)) : setWeekStart((w) => {
+                const d = new Date(w);
+                d.setDate(d.getDate() - 7);
+                return d;
+              }),
+              style: { border: "none", background: "none", cursor: "pointer" },
+              children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronLeft, { size: 18 })
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 16, fontWeight: 800 }, children: mode === "month" ? month.toLocaleString("en-US", { month: "long", year: "numeric" }) : `${weekDays[0].toLocaleDateString(void 0, { month: "short", day: "numeric" })} \u2013 ${weekDays[6].toLocaleDateString(void 0, { month: "short", day: "numeric" })}` }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              onClick: () => mode === "month" ? setMonth(new Date(y, m + 1, 1)) : setWeekStart((w) => {
+                const d = new Date(w);
+                d.setDate(d.getDate() + 7);
+                return d;
+              }),
+              style: { border: "none", background: "none", cursor: "pointer" },
+              children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 18 })
+            }
+          )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "inline-block", width: 6, height: 6, borderRadius: 99, background: "#92600A", marginRight: 5 } }),
-          "Appointment"
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }, children: [
+          ["M", "T", "W", "T", "F", "S", "S"].map((d, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { textAlign: "center", fontSize: 11, fontWeight: 700, color: S.sub, padding: "4px 0" }, children: d }, i2)),
+          mode === "month" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            Array.from({ length: (firstDow + 6) % 7 }).map((_, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {}, `b${i2}`)),
+            Array.from({ length: daysInMonth }).map((_, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cell, { isoDate: iso(i2 + 1), label: i2 + 1 }, i2 + 1))
+          ] }) : weekDays.map((dt) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cell, { isoDate: isoStr(dt), label: dt.getDate(), small: true, dim: dt.getMonth() !== m && mode === "month" }, isoStr(dt)))
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "inline-block", width: 6, height: 6, borderRadius: 99, background: "#177245", marginRight: 5 } }),
-          "Task due"
-        ] })
-      ] })
-    ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 14, marginTop: 10, fontSize: 11.5, color: S.sub }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "inline-block", width: 6, height: 6, borderRadius: 99, background: T.accent, marginRight: 5 } }),
+            "Production"
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "inline-block", width: 6, height: 6, borderRadius: 99, background: "#92600A", marginRight: 5 } }),
+            "Appointment"
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "inline-block", width: 6, height: 6, borderRadius: 99, background: "#177245", marginRight: 5 } }),
+            "Task due"
+          ] })
+        ] }),
+        selDay && (() => {
+          const dayNum = Number(selDay.slice(-2));
+          const dayAppts = visibleAppointments.filter((ap) => ap.date === selDay);
+          const dayJobs = view === "all" || view === "production" ? jobs.filter((j) => j.schedDate === selDay) : [];
+          const dayTasks = visibleTasks.filter(({ task }) => task.due === selDay);
+          const pretty = (/* @__PURE__ */ new Date(selDay + "T00:00:00")).toLocaleDateString(void 0, { weekday: "long", month: "long", day: "numeric" });
+          const nothing = !dayAppts.length && !dayJobs.length && !dayTasks.length;
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14, borderTop: `1px solid ${S.line}`, paddingTop: 12 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 800, color: S.ink }, children: pretty }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "ghost", onClick: () => openAdd(selDay), children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+                " Add"
+              ] })
+            ] }),
+            nothing && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "Nothing scheduled. Tap Add to book something." }),
+            dayAppts.map((ap) => {
+              const j = jobOf(ap.jobId);
+              const cat = ap.category || categoryForAppointment(ap.type);
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => openEdit(ap), style: { display: "flex", gap: 9, alignItems: "center", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "8px 0", borderTop: `1px solid ${S.line}` }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 8, height: 8, borderRadius: 99, flexShrink: 0, background: cat === "issues" ? "#B42318" : cat === "delivery" ? "#92600A" : cat === "production" ? "#177245" : T.accent } }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }, children: [
+                    ap.type,
+                    j ? ` \u2014 ${j.name}` : ""
+                  ] }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11.5, color: S.sub }, children: [
+                    ap.time ? fmtClock(ap.time) : "All day",
+                    ap.durationMin ? ` \xB7 ${ap.durationMin} min` : "",
+                    ap.assignedTo ? ` \xB7 ${ap.assignedTo}` : ""
+                  ] })
+                ] })
+              ] }, ap.id);
+            }),
+            dayJobs.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: { display: "flex", gap: 9, alignItems: "center", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "8px 0", borderTop: `1px solid ${S.line}` }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 8, height: 8, borderRadius: 99, flexShrink: 0, background: T.accent } }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }, children: [
+                  "Install \u2014 ",
+                  j.name
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: j.address })
+              ] })
+            ] }, j.id)),
+            dayTasks.map(({ job: j, task: t }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: { display: "flex", gap: 9, alignItems: "center", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "8px 0", borderTop: `1px solid ${S.line}` }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 8, height: 8, borderRadius: 99, flexShrink: 0, background: "#177245" } }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }, children: [
+                  "Task \u2014 ",
+                  t.label
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11.5, color: S.sub }, children: [
+                  j.name,
+                  t.time ? ` \xB7 by ${fmtClock(t.time)}` : ""
+                ] })
+              ] })
+            ] }, t.id))
+          ] });
+        })()
+      ] });
+    })(),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, margin: "16px 0 8px" }, children: "THIS MONTH" }),
     monthAppts.map((ap) => {
       const j = jobOf(ap.jobId);
@@ -70943,7 +71130,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
           ] }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Assign to", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: f.assignee, onChange: set("assignee"), children: TEAM.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: t }, t)) }) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Claim type *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: ["Insurance", "Retail", "Unknown"].map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setF({ ...f, claimType: c }), style: {
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Claim type *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: ["Insurance", "Retail", "Commercial", "Unknown"].map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setF({ ...f, claimType: c }), style: {
           border: `1.5px solid ${f.claimType === c ? T.accent : S.line}`,
           background: f.claimType === c ? T.accentSoft : "#fff",
           color: f.claimType === c ? T.accent : S.ink,
@@ -71720,9 +71907,12 @@ function JobDetail({
   onLog = () => {
   },
   leadSources = LEAD_SOURCES,
-  activity = []
+  activity = [],
+  onDelete = null
 }) {
   const [tab, setTab] = (0, import_react.useState)("overview");
+  const [delOpen, setDelOpen] = (0, import_react.useState)(false);
+  const [delTyped, setDelTyped] = (0, import_react.useState)("");
   const MONEY_TABS = ["estimate", "contract", "financials", "payments", "invoice"];
   const visibleTabs = JOB_TABS.filter(([id]) => showMoney || !MONEY_TABS.includes(id));
   (0, import_react.useEffect)(() => {
@@ -71738,7 +71928,31 @@ function JobDetail({
           {
             title: job.name,
             onBack,
-            right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: stage ? stage.name : "\u2014" })
+            right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: stage ? stage.name : "\u2014" }),
+              isAdmin && onDelete && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "button",
+                {
+                  "aria-label": "Delete job",
+                  onClick: () => {
+                    setDelTyped("");
+                    setDelOpen(true);
+                  },
+                  style: {
+                    border: `1px solid ${S.line}`,
+                    background: "#fff",
+                    borderRadius: 999,
+                    width: 34,
+                    height: 34,
+                    display: "grid",
+                    placeItems: "center",
+                    cursor: "pointer",
+                    color: "#B3261E"
+                  },
+                  children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15 })
+                }
+              )
+            ] })
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, margin: "8px 0 2px", display: "flex", alignItems: "center", gap: 6 }, children: [
@@ -71798,6 +72012,54 @@ function JobDetail({
         ] });
       })()
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+      Sheet,
+      {
+        open: delOpen,
+        onClose: () => {
+          setDelOpen(false);
+          setDelTyped("");
+        },
+        title: "Delete job",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => {
+            setDelOpen(false);
+            setDelTyped("");
+          }, children: "Cancel" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            Btn,
+            {
+              "data-testid": "confirm-delete-job",
+              style: { flex: 1, background: "#B3261E", borderColor: "#B3261E" },
+              disabled: delTyped.trim().toUpperCase() !== "DELETE",
+              onClick: () => {
+                onDelete(job.id, job.name);
+                setDelOpen(false);
+                setDelTyped("");
+              },
+              children: "Delete"
+            }
+          )
+        ] }),
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "This cannot be undone", tone: "red", children: [
+            "Deleting ",
+            job.name,
+            " removes the job and every note, photo, estimate, contract, task and message on it. A published customer portal for it stops working immediately."
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Type DELETE to confirm", hint: "Deliberately awkward \u2014 this is permanent.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: inputStyle,
+              value: delTyped,
+              onChange: (e) => setDelTyped(e.target.value),
+              autoCapitalize: "characters",
+              placeholder: "DELETE"
+            }
+          ) })
+        ]
+      }
+    ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: 16 }, children: [
       tab === "overview" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         TabOverview,
@@ -71862,7 +72124,7 @@ function JobDetail({
           users
         }
       ),
-      tab === "tasks" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabTasks, { job, mut }),
+      tab === "tasks" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabTasks, { job, mut, toast: toast2 }),
       tab === "files" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFiles, { job, mut, toast: toast2 }),
       tab === "portal" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         TabPortal,
@@ -71956,6 +72218,17 @@ function TabOverview({ job, juris, mut, toast: toast2, reviewSettings, brand: br
           }
         ) })
       ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Job type", hint: "Sets which task pathway this job follows.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        PillGroup,
+        {
+          options: ["Retail", "Insurance", "Commercial", "Unknown"],
+          value: job.claimType,
+          onPick: (v) => {
+            mut((j) => ({ ...j, claimType: v }));
+            onLog({ kind: "lead", jobId: job.id, jobName: job.name, text: `set ${job.name} to ${v} path` });
+          }
+        }
+      ) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Priority", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: job.priority || "", onChange: (e) => {
           mut((j) => ({ ...j, priority: e.target.value || null }));
@@ -76330,29 +76603,58 @@ function TaskRow({ t, today, onToggle }) {
     }
   );
 }
-function TabTasks({ job, mut }) {
+function TabTasks({ job, mut, toast: toast2 }) {
   const [txt, setTxt] = (0, import_react.useState)("");
   const [due, setDue] = (0, import_react.useState)("");
   const [time, setTime] = (0, import_react.useState)("");
+  const [suggest, setSuggest] = (0, import_react.useState)(null);
   const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
   const openTasks = job.tasks.filter((t) => !t.done);
   const doneTasks = job.tasks.filter((t) => t.done);
+  const toggle = (t) => {
+    const becomingDone = !t.done;
+    mut((j) => ({ ...j, tasks: j.tasks.map((x) => x.id === t.id ? { ...x, done: !x.done, doneAt: !x.done ? (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ") : null } : x) }));
+    if (becomingDone) {
+      const next = nextStepAfter(job, t.label);
+      if (next) setSuggest({ label: next });
+    }
+  };
+  const addSuggested = () => {
+    if (!suggest) return;
+    mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: suggest.label, done: false, due: null, time: null, auto: true }] }));
+    toast2 && toast2("Next step added");
+    setSuggest(null);
+  };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Project tasks" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "gray", children: [
+      job.claimType || "Retail",
+      " path"
+    ] }), children: "Project tasks" }),
+    suggest && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: T.accentSoft, border: `1px solid ${T.accent}`, borderRadius: 10, padding: "11px 13px", marginBottom: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.ink, fontWeight: 600 }, children: [
+        "Next step: ",
+        suggest.label
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 2 }, children: "Add it to the task list?" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 9 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", style: { flex: 1 }, onClick: () => setSuggest(null), children: "Skip" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, style: { flex: 1 }, onClick: addSuggested, children: "Add task" })
+      ] })
+    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 4 }, children: [
       "OPEN (",
       openTasks.length,
       ")"
     ] }),
     openTasks.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, padding: "10px 0" }, children: "Nothing open." }),
-    openTasks.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TaskRow, { t, today, onToggle: () => mut((j) => ({ ...j, tasks: j.tasks.map((x) => x.id === t.id ? { ...x, done: !x.done } : x) })) }, t.id)),
+    openTasks.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TaskRow, { t, today, onToggle: () => toggle(t) }, t.id)),
     doneTasks.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 16 }, children: [
         "COMPLETED (",
         doneTasks.length,
         ")"
       ] }),
-      doneTasks.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TaskRow, { t, today, onToggle: () => mut((j) => ({ ...j, tasks: j.tasks.map((x) => x.id === t.id ? { ...x, done: !x.done } : x) })) }, t.id))
+      doneTasks.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TaskRow, { t, today, onToggle: () => toggle(t) }, t.id))
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -80492,6 +80794,15 @@ function SupremeCRM() {
       alive = false;
     };
   }, [currentUser && currentUser.id]);
+  const deleteJobs = (ids, label) => {
+    setJobs((prev) => prev.filter((j) => !ids.includes(j.id)));
+    if (openJobId && ids.includes(openJobId)) {
+      setOpenJobId(null);
+      setNav("jobs");
+    }
+    logAct({ type: "delete", text: `Deleted ${ids.length === 1 ? "job" : ids.length + " jobs"}: ${label}` });
+    toast2(ids.length === 1 ? "Job deleted" : ids.length + " jobs deleted");
+  };
   const logAct = (entry) => setActivity((prev) => [{
     id: uid("act"),
     at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " "),
@@ -80832,7 +81143,8 @@ function SupremeCRM() {
         onLog: logAct,
         leadSources,
         activity,
-        ccToken
+        ccToken,
+        onDelete: isAdmin ? deleteJobs : null
       }
     ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       liveDb() && jobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { margin: "14px 16px 0", background: "#EAF6EE", border: "1px solid #CDE8D6", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "#177245", lineHeight: 1.5 }, children: "Fresh database \u2014 no demo customers here. Everything you create now saves for real. Have a Roofr export? More \u2192 Import jobs pulls your whole pipeline in." }),
@@ -80928,13 +81240,7 @@ function SupremeCRM() {
         onOpenJob: openJobScreen,
         currentUser: liveUser,
         toast: toast2,
-        onDeleteJobs: (ids, label) => {
-          setJobs((prev) => prev.filter((j) => !ids.includes(j.id)));
-          logAct({
-            type: "delete",
-            text: `Deleted ${ids.length === 1 ? "project" : ids.length + " projects"}: ${label}`
-          });
-        },
+        onDeleteJobs: deleteJobs,
         onAddProject: (contactId) => {
           setLeadSeed({ contactId });
           setNewLeadOpen(true);
