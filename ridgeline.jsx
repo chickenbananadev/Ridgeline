@@ -1562,7 +1562,22 @@ function computeCapOut(job) {
     commission = Math.max(0, gross) * (rate / 100);
   }
   const netCompany = gross - commission;
-  const reimbTotal = job.fin.reimbursements.reduce((s, r) => s + r.amt, 0);
+  /* Reimbursements come from two places now:
+     - cost lines flagged reimbursable (matches the cap-out sheet, where
+       each Jacob-paid line is marked Yes in the Reimbursement column), and
+     - the standalone reimbursements list (kept for back-compat).
+     A flagged line's "status" of "Needs paid" means a vendor is still
+     owed — it is a reimbursement to whoever fronted it, and it is
+     surfaced separately so nothing owed slips through. */
+  const flagged = [...job.fin.materials, ...job.fin.labor, ...job.fin.other].filter((l) => l.reimburse);
+  const flaggedTotal = flagged.reduce((s, l) => s + num(l.amt), 0);
+  const listTotal = (job.fin.reimbursements || []).reduce((s, r) => s + num(r.amt), 0);
+  const reimbTotal = flaggedTotal + listTotal;
+  const needsPaid = [
+    ...flagged.filter((l) => l.status === "Needs paid"),
+    ...(job.fin.reimbursements || []).filter((r) => r.status === "Needs paid"),
+  ];
+  const needsPaidTotal = needsPaid.reduce((s, l) => s + num(l.amt), 0);
   return {
     contract, materials, labor, other, cogs, gross,
     grossMargin: contract ? (gross / contract) * 100 : 0,
@@ -1572,7 +1587,8 @@ function computeCapOut(job) {
     coPctGross: gross > 0 ? (netCompany / gross) * 100 : 0,
     repPctJob: contract ? (commission / contract) * 100 : 0,
     coPctJob: contract ? (netCompany / contract) * 100 : 0,
-    reimbTotal, payout: commission + reimbTotal,
+    reimbTotal, flaggedTotal, listTotal, needsPaid, needsPaidTotal,
+    payout: commission + reimbTotal,
   };
 }
 /* Same job under every structure — admin-only what-if comparison. */
@@ -1588,7 +1604,27 @@ function paymentsSummary(job) {
   const contract = job.contract.price || estimateTotal(job.estimate) || job.value || 0;
   return { received, paidOut, contract, balance: contract - received };
 }
+/* Export gate. Reps cannot pull data out — this is what stops a
+   departing salesperson from walking off with the book of business.
+   The company owns the data. Admins export freely. Flipped by the app
+   once the signed-in seat is known; defaults closed so a rep can never
+   export during the brief window before it is set. Every blocked and
+   allowed export is recorded through exportLogger. */
+let EXPORT_ALLOWED = false;
+let exportLogger = () => {};
+function setExportPolicy(isAdmin, logger) {
+  EXPORT_ALLOWED = !!isAdmin;
+  if (logger) exportLogger = logger;
+}
 function downloadCsv(name, rows) {
+  if (!EXPORT_ALLOWED) {
+    try { exportLogger({ type: "export_blocked", text: `Blocked data export attempt: ${name}` }); } catch (e) {}
+    if (typeof window !== "undefined" && window.alert) {
+      window.alert("Exporting data is restricted to admins. The company owns this data.");
+    }
+    return false;
+  }
+  try { exportLogger({ type: "export", text: `Exported ${name}` }); } catch (e) {}
   try {
     const csv = rows.map((r) => r.map((c) => `"${String(c ?? "").replaceAll('"', '""')}"`).join(",")).join("\n");
     const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
@@ -2796,7 +2832,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
       {tab === "commission" && (
         <div style={{ marginTop: 12 }}>
           <Card>
-            <CardTitle right={<Btn kind="ghost" small onClick={exportCommission}><Download size={13} /> CSV</Btn>}>
+            <CardTitle right={isAdmin ? <Btn kind="ghost" small onClick={exportCommission}><Download size={13} /> CSV</Btn> : null}>
               {scope === "company" ? "All reps combined" : scope}
             </CardTitle>
             <KV k="Jobs included" v={String(commissionRows.length)} />
@@ -7997,15 +8033,38 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
     <Card style={{ marginTop: 12 }}>
       <CardTitle right={<span style={{ fontWeight: 800 }}>{money(total)}</span>}>{title}</CardTitle>
       {lines.map((l) => (
-        <div key={l.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-          <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} value={l.label}
-            onChange={(e) => onEdit(l.id, "label", e.target.value)} />
-          <span style={{ color: S.sub, fontSize: 13 }}>$</span>
-          <input style={{ ...inputStyle, width: 100, textAlign: "right", padding: "9px 11px" }} value={l.amt}
-            inputMode="decimal" onChange={(e) => onEdit(l.id, "amt", e.target.value)} />
-          <button onClick={() => onDelete(l.id)} style={{ border: "none", background: "none", cursor: "pointer" }}>
-            <Trash2 size={15} color="#B42318" />
-          </button>
+        <div key={l.id} style={{ borderBottom: `1px solid ${S.line}`, paddingBottom: 10, marginBottom: 10 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} value={l.label}
+              placeholder="Line item" onChange={(e) => onEdit(l.id, "label", e.target.value)} />
+            <span style={{ color: S.sub, fontSize: 13 }}>$</span>
+            <input style={{ ...inputStyle, width: 96, textAlign: "right", padding: "9px 11px" }} value={l.amt}
+              inputMode="decimal" onChange={(e) => onEdit(l.id, "amt", e.target.value)} />
+            <button onClick={() => onDelete(l.id)} style={{ border: "none", background: "none", cursor: "pointer" }}>
+              <Trash2 size={15} color="#B42318" />
+            </button>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 7 }}>
+            <input style={{ ...inputStyle, flex: 1, padding: "7px 10px", fontSize: 13 }} value={l.by || ""}
+              placeholder="Paid to / by (e.g. Jacob, QXO, Black Bull)" onChange={(e) => onEdit(l.id, "by", e.target.value)} />
+            <label style={{ display: "flex", gap: 5, alignItems: "center", fontSize: 12.5, color: S.ink, whiteSpace: "nowrap", cursor: "pointer" }}>
+              <input type="checkbox" checked={!!l.reimburse} style={{ width: 16, height: 16, accentColor: T.accent }}
+                onChange={(e) => onEdit(l.id, "reimburse", e.target.checked)} />
+              Reimburse
+            </label>
+          </div>
+          {l.reimburse && (
+            <div style={{ display: "flex", gap: 6, marginTop: 7 }}>
+              {["Reimbursed", "Needs paid"].map((stt) => (
+                <button key={stt} onClick={() => onEdit(l.id, "status", stt)} style={{
+                  flex: 1, border: `1.5px solid ${(l.status || "Reimbursed") === stt ? (stt === "Needs paid" ? "#B3261E" : T.accent) : S.line}`,
+                  background: (l.status || "Reimbursed") === stt ? (stt === "Needs paid" ? "#FDECEC" : T.accentSoft) : "#fff",
+                  color: (l.status || "Reimbursed") === stt ? (stt === "Needs paid" ? "#B3261E" : T.accent) : S.sub,
+                  borderRadius: 8, padding: "6px 0", fontSize: 12, fontWeight: 800, cursor: "pointer",
+                }}>{stt}</button>
+              ))}
+            </div>
+          )}
         </div>
       ))}
       <Btn kind="soft" small onClick={onAdd}><Plus size={13} /> Add</Btn>
@@ -8030,37 +8089,69 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
     ...j, fin: { ...j.fin, [bucket]: j.fin[bucket].filter((l) => l.id !== id) },
   }));
   const printCapOut = () => {
-    const row = (k, v, bold) => `<div class="tot${bold ? " grand" : ""}"><span>${esc(k)}</span><span>${esc(v)}</span></div>`;
-    const sec = (title, lines, total) => `<h2>${esc(title)}</h2>` +
-      `<table><thead><tr><th>Item</th><th>Paid to / by</th><th class="r">Amount</th></tr></thead><tbody>` +
-      lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.by || "")}</td><td class="r">${money(num(l.amt))}</td></tr>`).join("") +
-      `</tbody></table>` + row(`${title} total`, money(total));
-    let html = `<div style="display:flex;justify-content:space-between;gap:20px">
-        <div><h2 style="margin-top:0">Job</h2><div><b>${esc(job.name)}</b></div>
-          <div class="muted">${esc(job.address)}</div></div>
-        <div style="text-align:right"><div class="muted">Rep: ${esc(job.assignee || "")}</div>
-          <div class="muted">${esc(new Date().toLocaleDateString())}</div></div>
-      </div>`;
-    html += `<h2>Contract</h2>` + row("Contract price", money(cap.contract), true);
-    html += sec("Material costs", fin.materials, cap.materials);
-    html += sec("Labor costs", fin.labor, cap.labor);
-    html += sec("Other costs", fin.other, cap.other);
-    html += `<h2>Profit</h2>` +
-      row("Total job costs", money(cap.cogs)) +
-      row("Gross profit", money(cap.gross)) +
-      row("Gross margin", cap.grossMargin.toFixed(1) + "%");
-    html += `<h2>Commission — ${esc(st.label)}</h2>` +
-      row(cap.baseLabel, money(cap.base)) +
-      row("Rep commission", money(cap.commission), true) +
-      row("Net to company", money(cap.netCompany));
-    if (fin.reimbursements.length) {
-      html += sec("Reimbursements", fin.reimbursements, cap.reimbTotal);
-    }
-    html += `<div class="tot grand" style="margin-top:14px"><span>Total payout to rep</span><span>${money(cap.payout)}</span></div>`;
-    html += `<div class="sig">
-      <div><div class="sigline"></div><div class="siglbl">Rep signature / date</div></div>
-      <div><div class="sigline"></div><div class="siglbl">Approved by / date</div></div>
-    </div>`;
+    /* Mirrors the company cap-out sheet: banded sections, a Reimbursement
+       column on every cost line, and the payout as commission plus
+       everything flagged reimbursable. */
+    const money2 = (n) => money(num(n));
+    const secRow = (title) => `<tr class="band"><td colspan="4">${esc(title)}</td></tr>`;
+    const line = (l) => `<tr><td>${esc(l.label)}</td><td class="r">${money2(l.amt)}</td>`
+      + `<td class="muted">${esc(l.by ? (l.by + " " + (l.reimburse ? "reimbursement" : "")).trim() : "")}</td>`
+      + `<td class="r">${l.reimburse ? (l.status === "Needs paid" ? '<b style="color:#B3261E">NEEDS PAID</b>' : "Yes") : ""}</td></tr>`;
+    const totRow = (title, amt) => `<tr class="tot"><td><b>${esc(title)}</b></td><td class="r"><b>${money2(amt)}</b></td><td></td><td></td></tr>`;
+    const kv = (k, v, cls) => `<tr class="${cls || ""}"><td>${esc(k)}</td><td class="r">${esc(v)}</td><td colspan="2" class="muted"></td></tr>`;
+    const rep = job.assignee || "";
+    let html = `
+      <div class="capband" style="background:#1F3A5F;color:#fff;padding:14px 16px;border-radius:6px 6px 0 0">
+        <div style="font-size:20px;font-weight:800">CAP OUT SHEET</div>
+        <div style="opacity:.85;font-size:12.5px;margin-top:3px">${esc(job.name)} | ${esc(job.address)}${job.invoiceNo ? " | Invoice #" + esc(job.invoiceNo) : ""} | Rep: ${esc(rep)}</div>
+      </div>
+      <table class="cap"><tbody>
+        <tr class="head"><td><b>Line Item</b></td><td class="r"><b>Amount</b></td><td><b>Description</b></td><td class="r"><b>Reimbursement</b></td></tr>
+        ${secRow("REVENUE")}
+        ${kv("Gross Revenue", money2(cap.contract))}
+        ${totRow("Net Revenue", cap.contract)}
+        ${secRow("MATERIAL COSTS")}
+        ${fin.materials.map(line).join("")}
+        ${totRow("Total Material Costs", cap.materials)}
+        ${secRow("LABOR COSTS")}
+        ${fin.labor.map(line).join("")}
+        ${totRow("Total Labor Costs", cap.labor)}
+        ${secRow("OTHER COSTS")}
+        ${fin.other.map(line).join("")}
+        ${totRow("Total Other Costs", cap.other)}
+        <tr class="band dark"><td><b>TOTAL COGS</b></td><td class="r"><b>${money2(cap.cogs)}</b></td><td class="muted">Material + Labor + Other</td><td></td></tr>
+        ${secRow("PROFIT")}
+        ${kv("Gross Profit", money2(cap.gross))}
+        ${kv("Gross Profit Margin", cap.grossMargin.toFixed(2) + "%")}
+        ${secRow("COMMISSION — " + st.label)}
+        ${kv("Commission Rate", (fin.commissionRate ?? 60) + "%")}
+        <tr class="tot"><td><b>Commission</b></td><td class="r"><b>${money2(cap.commission)}</b></td><td class="muted">${esc(cap.baseLabel)} × rate</td><td></td></tr>
+        ${kv("Net Profit (to company)", money2(cap.netCompany))}
+        ${secRow("PROFIT SPLIT")}
+        ${kv("Your Share of Gross Profit", cap.repPctGross.toFixed(2) + "%")}
+        ${kv("Company Share of Gross Profit", cap.coPctGross.toFixed(2) + "%")}
+        ${kv("Your Commission (% of Job)", cap.repPctJob.toFixed(2) + "%")}
+        ${kv("Company Profit (% of Job)", cap.coPctJob.toFixed(2) + "%")}
+        ${secRow("REIMBURSEMENTS (out of pocket)")}
+        ${totRow("Total Reimbursements", cap.reimbTotal)}
+        ${cap.needsPaidTotal > 0 ? `<tr><td style="color:#B3261E"><b>Still owed (Needs paid)</b></td><td class="r" style="color:#B3261E"><b>${money2(cap.needsPaidTotal)}</b></td><td class="muted">Vendors/reps not yet paid</td><td></td></tr>` : ""}
+        <tr class="band payout"><td><b>JACOB PAYOUT</b></td><td class="r"><b>${money2(cap.payout)}</b></td><td class="muted">Commission + reimbursements</td><td></td></tr>
+      </tbody></table>
+      <div class="sig">
+        <div><div class="sigline"></div><div class="siglbl">Rep signature / date</div></div>
+        <div><div class="sigline"></div><div class="siglbl">Approved by / date</div></div>
+      </div>
+      <style>
+        table.cap{width:100%;border-collapse:collapse;font-size:12.5px}
+        table.cap td{border:1px solid #E2E6EB;padding:6px 9px;vertical-align:top}
+        table.cap tr.head td{background:#F2F4F7;font-size:11.5px}
+        table.cap tr.band td{background:#2F5C9E;color:#fff;font-weight:800;font-size:11.5px}
+        table.cap tr.band.dark td{background:#1F3A5F}
+        table.cap tr.band.payout td{background:#4F7A34}
+        table.cap tr.tot td{background:#F7F9FB}
+        table.cap td.r{text-align:right;white-space:nowrap}
+        table.cap td.muted{color:#667085}
+      </style>`;
     openDoc(`Cap out — ${job.name}`, brand, html, toast);
   };
   const exportCsv = () => {
@@ -8195,8 +8286,14 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
           <KV k="Total rep payout (commission + reimbursements)" v={money(cap.payout)} strong />
         </div>
       </Card>
+      {cap.needsPaidTotal > 0 && (
+        <Callout label={money(cap.needsPaidTotal) + " still owed"} tone="red">
+          {cap.needsPaid.length} {cap.needsPaid.length === 1 ? "item is" : "items are"} marked
+          Needs paid — a vendor or rep has fronted money that has not been paid back yet.
+        </Callout>
+      )}
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-        <Btn kind="ghost" style={{ flex: 1 }} onClick={exportCsv}><Download size={15} /> Export cap-out CSV</Btn>
+        {isAdmin && <Btn kind="ghost" style={{ flex: 1 }} onClick={exportCsv}><Download size={15} /> Export cap-out CSV</Btn>}
         <Btn kind="ghost" style={{ flex: 1 }} onClick={printCapOut}><Printer size={15} /> Cap-out PDF</Btn>
       </div>
     </>
@@ -12566,6 +12663,13 @@ export default function SupremeCRM() {
       by: userName,
       ...entry,
     }, ...prev].slice(0, 500));
+
+  /* Export gate follows the signed-in seat. Kept above every early
+     return so hook order is stable; admin is derived inline rather than
+     from a const declared later in the component. */
+  useEffect(() => {
+    setExportPolicy(canEditStructure(currentUser), logAct);
+  }, [currentUser && currentUser.role]); // eslint-disable-line
 
   /* Derived here rather than from userName, which is declared further
      down — reaching forward to it threw a temporal-dead-zone error the
