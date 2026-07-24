@@ -7576,7 +7576,6 @@ function CompanyCamJobCard({ job, mut, toast, ccToken }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [cors, setCors] = useState(false);
-  const [pulled, setPulled] = useState(null);
   const cc = job.companyCam || null;
 
   const create = async () => {
@@ -7588,19 +7587,6 @@ function CompanyCamJobCard({ job, mut, toast, ccToken }) {
       toast && toast("CompanyCam project created");
     } catch (e) {
       if (e && e.cors) setCors(true); else setErr((e && e.message) || "Could not create the project.");
-    }
-    setBusy(false);
-  };
-
-  const pull = async () => {
-    if (!ccToken || !cc) return;
-    setBusy(true); setErr(""); setCors(false);
-    try {
-      const photos = await ccProjectPhotos(ccToken, cc.id);
-      setPulled(photos);
-      if (!photos.length) toast && toast("No photos in that project yet");
-    } catch (e) {
-      if (e && e.cors) setCors(true); else setErr((e && e.message) || "Could not load photos.");
     }
     setBusy(false);
   };
@@ -7618,8 +7604,9 @@ function CompanyCamJobCard({ job, mut, toast, ccToken }) {
         <>
           <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
             Creates a CompanyCam project named <b>{job.name}</b> at{" "}
-            <b>{job.address}</b>, and keeps the link here so the crew opens
-            the right one.
+            <b>{job.address}</b>. Photos stay in CompanyCam — this is only the
+            link, so the crew opens the right project instead of making a
+            duplicate in the field.
           </div>
           <Btn style={{ width: "100%" }} disabled={busy} onClick={create}>
             {busy ? "Creating…" : "Create CompanyCam project"}
@@ -7644,32 +7631,10 @@ function CompanyCamJobCard({ job, mut, toast, ccToken }) {
           <a href={cc.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none", display: "block", marginTop: 10 }}>
             <Btn style={{ width: "100%" }}><ExternalLink size={14} /> Open in CompanyCam</Btn>
           </a>
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-            <Btn kind="ghost" small style={{ flex: 1 }} disabled={busy} onClick={pull}>
-              {busy ? "Loading…" : "Preview photos"}
-            </Btn>
-            <Btn kind="ghost" small style={{ flex: 1 }}
-              onClick={() => { mut((j) => ({ ...j, companyCam: null })); setPulled(null); toast && toast("Unlinked"); }}>
-              Unlink
-            </Btn>
-          </div>
-          {pulled && pulled.length > 0 && (
-            <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", marginBottom: 6 }}>
-                {pulled.length} IN COMPANYCAM
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-                {pulled.slice(0, 9).map((ph) => (
-                  <img key={ph.id} src={ph.url} alt="" style={{ width: "100%", borderRadius: 7, display: "block" }} />
-                ))}
-              </div>
-              <div style={{ fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
-                These stay in CompanyCam. Copying them into the job album waits
-                on Supabase Storage — holding full-size photos in the database
-                is what the storage migration is for.
-              </div>
-            </div>
-          )}
+          <Btn kind="ghost" small style={{ width: "100%", marginTop: 8 }}
+            onClick={() => { mut((j) => ({ ...j, companyCam: null })); toast && toast("Unlinked"); }}>
+            Unlink
+          </Btn>
         </>
       )}
       {err && <Callout label="CompanyCam" tone="red">{err}</Callout>}
@@ -10816,18 +10781,6 @@ async function ccCreateProject(token, job) {
   };
 }
 
-async function ccProjectPhotos(token, projectId, limit = 24) {
-  const out = await ccFetch(token, `/projects/${projectId}/photos?per_page=${limit}`);
-  const list = Array.isArray(out) ? out : (out && out.photos) || [];
-  return list.map((ph) => ({
-    id: String(ph.id),
-    url: (ph.uris || []).find((u) => u.type === "web")?.uri
-      || (ph.uris || []).find((u) => u.type === "original")?.uri || "",
-    at: ph.captured_at || ph.created_at || "",
-    by: (ph.creator_name || ""),
-  })).filter((ph) => ph.url);
-}
-
 /* Per-seat token storage. Falls back to memory when the table is
    missing so the app still runs before migration 010. */
 async function ccLoadToken(userId) {
@@ -10895,7 +10848,7 @@ function CompanyCamConnect({ onConnect }) {
   );
 }
 
-function Integrations({ integrations, setIntegrations, currentUser, users = [], onBack, toast }) {
+function Integrations({ integrations, setIntegrations, currentUser, users = [], onBack, toast, ccAutoCreate = true, setCcAutoCreate = () => {} }) {
   const isAdmin = currentUser.role === "admin";
   const byUser = integrations.gmailByUser || {};
   const mine = byUser[currentUser.id] || { connected: false };
@@ -11094,6 +11047,14 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           read it — that needs migration 010, without which the connection
           will not survive a refresh.
         </div>
+        <label style={{ display: "flex", gap: 10, alignItems: "center", padding: "11px 0 2px", marginTop: 8, borderTop: `1px solid ${S.line}`, fontSize: 13.5 }}>
+          <input type="checkbox" checked={ccAutoCreate} onChange={(e) => setCcAutoCreate(e.target.checked)}
+            style={{ width: 18, height: 18, accentColor: T.accent }} />
+          <span>
+            <div style={{ fontWeight: 600 }}>Create a CompanyCam project for every new lead</div>
+            <div style={{ fontSize: 11.5, color: S.sub }}>Company-wide. Uses whoever created the lead's connection.</div>
+          </span>
+        </label>
       </Card>
 
       <Card style={{ marginTop: 12 }}>
@@ -12317,12 +12278,15 @@ export default function SupremeCRM() {
   /* Setup checklist state. Status flags and non-secret config only —
      never an actual secret; see the note on SetupKeys. */
   const [apiSetup, setApiSetup] = useState({});
+  /* Company setting, not a secret: create a CompanyCam project whenever
+     a lead is created (using whichever seat's token is connected). */
+  const [ccAutoCreate, setCcAutoCreate] = useState(true);
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup];
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate];
   const orgPack = () => ({
     announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates,
-    priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, version: 1,
+    priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, version: 1,
   });
   const unpackOrg = (d) => {
     if (d.announcements) setAnnouncements(d.announcements);
@@ -12338,6 +12302,7 @@ export default function SupremeCRM() {
     if (d.vendors) setVendors(d.vendors);
     if (d.reviewSettings) setReviewSettings(d.reviewSettings);
     if (d.apiSetup) setApiSetup(d.apiSetup);
+    if (d.ccAutoCreate !== undefined) setCcAutoCreate(d.ccAutoCreate);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
   const brandErr = useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true);
@@ -12502,6 +12467,29 @@ export default function SupremeCRM() {
     setNewLeadOpen(false);
     setLeadSeed(null);
     setOpenJobId(id); setNav("jobs");
+
+    /* Auto-create the matching CompanyCam project when the seat is
+       connected and the company has the setting on. Best-effort and
+       out of band — a CORS block or a CompanyCam hiccup must never stop
+       a lead from saving, so it only reports through a toast and writes
+       the link back if it succeeds. Reusing an existing property's
+       project avoids a duplicate on a repeat job at the same address. */
+    if (ccToken && ccAutoCreate) {
+      const twin = existingPropertyJob && existingPropertyJob.companyCam;
+      if (twin) {
+        setJobs((prev) => prev.map((j) => j.id === id ? { ...j, companyCam: twin } : j));
+      } else {
+        ccCreateProject(ccToken, job).then(
+          (proj) => {
+            setJobs((prev) => prev.map((j) => j.id === id ? { ...j, companyCam: proj } : j));
+            toast("CompanyCam project created");
+          },
+          (e) => toast(e && e.cors
+            ? "Lead saved. CompanyCam was blocked by the browser — open the job's Photos tab to finish linking."
+            : "Lead saved. CompanyCam project wasn't created — create it from the Photos tab.")
+        );
+      }
+    }
     return id;
   };
 
@@ -12712,7 +12700,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onBack={() => setNav("more")} toast={toast} />
       ) : nav === "integrations" ? (
         <Integrations integrations={integrations} setIntegrations={setIntegrations}
-          currentUser={liveUser} users={users} onBack={() => setNav("more")} toast={toast} />
+          currentUser={liveUser} users={users} onBack={() => setNav("more")} toast={toast}
+          ccAutoCreate={ccAutoCreate} setCcAutoCreate={setCcAutoCreate} />
       ) : nav === "team" ? (
         <TeamManager users={users} setUsers={setUsers} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} brand={brand} />

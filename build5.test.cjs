@@ -73,10 +73,12 @@ ok(src.includes("read_by_team"), "message read receipts are wired");
 /* --- CompanyCam --- */
 ok(src.includes('const CC_API = "https://api.companycam.com/v2"'), "real CompanyCam API base");
 ok(src.includes("async function ccCreateProject"), "project creation exists");
-ok(src.includes("async function ccProjectPhotos"), "photo pull exists");
+ok(!src.includes("async function ccProjectPhotos"), "photo pull removed — link only, no photo import");
 ok(src.includes("err.cors = true"), "CORS failures are distinguished from outages");
 ok(src.includes("crm_user_integrations"), "tokens stored in the RLS-scoped table");
 ok(src.includes("function CompanyCamJobCard"), "job-level CompanyCam card exists");
+ok(src.includes("ccAutoCreate"), "lead-creation auto-create toggle exists");
+ok(src.includes("Create a CompanyCam project for every new lead"), "auto-create setting is surfaced");
 ok(src.includes("Open in CompanyCam"), "project link is exposed on the job");
 ok(!src.includes("Today this stores your token per seat; pulling project photos"),
   "stale placeholder copy removed");
