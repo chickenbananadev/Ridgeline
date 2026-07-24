@@ -80,6 +80,10 @@ ok(src.includes('const isAdmin = !!(currentUser && currentUser.role === "admin")
 ok(src.includes("Week ahead"), "home screen week-ahead card exists");
 ok(src.includes('go("dispatch")'), "week-ahead card links to dispatch");
 ok(src.includes("SetupKeys"), "setup and keys screen exists");
+ok(!src.includes("if (!days.length && !unassigned.length) return null;"),
+  "week-ahead card is not hidden when empty");
+ok(src.includes("Nothing scheduled in the next seven days"), "week-ahead has an empty state");
+ok(src.includes("Nothing on the books for today"), "today card has an empty state");
 
 if (fails) { console.log("\nbuild 4: " + fails + " FAILED"); process.exit(1); }
 console.log("build 4 tests passed");

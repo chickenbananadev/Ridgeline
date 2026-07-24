@@ -2633,8 +2633,9 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         brand2.address && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10, color: S.sub, marginTop: 3, lineHeight: 1.35 }, children: String(brand2.address).split(",")[1] ? String(brand2.address).split(",").slice(-2).join(",").trim() : brand2.address })
       ] })
     ] }),
-    (todaysAppts.length > 0 || todaysCrews.length > 0 || overdue.length > 0 || dueToday.length > 0) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("calendar"), children: "Calendar \u2192" }), children: "Today" }),
+      !todaysAppts.length && !todaysCrews.length && !overdue.length && !dueToday.length && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, paddingBottom: 2 }, children: "Nothing on the books for today. Add an appointment from the calendar, or schedule a roof from a job's Production tab." }),
       todaysAppts.map(({ ap, job }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => job && onOpenJob(job.id), style: {
         display: "flex",
         gap: 10,
@@ -2773,11 +2774,10 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         if (appts.length || roofs.length) days.push({ iso, dt, appts, roofs, i });
       }
       const unassigned = jobs.filter((j) => j.schedDate && !j.crewId);
-      if (!days.length && !unassigned.length) return null;
       const dayLabel = (d) => d.i === 0 ? "Today" : d.i === 1 ? "Tomorrow" : d.dt.toLocaleDateString(void 0, { weekday: "short", month: "short", day: "numeric" });
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("dispatch"), children: "Dispatch \u2192" }), children: "Week ahead" }),
-        !days.length && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, paddingBottom: 4 }, children: "Nothing scheduled in the next seven days." }),
+        !days.length && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, paddingBottom: 4, lineHeight: 1.5 }, children: "Nothing scheduled in the next seven days. Appointments booked on the calendar and roofs given an install date both appear here automatically." }),
         days.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: `1px solid ${S.line}`, padding: "9px 0 4px" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12.5, fontWeight: 800, color: d.i === 0 ? T.accent : S.ink }, children: dayLabel(d) }),

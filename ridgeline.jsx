@@ -2135,10 +2135,18 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         </div>
       </div>
 
-      {/* Today — the 6am answer: where everyone needs to be, what's overdue */}
-      {(todaysAppts.length > 0 || todaysCrews.length > 0 || overdue.length > 0 || dueToday.length > 0) && (
+      {/* Today — the 6am answer: where everyone needs to be, what's overdue.
+          Always rendered, including empty: a card that vanishes on a quiet
+          day reads as a broken screen rather than a clear one. */}
+      {true && (
         <Card style={{ marginTop: 16 }}>
           <CardTitle right={<button style={linkBtn} onClick={() => go("calendar")}>Calendar →</button>}>Today</CardTitle>
+          {!todaysAppts.length && !todaysCrews.length && !overdue.length && !dueToday.length && (
+            <div style={{ fontSize: 13, color: S.sub, paddingBottom: 2 }}>
+              Nothing on the books for today. Add an appointment from the
+              calendar, or schedule a roof from a job's Production tab.
+            </div>
+          )}
 
           {todaysAppts.map(({ ap, job }) => (
             <button key={ap.id} onClick={() => job && onOpenJob(job.id)} style={{
@@ -2236,14 +2244,18 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
           if (appts.length || roofs.length) days.push({ iso, dt, appts, roofs, i });
         }
         const unassigned = jobs.filter((j) => j.schedDate && !j.crewId);
-        if (!days.length && !unassigned.length) return null;
+        /* Rendered even when empty so the card is visibly present. */
         const dayLabel = (d) => d.i === 0 ? "Today" : d.i === 1 ? "Tomorrow"
           : d.dt.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
         return (
           <Card style={{ marginTop: 16 }}>
             <CardTitle right={<button style={linkBtn} onClick={() => go("dispatch")}>Dispatch →</button>}>Week ahead</CardTitle>
             {!days.length && (
-              <div style={{ fontSize: 13, color: S.sub, paddingBottom: 4 }}>Nothing scheduled in the next seven days.</div>
+              <div style={{ fontSize: 13, color: S.sub, paddingBottom: 4, lineHeight: 1.5 }}>
+                Nothing scheduled in the next seven days. Appointments booked
+                on the calendar and roofs given an install date both appear
+                here automatically.
+              </div>
             )}
             {days.map((d) => (
               <div key={d.iso} style={{ borderTop: `1px solid ${S.line}`, padding: "9px 0 4px" }}>
