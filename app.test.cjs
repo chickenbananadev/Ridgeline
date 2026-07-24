@@ -2570,7 +2570,18 @@ function Login({ brand: brand2, users, onLogin }) {
     ] })
   ] });
 }
-function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand: brand2 = DEFAULT_BRAND }) {
+function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand: brand2 = DEFAULT_BRAND, appointments = [], apptTypes = [] }) {
+  const todayIso = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const todaysAppts = appointments.filter((ap) => ap.date === todayIso).map((ap) => ({ ap, job: jobs.find((j) => j.id === ap.jobId) })).sort((a, b) => String(a.ap.time || "99").localeCompare(String(b.ap.time || "99")));
+  const todaysCrews = jobs.filter((j) => j.schedDate === todayIso);
+  const overdue = jobs.flatMap((j) => (j.tasks || []).filter((t) => !t.done && t.due && t.due < todayIso).map((t) => ({ job: j, t })));
+  const dueToday = jobs.flatMap((j) => (j.tasks || []).filter((t) => !t.done && t.due === todayIso).map((t) => ({ job: j, t })));
+  const fmtTime = (t) => {
+    if (!t) return "";
+    const [h, m] = String(t).split(":").map(Number);
+    const ap = h >= 12 ? "PM" : "AM";
+    return `${(h + 11) % 12 + 1}:${String(m || 0).padStart(2, "0")} ${ap}`;
+  };
   const totalPipeline = jobs.filter((j) => !DEAD_STAGES.includes(j.stageId) && j.stageId !== "s10").reduce((s, j) => s + j.value, 0);
   const stale = jobs.filter((j) => j.daysInStage >= 14 && !["s10", "s11", "s12"].includes(j.stageId));
   const approvedPlus = jobs.filter((j) => WON_STAGES.includes(j.stageId));
@@ -2597,6 +2608,134 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: brand2.company, style: { height: 40, maxWidth: 130, objectFit: "contain", display: "block", marginLeft: "auto" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 800, color: T.primary }, children: brand2.short }),
         brand2.address && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10, color: S.sub, marginTop: 3, lineHeight: 1.35 }, children: String(brand2.address).split(",")[1] ? String(brand2.address).split(",").slice(-2).join(",").trim() : brand2.address })
       ] })
+    ] }),
+    (todaysAppts.length > 0 || todaysCrews.length > 0 || overdue.length > 0 || dueToday.length > 0) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("calendar"), children: "Calendar \u2192" }), children: "Today" }),
+      todaysAppts.map(({ ap, job: job2 }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => job2 && onOpenJob(job2.id), style: {
+        display: "flex",
+        gap: 10,
+        alignItems: "center",
+        width: "100%",
+        textAlign: "left",
+        border: "none",
+        background: "none",
+        cursor: "pointer",
+        padding: "8px 0",
+        borderTop: `1px solid ${S.line}`
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+          minWidth: 66,
+          fontSize: 12,
+          fontWeight: 800,
+          color: "#92600A",
+          background: "#FDF6EC",
+          border: "1px solid #F0DFC5",
+          borderRadius: 8,
+          padding: "5px 0",
+          textAlign: "center"
+        }, children: ap.time ? fmtTime(ap.time) : "Today" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }, children: [
+            ap.type,
+            job2 ? ` \u2014 ${job2.name}` : ""
+          ] }),
+          job2 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: job2.address })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 14, color: "#C7CBD1" })
+      ] }, ap.id)),
+      todaysCrews.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: {
+        display: "flex",
+        gap: 10,
+        alignItems: "center",
+        width: "100%",
+        textAlign: "left",
+        border: "none",
+        background: "none",
+        cursor: "pointer",
+        padding: "8px 0",
+        borderTop: `1px solid ${S.line}`
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+          minWidth: 66,
+          fontSize: 12,
+          fontWeight: 800,
+          color: T.accent,
+          background: T.accentSoft,
+          borderRadius: 8,
+          padding: "5px 0",
+          textAlign: "center"
+        }, children: "On site" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }, children: j.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: j.address })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 14, color: "#C7CBD1" })
+      ] }, j.id)),
+      overdue.map(({ job: job2, t }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(job2.id), style: {
+        display: "flex",
+        gap: 10,
+        alignItems: "center",
+        width: "100%",
+        textAlign: "left",
+        border: "none",
+        background: "none",
+        cursor: "pointer",
+        padding: "8px 0",
+        borderTop: `1px solid ${S.line}`
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+          minWidth: 66,
+          fontSize: 12,
+          fontWeight: 800,
+          color: "#B42318",
+          background: "#FDECEA",
+          border: "1px solid #F5C6C0",
+          borderRadius: 8,
+          padding: "5px 0",
+          textAlign: "center"
+        }, children: "Overdue" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }, children: t.label }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11.5, color: S.sub }, children: [
+            job2.name,
+            " \xB7 was due ",
+            t.due
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 14, color: "#C7CBD1" })
+      ] }, t.id)),
+      dueToday.map(({ job: job2, t }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(job2.id), style: {
+        display: "flex",
+        gap: 10,
+        alignItems: "center",
+        width: "100%",
+        textAlign: "left",
+        border: "none",
+        background: "none",
+        cursor: "pointer",
+        padding: "8px 0",
+        borderTop: `1px solid ${S.line}`
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+          minWidth: 66,
+          fontSize: 12,
+          fontWeight: 800,
+          color: "#177245",
+          background: "#EAF6EE",
+          border: "1px solid #CDE8D6",
+          borderRadius: 8,
+          padding: "5px 0",
+          textAlign: "center"
+        }, children: "Due today" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }, children: t.label }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11.5, color: S.sub }, children: [
+            job2.name,
+            t.time ? ` \xB7 by ${fmtTime(t.time)}` : ""
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 14, color: "#C7CBD1" })
+      ] }, t.id))
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("jobs"), children: "Open board \u2192" }), children: "Pipeline" }),
@@ -11487,7 +11626,9 @@ function SupremeCRM() {
             setBoardStage(id);
             setNav("jobs");
           },
-          brand: brand2
+          brand: brand2,
+          appointments,
+          apptTypes
         }
       )
     ] }) : nav === "jobs" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(

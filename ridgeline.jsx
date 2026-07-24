@@ -2067,7 +2067,23 @@ function Login({ brand, users, onLogin }) {
 /* ================================================================
    DASHBOARD
    ================================================================ */
-function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND }) {
+function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND, appointments = [], apptTypes = [] }) {
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const todaysAppts = appointments
+    .filter((ap) => ap.date === todayIso)
+    .map((ap) => ({ ap, job: jobs.find((j) => j.id === ap.jobId) }))
+    .sort((a, b) => String(a.ap.time || "99").localeCompare(String(b.ap.time || "99")));
+  const todaysCrews = jobs.filter((j) => j.schedDate === todayIso);
+  const overdue = jobs.flatMap((j) =>
+    (j.tasks || []).filter((t) => !t.done && t.due && t.due < todayIso).map((t) => ({ job: j, t })));
+  const dueToday = jobs.flatMap((j) =>
+    (j.tasks || []).filter((t) => !t.done && t.due === todayIso).map((t) => ({ job: j, t })));
+  const fmtTime = (t) => {
+    if (!t) return "";
+    const [h, m] = String(t).split(":").map(Number);
+    const ap = h >= 12 ? "PM" : "AM";
+    return `${((h + 11) % 12) + 1}:${String(m || 0).padStart(2, "0")} ${ap}`;
+  };
   const totalPipeline = jobs.filter((j) => !DEAD_STAGES.includes(j.stageId) && j.stageId !== "s10").reduce((s, j) => s + j.value, 0);
   const stale = jobs.filter((j) => j.daysInStage >= 14 && !["s10","s11","s12"].includes(j.stageId));
   const approvedPlus = jobs.filter((j) => WON_STAGES.includes(j.stageId));
@@ -2104,6 +2120,90 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
           )}
         </div>
       </div>
+
+      {/* Today — the 6am answer: where everyone needs to be, what's overdue */}
+      {(todaysAppts.length > 0 || todaysCrews.length > 0 || overdue.length > 0 || dueToday.length > 0) && (
+        <Card style={{ marginTop: 16 }}>
+          <CardTitle right={<button style={linkBtn} onClick={() => go("calendar")}>Calendar →</button>}>Today</CardTitle>
+
+          {todaysAppts.map(({ ap, job }) => (
+            <button key={ap.id} onClick={() => job && onOpenJob(job.id)} style={{
+              display: "flex", gap: 10, alignItems: "center", width: "100%", textAlign: "left",
+              border: "none", background: "none", cursor: "pointer", padding: "8px 0",
+              borderTop: `1px solid ${S.line}`,
+            }}>
+              <span style={{
+                minWidth: 66, fontSize: 12, fontWeight: 800, color: "#92600A",
+                background: "#FDF6EC", border: "1px solid #F0DFC5", borderRadius: 8,
+                padding: "5px 0", textAlign: "center",
+              }}>{ap.time ? fmtTime(ap.time) : "Today"}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }}>
+                  {ap.type}{job ? ` — ${job.name}` : ""}
+                </span>
+                {job && <span style={{ fontSize: 11.5, color: S.sub, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{job.address}</span>}
+              </span>
+              <ChevronRight size={14} color="#C7CBD1" />
+            </button>
+          ))}
+
+          {todaysCrews.map((j) => (
+            <button key={j.id} onClick={() => onOpenJob(j.id)} style={{
+              display: "flex", gap: 10, alignItems: "center", width: "100%", textAlign: "left",
+              border: "none", background: "none", cursor: "pointer", padding: "8px 0",
+              borderTop: `1px solid ${S.line}`,
+            }}>
+              <span style={{
+                minWidth: 66, fontSize: 12, fontWeight: 800, color: T.accent,
+                background: T.accentSoft, borderRadius: 8, padding: "5px 0", textAlign: "center",
+              }}>On site</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }}>{j.name}</span>
+                <span style={{ fontSize: 11.5, color: S.sub, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.address}</span>
+              </span>
+              <ChevronRight size={14} color="#C7CBD1" />
+            </button>
+          ))}
+
+          {overdue.map(({ job, t }) => (
+            <button key={t.id} onClick={() => onOpenJob(job.id)} style={{
+              display: "flex", gap: 10, alignItems: "center", width: "100%", textAlign: "left",
+              border: "none", background: "none", cursor: "pointer", padding: "8px 0",
+              borderTop: `1px solid ${S.line}`,
+            }}>
+              <span style={{
+                minWidth: 66, fontSize: 12, fontWeight: 800, color: "#B42318",
+                background: "#FDECEA", border: "1px solid #F5C6C0", borderRadius: 8,
+                padding: "5px 0", textAlign: "center",
+              }}>Overdue</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }}>{t.label}</span>
+                <span style={{ fontSize: 11.5, color: S.sub }}>{job.name} · was due {t.due}</span>
+              </span>
+              <ChevronRight size={14} color="#C7CBD1" />
+            </button>
+          ))}
+
+          {dueToday.map(({ job, t }) => (
+            <button key={t.id} onClick={() => onOpenJob(job.id)} style={{
+              display: "flex", gap: 10, alignItems: "center", width: "100%", textAlign: "left",
+              border: "none", background: "none", cursor: "pointer", padding: "8px 0",
+              borderTop: `1px solid ${S.line}`,
+            }}>
+              <span style={{
+                minWidth: 66, fontSize: 12, fontWeight: 800, color: "#177245",
+                background: "#EAF6EE", border: "1px solid #CDE8D6", borderRadius: 8,
+                padding: "5px 0", textAlign: "center",
+              }}>Due today</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }}>{t.label}</span>
+                <span style={{ fontSize: 11.5, color: S.sub }}>{job.name}{t.time ? ` · by ${fmtTime(t.time)}` : ""}</span>
+              </span>
+              <ChevronRight size={14} color="#C7CBD1" />
+            </button>
+          ))}
+        </Card>
+      )}
 
       {/* Pipeline at a glance — counts and dollars per stage, tap to filter the board */}
       <Card style={{ marginTop: 16 }}>
@@ -10096,7 +10196,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           <div style={{ paddingTop: 14 }}><AnnouncementBar announcements={announcements} /></div>
           <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav}
             onNewLead={() => setNewLeadOpen(true)} onQuickTask={() => setQuickTaskOpen(true)}
-            onOpenStage={(id) => { setBoardStage(id); setNav("jobs"); }} brand={brand} />
+            onOpenStage={(id) => { setBoardStage(id); setNav("jobs"); }} brand={brand}
+            appointments={appointments} apptTypes={apptTypes} />
         </>
       ) : nav === "jobs" ? (
         <JobBoard jobs={jobs} stages={stages} filters={filters}
