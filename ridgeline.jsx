@@ -2494,7 +2494,7 @@ function SubHeader({ title, onBack, right }) {
 /* ================================================================
    CALENDAR — month grid; jobs with a scheduled date appear as dots
    ================================================================ */
-function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage }) {
+function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage, onLog = () => {} }) {
   const today = new Date();
   const [month, setMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [adding, setAdding] = useState(false);
@@ -2519,6 +2519,11 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
 
   const jobsOn = (d) => jobs.filter((j) => j.schedDate === iso(d));
   const apptsOn = (d) => appointments.filter((ap) => ap.date === iso(d));
+  const allTasks = jobs.flatMap((j) => (j.tasks || []).filter((t) => t.due && !t.done).map((t) => ({ job: j, task: t })));
+  const tasksOn = (d) => allTasks.filter(({ task }) => task.due === iso(d));
+  const monthTasks = allTasks
+    .filter(({ task }) => task.due.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`))
+    .sort((a2, b2) => a2.task.due.localeCompare(b2.task.due));
   const monthAppts = appointments
     .filter((ap) => ap.date && ap.date.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`))
     .sort((a2, b2) => (a2.date + (a2.time || "")).localeCompare(b2.date + (b2.time || "")));
@@ -2527,11 +2532,14 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     .sort((a2, b2) => a2.schedDate.localeCompare(b2.schedDate));
 
   const save = () => {
+    const jb = jobs.find((x) => x.id === f.jobId);
     if (editingId) {
       setAppointments(appointments.map((ap) => (ap.id === editingId ? { ...ap, ...f } : ap)));
+      onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `updated ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
       toast("Appointment updated");
     } else {
       setAppointments([...appointments, { ...f, id: uid("ap") }]);
+      onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `scheduled ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
       toast("Appointment added");
     }
     setAdding(false); setEditingId(null);
@@ -2552,6 +2560,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       subject: channel === "email" ? `Upcoming ${f.type.toLowerCase()} — ${when}` : "",
       body, status: "Queued", at: new Date().toISOString().slice(0, 16).replace("T", " "),
     });
+    onLog({ kind: "message", jobId: j.id, jobName: j.name, text: `queued ${channel === "sms" ? "a text" : "an email"} reminder to ${j.name} for the ${f.type.toLowerCase()} on ${f.date}` });
     toast(`${channel === "sms" ? "Text" : "Email"} reminder queued — see it in the Inbox`);
   };
   const addType = () => {
@@ -2593,6 +2602,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
                 <div style={{ display: "flex", gap: 3, justifyContent: "center", height: 6, marginTop: 2 }}>
                   {hasJob && <span style={{ width: 5, height: 5, borderRadius: 99, background: T.accent }} />}
                   {hasAppt && <span style={{ width: 5, height: 5, borderRadius: 99, background: "#92600A" }} />}
+                  {tasksOn(d).length > 0 && <span style={{ width: 5, height: 5, borderRadius: 99, background: "#177245" }} />}
                 </div>
               </div>
             );
@@ -2601,6 +2611,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
         <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 11.5, color: S.sub }}>
           <span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: T.accent, marginRight: 5 }} />Production</span>
           <span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: "#92600A", marginRight: 5 }} />Appointment</span>
+          <span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 99, background: "#177245", marginRight: 5 }} />Task due</span>
         </div>
       </Card>
 
@@ -2624,6 +2635,14 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
           </Card>
         );
       })}
+      {monthTasks.map(({ job: j2, task: t2 }) => (
+        <Card key={t2.id} pad={14} style={{ marginTop: 8 }}>
+          <button onClick={() => onOpenJob(j2.id)} style={{ border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, width: "100%" }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>Task — {t2.label}</div>
+            <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>Due {t2.due} · {j2.name}</div>
+          </button>
+        </Card>
+      ))}
       {monthJobs.map((j) => (
         <Card key={j.id} pad={14} style={{ marginTop: 8 }}>
           <button onClick={() => onOpenJob(j.id)} style={{ border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, width: "100%" }}>
@@ -3224,7 +3243,7 @@ const JOB_TABS = [
 ];
 
 function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [],
-  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {} }) {
+  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES }) {
   const [tab, setTab] = useState("overview");
   const MONEY_TABS = ["estimate", "contract", "financials", "payments", "invoice"];
   const visibleTabs = JOB_TABS.filter(([id]) => showMoney || !MONEY_TABS.includes(id));
@@ -3267,7 +3286,8 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
         </div>
       </div>
       <div style={{ padding: 16 }}>
-        {tab === "overview" && <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand} />}
+        {tab === "overview" && <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand}
+          currentUser={currentUser} onLog={onLog} leadSources={leadSources} />}
         {tab === "checklist" && <TabChecklist job={job} mut={mut} toast={toast} />}
         {tab === "measure" && <TabMeasure job={job} mut={mut} toast={toast} />}
         {tab === "materials" && <TabMaterials job={job} toast={toast} />}
@@ -3292,12 +3312,61 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
 }
 
 /* ---------- Overview ---------- */
-function TabOverview({ job, juris, mut, toast, reviewSettings, brand }) {
+function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {}, leadSources = LEAD_SOURCES }) {
+  const notes = job.notes || [];
+  const [noteTxt, setNoteTxt] = useState("");
+  const [noteVisible, setNoteVisible] = useState(false);
+  const addNote = () => {
+    const t = noteTxt.trim();
+    if (!t) return;
+    const n = {
+      id: uid("n"), by: currentUser.name, at: new Date().toISOString().slice(0, 16).replace("T", " "),
+      text: t, customerVisible: noteVisible,
+    };
+    mut((j) => ({ ...j, notes: [n, ...(j.notes || [])] }));
+    onLog({ kind: "note", jobId: job.id, jobName: job.name, text: `noted on ${job.name}: "${t.slice(0, 70)}${t.length > 70 ? "…" : ""}"${noteVisible ? " (customer-visible)" : ""}` });
+    setNoteTxt(""); setNoteVisible(false);
+    toast(noteVisible ? "Note added — customer can see this in their portal" : "Internal note added");
+  };
+  const toggleNoteVis = (id) =>
+    mut((j) => ({ ...j, notes: (j.notes || []).map((n) => (n.id === id ? { ...n, customerVisible: !n.customerVisible } : n)) }));
   const cap = computeCapOut(job);
   const pay = paymentsSummary(job);
   const canReview = (job.consent.sms.granted || job.consent.email.granted) && !job.review.sent;
   return (
     <>
+      <Card style={{ marginBottom: 12 }}>
+        <CardTitle right={
+          <select style={{ ...selStyle, width: "auto", padding: "7px 30px 7px 10px", fontSize: 12.5 }}
+            value={job.leadSource || ""} onChange={(e) => mut((j) => ({ ...j, leadSource: e.target.value }))}>
+            <option value="">Lead source…</option>
+            {leadSources.map((l) => <option key={l}>{l}</option>)}
+          </select>
+        }>Notes & updates</CardTitle>
+        <textarea style={{ ...inputStyle, minHeight: 64, resize: "vertical", fontFamily: "inherit" }}
+          value={noteTxt} onChange={(e) => setNoteTxt(e.target.value)}
+          placeholder="Log a call, a decision, a heads-up…" />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 9 }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: S.ink, cursor: "pointer" }}>
+            <input type="checkbox" checked={noteVisible} onChange={(e) => setNoteVisible(e.target.checked)}
+              style={{ width: 17, height: 17, accentColor: T.accent }} />
+            Visible to customer in their portal
+          </label>
+          <Btn small onClick={addNote} disabled={!noteTxt.trim()}>Add note</Btn>
+        </div>
+        {notes.map((n) => (
+          <div key={n.id} style={{ borderTop: `1px solid ${S.line}`, padding: "11px 0", marginTop: 11 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+              <span style={{ fontSize: 11.5, color: S.sub }}>{n.by} · {n.at}</span>
+              <button onClick={() => toggleNoteVis(n.id)} style={{ border: "none", background: "none", cursor: "pointer", padding: 0 }}>
+                <Chip tone={n.customerVisible ? "green" : "gray"}>{n.customerVisible ? "Customer can see" : "Internal only"}</Chip>
+              </button>
+            </div>
+            <div style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 4, whiteSpace: "pre-wrap" }}>{n.text}</div>
+          </div>
+        ))}
+      </Card>
+
       <Card>
         <CardTitle>Contact</CardTitle>
         <KV k="Phone" v={job.phone} />
@@ -4980,6 +5049,8 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
 
 function TabTasks({ job, mut }) {
   const [txt, setTxt] = useState("");
+  const [due, setDue] = useState("");
+  const today = new Date().toISOString().slice(0, 10);
   return (
     <Card>
       <CardTitle>Project tasks</CardTitle>
@@ -4991,17 +5062,25 @@ function TabTasks({ job, mut }) {
             borderBottom: `1px solid ${S.line}`,
           }}>
           {t.done ? <CheckCircle2 size={20} color="#177245" /> : <Circle size={20} color="#C7CBD1" />}
-          <span style={{
-            fontSize: 15, color: t.done ? S.sub : S.ink,
-            textDecoration: t.done ? "line-through" : "none",
-          }}>{t.label}</span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{
+              fontSize: 15, color: t.done ? S.sub : S.ink,
+              textDecoration: t.done ? "line-through" : "none", display: "block",
+            }}>{t.label}</span>
+            {t.due && (
+              <Chip tone={t.done ? "gray" : t.due < today ? "red" : "blue"}>
+                {t.due < today && !t.done ? "Overdue · " : "Due "}{t.due}
+              </Chip>
+            )}
+          </span>
         </button>
       ))}
-      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-        <input style={{ ...inputStyle, flex: 1 }} placeholder="Add a task" value={txt}
+      <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+        <input style={{ ...inputStyle, flex: 1, minWidth: 160 }} placeholder="Add a task" value={txt}
           onChange={(e) => setTxt(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && txt.trim()) { mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: txt.trim(), done: false }] })); setTxt(""); } }} />
-        <Btn small disabled={!txt.trim()} onClick={() => { mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: txt.trim(), done: false }] })); setTxt(""); }}>
+          onKeyDown={(e) => { if (e.key === "Enter" && txt.trim()) { mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: txt.trim(), done: false, due: due || null }] })); setTxt(""); setDue(""); } }} />
+        <input style={{ ...inputStyle, width: 150 }} type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+        <Btn small disabled={!txt.trim()} onClick={() => { mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: txt.trim(), done: false, due: due || null }] })); setTxt(""); setDue(""); }}>
           <Plus size={14} />
         </Btn>
       </div>
@@ -5061,6 +5140,18 @@ function TabPortal({ job, brand, mut, toast }) {
   ];
   return (
     <>
+      <Card style={{ marginBottom: 12 }}>
+        <CardTitle>Updates from your team</CardTitle>
+        {(job.notes || []).filter((n) => n.customerVisible).length === 0 ? (
+          <div style={{ fontSize: 13.5, color: S.sub }}>Updates your team shares will appear here.</div>
+        ) : (job.notes || []).filter((n) => n.customerVisible).map((n) => (
+          <div key={n.id} style={{ borderTop: `1px solid ${S.line}`, padding: "10px 0" }}>
+            <div style={{ fontSize: 11.5, color: S.sub }}>{n.at}</div>
+            <div style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 3, whiteSpace: "pre-wrap" }}>{n.text}</div>
+          </div>
+        ))}
+      </Card>
+
       <Card>
         <CardTitle>Client portal</CardTitle>
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 14 }}>
@@ -5898,6 +5989,171 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
 /* ================================================================
    BRANDING EDITOR + MORE MENU + INBOX
    ================================================================ */
+function ActivityFeed({ activity, currentUser, onOpenJob, onBack }) {
+  const isMgr = currentUser.role === "admin" || currentUser.role === "manager";
+  const [kind, setKind] = useState("All");
+  const mine = isMgr ? activity : activity.filter((a) => a.by === currentUser.name);
+  const KINDS = ["All", "lead", "stage", "task", "note", "message", "appointment"];
+  const list = mine.filter((a) => kind === "All" || a.kind === kind);
+  const initials = (n) => n.split(" ").map((x) => x[0]).join("").slice(0, 2).toUpperCase();
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Activity feed" onBack={onBack} />
+      <div style={{ fontSize: 13, color: S.sub, margin: "10px 0 12px" }}>
+        {isMgr ? "Everything anyone has done, newest first." : "Your activity, newest first. Admins and managers see the whole team's."}
+      </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+        {KINDS.map((k) => (
+          <button key={k} onClick={() => setKind(k)} style={{
+            border: `1.5px solid ${kind === k ? T.accent : S.line}`,
+            background: kind === k ? T.accentSoft : "#fff",
+            color: kind === k ? T.accent : S.ink,
+            borderRadius: 999, padding: "6px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+            textTransform: "capitalize",
+          }}>{k}</button>
+        ))}
+      </div>
+      {list.length === 0 && (
+        <Card><div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
+          Nothing yet. Stage moves, new leads, tasks, notes, and queued messages all land here as they happen.
+        </div></Card>
+      )}
+      {list.map((a) => (
+        <Card key={a.id} pad={13} style={{ marginTop: 8 }}>
+          <div style={{ display: "flex", gap: 11, alignItems: "flex-start" }}>
+            <span style={{
+              width: 36, height: 36, borderRadius: 99, background: T.accentSoft, color: T.accent,
+              display: "grid", placeItems: "center", fontSize: 12.5, fontWeight: 800, flexShrink: 0,
+            }}>{initials(a.by)}</span>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>
+                <b>{a.by}</b> {a.text}
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 4 }}>
+                <span style={{ fontSize: 11.5, color: S.sub }}>{a.at}</span>
+                {a.jobId && (
+                  <button onClick={() => onOpenJob(a.jobId)} style={{ ...linkBtn, fontSize: 12 }}>
+                    {a.jobName || "Open job"} →
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }) {
+  const [txt, setTxt] = useState("");
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [tagOpen, setTagOpen] = useState(false);
+  const [tagged, setTagged] = useState(null); // jobId
+  const inputRef = useRef(null);
+  const send = () => {
+    const t = txt.trim();
+    if (!t) return;
+    const mentions = users.filter((u) => t.includes(`@${u.name}`)).map((u) => u.name);
+    setMsgs([...msgs, {
+      id: uid("cm"), by: currentUser.name, at: new Date().toISOString().slice(0, 16).replace("T", " "),
+      text: t, mentions, jobId: tagged,
+    }]);
+    setTxt(""); setTagged(null);
+  };
+  const insert = (frag) => {
+    setTxt((prev) => (prev ? prev.replace(/\s?$/, " ") : "") + frag + " ");
+    if (inputRef.current) inputRef.current.focus();
+  };
+  const renderText = (t) => t.split(/(@[A-Z][a-zA-Z]+ [A-Z][a-zA-Z]+)/g).map((part, i2) =>
+    part.startsWith("@")
+      ? <b key={i2} style={{ color: T.accent }}>{part}</b>
+      : <span key={i2}>{part}</span>);
+  const jobOf = (id) => jobs.find((j) => j.id === id);
+  const initials = (n) => n.split(" ").map((x) => x[0]).join("").slice(0, 2).toUpperCase();
+  return (
+    <div style={{ padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Team chat" onBack={onBack} />
+      <div style={{ fontSize: 12.5, color: S.sub, margin: "10px 0 12px", lineHeight: 1.5 }}>
+        One channel for the whole company. @ someone when a customer calls in for them; tag the job so the thread
+        is one tap away. Messages sync across everyone's devices once the app is wired to the database.
+      </div>
+      {msgs.length === 0 && (
+        <Card><div style={{ fontSize: 14, color: S.sub }}>No messages yet — say something.</div></Card>
+      )}
+      {msgs.map((m) => {
+        const j = m.jobId ? jobOf(m.jobId) : null;
+        const me = m.by === currentUser.name;
+        const mentioned = m.mentions.includes(currentUser.name);
+        return (
+          <div key={m.id} style={{ display: "flex", gap: 10, marginTop: 10, flexDirection: me ? "row-reverse" : "row" }}>
+            <span style={{
+              width: 34, height: 34, borderRadius: 99, background: me ? T.primary : T.accentSoft,
+              color: me ? "#fff" : T.accent, display: "grid", placeItems: "center",
+              fontSize: 12, fontWeight: 800, flexShrink: 0,
+            }}>{initials(m.by)}</span>
+            <div style={{
+              maxWidth: "78%", background: mentioned ? "#FDF6EC" : "#fff",
+              border: `1px solid ${mentioned ? "#F0DFC5" : S.line}`,
+              borderRadius: 14, padding: "10px 13px",
+            }}>
+              <div style={{ fontSize: 11.5, color: S.sub, marginBottom: 3 }}>{m.by} · {m.at}</div>
+              <div style={{ fontSize: 14, lineHeight: 1.5 }}>{renderText(m.text)}</div>
+              {j && (
+                <button onClick={() => onOpenJob(j.id)} style={{
+                  marginTop: 7, border: `1px solid ${S.line}`, background: S.bg, borderRadius: 9,
+                  padding: "6px 10px", fontSize: 12.5, cursor: "pointer", display: "flex", gap: 6, alignItems: "center",
+                }}>
+                  <Home size={12} color={T.accent} /> {j.name} — {j.address}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      <div style={{
+        position: "fixed", left: 0, right: 0, bottom: 86, background: "#fff",
+        borderTop: `1px solid ${S.line}`, padding: "10px 16px",
+      }}>
+        {tagged && (
+          <div style={{ marginBottom: 7 }}>
+            <Chip tone="blue">Tagged: {(jobOf(tagged) || {}).name} <button onClick={() => setTagged(null)} style={{ border: "none", background: "none", cursor: "pointer", color: "inherit", fontWeight: 800 }}>×</button></Chip>
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+          <Btn kind="ghost" small onClick={() => { setMentionOpen(true); }}>@</Btn>
+          <Btn kind="ghost" small onClick={() => { setTagOpen(true); }}><Home size={13} /></Btn>
+          <textarea ref={inputRef} style={{ ...inputStyle, flex: 1, minHeight: 42, maxHeight: 110, resize: "none", fontFamily: "inherit" }}
+            value={txt} placeholder="Message the team…" onChange={(e) => setTxt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
+          <Btn onClick={send} disabled={!txt.trim()}><Send size={15} /></Btn>
+        </div>
+      </div>
+
+      <Sheet open={mentionOpen} onClose={() => setMentionOpen(false)} title="Mention someone">
+        {users.filter((u) => u.active !== false && u.name !== currentUser.name).map((u, i2) => (
+          <button key={u.id} onClick={() => { insert(`@${u.name}`); setMentionOpen(false); }} style={{
+            width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer",
+            padding: "12px 4px", borderTop: i2 ? `1px solid ${S.line}` : "none", fontSize: 14.5, fontWeight: 600,
+          }}>@{u.name} <span style={{ fontSize: 12, color: S.sub, fontWeight: 400 }}>· {u.title}</span></button>
+        ))}
+      </Sheet>
+      <Sheet open={tagOpen} onClose={() => setTagOpen(false)} title="Tag a job">
+        {jobs.filter((j) => !DEAD_STAGES.includes(j.stageId)).map((j, i2) => (
+          <button key={j.id} onClick={() => { setTagged(j.id); setTagOpen(false); }} style={{
+            width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer",
+            padding: "12px 4px", borderTop: i2 ? `1px solid ${S.line}` : "none",
+          }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700 }}>{j.name}</div>
+            <div style={{ fontSize: 12.5, color: S.sub }}>{j.address}</div>
+          </button>
+        ))}
+      </Sheet>
+    </div>
+  );
+}
+
 function VendorManager({ vendors, setVendors, currentUser, onBack, toast }) {
   const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
   const blank = { name: "", contact: "", phone: "", email: "", account: "", notes: "", active: true };
@@ -7214,6 +7470,8 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
 
 function MoreMenu({ onNav, onLogout, brand, currentUser }) {
   const items = [
+    ["activity", ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
+    ["chat", MessageCircle, "Team chat", "Talk to the team — @ someone, tag a job"],
     ["insurance", Shield, "Insurance", "Clients, supplements, code lookup"],
     ["performance", PieChart, "Performance", "Rep scoreboard & funnel"],
     ["calendar", CalIcon, "Calendar", "Schedule & material drops"],
@@ -7377,6 +7635,8 @@ export default function SupremeCRM() {
   ]);
   const [appointments, setAppointments] = useState([]);
   const [estimateTemplates, setEstimateTemplates] = useState([]);
+  const [activity, setActivity] = useState([]);
+  const [chatMsgs, setChatMsgs] = useState([]);
   const [apptTypes, setApptTypes] = useState(["Inspection", "Adjuster meeting", "Estimate presentation", "Production start", "Final walkthrough"]);
   const [integrations, setIntegrations] = useState({
     /* Gmail is per-user: each rep connects their own mailbox so email
@@ -7395,7 +7655,7 @@ export default function SupremeCRM() {
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [quickTaskOpen, setQuickTaskOpen] = useState(false);
   const [inboxPick, setInboxPick] = useState(false);
-  const [qt, setQt] = useState({ jobId: "", label: "" });
+  const [qt, setQt] = useState({ jobId: "", label: "", due: "" });
   const [toastMsg, setToastMsg] = useState("");
   const [filters, setFilters] = useState({ sort: "updated", assignees: [], stages: [], sources: [] });
   const [reviewSettings, setReviewSettings] = useState({
@@ -7407,22 +7667,28 @@ export default function SupremeCRM() {
   T.accent = brand.accent || "#1B6DE0";
   T.accentSoft = brand.accentSoft && brand.accentSoftCustom ? brand.accentSoft : softOf(T.accent);
 
+  const logAct = (entry) =>
+    setActivity((prev) => [{
+      id: uid("act"),
+      at: new Date().toISOString().slice(0, 16).replace("T", " "),
+      by: userName,
+      ...entry,
+    }, ...prev].slice(0, 500));
+
   const toast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(""), 2200); };
 
-  const mutJob = (id) => (fn) => setJobs((prev) => prev.map((j) => (j.id === id ? fn(j) : j)));
+  const applyJob = (id, fn) => setJobs((prev) => prev.map((j) => (j.id === id ? fn(j) : j)));
+  /* Callable both ways: mutJob(id)(fn) and mutJob(id, fn). */
+  const mutJob = (id, fn) => (fn ? applyJob(id, fn) : (f2) => applyJob(id, f2));
 
   const moveStage = (jobId, stageId) => {
+    const jb = jobs.find((x) => x.id === jobId);
+    const stage = stages.find((x) => x.id === stageId);
     setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, stageId, daysInStage: 0, updated: "just now" } : j)));
-    const stage = stages.find((s) => s.id === stageId);
-    if (stage && /completed/i.test(stage.name)) {
-      const j = jobs.find((x) => x.id === jobId);
-      if (reviewSettings.enabled && j && (j.consent.sms.granted || j.consent.email.granted) && !j.review.sent) {
-        setJobs((prev) => prev.map((x) => (x.id === jobId ? { ...x, review: { ...x.review, sent: true } } : x)));
-        toast(`Job completed — review request queued (${reviewSettings.delayHours}h delay)`);
-        return;
-      }
+    if (jb && stage) {
+      logAct({ kind: "stage", jobId, jobName: jb.name, text: `moved ${jb.name} to "${stage.label}"` });
+      toast(`Moved to ${stage.label}`);
     }
-    toast(stage ? `Moved to ${stage.name}` : "Moved");
   };
 
   const applyRemovedStages = (nextStages) => {
@@ -7462,6 +7728,7 @@ export default function SupremeCRM() {
       portal: { estimate: false, contract: false, photos: false, invoice: false }, crewId: null, messages: [], workOrder: null,
       review: { sent: false, clicked: false, posted: false },
     }, ...prev]);
+    logAct({ kind: "lead", jobId: job.id, jobName: job.name, text: `created new lead ${job.name} (${job.leadSource})` });
     toast("Lead created");
     setOpenJobId(id); setNav("jobs");
   };
@@ -7538,7 +7805,8 @@ export default function SupremeCRM() {
           onMoveStage={moveStage} mut={mutJob(openJob.id)} toast={toast} reviewSettings={reviewSettings}
 currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           crews={crews} setCrews={setCrews} templates={templates} integrations={integrations} users={users}
-          estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} setBrand={setBrand} />
+          estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} setBrand={setBrand}
+          onLog={logAct} leadSources={leadSources} />
       ) : nav === "home" ? (
         <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav}
           onNewLead={() => setNewLeadOpen(true)} onQuickTask={() => setQuickTaskOpen(true)} />
@@ -7558,13 +7826,18 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "calendar" ? (
         <CalendarView jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}
           appointments={appointments} setAppointments={setAppointments}
-          apptTypes={apptTypes} setApptTypes={setApptTypes} toast={toast}
+          apptTypes={apptTypes} setApptTypes={setApptTypes} toast={toast} onLog={logAct}
           onQueueMessage={(jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))} />
       ) : nav === "contacts" ? (
         <Contacts jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
       ) : nav === "reviews" ? (
         <ReviewSettings settings={reviewSettings} setSettings={setReviewSettings} jobs={jobs}
           onBack={() => setNav("more")} brand={brand} setBrandFromReviews={setBrand} mut={mutJob} toast={toast} />
+      ) : nav === "activity" ? (
+        <ActivityFeed activity={activity} currentUser={liveUser} onOpenJob={openJobScreen} onBack={() => setNav("more")} />
+      ) : nav === "chat" ? (
+        <TeamChat msgs={chatMsgs} setMsgs={setChatMsgs} users={users} jobs={jobs}
+          currentUser={liveUser} onOpenJob={openJobScreen} onBack={() => setNav("more")} />
       ) : nav === "vendors" ? (
         <VendorManager vendors={vendors} setVendors={setVendors} currentUser={liveUser}
           onBack={() => setNav("more")} toast={toast} />
@@ -7634,8 +7907,10 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
 
       <Sheet open={quickTaskOpen} onClose={() => setQuickTaskOpen(false)} title="Quick task"
         footer={<Btn style={{ width: "100%" }} disabled={!qt.jobId || !qt.label.trim()} onClick={() => {
-          mutJob(qt.jobId, (j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: qt.label.trim(), done: false }] }));
-          setQuickTaskOpen(false); setQt({ jobId: "", label: "" }); toast("Task added");
+          const target = jobs.find((j) => j.id === qt.jobId);
+          mutJob(qt.jobId, (j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: qt.label.trim(), done: false, due: qt.due || null }] }));
+          logAct({ kind: "task", jobId: qt.jobId, jobName: target ? target.name : "", text: `added task "${qt.label.trim()}"${qt.due ? ` due ${qt.due}` : ""}${target ? ` on ${target.name}` : ""}` });
+          setQuickTaskOpen(false); setQt({ jobId: "", label: "", due: "" }); toast("Task added");
         }}>Add task</Btn>}>
         <Field label="Customer / job">
           <select style={selStyle} value={qt.jobId} onChange={(e) => setQt({ ...qt, jobId: e.target.value })}>
@@ -7644,6 +7919,9 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           </select>
         </Field>
         <Field label="Task"><input style={inputStyle} value={qt.label} onChange={(e) => setQt({ ...qt, label: e.target.value })} placeholder="Call adjuster back, order materials…" /></Field>
+        <Field label="Deadline (optional)" hint="Tasks with deadlines show on the calendar.">
+          <input style={inputStyle} type="date" value={qt.due} onChange={(e) => setQt({ ...qt, due: e.target.value })} />
+        </Field>
       </Sheet>
       <FiltersSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} stages={stages}
         filters={filters} setFilters={setFilters} />
