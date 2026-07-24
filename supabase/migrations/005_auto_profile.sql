@@ -21,7 +21,7 @@ begin
     new.id,
     coalesce(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
     new.email,
-    coalesce(new.raw_user_meta_data->>'role', 'rep'),
+    coalesce(new.raw_user_meta_data->>'role', 'rep')::user_role,
     coalesce(new.raw_user_meta_data->>'title', 'Sales Rep'),
     true,
     coalesce((new.raw_user_meta_data->>'commission_rate')::numeric, 60)
@@ -41,7 +41,7 @@ insert into public.profiles (id, name, email, role, title, active, commission_ra
 select u.id,
        coalesce(u.raw_user_meta_data->>'name', split_part(u.email, '@', 1)),
        u.email,
-       coalesce(u.raw_user_meta_data->>'role', 'rep'),
+       coalesce(u.raw_user_meta_data->>'role', 'rep')::user_role,
        coalesce(u.raw_user_meta_data->>'title', 'Sales Rep'),
        true,
        60
