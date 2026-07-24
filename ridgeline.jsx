@@ -2639,7 +2639,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
         <Card key={t2.id} pad={14} style={{ marginTop: 8 }}>
           <button onClick={() => onOpenJob(j2.id)} style={{ border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, width: "100%" }}>
             <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>Task — {t2.label}</div>
-            <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>Due {t2.due} · {j2.name}</div>
+            <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>Due {t2.due}{t2.time ? ` at ${t2.time}` : ""} · {j2.name}</div>
           </button>
         </Card>
       ))}
@@ -3094,9 +3094,23 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
         {job.value > 0 && <div style={{ fontSize: 14, fontWeight: 700, color: S.ink, whiteSpace: "nowrap" }}>{money(job.value)}</div>}
       </div>
       <div style={{ fontSize: 13, color: S.sub, marginTop: 3 }}>{job.address}</div>
-      <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
         <Chip tone={job.claimType === "Insurance" ? "blue" : "gray"}>{job.claimType === "Unknown" ? "TBD" : job.claimType}</Chip>
         <Chip tone="slate">{job.state}</Chip>
+        {job.priority && (
+          <Chip tone={job.priority === "Urgent" ? "red" : job.priority === "High" ? "amber" : "gray"}>{job.priority}</Chip>
+        )}
+        {job.leadQuality > 0 && (
+          <span style={{ display: "inline-flex", gap: 2 }}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <span key={n} style={{
+                width: 7, height: 7, borderRadius: 2,
+                background: job.leadQuality >= n ? T.accent : S.line,
+              }} />
+            ))}
+          </span>
+        )}
+        {(job.tags || []).slice(0, 2).map((t) => <Chip key={t} tone="blue">{t}</Chip>)}
       </div>
       <div style={{
         display: "flex", justifyContent: "space-between", alignItems: "center",
@@ -3243,7 +3257,7 @@ const JOB_TABS = [
 ];
 
 function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [],
-  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES }) {
+  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [] }) {
   const [tab, setTab] = useState("overview");
   const MONEY_TABS = ["estimate", "contract", "financials", "payments", "invoice"];
   const visibleTabs = JOB_TABS.filter(([id]) => showMoney || !MONEY_TABS.includes(id));
@@ -3287,10 +3301,10 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
       </div>
       <div style={{ padding: 16 }}>
         {tab === "overview" && <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand}
-          currentUser={currentUser} onLog={onLog} leadSources={leadSources} />}
+          currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} />}
         {tab === "checklist" && <TabChecklist job={job} mut={mut} toast={toast} />}
         {tab === "measure" && <TabMeasure job={job} mut={mut} toast={toast} />}
-        {tab === "materials" && <TabMaterials job={job} toast={toast} />}
+        {tab === "materials" && <TabMaterials job={job} mut={mut} toast={toast} />}
         {tab === "estimate" && <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
           estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} />}
         {tab === "contract" && <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast} />}
@@ -3300,7 +3314,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
         {tab === "photos" && <TabPhotos job={job} mut={mut} toast={toast} />}
         {tab === "financials" && <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} />}
         {tab === "payments" && <TabPayments job={job} mut={mut} toast={toast} />}
-        {tab === "invoice" && <TabInvoice job={job} brand={brand} toast={toast} />}
+        {tab === "invoice" && <TabInvoice job={job} brand={brand} mut={mut} toast={toast} />}
         {tab === "workorder" && <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
           crews={crews} templates={templates} currentUser={currentUser} users={users} />}
         {tab === "tasks" && <TabTasks job={job} mut={mut} />}
@@ -3312,7 +3326,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
 }
 
 /* ---------- Overview ---------- */
-function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {}, leadSources = LEAD_SOURCES }) {
+function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [] }) {
   const notes = job.notes || [];
   const [noteTxt, setNoteTxt] = useState("");
   const [noteVisible, setNoteVisible] = useState(false);
@@ -3330,19 +3344,91 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
   };
   const toggleNoteVis = (id) =>
     mut((j) => ({ ...j, notes: (j.notes || []).map((n) => (n.id === id ? { ...n, customerVisible: !n.customerVisible } : n)) }));
+  const [editingNote, setEditingNote] = useState(null);
+  const [editTxt, setEditTxt] = useState("");
+  const startEditNote = (n) => { setEditingNote(n.id); setEditTxt(n.text); };
+  const saveEditNote = (n) => {
+    const t = editTxt.trim();
+    if (!t || t === n.text) { setEditingNote(null); return; }
+    mut((j) => ({ ...j, notes: (j.notes || []).map((x) => (x.id === n.id ? { ...x, text: t, editedAt: new Date().toISOString().slice(0, 16).replace("T", " ") } : x)) }));
+    /* Audit: the old text goes in the log so edits can't hide anything. */
+    onLog({ kind: "note", jobId: job.id, jobName: job.name,
+      text: `edited a note on ${job.name} — was: "${n.text.slice(0, 90)}${n.text.length > 90 ? "…" : ""}" → now: "${t.slice(0, 90)}${t.length > 90 ? "…" : ""}"` });
+    setEditingNote(null);
+    toast("Note updated — the change is in the activity feed");
+  };
+  const deleteNote = (n) => {
+    mut((j) => ({ ...j, notes: (j.notes || []).filter((x) => x.id !== n.id) }));
+    onLog({ kind: "note", jobId: job.id, jobName: job.name,
+      text: `deleted a note on ${job.name} — it said: "${n.text.slice(0, 120)}${n.text.length > 120 ? "…" : ""}"` });
+    toast("Note deleted — its contents are preserved in the activity feed");
+  };
   const cap = computeCapOut(job);
   const pay = paymentsSummary(job);
   const canReview = (job.consent.sms.granted || job.consent.email.granted) && !job.review.sent;
   return (
     <>
       <Card style={{ marginBottom: 12 }}>
-        <CardTitle right={
-          <select style={{ ...selStyle, width: "auto", padding: "7px 30px 7px 10px", fontSize: 12.5 }}
-            value={job.leadSource || ""} onChange={(e) => mut((j) => ({ ...j, leadSource: e.target.value }))}>
-            <option value="">Lead source…</option>
-            {leadSources.map((l) => <option key={l}>{l}</option>)}
-          </select>
-        }>Notes & updates</CardTitle>
+        <CardTitle>Lead details</CardTitle>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Lead source">
+            <select style={selStyle} value={job.leadSource || ""} onChange={(e) => {
+              mut((j) => ({ ...j, leadSource: e.target.value }));
+              onLog({ kind: "lead", jobId: job.id, jobName: job.name, text: `changed ${job.name}'s lead source to ${e.target.value}` });
+            }}>
+              <option value="">Select…</option>
+              {leadSources.map((l) => <option key={l}>{l}</option>)}
+            </select>
+          </Field>
+          <Field label="Referred by">
+            <input style={inputStyle} value={job.referredBy || ""} placeholder="Rob Theaton"
+              onChange={(e) => mut((j) => ({ ...j, referredBy: e.target.value }))} />
+          </Field>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Priority">
+            <select style={selStyle} value={job.priority || ""} onChange={(e) => {
+              mut((j) => ({ ...j, priority: e.target.value || null }));
+              if (e.target.value) onLog({ kind: "lead", jobId: job.id, jobName: job.name, text: `set ${job.name} to ${e.target.value} priority` });
+            }}>
+              <option value="">None</option>
+              <option>Low</option><option>Medium</option><option>High</option><option>Urgent</option>
+            </select>
+          </Field>
+          <Field label="Lead quality">
+            <div style={{ display: "flex", gap: 5, paddingTop: 8 }}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button key={n} onClick={() => mut((j) => ({ ...j, leadQuality: j.leadQuality === n ? null : n }))}
+                  style={{
+                    width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontWeight: 800, fontSize: 13,
+                    border: `1.5px solid ${(job.leadQuality || 0) >= n ? T.accent : S.line}`,
+                    background: (job.leadQuality || 0) >= n ? T.accent : "#fff",
+                    color: (job.leadQuality || 0) >= n ? "#fff" : S.sub,
+                  }}>{n}</button>
+              ))}
+            </div>
+          </Field>
+        </div>
+        <Field label="Tags">
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            {(job.tags || []).map((t) => (
+              <Chip key={t} tone="blue">{t} <button onClick={() => mut((j) => ({ ...j, tags: (j.tags || []).filter((x) => x !== t) }))}
+                style={{ border: "none", background: "none", cursor: "pointer", color: "inherit", fontWeight: 800, padding: 0 }}>×</button></Chip>
+            ))}
+            <input style={{ ...inputStyle, width: 130, padding: "7px 10px", fontSize: 13 }} placeholder="Add tag ↵"
+              onKeyDown={(e) => {
+                const v = e.target.value.trim();
+                if (e.key === "Enter" && v) {
+                  mut((j) => ({ ...j, tags: [...new Set([...(j.tags || []), v])] }));
+                  e.target.value = "";
+                }
+              }} />
+          </div>
+        </Field>
+      </Card>
+
+      <Card style={{ marginBottom: 12 }}>
+        <CardTitle>Notes & updates</CardTitle>
         <textarea style={{ ...inputStyle, minHeight: 64, resize: "vertical", fontFamily: "inherit" }}
           value={noteTxt} onChange={(e) => setNoteTxt(e.target.value)}
           placeholder="Log a call, a decision, a heads-up…" />
@@ -3357,12 +3443,41 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
         {notes.map((n) => (
           <div key={n.id} style={{ borderTop: `1px solid ${S.line}`, padding: "11px 0", marginTop: 11 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-              <span style={{ fontSize: 11.5, color: S.sub }}>{n.by} · {n.at}</span>
+              <span style={{ fontSize: 11.5, color: S.sub }}>{n.by} · {n.at}{n.editedAt ? ` · edited ${n.editedAt}` : ""}</span>
               <button onClick={() => toggleNoteVis(n.id)} style={{ border: "none", background: "none", cursor: "pointer", padding: 0 }}>
                 <Chip tone={n.customerVisible ? "green" : "gray"}>{n.customerVisible ? "Customer can see" : "Internal only"}</Chip>
               </button>
             </div>
-            <div style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 4, whiteSpace: "pre-wrap" }}>{n.text}</div>
+            {editingNote === n.id ? (
+              <div style={{ marginTop: 6 }}>
+                <textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical", fontFamily: "inherit" }}
+                  value={editTxt} onChange={(e) => setEditTxt(e.target.value)} />
+                <div style={{ display: "flex", gap: 8, marginTop: 7 }}>
+                  <Btn small onClick={() => saveEditNote(n)} disabled={!editTxt.trim()}>Save</Btn>
+                  <Btn small kind="ghost" onClick={() => setEditingNote(null)}>Cancel</Btn>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 4, whiteSpace: "pre-wrap" }}>{n.text}</div>
+                <div style={{ display: "flex", gap: 12, marginTop: 6 }}>
+                  <button style={linkBtn} onClick={() => startEditNote(n)}>Edit</button>
+                  <button style={{ ...linkBtn, color: "#B42318" }} onClick={() => deleteNote(n)}>Delete</button>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </Card>
+
+      <Card style={{ marginBottom: 12 }}>
+        <CardTitle>Activity on this job</CardTitle>
+        {activity.filter((a) => a.jobId === job.id).length === 0 ? (
+          <div style={{ fontSize: 13.5, color: S.sub }}>Stage moves, notes, tasks, and messages on this job land here as they happen.</div>
+        ) : activity.filter((a) => a.jobId === job.id).slice(0, 25).map((a) => (
+          <div key={a.id} style={{ borderTop: `1px solid ${S.line}`, padding: "10px 0" }}>
+            <div style={{ fontSize: 13, lineHeight: 1.5 }}><b>{a.by}</b> {a.text}</div>
+            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 3 }}>{a.at}</div>
           </div>
         ))}
       </Card>
@@ -3606,7 +3721,7 @@ function TabMeasure({ job, mut, toast }) {
 }
 
 /* ---------- Materials ---------- */
-function TabMaterials({ job, toast }) {
+function TabMaterials({ job, mut, toast }) {
   const list = generateRoofingMaterials(job.measurements);
   const copyText = () => {
     if (!list) return;
@@ -3620,6 +3735,10 @@ function TabMaterials({ job, toast }) {
   return (
     <>
       <Card>
+        <Field label="PO number (optional)" hint="Goes on the material order to the supplier.">
+          <input style={inputStyle} value={job.materialsPo || ""} placeholder="PO-2026-0148"
+            onChange={(e) => mut((j) => ({ ...j, materialsPo: e.target.value }))} />
+        </Field>
         <CardTitle right={list && <Chip tone="blue">{job.measurements.waste}% waste</Chip>}>Roofing material order</CardTitle>
         {!list ? (
           <div style={{ fontSize: 14, color: S.sub }}>
@@ -4847,11 +4966,15 @@ function TabPayments({ job, mut, toast }) {
 }
 
 /* ---------- Invoice ---------- */
-function TabInvoice({ job, brand, toast }) {
+function TabInvoice({ job, brand, mut, toast }) {
   const pay = paymentsSummary(job);
   return (
     <>
       <Card>
+        <Field label="PO number (optional)" hint="Shown on the invoice — some insurers and commercial clients require one.">
+          <input style={inputStyle} value={job.invoicePo || ""} placeholder="PO-2026-0148"
+            onChange={(e) => mut((j) => ({ ...j, invoicePo: e.target.value }))} />
+        </Field>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 800 }}>{brand.company}</div>
@@ -4930,6 +5053,10 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
   return (
     <>
       <Card>
+        <Field label="PO number (optional)" hint="Prints on the work order the crew receives.">
+          <input style={inputStyle} value={(job.workOrder && job.workOrder.po) || ""} placeholder="PO-2026-0148"
+            onChange={(e) => mut((j) => ({ ...j, workOrder: { ...(j.workOrder || {}), po: e.target.value } }))} />
+        </Field>
         <CardTitle right={wo.status === "Sent" ? <Chip tone="green">Sent {wo.sentAt}</Chip> : <Chip tone="gray">Draft</Chip>}>
           Crew assignment
         </CardTitle>
@@ -5050,37 +5177,50 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
 function TabTasks({ job, mut }) {
   const [txt, setTxt] = useState("");
   const [due, setDue] = useState("");
+  const [time, setTime] = useState("");
   const today = new Date().toISOString().slice(0, 10);
+  const openTasks = job.tasks.filter((t) => !t.done);
+  const doneTasks = job.tasks.filter((t) => t.done);
+  const TaskRow = ({ t }) => (
+    <button key={t.id} onClick={() => mut((j) => ({ ...j, tasks: j.tasks.map((x) => x.id === t.id ? { ...x, done: !x.done } : x) }))}
+      style={{
+        display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "11px 0",
+        border: "none", background: "none", cursor: "pointer", textAlign: "left",
+        borderBottom: `1px solid ${S.line}`,
+      }}>
+      {t.done ? <CheckCircle2 size={20} color="#177245" /> : <Circle size={20} color="#C7CBD1" />}
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{
+          fontSize: 15, color: t.done ? S.sub : S.ink,
+          textDecoration: t.done ? "line-through" : "none", display: "block",
+        }}>{t.label}</span>
+        {t.due && (
+          <Chip tone={t.done ? "gray" : t.due < today ? "red" : "blue"}>
+            {t.due < today && !t.done ? "Overdue · " : "Due "}{t.due}{t.time ? ` at ${t.time}` : ""}
+          </Chip>
+        )}
+      </span>
+    </button>
+  );
   return (
     <Card>
       <CardTitle>Project tasks</CardTitle>
-      {job.tasks.map((t) => (
-        <button key={t.id} onClick={() => mut((j) => ({ ...j, tasks: j.tasks.map((x) => x.id === t.id ? { ...x, done: !x.done } : x) }))}
-          style={{
-            display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "11px 0",
-            border: "none", background: "none", cursor: "pointer", textAlign: "left",
-            borderBottom: `1px solid ${S.line}`,
-          }}>
-          {t.done ? <CheckCircle2 size={20} color="#177245" /> : <Circle size={20} color="#C7CBD1" />}
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{
-              fontSize: 15, color: t.done ? S.sub : S.ink,
-              textDecoration: t.done ? "line-through" : "none", display: "block",
-            }}>{t.label}</span>
-            {t.due && (
-              <Chip tone={t.done ? "gray" : t.due < today ? "red" : "blue"}>
-                {t.due < today && !t.done ? "Overdue · " : "Due "}{t.due}
-              </Chip>
-            )}
-          </span>
-        </button>
-      ))}
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 4 }}>OPEN ({openTasks.length})</div>
+      {openTasks.length === 0 && <div style={{ fontSize: 13.5, color: S.sub, padding: "10px 0" }}>Nothing open.</div>}
+      {openTasks.map((t) => <TaskRow key={t.id} t={t} />)}
+      {doneTasks.length > 0 && (
+        <>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 16 }}>COMPLETED ({doneTasks.length})</div>
+          {doneTasks.map((t) => <TaskRow key={t.id} t={t} />)}
+        </>
+      )}
       <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
         <input style={{ ...inputStyle, flex: 1, minWidth: 160 }} placeholder="Add a task" value={txt}
           onChange={(e) => setTxt(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && txt.trim()) { mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: txt.trim(), done: false, due: due || null }] })); setTxt(""); setDue(""); } }} />
-        <input style={{ ...inputStyle, width: 150 }} type="date" value={due} onChange={(e) => setDue(e.target.value)} />
-        <Btn small disabled={!txt.trim()} onClick={() => { mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: txt.trim(), done: false, due: due || null }] })); setTxt(""); setDue(""); }}>
+          onKeyDown={(e) => { if (e.key === "Enter" && txt.trim()) { mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: txt.trim(), done: false, due: due || null, time: time || null }] })); setTxt(""); setDue(""); setTime(""); } }} />
+        <input style={{ ...inputStyle, width: 138 }} type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+        <input style={{ ...inputStyle, width: 108 }} type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+        <Btn small disabled={!txt.trim()} onClick={() => { mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: txt.trim(), done: false, due: due || null, time: time || null }] })); setTxt(""); setDue(""); setTime(""); }}>
           <Plus size={14} />
         </Btn>
       </div>
@@ -7637,6 +7777,7 @@ export default function SupremeCRM() {
   const [estimateTemplates, setEstimateTemplates] = useState([]);
   const [activity, setActivity] = useState([]);
   const [chatMsgs, setChatMsgs] = useState([]);
+  const [chatSeenCount, setChatSeenCount] = useState(0);
   const [apptTypes, setApptTypes] = useState(["Inspection", "Adjuster meeting", "Estimate presentation", "Production start", "Final walkthrough"]);
   const [integrations, setIntegrations] = useState({
     /* Gmail is per-user: each rep connects their own mailbox so email
@@ -7655,7 +7796,7 @@ export default function SupremeCRM() {
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [quickTaskOpen, setQuickTaskOpen] = useState(false);
   const [inboxPick, setInboxPick] = useState(false);
-  const [qt, setQt] = useState({ jobId: "", label: "", due: "" });
+  const [qt, setQt] = useState({ jobId: "", label: "", due: "", time: "" });
   const [toastMsg, setToastMsg] = useState("");
   const [filters, setFilters] = useState({ sort: "updated", assignees: [], stages: [], sources: [] });
   const [reviewSettings, setReviewSettings] = useState({
@@ -7675,9 +7816,18 @@ export default function SupremeCRM() {
       ...entry,
     }, ...prev].slice(0, 500));
 
+  const unreadMentions = chatMsgs.slice(chatSeenCount).filter((m2) => m2.mentions && m2.mentions.includes(userName)).length;
+  const prevChatLen = useRef(0);
+  useEffect(() => {
+    const fresh = chatMsgs.slice(prevChatLen.current);
+    const forMe = fresh.filter((m2) => m2.mentions && m2.mentions.includes(userName) && m2.by !== userName);
+    if (forMe.length > 0) toast(`${forMe[forMe.length - 1].by} mentioned you in team chat`);
+    prevChatLen.current = chatMsgs.length;
+  }, [chatMsgs]);
+
   const toast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(""), 2200); };
 
-  const applyJob = (id, fn) => setJobs((prev) => prev.map((j) => (j.id === id ? fn(j) : j)));
+  const applyJob = (id, fn) => setJobs((prev) => prev.map((j) => (j.id === id ? { ...fn(j), updated: "just now", touchedAt: Date.now() } : j)));
   /* Callable both ways: mutJob(id)(fn) and mutJob(id, fn). */
   const mutJob = (id, fn) => (fn ? applyJob(id, fn) : (f2) => applyJob(id, f2));
 
@@ -7785,14 +7935,23 @@ export default function SupremeCRM() {
   const openJobScreen = (id) => { setOpenJobId(id); setNav("jobs"); };
   const backToBoard = () => setOpenJobId(null);
 
-  const NavBtn = ({ id, icon: Icon, label }) => {
+  const NavBtn = ({ id, icon: Icon, label, badge = 0 }) => {
     const active = nav === id && !openJob;
     return (
       <button onClick={() => { setNav(id); setOpenJobId(null); }} style={{
         flex: 1, border: "none", background: "none", cursor: "pointer",
         display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 0",
       }}>
-        <Icon size={21} color={active ? T.accent : "#9CA3AF"} strokeWidth={active ? 2.4 : 2} />
+        <span style={{ position: "relative", display: "inline-grid" }}>
+          {badge > 0 && (
+            <span style={{
+              position: "absolute", top: -5, right: -9, minWidth: 16, height: 16, borderRadius: 99,
+              background: "#B42318", color: "#fff", fontSize: 10, fontWeight: 800,
+              display: "grid", placeItems: "center", padding: "0 4px", zIndex: 1,
+            }}>{badge}</span>
+          )}
+          <Icon size={21} color={active ? T.accent : "#9CA3AF"} strokeWidth={active ? 2.4 : 2} />
+        </span>
         <span style={{ fontSize: 11, fontWeight: active ? 700 : 500, color: active ? T.accent : "#9CA3AF" }}>{label}</span>
       </button>
     );
@@ -7806,7 +7965,7 @@ export default function SupremeCRM() {
 currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           crews={crews} setCrews={setCrews} templates={templates} integrations={integrations} users={users}
           estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} setBrand={setBrand}
-          onLog={logAct} leadSources={leadSources} />
+          onLog={logAct} leadSources={leadSources} activity={activity} />
       ) : nav === "home" ? (
         <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav}
           onNewLead={() => setNewLeadOpen(true)} onQuickTask={() => setQuickTaskOpen(true)} />
@@ -7837,7 +7996,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <ActivityFeed activity={activity} currentUser={liveUser} onOpenJob={openJobScreen} onBack={() => setNav("more")} />
       ) : nav === "chat" ? (
         <TeamChat msgs={chatMsgs} setMsgs={setChatMsgs} users={users} jobs={jobs}
-          currentUser={liveUser} onOpenJob={openJobScreen} onBack={() => setNav("more")} />
+          currentUser={liveUser} onOpenJob={openJobScreen}
+          onBack={() => { setChatSeenCount(chatMsgs.length); setNav("more"); }} />
       ) : nav === "vendors" ? (
         <VendorManager vendors={vendors} setVendors={setVendors} currentUser={liveUser}
           onBack={() => setNav("more")} toast={toast} />
@@ -7884,7 +8044,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           flexShrink: 0,
         }}><Plus size={25} /></button>
         <NavBtn id="inbox" icon={MessageCircle} label="Inbox" />
-        <NavBtn id="more" icon={Menu} label="More" />
+        <NavBtn id="more" icon={Menu} label="More" badge={unreadMentions} />
       </div>
 
       <NewLeadSheet open={newLeadOpen} onClose={() => setNewLeadOpen(false)} onCreate={createLead} brand={brand} leadSources={leadSources} users={users} />
@@ -7908,9 +8068,9 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       <Sheet open={quickTaskOpen} onClose={() => setQuickTaskOpen(false)} title="Quick task"
         footer={<Btn style={{ width: "100%" }} disabled={!qt.jobId || !qt.label.trim()} onClick={() => {
           const target = jobs.find((j) => j.id === qt.jobId);
-          mutJob(qt.jobId, (j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: qt.label.trim(), done: false, due: qt.due || null }] }));
+          mutJob(qt.jobId, (j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: qt.label.trim(), done: false, due: qt.due || null, time: qt.time || null }] }));
           logAct({ kind: "task", jobId: qt.jobId, jobName: target ? target.name : "", text: `added task "${qt.label.trim()}"${qt.due ? ` due ${qt.due}` : ""}${target ? ` on ${target.name}` : ""}` });
-          setQuickTaskOpen(false); setQt({ jobId: "", label: "", due: "" }); toast("Task added");
+          setQuickTaskOpen(false); setQt({ jobId: "", label: "", due: "", time: "" }); toast("Task added");
         }}>Add task</Btn>}>
         <Field label="Customer / job">
           <select style={selStyle} value={qt.jobId} onChange={(e) => setQt({ ...qt, jobId: e.target.value })}>
@@ -7920,7 +8080,10 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         </Field>
         <Field label="Task"><input style={inputStyle} value={qt.label} onChange={(e) => setQt({ ...qt, label: e.target.value })} placeholder="Call adjuster back, order materials…" /></Field>
         <Field label="Deadline (optional)" hint="Tasks with deadlines show on the calendar.">
-          <input style={inputStyle} type="date" value={qt.due} onChange={(e) => setQt({ ...qt, due: e.target.value })} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <input style={{ ...inputStyle, flex: 1 }} type="date" value={qt.due} onChange={(e) => setQt({ ...qt, due: e.target.value })} />
+            <input style={{ ...inputStyle, width: 110 }} type="time" value={qt.time || ""} onChange={(e) => setQt({ ...qt, time: e.target.value })} />
+          </div>
         </Field>
       </Sheet>
       <FiltersSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} stages={stages}
