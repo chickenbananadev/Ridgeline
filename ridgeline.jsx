@@ -6874,15 +6874,18 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
   const [tagOpen, setTagOpen] = useState(false);
   const [tagged, setTagged] = useState(null); // jobId
   const inputRef = useRef(null);
+  const me = (currentUser && currentUser.name) || "Unknown";
   const send = () => {
     const t = txt.trim();
     if (!t) return;
-    const mentions = users.filter((u) => t.includes(`@${u.name}`)).map((u) => u.name);
-    setMsgs([...msgs, {
-      id: uid("cm"), by: currentUser.name, at: new Date().toISOString().slice(0, 16).replace("T", " "),
-      text: t, mentions, jobId: tagged,
+    const mentions = (users || [])
+      .filter((u) => u && u.name && t.includes(`@${u.name}`))
+      .map((u) => u.name);
+    setMsgs([...(msgs || []), {
+      id: uid("cm"), by: me, at: new Date().toISOString().slice(0, 16).replace("T", " "),
+      text: t, mentions, jobId: tagged || null,
     }]);
-    setTxt(""); setTagged(null);
+    setTxt(""); setTagged(null); setMentionOpen(false);
   };
   const insert = (frag) => {
     setTxt((prev) => {
@@ -6892,12 +6895,14 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
     });
     if (inputRef.current) inputRef.current.focus();
   };
-  const renderText = (t) => t.split(/(@[A-Z][a-zA-Z]+ [A-Z][a-zA-Z]+)/g).map((part, i2) =>
-    part.startsWith("@")
+  const renderText = (t) => String(t || "").split(/(@[A-Za-z][\w'-]*(?: [A-Za-z][\w'-]*)?)/g).map((part, i2) =>
+    part && part.startsWith("@")
       ? <b key={i2} style={{ color: T.accent }}>{part}</b>
       : <span key={i2}>{part}</span>);
-  const jobOf = (id) => jobs.find((j) => j.id === id);
-  const initials = (n) => n.split(" ").map((x) => x[0]).join("").slice(0, 2).toUpperCase();
+  const jobOf = (id) => (jobs || []).find((j) => j.id === id);
+  /* Defensive: a profile with a blank name used to crash the whole
+     screen here, which looked like "sending broke the app". */
+  const initials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
   return (
     <div style={{ padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }}>
       <SubHeader title="Team chat" onBack={onBack} />
@@ -6908,15 +6913,15 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
       {msgs.length === 0 && (
         <Card><div style={{ fontSize: 14, color: S.sub }}>No messages yet — say something.</div></Card>
       )}
-      {msgs.map((m) => {
+      {(msgs || []).map((m) => {
         const j = m.jobId ? jobOf(m.jobId) : null;
-        const me = m.by === currentUser.name;
-        const mentioned = m.mentions.includes(currentUser.name);
+        const mine = m.by === me;
+        const mentioned = Array.isArray(m.mentions) && m.mentions.includes(me);
         return (
-          <div key={m.id} style={{ display: "flex", gap: 10, marginTop: 10, flexDirection: me ? "row-reverse" : "row" }}>
+          <div key={m.id} style={{ display: "flex", gap: 10, marginTop: 10, flexDirection: mine ? "row-reverse" : "row" }}>
             <span style={{
-              width: 34, height: 34, borderRadius: 99, background: me ? T.primary : T.accentSoft,
-              color: me ? "#fff" : T.accent, display: "grid", placeItems: "center",
+              width: 34, height: 34, borderRadius: 99, background: mine ? T.primary : T.accentSoft,
+              color: mine ? "#fff" : T.accent, display: "grid", placeItems: "center",
               fontSize: 12, fontWeight: 800, flexShrink: 0,
             }}>{initials(m.by)}</span>
             <div style={{
@@ -6966,7 +6971,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
       </div>
 
       <Sheet open={mentionOpen} onClose={() => setMentionOpen(false)} title="Mention someone">
-        {users.filter((u) => u.active !== false && u.name !== currentUser.name).map((u, i2) => (
+        {(users || []).filter((u) => u && u.name && u.active !== false && u.name !== me).map((u, i2) => (
           <button key={u.id} onClick={() => { insert(`@${u.name}`); setMentionOpen(false); }} style={{
             width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer",
             padding: "12px 4px", borderTop: i2 ? `1px solid ${S.line}` : "none", fontSize: 14.5, fontWeight: 600,
@@ -8932,11 +8937,18 @@ export default function SupremeCRM() {
       ...entry,
     }, ...prev].slice(0, 500));
 
-  const unreadMentions = chatMsgs.slice(chatSeenCount).filter((m2) => m2.mentions && m2.mentions.includes(userName)).length;
+  /* Derived here rather than from userName, which is declared further
+     down — reaching forward to it threw a temporal-dead-zone error the
+     instant the chat list was non-empty, blanking the screen on send. */
+  const meName = currentUser ? currentUser.name : "";
+  const unreadMentions = chatMsgs
+    .slice(chatSeenCount)
+    .filter((m2) => Array.isArray(m2.mentions) && m2.mentions.includes(meName)).length;
   const prevChatLen = useRef(0);
   useEffect(() => {
     const fresh = chatMsgs.slice(prevChatLen.current);
-    const forMe = fresh.filter((m2) => m2.mentions && m2.mentions.includes(userName) && m2.by !== userName);
+    const forMe = fresh.filter((m2) =>
+      Array.isArray(m2.mentions) && m2.mentions.includes(meName) && m2.by !== meName);
     if (forMe.length > 0) toast(`${forMe[forMe.length - 1].by} mentioned you in team chat`);
     prevChatLen.current = chatMsgs.length;
   }, [chatMsgs]);

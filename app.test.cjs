@@ -7884,20 +7884,22 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
   const [tagOpen, setTagOpen] = (0, import_react.useState)(false);
   const [tagged, setTagged] = (0, import_react.useState)(null);
   const inputRef = (0, import_react.useRef)(null);
+  const me = currentUser && currentUser.name || "Unknown";
   const send = () => {
     const t = txt.trim();
     if (!t) return;
-    const mentions = users.filter((u) => t.includes(`@${u.name}`)).map((u) => u.name);
-    setMsgs([...msgs, {
+    const mentions = (users || []).filter((u) => u && u.name && t.includes(`@${u.name}`)).map((u) => u.name);
+    setMsgs([...msgs || [], {
       id: uid("cm"),
-      by: currentUser.name,
+      by: me,
       at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " "),
       text: t,
       mentions,
-      jobId: tagged
+      jobId: tagged || null
     }]);
     setTxt("");
     setTagged(null);
+    setMentionOpen(false);
   };
   const insert = (frag) => {
     setTxt((prev) => {
@@ -7907,24 +7909,24 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
     });
     if (inputRef.current) inputRef.current.focus();
   };
-  const renderText = (t) => t.split(/(@[A-Z][a-zA-Z]+ [A-Z][a-zA-Z]+)/g).map((part, i2) => part.startsWith("@") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { style: { color: T.accent }, children: part }, i2) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: part }, i2));
-  const jobOf = (id) => jobs.find((j) => j.id === id);
-  const initials = (n) => n.split(" ").map((x) => x[0]).join("").slice(0, 2).toUpperCase();
+  const renderText = (t) => String(t || "").split(/(@[A-Za-z][\w'-]*(?: [A-Za-z][\w'-]*)?)/g).map((part, i2) => part && part.startsWith("@") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { style: { color: T.accent }, children: part }, i2) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: part }, i2));
+  const jobOf = (id) => (jobs || []).find((j) => j.id === id);
+  const initials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Team chat", onBack }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, margin: "10px 0 12px", lineHeight: 1.5 }, children: "One channel for the whole company. @ someone when a customer calls in for them; tag the job so the thread is one tap away. Messages sync across everyone's devices once the app is wired to the database." }),
     msgs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub }, children: "No messages yet \u2014 say something." }) }),
-    msgs.map((m) => {
+    (msgs || []).map((m) => {
       const j = m.jobId ? jobOf(m.jobId) : null;
-      const me = m.by === currentUser.name;
-      const mentioned = m.mentions.includes(currentUser.name);
-      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 10, flexDirection: me ? "row-reverse" : "row" }, children: [
+      const mine = m.by === me;
+      const mentioned = Array.isArray(m.mentions) && m.mentions.includes(me);
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 10, flexDirection: mine ? "row-reverse" : "row" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
           width: 34,
           height: 34,
           borderRadius: 99,
-          background: me ? T.primary : T.accentSoft,
-          color: me ? "#fff" : T.accent,
+          background: mine ? T.primary : T.accentSoft,
+          color: mine ? "#fff" : T.accent,
           display: "grid",
           placeItems: "center",
           fontSize: 12,
@@ -8011,7 +8013,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { onClick: send, disabled: !txt.trim(), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }) })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: mentionOpen, onClose: () => setMentionOpen(false), title: "Mention someone", children: users.filter((u) => u.active !== false && u.name !== currentUser.name).map((u, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: mentionOpen, onClose: () => setMentionOpen(false), title: "Mention someone", children: (users || []).filter((u) => u && u.name && u.active !== false && u.name !== me).map((u, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
       insert(`@${u.name}`);
       setMentionOpen(false);
     }, style: {
@@ -10217,11 +10219,12 @@ function SupremeCRM() {
     by: userName,
     ...entry
   }, ...prev].slice(0, 500));
-  const unreadMentions = chatMsgs.slice(chatSeenCount).filter((m2) => m2.mentions && m2.mentions.includes(userName)).length;
+  const meName = currentUser ? currentUser.name : "";
+  const unreadMentions = chatMsgs.slice(chatSeenCount).filter((m2) => Array.isArray(m2.mentions) && m2.mentions.includes(meName)).length;
   const prevChatLen = (0, import_react.useRef)(0);
   (0, import_react.useEffect)(() => {
     const fresh = chatMsgs.slice(prevChatLen.current);
-    const forMe = fresh.filter((m2) => m2.mentions && m2.mentions.includes(userName) && m2.by !== userName);
+    const forMe = fresh.filter((m2) => Array.isArray(m2.mentions) && m2.mentions.includes(meName) && m2.by !== meName);
     if (forMe.length > 0) toast2(`${forMe[forMe.length - 1].by} mentioned you in team chat`);
     prevChatLen.current = chatMsgs.length;
   }, [chatMsgs]);

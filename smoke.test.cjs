@@ -59,6 +59,17 @@ const bodyLen = () => document.body.textContent.length;
   clickText("Jobs");
   clickText("New");
   console.log("new lead sheet:", bodyLen());
+
+  // --- team chat: send a mentioned + job-tagged message (regressions: TDZ crash, blank page) ---
+  clickText("More"); clickText("Team chat");
+  const ta = document.querySelector("textarea");
+  if (ta) {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value").set;
+    act(() => { setter.call(ta, "Test @Jacob Henderson please call"); ta.dispatchEvent(new window.Event("input", { bubbles: true })); });
+    const ghosts = [...document.querySelectorAll("button")].filter((e) => e.textContent.trim() === "");
+    if (ghosts.length) act(() => ghosts[ghosts.length - 1].dispatchEvent(new window.MouseEvent("click", { bubbles: true })));
+    console.log("chat after send:", bodyLen(), document.body.textContent.includes("please call") ? "(message rendered)" : "(MESSAGE MISSING)");
+  }
   console.log("\n=== console.error captured:", errors.length);
   errors.slice(0, 12).forEach((e) => console.log(" *", e));
 })().catch((e) => { origErr("FATAL", e && e.stack ? e.stack.split("\n").slice(0,4).join("\n") : e); });
