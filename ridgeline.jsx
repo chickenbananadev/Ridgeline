@@ -4136,7 +4136,12 @@ function PasswordSetScreen({ brand, mode, onDone, toast }) {
 }
 
 function PillGroup({ options, value, onPick, multi = false }) {
-  const vals = multi ? (Array.isArray(value) ? value : []) : [];
+  /* Older records stored a single string where several are now allowed,
+     so a bare string counts as a one-item selection instead of showing
+     nothing selected. */
+  const vals = multi
+    ? (Array.isArray(value) ? value : (value ? [value] : []))
+    : [];
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
       {options.map((o) => {
@@ -4178,14 +4183,14 @@ function TabChecklist({ job, mut, toast }) {
         <CardTitle>Structure & history</CardTitle>
         <Field label="Structure type"><PillGroup options={["Single Family", "Multi-Family", "Detached Garage", "Commercial"]} value={c.structure} onPick={set("structure")} /></Field>
         <Field label="Approximate roof age (years)"><input style={inputStyle} value={c.roofAge} onChange={(e) => set("roofAge")(e.target.value)} /></Field>
-        <Field label="Inspection method"><PillGroup options={["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"]} value={c.method} onPick={set("method")} /></Field>
-        <Field label="Layers"><PillGroup options={["1 Layer", "2 Layers", "3+ Layers"]} value={c.layers} onPick={set("layers")} /></Field>
-        <Field label="Roof covering"><PillGroup options={["Asphalt shingle", "Metal", "Flat / membrane", "Tile", "Wood shake"]} value={c.roofType} onPick={set("roofType")} /></Field>
+        <Field label="Inspection method"><PillGroup multi options={["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"]} value={c.method} onPick={set("method")} /></Field>
+        <Field label="Layers"><PillGroup multi options={["1 Layer", "2 Layers", "3+ Layers"]} value={c.layers} onPick={set("layers")} /></Field>
+        <Field label="Roof covering"><PillGroup multi options={["Asphalt shingle", "Metal", "Flat / membrane", "Tile", "Wood shake"]} value={c.roofType} onPick={set("roofType")} /></Field>
         <Field label="Pitch (primary)"><PillGroup options={["3/12", "4/12", "5/12", "6/12", "7/12", "8/12", "9/12+"]} value={c.pitch} onPick={set("pitch")} /></Field>
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Decking & ventilation</CardTitle>
-        <Field label="Decking type"><PillGroup options={["OSB", "Plywood", "1x6 Plank / Spaced Lumber", "Unknown"]} value={c.deckingType} onPick={set("deckingType")} /></Field>
+        <Field label="Decking type"><PillGroup multi options={["OSB", "Plywood", "1x6 Plank / Spaced Lumber", "Unknown"]} value={c.deckingType} onPick={set("deckingType")} /></Field>
         <Field label="Decking condition"><PillGroup options={["Good", "Fair", "Poor", "Critical"]} value={c.deckingCond} onPick={set("deckingCond")} /></Field>
         <Field label="Ventilation present"><PillGroup multi options={["Ridge Vent", "Box Vents / Turtles", "Gable Vents", "Power Vent", "Turbines", "None visible"]} value={c.ventTypes} onPick={set("ventTypes")} /></Field>
         <Field label="Soffit intake present"><PillGroup options={["Yes", "No", "Blocked"]} value={c.soffitIntake} onPick={set("soffitIntake")} /></Field>
@@ -4194,7 +4199,7 @@ function TabChecklist({ job, mut, toast }) {
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="blue">Required</Chip>}>Attic</CardTitle>
         <Field label="Attic accessible"><PillGroup options={["Yes", "No — note reason in notes"]} value={c.atticAccess} onPick={set("atticAccess")} /></Field>
-        <Field label="Decking from below"><PillGroup options={["Good", "Stained / Tracked", "Active Rot / Mold", "Not visible"]} value={c.atticDecking} onPick={set("atticDecking")} /></Field>
+        <Field label="Decking from below"><PillGroup multi options={["Good", "Stained / Tracked", "Active Rot / Mold", "Not visible"]} value={c.atticDecking} onPick={set("atticDecking")} /></Field>
         <Field label="Daylight visible through decking"><PillGroup options={["Yes", "No"]} value={c.lightCheck} onPick={set("lightCheck")} /></Field>
       </Card>
       <Card style={{ marginTop: 12 }}>
@@ -8339,10 +8344,8 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
       setEditing(null);
     } catch (e) {
       const msg = e && e.message ? e.message : "Could not save the seat.";
-      const hint = /Failed to send a request|FunctionsFetchError|not found|Failed to fetch/i.test(msg)
-        ? " — The invite-user Edge Function isn't deployed yet. Run `supabase functions deploy invite-user`, or add the user from the Supabase dashboard (Authentication → Users) for now."
-        : "";
-      setSeatErr(msg + hint);
+      const noFn = /Failed to send a request|FunctionsFetchError|not found|Failed to fetch|non-2xx/i.test(msg);
+      setSeatErr(noFn ? "INVITE_FALLBACK" : msg);
     }
     setSaving(false);
   };
@@ -8457,7 +8460,16 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
             </Btn>
           </div>
         }>
-        {seatErr && <Callout label="Could not save" tone="red">{seatErr}</Callout>}
+        {seatErr === "INVITE_FALLBACK" ? (
+          <Callout label="Two-step invite" tone="amber">
+            The one-tap invite isn't set up on this project yet, so use this for now:
+            {"\n"}1. Supabase → Authentication → Users → Invite user → enter {f.email || "their email"}.
+            {"\n"}2. They set a password from the email and appear here automatically.
+            {"\n"}Running migration 005 makes step 2 instant — ask Claude for it if you haven't.
+          </Callout>
+        ) : seatErr ? (
+          <Callout label="Could not save" tone="red">{seatErr}</Callout>
+        ) : null}
         <Field label="Full name *"><input style={inputStyle} value={f.name} onChange={set("name")} /></Field>
         <Field label="Work email *" hint={emailTaken ? "That email already has a seat." : "This is their login. An invite to set a password goes here."}>
           <input style={{ ...inputStyle, borderColor: emailTaken ? "#B42318" : S.line }} type="email" value={f.email} onChange={set("email")} />

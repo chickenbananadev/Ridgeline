@@ -4893,7 +4893,7 @@ function PasswordSetScreen({ brand: brand2, mode, onDone, toast: toast2 }) {
   ] }) });
 }
 function PillGroup({ options, value, onPick, multi = false }) {
-  const vals = multi ? Array.isArray(value) ? value : [] : [];
+  const vals = multi ? Array.isArray(value) ? value : value ? [value] : [] : [];
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 7 }, children: options.map((o) => {
     const on = multi ? vals.includes(o) : value === o;
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => {
@@ -4926,14 +4926,14 @@ function TabChecklist({ job: job2, mut, toast: toast2 }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Structure & history" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Structure type", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Single Family", "Multi-Family", "Detached Garage", "Commercial"], value: c.structure, onPick: set("structure") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Approximate roof age (years)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: c.roofAge, onChange: (e) => set("roofAge")(e.target.value) }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Inspection method", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"], value: c.method, onPick: set("method") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Layers", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["1 Layer", "2 Layers", "3+ Layers"], value: c.layers, onPick: set("layers") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Roof covering", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Asphalt shingle", "Metal", "Flat / membrane", "Tile", "Wood shake"], value: c.roofType, onPick: set("roofType") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Inspection method", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"], value: c.method, onPick: set("method") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Layers", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ["1 Layer", "2 Layers", "3+ Layers"], value: c.layers, onPick: set("layers") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Roof covering", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ["Asphalt shingle", "Metal", "Flat / membrane", "Tile", "Wood shake"], value: c.roofType, onPick: set("roofType") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Pitch (primary)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["3/12", "4/12", "5/12", "6/12", "7/12", "8/12", "9/12+"], value: c.pitch, onPick: set("pitch") }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Decking & ventilation" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Decking type", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["OSB", "Plywood", "1x6 Plank / Spaced Lumber", "Unknown"], value: c.deckingType, onPick: set("deckingType") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Decking type", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ["OSB", "Plywood", "1x6 Plank / Spaced Lumber", "Unknown"], value: c.deckingType, onPick: set("deckingType") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Decking condition", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Good", "Fair", "Poor", "Critical"], value: c.deckingCond, onPick: set("deckingCond") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Ventilation present", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ["Ridge Vent", "Box Vents / Turtles", "Gable Vents", "Power Vent", "Turbines", "None visible"], value: c.ventTypes, onPick: set("ventTypes") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Soffit intake present", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Yes", "No", "Blocked"], value: c.soffitIntake, onPick: set("soffitIntake") }) }),
@@ -4942,7 +4942,7 @@ function TabChecklist({ job: job2, mut, toast: toast2 }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "Required" }), children: "Attic" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Attic accessible", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Yes", "No \u2014 note reason in notes"], value: c.atticAccess, onPick: set("atticAccess") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Decking from below", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Good", "Stained / Tracked", "Active Rot / Mold", "Not visible"], value: c.atticDecking, onPick: set("atticDecking") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Decking from below", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ["Good", "Stained / Tracked", "Active Rot / Mold", "Not visible"], value: c.atticDecking, onPick: set("atticDecking") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Daylight visible through decking", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Yes", "No"], value: c.lightCheck, onPick: set("lightCheck") }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
@@ -9652,8 +9652,8 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast: toast2
       setEditing(null);
     } catch (e) {
       const msg = e && e.message ? e.message : "Could not save the seat.";
-      const hint = /Failed to send a request|FunctionsFetchError|not found|Failed to fetch/i.test(msg) ? " \u2014 The invite-user Edge Function isn't deployed yet. Run `supabase functions deploy invite-user`, or add the user from the Supabase dashboard (Authentication \u2192 Users) for now." : "";
-      setSeatErr(msg + hint);
+      const noFn = /Failed to send a request|FunctionsFetchError|not found|Failed to fetch|non-2xx/i.test(msg);
+      setSeatErr(noFn ? "INVITE_FALLBACK" : msg);
     }
     setSaving(false);
   };
@@ -9782,7 +9782,17 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast: toast2
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 2 }, disabled: !valid || saving, onClick: save, children: saving ? "Saving\u2026" : editing === "new" ? "Create seat & send invite" : "Save changes" })
         ] }),
         children: [
-          seatErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Could not save", tone: "red", children: seatErr }),
+          seatErr === "INVITE_FALLBACK" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Two-step invite", tone: "amber", children: [
+            "The one-tap invite isn't set up on this project yet, so use this for now:",
+            "\n",
+            "1. Supabase \u2192 Authentication \u2192 Users \u2192 Invite user \u2192 enter ",
+            f.email || "their email",
+            ".",
+            "\n",
+            "2. They set a password from the email and appear here automatically.",
+            "\n",
+            "Running migration 005 makes step 2 instant \u2014 ask Claude for it if you haven't."
+          ] }) : seatErr ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Could not save", tone: "red", children: seatErr }) : null,
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Full name *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.name, onChange: set("name") }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Work email *", hint: emailTaken ? "That email already has a seat." : "This is their login. An invite to set a password goes here.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, borderColor: emailTaken ? "#B42318" : S.line }, type: "email", value: f.email, onChange: set("email") }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Mobile", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.phone, inputMode: "tel", onChange: (e) => setF((p2) => ({ ...p2, phone: formatPhone(e.target.value) })) }) }),
