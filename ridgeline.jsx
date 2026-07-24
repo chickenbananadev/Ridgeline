@@ -1005,6 +1005,20 @@ const SEED_PRICE_LIST = [
   { id: "pl10", sku: "STARTER", item: "Starter strip — roll", unit: "ROLL", cost: 48.0, price: 68.0, supplier: "QXO", category: "Shingles" },
 ];
 
+const ROOF_COVERING_OPTIONS = ["Asphalt shingle", "Metal", "Flat / membrane", "Tile", "Wood shake"];
+const ROOF_LAYER_OPTIONS = ["1 Layer", "2 Layers", "3+ Layers", "Unknown"];
+const WORK_REQUEST_OPTIONS = ["Roof replacement", "Roof repair", "Inspection", "Gutters", "Siding", "Windows", "Storm damage help", "Other"];
+const LEAD_REASON_OPTIONS = ["Active leak", "Storm damage", "Roof age / condition", "Selling or buying", "Insurance claim", "Maintenance", "Upgrade / appearance", "Other"];
+
+const BLANK_INTAKE = {
+  roofTypes: [], roofAge: "", layers: "", workRequested: [], reasonForCalling: "",
+  propertyUse: "Primary residence", decisionTimeline: "", notes: "",
+};
+const DEFAULT_PORTAL_SETTINGS = {
+  estimate: false, contract: false, photos: false, invoice: false, documents: false,
+  quoteRequests: true, addOnQuotes: true, notifyStage: true,
+};
+
 const BLANK_CHECKLIST = {
   complete: false, structure: "", roofAge: "", method: "", layers: "", roofType: "",
   deckingType: "", deckingCond: "", pitch: "", ventTypes: [], soffitIntake: "",
@@ -1065,7 +1079,7 @@ const seedJobs = [
     files: [{ id: "f1", name: "Hail photos — insurer upload.zip", cat: "Photos", at: "Jul 9", by: "Jacob Henderson" }],
     payments: [],
     fin: { materials: [], labor: [], other: [], commissionRate: 60, reimbursements: [] },
-    portal: { estimate: false, contract: false, photos: false, invoice: false }, crewId: null, messages: [], workOrder: null,
+    portal: { ...DEFAULT_PORTAL_SETTINGS }, crewId: null, messages: [], workOrder: null,
     review: { sent: false, clicked: false, posted: false },
   },
   {
@@ -1224,7 +1238,7 @@ const seedJobs = [
     photos: [], tasks: [{ id: "t1", label: "Schedule inspection", done: false }],
     files: [], payments: [],
     fin: { materials: [], labor: [], other: [], commissionRate: 60, reimbursements: [] },
-    portal: { estimate: false, contract: false, photos: false, invoice: false }, crewId: null, messages: [], workOrder: null,
+    portal: { ...DEFAULT_PORTAL_SETTINGS }, crewId: null, messages: [], workOrder: null,
     review: { sent: false, clicked: false, posted: false },
   },
   {
@@ -1580,7 +1594,7 @@ function Chip({ children, tone = "gray" }) {
   );
 }
 
-function Btn({ children, kind = "primary", onClick, style, small, disabled }) {
+function Btn({ children, kind = "primary", onClick, style, small, disabled, ...props }) {
   const base = {
     display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
     border: "1px solid transparent", borderRadius: 10, cursor: disabled ? "not-allowed" : "pointer",
@@ -1597,7 +1611,7 @@ function Btn({ children, kind = "primary", onClick, style, small, disabled }) {
     green: { background: "#177245", color: "#fff" },
   };
   return (
-    <button onClick={disabled ? undefined : onClick} style={{ ...base, ...kinds[kind], ...style }}>
+    <button {...props} disabled={disabled} onClick={disabled ? undefined : onClick} style={{ ...base, ...kinds[kind], ...style }}>
       {children}
     </button>
   );
@@ -2676,20 +2690,39 @@ function SubHeader({ title, onBack, right }) {
 /* ================================================================
    CALENDAR — month grid; jobs with a scheduled date appear as dots
    ================================================================ */
-function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage, onLog = () => {} }) {
+const CALENDAR_VIEWS = [
+  ["all", "All"], ["sales", "Sales"], ["production", "Production"], ["issues", "Issues"], ["delivery", "Delivery"],
+];
+function categoryForAppointment(type) {
+  const value = String(type || "").toLowerCase();
+  if (/deliver|material|dump|trailer|pickup/.test(value)) return "delivery";
+  if (/issue|service|repair|warranty|callback/.test(value)) return "issues";
+  if (/production|install|final walk|crew/.test(value)) return "production";
+  return "sales";
+}
+function timeMinutes(value) {
+  if (!value || !value.includes(":")) return null;
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage, onLog = () => {}, users = [] }) {
   const today = new Date();
   const [month, setMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [view, setView] = useState("all");
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [f, setF] = useState({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "" });
+  const [f, setF] = useState({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "", assignedTo: "", durationMin: 60, status: "Scheduled" });
   const openAdd = (date) => {
     setEditingId(null);
-    setF({ jobId: "", type: apptTypes[0] || "Inspection", date: date || "", time: "", notes: "" });
+    setF({ jobId: "", type: apptTypes[0] || "Inspection", date: date || "", time: "", notes: "", assignedTo: "", durationMin: 60, status: "Scheduled" });
     setAdding(true);
   };
   const openEdit = (ap) => {
     setEditingId(ap.id);
-    setF({ jobId: ap.jobId, type: ap.type, date: ap.date, time: ap.time || "", notes: ap.notes || "" });
+    setF({ jobId: ap.jobId, type: ap.type, date: ap.date, time: ap.time || "", notes: ap.notes || "",
+      assignedTo: ap.assignedTo || jobs.find((j) => j.id === ap.jobId)?.assignee || "",
+      durationMin: ap.durationMin || 60, status: ap.status || "Scheduled" });
     setAdding(true);
   };
   const [newType, setNewType] = useState("");
@@ -2699,33 +2732,57 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   const firstDow = new Date(y, m, 1).getDay();
   const iso = (d) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
-  const jobsOn = (d) => jobs.filter((j) => j.schedDate === iso(d));
-  const apptsOn = (d) => appointments.filter((ap) => ap.date === iso(d));
+  const visibleAppointments = appointments.filter((ap) => view === "all" || (ap.category || categoryForAppointment(ap.type)) === view);
+  const jobsOn = (d) => (view === "all" || view === "production") ? jobs.filter((j) => j.schedDate === iso(d)) : [];
+  const apptsOn = (d) => visibleAppointments.filter((ap) => ap.date === iso(d));
   const allTasks = jobs.flatMap((j) => (j.tasks || []).filter((t) => t.due && !t.done).map((t) => ({ job: j, task: t })));
-  const tasksOn = (d) => allTasks.filter(({ task }) => task.due === iso(d));
+  const visibleTasks = (view === "all" || view === "issues") ? allTasks : [];
+  const tasksOn = (d) => visibleTasks.filter(({ task }) => task.due === iso(d));
   const monthTasks = allTasks
-    .filter(({ task }) => task.due.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`))
+    .filter(({ task }) => (view === "all" || view === "issues") && task.due.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`))
     .sort((a2, b2) => a2.task.due.localeCompare(b2.task.due));
-  const monthAppts = appointments
+  const monthAppts = visibleAppointments
     .filter((ap) => ap.date && ap.date.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`))
     .sort((a2, b2) => (a2.date + (a2.time || "")).localeCompare(b2.date + (b2.time || "")));
   const monthJobs = jobs
-    .filter((j) => j.schedDate && j.schedDate.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`))
+    .filter((j) => (view === "all" || view === "production") && j.schedDate && j.schedDate.startsWith(`${y}-${String(m + 1).padStart(2, "0")}`))
     .sort((a2, b2) => a2.schedDate.localeCompare(b2.schedDate));
+  const selectedJob = jobs.find((j) => j.id === f.jobId);
+  const resolvedAssignedTo = f.assignedTo || selectedJob?.assignee || "";
+  const start = timeMinutes(f.time);
+  const end = start == null ? null : start + (Number(f.durationMin) || 60);
+  const scheduleChecks = appointments.filter((ap) => ap.id !== editingId && ap.date === f.date && f.time && ap.time)
+    .map((ap) => {
+      const apJob = jobs.find((j) => j.id === ap.jobId);
+      const apAssigned = ap.assignedTo || apJob?.assignee || "";
+      if (!resolvedAssignedTo || apAssigned !== resolvedAssignedTo) return null;
+      const apStart = timeMinutes(ap.time);
+      const apEnd = apStart + (Number(ap.durationMin) || 60);
+      const overlap = start < apEnd && end > apStart;
+      const gap = overlap ? 0 : Math.min(Math.abs(start - apEnd), Math.abs(apStart - end));
+      const travelRisk = !overlap && gap < 90 && selectedJob?.zip && apJob?.zip && selectedJob.zip !== apJob.zip;
+      return overlap || travelRisk ? { ap, job: apJob, overlap, gap } : null;
+    }).filter(Boolean);
+  const hardConflicts = scheduleChecks.filter((check) => check.overlap);
 
   const save = () => {
     const jb = jobs.find((x) => x.id === f.jobId);
+    if (hardConflicts.length) { toast("Resolve the scheduling conflict before saving"); return; }
+    const payload = {
+      ...f, assignedTo: resolvedAssignedTo, durationMin: Number(f.durationMin) || 60,
+      category: categoryForAppointment(f.type), status: f.status || "Scheduled",
+    };
     if (editingId) {
-      setAppointments(appointments.map((ap) => (ap.id === editingId ? { ...ap, ...f } : ap)));
+      setAppointments(appointments.map((ap) => (ap.id === editingId ? { ...ap, ...payload } : ap)));
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `updated ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
       toast("Appointment updated");
     } else {
-      setAppointments([...appointments, { ...f, id: uid("ap") }]);
+      setAppointments([...appointments, { ...payload, id: uid("ap") }]);
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `scheduled ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
       toast("Appointment added");
     }
     setAdding(false); setEditingId(null);
-    setF({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "" });
+    setF({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "", assignedTo: "", durationMin: 60, status: "Scheduled" });
   };
   /* Queue a reminder on the customer's job thread. It sends for real once
      Gmail/SMS integrations are live; until then it sits in the thread as
@@ -2758,6 +2815,15 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
       <SubHeader title="Calendar" onBack={onBack}
         right={<Btn small onClick={() => openAdd(null)}><Plus size={14} /> Add</Btn>} />
+      <div style={{ display: "flex", gap: 7, overflowX: "auto", marginTop: 12, paddingBottom: 2 }}>
+        {CALENDAR_VIEWS.map(([id, label]) => (
+          <button key={id} onClick={() => setView(id)} style={{
+            border: `1.5px solid ${view === id ? T.accent : S.line}`,
+            background: view === id ? T.accentSoft : "#fff", color: view === id ? T.accent : S.ink,
+            borderRadius: 999, padding: "7px 12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap",
+          }}>{label}</button>
+        ))}
+      </div>
       <Card style={{ marginTop: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <button onClick={() => setMonth(new Date(y, m - 1, 1))} style={{ border: "none", background: "none", cursor: "pointer" }}><ChevronLeft size={18} /></button>
@@ -2804,8 +2870,16 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
           <Card key={ap.id} pad={14} style={{ marginTop: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
               <button onClick={() => openEdit(ap)} style={{ border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{ap.type}{j ? ` — ${j.name}` : ""}</div>
-                <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>{ap.date}{ap.time ? ` · ${ap.time}` : ""}{j ? ` · ${j.address}` : ""}</div>
+                <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{ap.type}{j ? ` — ${j.name}` : ""}</div>
+                  <Chip tone={(ap.category || categoryForAppointment(ap.type)) === "issues" ? "red" : (ap.category || categoryForAppointment(ap.type)) === "delivery" ? "amber" : (ap.category || categoryForAppointment(ap.type)) === "production" ? "green" : "blue"}>
+                    {ap.category || categoryForAppointment(ap.type)}
+                  </Chip>
+                </div>
+                <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>
+                  {ap.date}{ap.time ? ` · ${ap.time}` : ""}{ap.durationMin ? ` · ${ap.durationMin} min` : ""}{j ? ` · ${j.address}` : ""}
+                </div>
+                {(ap.assignedTo || j?.assignee) && <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>Assigned to {ap.assignedTo || j.assignee}</div>}
                 {ap.notes && <div style={{ fontSize: 12.5, color: S.sub, marginTop: 4 }}>{ap.notes}</div>}
                 {j && <span onClick={(e) => { e.stopPropagation(); onOpenJob(j.id); }} style={{ fontSize: 12, color: T.accent, fontWeight: 700 }}>Open job →</span>}
               </button>
@@ -2833,7 +2907,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
           </button>
         </Card>
       ))}
-      {monthAppts.length === 0 && monthJobs.length === 0 && (
+      {monthAppts.length === 0 && monthJobs.length === 0 && monthTasks.length === 0 && (
         <Card style={{ marginTop: 8 }}><div style={{ fontSize: 14, color: S.sub }}>Nothing scheduled this month.</div></Card>
       )}
 
@@ -2848,7 +2922,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
             <Btn kind="ghost" disabled={!f.jobId || !f.date} onClick={queueReminder} style={{ flexShrink: 0 }}>
               <Send size={13} /> Remind
             </Btn>
-            <Btn style={{ flex: 1 }} disabled={!f.jobId || !f.date} onClick={save}>{editingId ? "Save changes" : "Add to calendar"}</Btn>
+            <Btn style={{ flex: 1 }} disabled={!f.jobId || !f.date || hardConflicts.length > 0} onClick={save}>{editingId ? "Save changes" : "Add to calendar"}</Btn>
           </div>
         }>
         <Field label="Customer / job *">
@@ -2871,19 +2945,89 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
           <Btn kind="ghost" small onClick={addType} disabled={!newType.trim()}><Plus size={13} /></Btn>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Assigned to">
+            <input list="calendar-assignees" style={inputStyle} value={resolvedAssignedTo}
+              onChange={(e) => setF({ ...f, assignedTo: e.target.value })} placeholder="Rep, crew, or driver" />
+            <datalist id="calendar-assignees">
+              {users.filter((user) => user.active !== false).map((user) => <option key={user.id || user.name} value={user.name} />)}
+              <option value="Material / dump driver" />
+            </datalist>
+          </Field>
+          <Field label="Duration">
+            <select style={selStyle} value={f.durationMin} onChange={(e) => setF({ ...f, durationMin: Number(e.target.value) })}>
+              <option value={30}>30 minutes</option><option value={60}>1 hour</option><option value={90}>1.5 hours</option>
+              <option value={120}>2 hours</option><option value={240}>Half day</option><option value={480}>Full day</option>
+            </select>
+          </Field>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Date *"><input style={inputStyle} type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
           <Field label="Time"><input style={inputStyle} type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} /></Field>
         </div>
+        {scheduleChecks.map((check) => (
+          <Callout key={check.ap.id} label={check.overlap ? "Scheduling conflict" : "Travel-time warning"} tone={check.overlap ? "red" : "amber"}>
+            {resolvedAssignedTo} already has {check.ap.type}{check.job ? ` for ${check.job.name}` : ""} at {check.ap.time}.
+            {check.overlap ? " These appointments overlap and cannot be double-booked." : ` There is only about ${check.gap} minutes between different service areas.`}
+          </Callout>
+        ))}
         <Field label="Notes"><textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
       </Sheet>
     </div>
   );
 }
 
-function Contacts({ jobs, onBack, onOpenJob }) {
+function contactKey(job) {
+  if (job.contactId) return job.contactId;
+  const email = (job.email || "").trim().toLowerCase();
+  const phone = (job.phone || "").replace(/\D/g, "");
+  return `legacy:${email || phone || (job.name || "").trim().toLowerCase()}`;
+}
+
+function propertyKey(job) {
+  return job.propertyId || `legacy:${(job.address || "").trim().toLowerCase()}`;
+}
+
+function buildContactDirectory(jobs) {
+  const grouped = new Map();
+  jobs.forEach((job) => {
+    const key = contactKey(job);
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        id: key,
+        name: job.contact?.name || job.name,
+        first: job.contact?.first || (job.name || "").split(" ")[0] || "",
+        last: job.contact?.last || (job.name || "").split(" ").slice(1).join(" "),
+        phone: job.contact?.phone || job.phone,
+        email: job.contact?.email || job.email,
+        jobs: [],
+      });
+    }
+    grouped.get(key).jobs.push(job);
+  });
+  return Array.from(grouped.values()).map((contact) => ({
+    ...contact,
+    properties: Array.from(new Map(contact.jobs.map((job) => [propertyKey(job), {
+      id: propertyKey(job),
+      address: job.address,
+      street: job.property?.street || (job.address || "").split(",")[0] || "",
+      city: job.property?.city || "",
+      state: job.property?.state || job.state || "OH",
+      zip: job.property?.zip || job.zip || "",
+      lat: job.property?.lat ?? job.lat ?? null,
+      lng: job.property?.lng ?? job.lng ?? null,
+      use: job.property?.use || job.intake?.propertyUse || "",
+      sourceJobId: job.id,
+    }])).values()),
+  })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function Contacts({ jobs, onBack, onOpenJob, onAddProject }) {
   const [q, setQ] = useState("");
-  const list = jobs.filter((j) =>
-    (j.name + j.address + j.phone + j.email).toLowerCase().includes(q.toLowerCase()));
+  const contacts = useMemo(() => buildContactDirectory(jobs), [jobs]);
+  const needle = q.trim().toLowerCase();
+  const list = contacts.filter((contact) =>
+    [contact.name, contact.phone, contact.email, ...contact.jobs.flatMap((j) => [j.address, j.intake?.reasonForCalling, ...(j.intake?.workRequested || [])])]
+      .filter(Boolean).join(" ").toLowerCase().includes(needle));
   return (
     <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
       <SubHeader title="Contacts" onBack={onBack} />
@@ -2891,29 +3035,55 @@ function Contacts({ jobs, onBack, onOpenJob }) {
         <input style={inputStyle} placeholder="Search name, address, phone, email" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       <div style={{ marginTop: 12 }}>
-        {list.map((j) => (
-          <Card key={j.id} pad={16} style={{ marginBottom: 10, cursor: "pointer" }}>
-            <div onClick={() => onOpenJob(j.id)}>
+        {list.map((contact) => {
+          const properties = new Set(contact.jobs.map(propertyKey)).size;
+          const smsConsent = contact.jobs.some((j) => j.consent?.sms?.granted);
+          const emailConsent = contact.jobs.some((j) => j.consent?.email?.granted);
+          return (
+          <Card key={contact.id} pad={16} style={{ marginBottom: 10 }}>
+            <div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <div style={{ fontSize: 15, fontWeight: 700 }}>{j.name}</div>
-                <Chip tone="slate">{j.state}</Chip>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>{contact.name}</div>
+                <Chip tone="slate">{contact.jobs.length} project{contact.jobs.length === 1 ? "" : "s"}</Chip>
               </div>
-              <div style={{ fontSize: 13, color: S.sub, marginTop: 3 }}>{j.address}</div>
               <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 13, color: S.sub, flexWrap: "wrap" }}>
-                <span style={{ display: "flex", gap: 6, alignItems: "center" }}><Phone size={13} /> {j.phone}</span>
-                <span style={{ display: "flex", gap: 6, alignItems: "center" }}><Mail size={13} /> {j.email}</span>
+                {contact.phone && <span style={{ display: "flex", gap: 6, alignItems: "center" }}><Phone size={13} /> {contact.phone}</span>}
+                {contact.email && <span style={{ display: "flex", gap: 6, alignItems: "center" }}><Mail size={13} /> {contact.email}</span>}
               </div>
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                <Chip tone={j.consent.sms.granted ? "green" : "gray"}>
-                  SMS {j.consent.sms.granted ? "consent on file" : "no consent"}
+                <Chip tone={smsConsent ? "green" : "gray"}>
+                  SMS {smsConsent ? "consent on file" : "no consent"}
                 </Chip>
-                <Chip tone={j.consent.email.granted ? "green" : "gray"}>
-                  Email {j.consent.email.granted ? "consent" : "no consent"}
+                <Chip tone={emailConsent ? "green" : "gray"}>
+                  Email {emailConsent ? "consent" : "no consent"}
                 </Chip>
+                <Chip tone="blue">{properties} propert{properties === 1 ? "y" : "ies"}</Chip>
               </div>
+              <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 13, paddingTop: 6 }}>
+                {contact.jobs.map((job) => (
+                  <button key={job.id} onClick={() => onOpenJob(job.id)} style={{
+                    width: "100%", border: "none", background: "none", cursor: "pointer",
+                    textAlign: "left", padding: "9px 0", display: "flex", justifyContent: "space-between", gap: 12,
+                  }}>
+                    <span>
+                      <span style={{ display: "block", fontSize: 13.5, fontWeight: 650, color: S.ink }}>{job.address}</span>
+                      <span style={{ display: "block", fontSize: 12, color: S.sub, marginTop: 2 }}>
+                        {(job.intake?.workRequested || []).join(", ") || job.claimType || "Project"}
+                      </span>
+                    </span>
+                    <ChevronRight size={16} color={S.sub} style={{ marginTop: 3, flexShrink: 0 }} />
+                  </button>
+                ))}
+              </div>
+              <Btn kind="soft" small style={{ width: "100%", marginTop: 8 }} onClick={() => onAddProject(contact.id)}>
+                <Plus size={13} /> Add another project
+              </Btn>
             </div>
           </Card>
-        ))}
+        );})}
+        {list.length === 0 && (
+          <Card pad={18}><div style={{ fontSize: 13.5, color: S.sub }}>No contacts match that search.</div></Card>
+        )}
       </div>
     </div>
   );
@@ -2923,18 +3093,68 @@ function Contacts({ jobs, onBack, onOpenJob }) {
    NEW LEAD — intake with claim type, insurance details, and
    timestamped SMS/email consent captured at the point of collection
    ================================================================ */
-function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURCES, users = [] }) {
+function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURCES, users = [], jobs = [], seed = null }) {
+  const contacts = useMemo(() => buildContactDirectory(jobs), [jobs]);
   const blank = {
+    contactMode: "new", existingContactId: "", existingPropertyId: "",
     first: "", last: "", phone: "", email: "", street: "", city: "", stateSel: "OH", zip: "",
     lat: null, lng: null,
     leadSource: "", assignee: TEAM[0], claimType: "Insurance",
+    roofTypes: [], roofAge: "", layers: "", workRequested: [], reasonForCalling: "",
+    propertyUse: "Primary residence", decisionTimeline: "",
     carrier: "", policy: "", claim: "", adjusterName: "", adjusterPhone: "", deductible: "", coverage: "", oLaw: false,
     rps: false, cosmetic: false, windHailDed: false, acvRoof: false, matching: false,
     smsConsent: false, emailConsent: false, notes: "",
   };
   const [f, setF] = useState(blank);
-  useEffect(() => { if (open) setF(blank); }, [open]); // eslint-disable-line
+  useEffect(() => {
+    if (!open) return;
+    const selected = seed?.contactId ? contacts.find((c) => c.id === seed.contactId) : null;
+    const seedName = (seed?.name || "").trim().split(/\s+/);
+    const consentJobs = selected?.jobs || [];
+    setF({
+      ...blank,
+      contactMode: selected ? "existing" : "new",
+      existingContactId: selected?.id || "",
+      first: selected?.first || seedName[0] || "",
+      last: selected?.last || seedName.slice(1).join(" "),
+      phone: selected?.phone || seed?.phone || "",
+      email: selected?.email || seed?.email || "",
+      leadSource: seed?.leadSource || "",
+      smsConsent: consentJobs.some((j) => j.consent?.sms?.granted),
+      emailConsent: consentJobs.some((j) => j.consent?.email?.granted),
+    });
+  }, [open, seed]); // eslint-disable-line
   const set = (k) => (e) => setF({ ...f, [k]: e.target ? (e.target.type === "checkbox" ? e.target.checked : e.target.value) : e });
+  const existingContact = contacts.find((c) => c.id === f.existingContactId);
+  const selectContact = (id) => {
+    const contact = contacts.find((c) => c.id === id);
+    if (!contact) {
+      setF({ ...f, existingContactId: "", existingPropertyId: "" });
+      return;
+    }
+    setF({
+      ...f,
+      contactMode: "existing", existingContactId: contact.id, existingPropertyId: "",
+      first: contact.first, last: contact.last, phone: contact.phone || "", email: contact.email || "",
+      street: "", city: "", stateSel: "OH", zip: "", lat: null, lng: null,
+      smsConsent: contact.jobs.some((j) => j.consent?.sms?.granted),
+      emailConsent: contact.jobs.some((j) => j.consent?.email?.granted),
+    });
+  };
+  const selectProperty = (id) => {
+    const property = existingContact?.properties.find((p) => p.id === id);
+    if (!property) {
+      setF({ ...f, existingPropertyId: "", street: "", city: "", stateSel: "OH", zip: "", lat: null, lng: null });
+      return;
+    }
+    setF({
+      ...f, existingPropertyId: property.id,
+      street: property.street || property.address, city: property.city || "",
+      stateSel: property.state || "OH", zip: property.zip || "",
+      lat: property.lat ?? null, lng: property.lng ?? null, propertyUse: property.use || f.propertyUse,
+    });
+  };
   const juris = jurisdictionForZip(f.zip);
   const canCreate = f.first.trim() && f.last.trim() && f.street.trim() && f.zip.trim();
   return (
@@ -2942,13 +3162,45 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
       footer={
         <div style={{ display: "flex", gap: 10 }}>
           <Btn kind="ghost" style={{ flex: 1 }} onClick={onClose}>Cancel</Btn>
-          <Btn style={{ flex: 2 }} disabled={!canCreate || !f.leadSource} onClick={() => { onCreate(f); onClose(); }}>Create lead</Btn>
+          <Btn data-testid="create-lead" style={{ flex: 2 }} disabled={!canCreate || !f.leadSource} onClick={() => { onCreate(f); onClose(); }}>Create lead</Btn>
         </div>
       }>
+      {contacts.length > 0 && (
+        <div style={{ background: "#F7F8FA", border: `1px solid ${S.line}`, borderRadius: 12, padding: 12, margin: "4px 0 16px" }}>
+          <div style={{ display: "flex", gap: 8, marginBottom: f.contactMode === "existing" ? 10 : 0 }}>
+            <Btn kind={f.contactMode === "new" ? "primary" : "ghost"} small style={{ flex: 1 }}
+              onClick={() => setF({ ...blank, contactMode: "new", leadSource: f.leadSource, assignee: f.assignee })}>
+              New customer
+            </Btn>
+            <Btn kind={f.contactMode === "existing" ? "primary" : "ghost"} small style={{ flex: 1 }}
+              onClick={() => setF({ ...f, contactMode: "existing" })}>
+              Existing customer
+            </Btn>
+          </div>
+          {f.contactMode === "existing" && (
+            <>
+              <Field label="Select customer">
+                <select data-testid="existing-contact" style={selStyle} value={f.existingContactId} onChange={(e) => selectContact(e.target.value)}>
+                  <option value="">Select…</option>
+                  {contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name} · {contact.jobs.length} project{contact.jobs.length === 1 ? "" : "s"}</option>)}
+                </select>
+              </Field>
+              {existingContact && (
+                <Field label="Property">
+                  <select data-testid="existing-property" style={selStyle} value={f.existingPropertyId} onChange={(e) => selectProperty(e.target.value)}>
+                    <option value="">Add a new property</option>
+                    {existingContact.properties.map((property) => <option key={property.id} value={property.id}>{property.address}</option>)}
+                  </select>
+                </Field>
+              )}
+            </>
+          )}
+        </div>
+      )}
       <div style={{ fontSize: 13, fontWeight: 800, color: T.primary, textTransform: "uppercase", letterSpacing: 0.5, margin: "6px 0 10px" }}>Primary contact</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Field label="First name *"><input style={inputStyle} value={f.first} onChange={set("first")} /></Field>
-        <Field label="Last name *"><input style={inputStyle} value={f.last} onChange={set("last")} /></Field>
+        <Field label="First name *"><input data-testid="lead-first" style={inputStyle} value={f.first} onChange={set("first")} /></Field>
+        <Field label="Last name *"><input data-testid="lead-last" style={inputStyle} value={f.last} onChange={set("last")} /></Field>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="Phone"><input style={inputStyle} value={f.phone} inputMode="tel" onChange={(e) => setF((p2) => ({ ...p2, phone: formatPhone(e.target.value) }))} placeholder="(555) 555-0100" /></Field>
@@ -2960,7 +3212,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
         <AddressAutocomplete
           value={f.street}
           placeholder="123 Main St"
-          onChange={(v) => setF({ ...f, street: v })}
+          onChange={(v) => setF({ ...f, street: v, existingPropertyId: "" })}
           onPick={(it) => setF((p) => ({
             ...p,
             street: it.street || it.formatted,
@@ -2978,7 +3230,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
             <option>OH</option><option>KY</option><option>IL</option>
           </select>
         </Field>
-        <Field label="Zip *"><input style={inputStyle} value={f.zip} onChange={set("zip")} /></Field>
+        <Field label="Zip *"><input data-testid="lead-zip" style={inputStyle} value={f.zip} onChange={set("zip")} /></Field>
       </div>
       {juris && (
         <div style={{ background: T.accentSoft, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
@@ -2992,10 +3244,41 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
         </div>
       )}
 
+      <div style={{ fontSize: 13, fontWeight: 800, color: T.primary, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0" }}>Property & roof</div>
+      <Field label="Property use">
+        <PillGroup options={["Primary residence", "Rental", "Commercial", "Vacant", "Other"]} value={f.propertyUse} onPick={(v) => setF({ ...f, propertyUse: v })} />
+      </Field>
+      <Field label="Current roof type">
+        <PillGroup multi options={ROOF_COVERING_OPTIONS} value={f.roofTypes} onPick={(v) => setF({ ...f, roofTypes: v })} />
+      </Field>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <Field label="Approximate roof age">
+          <input data-testid="lead-roof-age" style={inputStyle} value={f.roofAge} inputMode="numeric" onChange={set("roofAge")} placeholder="Years, if known" />
+        </Field>
+        <Field label="Existing layers">
+          <select data-testid="lead-layers" style={selStyle} value={f.layers} onChange={set("layers")}>
+            <option value="">— unknown —</option>
+            {ROOF_LAYER_OPTIONS.map((layer) => <option key={layer}>{layer}</option>)}
+          </select>
+        </Field>
+      </div>
+      <Field label="What are they interested in?">
+        <PillGroup multi options={WORK_REQUEST_OPTIONS} value={f.workRequested} onPick={(v) => setF({ ...f, workRequested: v })} />
+      </Field>
+      <Field label="Reason for calling">
+        <PillGroup options={LEAD_REASON_OPTIONS} value={f.reasonForCalling} onPick={(v) => setF({ ...f, reasonForCalling: v })} />
+      </Field>
+      <Field label="Decision timeline">
+        <PillGroup options={["Emergency / ASAP", "Within 30 days", "1–3 months", "3–12 months", "Just gathering information"]} value={f.decisionTimeline} onPick={(v) => setF({ ...f, decisionTimeline: v })} />
+      </Field>
+      <Field label="Intake notes">
+        <textarea style={{ ...inputStyle, minHeight: 82 }} value={f.notes} onChange={set("notes")} placeholder="Leak location, storm date, access instructions, customer concerns…" />
+      </Field>
+
       <div style={{ fontSize: 13, fontWeight: 800, color: T.primary, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0" }}>Job details</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Field label="Lead source *">
-          <select style={selStyle} value={f.leadSource} onChange={set("leadSource")}>
+          <select data-testid="lead-source" style={selStyle} value={f.leadSource} onChange={set("leadSource")}>
             <option value="">— select —</option>
             {leadSources.map((l) => <option key={l}>{l}</option>)}
           </select>
@@ -3232,10 +3515,116 @@ function WorkflowEditor({ open, onClose, stages, setStages }) {
 }
 const arrowBtn = { border: "1px solid #E5E7EB", background: "#fff", borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14 };
 
+function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppointments, calls, setCalls, currentUser, toast, onLog, apptTypes }) {
+  const [mode, setMode] = useState("note");
+  const [note, setNote] = useState("");
+  const [call, setCall] = useState("");
+  const [textDraft, setTextDraft] = useState("");
+  const [task, setTask] = useState({ label: "", due: "", time: "" });
+  const [appt, setAppt] = useState({ type: apptTypes[0] || "Inspection", date: "", time: "", durationMin: 60 });
+  useEffect(() => {
+    setMode("note"); setNote(""); setCall(""); setTextDraft("");
+    setTask({ label: "", due: "", time: "" });
+    setAppt({ type: apptTypes[0] || "Inspection", date: "", time: "", durationMin: 60 });
+  }, [job?.id]); // eslint-disable-line
+  if (!job) return null;
+  const stamp = () => new Date().toISOString().slice(0, 16).replace("T", " ");
+  const finish = (message) => { toast(message); onClose(); };
+  const addNote = () => {
+    const text = note.trim(); if (!text) return;
+    mutJob(job.id, (j) => ({ ...j, notes: [{ id: uid("n"), by: currentUser.name, at: stamp(), text, customerVisible: false }, ...(j.notes || [])] }));
+    onLog({ kind: "note", jobId: job.id, jobName: job.name, text: `noted on ${job.name}: "${text.slice(0, 80)}${text.length > 80 ? "…" : ""}"` });
+    finish("Note added");
+  };
+  const addCall = () => {
+    const about = call.trim(); if (!about) return;
+    setCalls([{ id: uid("call"), at: stamp(), by: currentUser.name, name: job.name, phone: job.phone || "",
+      source: job.leadSource || "", about, jobId: job.id }, ...calls]);
+    onLog({ kind: "call", jobId: job.id, jobName: job.name, text: `logged a call with ${job.name}: "${about.slice(0, 80)}${about.length > 80 ? "…" : ""}"` });
+    finish("Call logged");
+  };
+  const addTextDraft = () => {
+    const body = textDraft.trim(); if (!body) return;
+    mutJob(job.id, (j) => ({ ...j, messages: [...(j.messages || []), {
+      id: uid("m"), kind: "sms", audience: "Customer", to: j.phone || j.name,
+      subject: "", body, status: "Draft", at: stamp(),
+    }] }));
+    onLog({ kind: "message", jobId: job.id, jobName: job.name, text: `drafted a text to ${job.name}` });
+    finish("Text draft saved in the job thread");
+  };
+  const addTask = () => {
+    const label = task.label.trim(); if (!label) return;
+    mutJob(job.id, (j) => ({ ...j, tasks: [...(j.tasks || []), {
+      id: uid("t"), label, done: false, due: task.due || null, time: task.time || null,
+    }] }));
+    onLog({ kind: "task", jobId: job.id, jobName: job.name, text: `added task "${label}"${task.due ? ` due ${task.due}` : ""}` });
+    finish("Task added");
+  };
+  const addAppointment = () => {
+    if (!appt.date) return;
+    const category = categoryForAppointment(appt.type);
+    setAppointments([...appointments, {
+      id: uid("ap"), jobId: job.id, type: appt.type, date: appt.date, time: appt.time,
+      notes: "", category, assignedTo: job.assignee, durationMin: Number(appt.durationMin) || 60, status: "Scheduled",
+    }]);
+    onLog({ kind: "appointment", jobId: job.id, jobName: job.name, text: `scheduled ${appt.type.toLowerCase()} for ${job.name} on ${appt.date}` });
+    finish("Appointment added");
+  };
+  const actions = [
+    ["note", "Note"], ["call", "Call"], ["text", "Text"], ["task", "Task"], ["appointment", "Appointment"],
+  ];
+  return (
+    <Sheet open={!!job} onClose={onClose} title={`Quick add — ${job.name}`} wide>
+      <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10 }}>{job.address}</div>
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 10 }}>
+        {actions.map(([id, label]) => (
+          <button key={id} onClick={() => setMode(id)} style={{
+            border: `1.5px solid ${mode === id ? T.accent : S.line}`, background: mode === id ? T.accentSoft : "#fff",
+            color: mode === id ? T.accent : S.ink, borderRadius: 999, padding: "7px 12px",
+            fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap",
+          }}>{label}</button>
+        ))}
+      </div>
+      {mode === "note" && <>
+        <Field label="Internal note"><textarea data-testid="quick-note" autoFocus style={{ ...inputStyle, minHeight: 110 }} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+        <Btn data-testid="quick-save-note" style={{ width: "100%" }} disabled={!note.trim()} onClick={addNote}>Add note</Btn>
+      </>}
+      {mode === "call" && <>
+        <Field label="Call summary"><textarea autoFocus style={{ ...inputStyle, minHeight: 110 }} value={call} onChange={(e) => setCall(e.target.value)} placeholder="What was discussed, decisions, and next step…" /></Field>
+        <Btn style={{ width: "100%" }} disabled={!call.trim()} onClick={addCall}><Phone size={14} /> Log call</Btn>
+      </>}
+      {mode === "text" && <>
+        <Field label="Text draft"><textarea autoFocus style={{ ...inputStyle, minHeight: 110 }} value={textDraft} onChange={(e) => setTextDraft(e.target.value)} placeholder={`Hi ${(job.name || "").split(" ")[0]}, `} /></Field>
+        <Btn style={{ width: "100%" }} disabled={!textDraft.trim()} onClick={addTextDraft}><MessageCircle size={14} /> Save draft</Btn>
+      </>}
+      {mode === "task" && <>
+        <Field label="Task"><input autoFocus style={inputStyle} value={task.label} onChange={(e) => setTask({ ...task, label: e.target.value })} /></Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <Field label="Due date"><input style={inputStyle} type="date" value={task.due} onChange={(e) => setTask({ ...task, due: e.target.value })} /></Field>
+          <Field label="Time"><input style={inputStyle} type="time" value={task.time} onChange={(e) => setTask({ ...task, time: e.target.value })} /></Field>
+        </div>
+        <Btn style={{ width: "100%" }} disabled={!task.label.trim()} onClick={addTask}>Add task</Btn>
+      </>}
+      {mode === "appointment" && <>
+        <Field label="Type"><select style={selStyle} value={appt.type} onChange={(e) => setAppt({ ...appt, type: e.target.value })}>{apptTypes.map((type) => <option key={type}>{type}</option>)}</select></Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <Field label="Date"><input style={inputStyle} type="date" value={appt.date} onChange={(e) => setAppt({ ...appt, date: e.target.value })} /></Field>
+          <Field label="Time"><input style={inputStyle} type="time" value={appt.time} onChange={(e) => setAppt({ ...appt, time: e.target.value })} /></Field>
+        </div>
+        <Field label="Duration"><select style={selStyle} value={appt.durationMin} onChange={(e) => setAppt({ ...appt, durationMin: Number(e.target.value) })}>
+          <option value={30}>30 minutes</option><option value={60}>1 hour</option><option value={90}>1.5 hours</option><option value={120}>2 hours</option>
+        </select></Field>
+        <Btn style={{ width: "100%" }} disabled={!appt.date} onClick={addAppointment}><CalIcon size={14} /> Add appointment</Btn>
+      </>}
+      <Btn kind="ghost" style={{ width: "100%", marginTop: 10 }} onClick={() => { onClose(); onOpenJob(job.id); }}>Open full job</Btn>
+    </Sheet>
+  );
+}
+
 /* ================================================================
    JOB BOARD — kanban with drag between stages + tap-to-move
    ================================================================ */
-function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, focusStage, onClearFocus }) {
+function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus }) {
   const dragJob = useRef(null);
   const focusRef = useRef(null);
   useEffect(() => {
@@ -3315,15 +3704,26 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
           }}>{job.assignee.split(" ").map((w) => w[0]).join("")}</span>
         </div>
       </div>
-      <button
-        onClick={(e) => { e.stopPropagation(); setMoveMenuFor(moveMenuFor === job.id ? null : job.id); }}
-        style={{
-          marginTop: 10, width: "100%", border: `1px solid ${S.line}`, background: "#FAFBFC",
-          borderRadius: 8, padding: "7px 0", fontSize: 13, fontWeight: 600, color: S.sub, cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-        }}>
-        <ArrowUpDown size={13} /> Move
-      </button>
+      <div style={{ display: "flex", gap: 7, marginTop: 10 }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); onQuickAction(job.id); }}
+          style={{
+            flex: 1, border: `1px solid ${S.line}`, background: T.accentSoft,
+            borderRadius: 8, padding: "7px 0", fontSize: 13, fontWeight: 700, color: T.accent, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          }}>
+          <Plus size={13} /> Quick add
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); setMoveMenuFor(moveMenuFor === job.id ? null : job.id); }}
+          style={{
+            flex: 1, border: `1px solid ${S.line}`, background: "#FAFBFC",
+            borderRadius: 8, padding: "7px 0", fontSize: 13, fontWeight: 600, color: S.sub, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          }}>
+          <ArrowUpDown size={13} /> Move
+        </button>
+      </div>
       {moveMenuFor === job.id && (
         <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }} onClick={(e) => e.stopPropagation()}>
           {stages.filter((s) => s.id !== job.stageId).map((s) => (
@@ -3507,7 +3907,8 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           crews={crews} templates={templates} currentUser={currentUser} users={users} />}
         {tab === "tasks" && <TabTasks job={job} mut={mut} />}
         {tab === "files" && <TabFiles job={job} mut={mut} toast={toast} />}
-        {tab === "portal" && <TabPortal job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser} />}
+        {tab === "portal" && <TabPortal job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser}
+          stageLabel={(stages.find((stage) => stage.id === job.stageId) || {}).name || ""} />}
       </div>
     </div>
   );
@@ -3613,6 +4014,29 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
               }} />
           </div>
         </Field>
+      </Card>
+
+      <Card style={{ marginBottom: 12 }}>
+        <CardTitle>Intake snapshot</CardTitle>
+        <KV k="Reason for calling" v={job.intake?.reasonForCalling || "Not captured"} />
+        <KV k="Roof type" v={(job.intake?.roofTypes || (Array.isArray(job.checklist?.roofType) ? job.checklist.roofType : [job.checklist?.roofType]).filter(Boolean)).join(", ") || "Not captured"} />
+        <KV k="Approximate age" v={(job.intake?.roofAge || job.checklist?.roofAge) ? `${job.intake?.roofAge || job.checklist?.roofAge} years` : "Not captured"} />
+        <KV k="Existing layers" v={job.intake?.layers || (Array.isArray(job.checklist?.layers) ? job.checklist.layers.join(", ") : job.checklist?.layers) || "Not captured"} />
+        <KV k="Property use" v={job.intake?.propertyUse || job.property?.use || "Not captured"} />
+        <KV k="Decision timeline" v={job.intake?.decisionTimeline || "Not captured"} />
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 12, color: S.sub, marginBottom: 6 }}>Interested in</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {(job.intake?.workRequested || []).length > 0
+              ? job.intake.workRequested.map((item) => <Chip key={item} tone="blue">{item}</Chip>)
+              : <span style={{ fontSize: 13.5, color: S.sub }}>Not captured</span>}
+          </div>
+        </div>
+        {job.intake?.notes && (
+          <div style={{ marginTop: 12, background: "#F7F8FA", borderRadius: 10, padding: "10px 12px", fontSize: 13.5, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+            {job.intake.notes}
+          </div>
+        )}
       </Card>
 
       <WarrantyCard job={job} mut={mut} />
@@ -4199,19 +4623,166 @@ function PortalThread({ token, meRole, meName, accent }) {
   );
 }
 
+const PORTAL_STEPS = [
+  "Appointment scheduled", "Inspection & estimating", "Quote approved",
+  "Materials ordered", "Installation scheduled", "Installation", "Complete",
+];
+function portalProgressFor(job) {
+  if (Number.isInteger(job.portalProgress)) return Math.max(0, Math.min(PORTAL_STEPS.length - 1, job.portalProgress));
+  const stage = String(job.stageLabel || "").toLowerCase();
+  if (/complete|closed/.test(stage)) return 6;
+  if (/install|production/.test(stage)) return 5;
+  if (/scheduled/.test(stage)) return 4;
+  if (/material|order/.test(stage)) return 3;
+  if (/approved|deposit|won|sold/.test(stage)) return 2;
+  if (/estimate|inspect|follow/.test(stage)) return 1;
+  return 0;
+}
+function PortalTracker({ step = 0, accent = T.accent, compact = false }) {
+  return (
+    <div style={{ marginTop: compact ? 8 : 12 }}>
+      {PORTAL_STEPS.map((label, index) => {
+        const complete = index < step;
+        const active = index === step;
+        return (
+          <div key={label} style={{ display: "flex", gap: 11, minHeight: compact ? 31 : 40 }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 22, flexShrink: 0 }}>
+              <div style={{
+                width: active ? 20 : 16, height: active ? 20 : 16, marginTop: active ? 0 : 2,
+                borderRadius: 99, display: "grid", placeItems: "center",
+                border: `2px solid ${complete || active ? accent : "#D6D9DE"}`,
+                background: complete || active ? accent : "#fff", color: "#fff", fontSize: 10, fontWeight: 900,
+              }}>{complete ? "✓" : active ? "•" : ""}</div>
+              {index < PORTAL_STEPS.length - 1 && <div style={{ width: 2, flex: 1, background: complete ? accent : "#E5E7EB" }} />}
+            </div>
+            <div style={{
+              fontSize: compact ? 12.5 : 13.5, paddingTop: active ? 1 : 0,
+              fontWeight: active ? 800 : complete ? 650 : 500,
+              color: active ? accent : complete ? S.ink : S.sub,
+            }}>{label}{active && <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, marginTop: 1 }}>CURRENT STAGE</span>}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function PortalRequestCenter({ token, jobId, role, customerName, accent, allowQuoteChanges = true, allowAddOns = true }) {
+  const [requests, setRequests] = useState([]);
+  const [kind, setKind] = useState("quote_change");
+  const [category, setCategory] = useState("Gutters");
+  const [details, setDetails] = useState("");
+  const [busy, setBusy] = useState(false);
+  const db = DB();
+  const load = () => {
+    if (!db || !token) return;
+    db.from("crm_portal_requests").select("*").eq("token", token).order("created_at", { ascending: false })
+      .then(({ data }) => { if (data) setRequests(data); });
+  };
+  useEffect(() => {
+    load();
+    if (!db || !token) return;
+    const ch = db.channel("portal-requests-" + token)
+      .on("postgres_changes", { event: "*", schema: "public", table: "crm_portal_requests", filter: `token=eq.${token}` }, load)
+      .subscribe();
+    return () => { db.removeChannel(ch); };
+  }, [token]);
+  const submit = async () => {
+    const body = details.trim();
+    if (!db || !body) return;
+    setBusy(true);
+    const row = {
+      id: uid("prq"), token, job_id: jobId, request_type: kind,
+      category: kind === "add_on" ? category : "Current quote",
+      details: body, status: "New", requested_by: customerName || "Customer",
+    };
+    const { error } = await db.from("crm_portal_requests").insert(row);
+    if (!error) {
+      setRequests((prev) => [{ ...row, created_at: new Date().toISOString() }, ...prev]);
+      setDetails("");
+    }
+    setBusy(false);
+  };
+  const updateStatus = async (id, status) => {
+    if (!db) return;
+    const { error } = await db.from("crm_portal_requests").update({ status }).eq("id", id);
+    if (!error) setRequests((prev) => prev.map((request) => request.id === id ? { ...request, status } : request));
+  };
+  if (!db && role === "team") {
+    return <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>Customer quote requests appear here when the portal is connected to the live database.</div>;
+  }
+  return (
+    <>
+      {role === "customer" && (allowQuoteChanges || allowAddOns) && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 7, marginBottom: 10 }}>
+            {allowQuoteChanges && <button onClick={() => setKind("quote_change")} style={{
+              border: `1.5px solid ${kind === "quote_change" ? accent : S.line}`, background: kind === "quote_change" ? `${accent}16` : "#fff",
+              color: kind === "quote_change" ? accent : S.ink, borderRadius: 999, padding: "7px 11px", fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+            }}>Update current quote</button>}
+            {allowAddOns && <button onClick={() => setKind("add_on")} style={{
+              border: `1.5px solid ${kind === "add_on" ? accent : S.line}`, background: kind === "add_on" ? `${accent}16` : "#fff",
+              color: kind === "add_on" ? accent : S.ink, borderRadius: 999, padding: "7px 11px", fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+            }}>Price another project</button>}
+          </div>
+          {kind === "add_on" && (
+            <Field label="What would you like priced?">
+              <select style={selStyle} value={category} onChange={(e) => setCategory(e.target.value)}>
+                {["Gutters", "Siding", "Windows", "Roof repair", "Maintenance", "Another property", "Other"].map((item) => <option key={item}>{item}</option>)}
+              </select>
+            </Field>
+          )}
+          <Field label={kind === "add_on" ? "Tell us what you need" : "What would you like changed?"}>
+            <textarea data-testid="portal-request-details" style={{ ...inputStyle, minHeight: 90 }} value={details}
+              onChange={(e) => setDetails(e.target.value)} placeholder={kind === "add_on" ? "Describe the project, timing, and any measurements or concerns…" : "Describe the option, material, color, or scope change you want reviewed…"} />
+          </Field>
+          <Btn data-testid="portal-submit-request" style={{ width: "100%" }} disabled={busy || !details.trim()} onClick={submit}>
+            Send request
+          </Btn>
+        </div>
+      )}
+      {requests.length === 0 && <div style={{ fontSize: 13, color: S.sub }}>No quote requests yet.</div>}
+      {requests.map((request) => (
+        <div key={request.id} style={{ borderTop: `1px solid ${S.line}`, padding: "11px 0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 750 }}>{request.request_type === "add_on" ? request.category : "Quote update"}</div>
+            <Chip tone={request.status === "Quoted" || request.status === "Closed" ? "green" : request.status === "Reviewing" ? "amber" : "blue"}>{request.status}</Chip>
+          </div>
+          <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.5, marginTop: 4, whiteSpace: "pre-wrap" }}>{request.details}</div>
+          <div style={{ fontSize: 11, color: S.sub, marginTop: 4 }}>{String(request.created_at || "").slice(0, 10)}</div>
+          {role === "team" && (
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              {["Reviewing", "Quoted", "Closed"].map((status) => (
+                <Btn key={status} kind="ghost" small disabled={request.status === status} onClick={() => updateStatus(request.id, status)}>{status}</Btn>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
 function buildPortalSnapshot(job, brand, token) {
+  const portal = { ...DEFAULT_PORTAL_SETTINGS, ...(job.portal || {}) };
+  const pay = paymentsSummary(job);
   return {
     token, job_id: job.id,
     data: {
       company: brand.company, logo: brand.logo || null, primary: brand.primary,
       slogan: brand.slogan, phone: brand.phone, email: brand.email,
-      name: job.name, address: job.address,
+      jobId: job.id, name: job.name, address: job.address,
       stageLabel: job.stageLabel || "",
-      portal: job.portal,
+      progress: portalProgressFor(job), steps: PORTAL_STEPS,
+      portal,
       notes: (job.notes || []).filter((n) => n.customerVisible).map((n) => ({ at: n.at, text: n.text })),
-      photos: job.portal && job.portal.photos ? (job.photos || []).filter((ph) => ph.shared).map((ph) => ({ url: ph.url || ph.dataUrl, label: ph.label || "" })) : [],
-      estimate: job.portal && job.portal.estimate ? { number: job.estimate.number, date: job.estimate.date, total: estimateTotal(job.estimate), items: job.estimate.items } : null,
-      contract: job.portal && job.portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
+      photos: portal.photos ? (job.photos || []).filter((ph) => ph.shared).map((ph) => ({ url: ph.url || ph.dataUrl, label: ph.label || "" })) : [],
+      documents: portal.documents ? (job.files || []).filter((file) => file.shared).map((file) => ({
+        name: file.name, category: file.cat, date: file.at, url: file.url || null,
+      })) : [],
+      estimate: portal.estimate ? { number: job.estimate.number, date: job.estimate.date, total: estimateTotal(job.estimate), items: job.estimate.items } : null,
+      contract: portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
+      invoice: portal.invoice ? { contract: pay.contract, received: pay.received, balance: pay.balance } : null,
       schedDate: job.schedDate || null,
       updatedAt: new Date().toISOString(),
     },
@@ -4255,8 +4826,8 @@ function PublicPortal({ token }) {
       </div>
       <div style={{ padding: "16px 16px 60px" }}>
         <Card>
-          <CardTitle>Project status</CardTitle>
-          <Chip tone="blue">{d.stageLabel || "In progress"}</Chip>
+          <CardTitle right={<Chip tone="blue">{d.stageLabel || PORTAL_STEPS[d.progress || 0]}</Chip>}>Project tracker</CardTitle>
+          <PortalTracker step={d.progress || 0} accent={prim} />
           {d.schedDate && <div style={{ fontSize: 13.5, color: S.ink, marginTop: 10 }}>Installation scheduled for <b>{d.schedDate}</b></div>}
         </Card>
 
@@ -4293,6 +4864,31 @@ function PublicPortal({ token }) {
           </Card>
         )}
 
+        {d.invoice && (
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle>Invoice & balance</CardTitle>
+            <KV k="Project total" v={money(d.invoice.contract || 0)} />
+            <KV k="Payments received" v={money(d.invoice.received || 0)} />
+            <KV k="Balance" v={money(d.invoice.balance || 0)} strong />
+          </Card>
+        )}
+
+        {(d.documents || []).length > 0 && (
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle>Documents</CardTitle>
+            {d.documents.map((file, index) => (
+              <div key={`${file.name}-${index}`} style={{ display: "flex", gap: 10, alignItems: "center", borderTop: index ? `1px solid ${S.line}` : "none", padding: "10px 0" }}>
+                <FileText size={18} color={prim} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700 }}>{file.name}</div>
+                  <div style={{ fontSize: 11.5, color: S.sub }}>{file.category}{file.date ? ` · ${file.date}` : ""}</div>
+                </div>
+                {file.url && <a href={file.url} target="_blank" rel="noreferrer" style={{ color: prim, fontSize: 12.5, fontWeight: 700 }}>Open</a>}
+              </div>
+            ))}
+          </Card>
+        )}
+
         {(d.photos || []).length > 0 && (
           <Card style={{ marginTop: 12 }}>
             <CardTitle>Project photos</CardTitle>
@@ -4304,6 +4900,17 @@ function PublicPortal({ token }) {
                 </div>
               ))}
             </div>
+          </Card>
+        )}
+
+        {(d.portal?.quoteRequests || d.portal?.addOnQuotes) && (
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle>Quotes & future projects</CardTitle>
+            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 12 }}>
+              Request a change to your current quote or ask us to price another project without making a phone call.
+            </div>
+            <PortalRequestCenter token={token} jobId={d.jobId || null} role="customer" customerName={d.name} accent={prim}
+              allowQuoteChanges={d.portal?.quoteRequests} allowAddOns={d.portal?.addOnQuotes} />
           </Card>
         )}
 
@@ -4997,8 +5604,15 @@ function PillGroup({ options, value, onPick, multi = false }) {
 function TabChecklist({ job, mut, toast }) {
   const c = job.checklist;
   const set = (k) => (v) => mut((j) => ({ ...j, checklist: { ...j.checklist, [k]: v } }));
-  const required = ["structure", "roofAge", "layers", "roofType", "pitch", "overall"];
-  const missing = required.filter((k) => !c[k]);
+  const roofTypes = Array.isArray(c.roofType) ? c.roofType : (c.roofType ? [c.roofType] : []);
+  const isFlatRoof = roofTypes.includes("Flat / membrane");
+  const required = ["structure", "roofAge", "layers", "roofType", ...(isFlatRoof ? [] : ["pitch"]), "overall"];
+  const hasAnswer = (v) => Array.isArray(v) ? v.length > 0 : String(v || "").trim().length > 0;
+  const missing = required.filter((k) => !hasAnswer(c[k]));
+  const requiredLabels = {
+    structure: "structure type", roofAge: "roof age", layers: "layers",
+    roofType: "roof covering", pitch: "primary pitch", overall: "overall condition",
+  };
   return (
     <>
       <Card>
@@ -5015,8 +5629,15 @@ function TabChecklist({ job, mut, toast }) {
         <Field label="Approximate roof age (years)"><input style={inputStyle} value={c.roofAge} onChange={(e) => set("roofAge")(e.target.value)} /></Field>
         <Field label="Inspection method"><PillGroup multi options={["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"]} value={c.method} onPick={set("method")} /></Field>
         <Field label="Layers"><PillGroup multi options={["1 Layer", "2 Layers", "3+ Layers"]} value={c.layers} onPick={set("layers")} /></Field>
-        <Field label="Roof covering"><PillGroup multi options={["Asphalt shingle", "Metal", "Flat / membrane", "Tile", "Wood shake"]} value={c.roofType} onPick={set("roofType")} /></Field>
-        <Field label="Pitch (primary)"><PillGroup options={["3/12", "4/12", "5/12", "6/12", "7/12", "8/12", "9/12+"]} value={c.pitch} onPick={set("pitch")} /></Field>
+        <Field label="Roof covering"><PillGroup multi options={ROOF_COVERING_OPTIONS} value={c.roofType} onPick={set("roofType")} /></Field>
+        <Field label={isFlatRoof ? "Pitch / drainage slope (optional for flat roof)" : "Pitch (primary)"}>
+          <PillGroup options={["Flat / low slope", "1/12", "2/12", "3/12", "4/12", "5/12", "6/12", "7/12", "8/12", "9/12+"]} value={c.pitch} onPick={set("pitch")} />
+        </Field>
+        {isFlatRoof && (
+          <div style={{ background: "#ECFDF3", borderRadius: 10, padding: "10px 12px", marginTop: -4, marginBottom: 12, fontSize: 12.5, color: "#176B3A" }}>
+            Pitch is not required to complete a flat-roof inspection.
+          </div>
+        )}
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Decking & ventilation</CardTitle>
@@ -5045,7 +5666,7 @@ function TabChecklist({ job, mut, toast }) {
         </Field>
       </Card>
       <div style={{ marginTop: 14, display: "flex", gap: 10 }}>
-        <Btn style={{ flex: 1 }} disabled={missing.length > 0} onClick={() => {
+        <Btn data-testid="complete-checklist" style={{ flex: 1 }} disabled={missing.length > 0} onClick={() => {
           mut((j) => ({ ...j, checklist: { ...j.checklist, complete: true } }));
           toast("Checklist complete — report unlocked");
         }}>
@@ -5054,7 +5675,7 @@ function TabChecklist({ job, mut, toast }) {
       </div>
       {missing.length > 0 && (
         <div style={{ fontSize: 13, color: "#B42318", marginTop: 10 }}>
-          Still needed: {missing.join(", ")}
+          Still needed: {missing.map((key) => requiredLabels[key] || key).join(", ")}
         </div>
       )}
     </>
@@ -6775,7 +7396,7 @@ function TabFiles({ job, mut, toast }) {
           </select>
         </Field>
         <Btn style={{ width: "100%" }} disabled={!name.trim()} onClick={() => {
-          mut((j) => ({ ...j, files: [...j.files, { id: uid("f"), name: name.trim(), cat, at: nowStamp(), by: j.assignee }] }));
+          mut((j) => ({ ...j, files: [...j.files, { id: uid("f"), name: name.trim(), cat, at: nowStamp(), by: j.assignee, shared: false }] }));
           setName(""); toast("File attached to job");
         }}><Upload size={15} /> Upload</Btn>
       </Card>
@@ -6789,6 +7410,11 @@ function TabFiles({ job, mut, toast }) {
               <div style={{ fontSize: 14, fontWeight: 600 }}>{f.name}</div>
               <div style={{ fontSize: 12, color: S.sub }}>{f.cat} · {f.at} · {f.by}</div>
             </div>
+            <button onClick={() => mut((j) => ({ ...j, files: j.files.map((x) => x.id === f.id ? { ...x, shared: !x.shared } : x) }))}
+              title={f.shared ? "Remove from customer portal" : "Share in customer portal"}
+              style={{ border: "none", background: "none", cursor: "pointer", padding: 2 }}>
+              <Chip tone={f.shared ? "green" : "gray"}>{f.shared ? "Shared" : "Internal"}</Chip>
+            </button>
             <button onClick={() => mut((j) => ({ ...j, files: j.files.filter((x) => x.id !== f.id) }))}
               style={{ border: "none", background: "none", cursor: "pointer" }}>
               <Trash2 size={15} color="#B42318" />
@@ -6801,10 +7427,12 @@ function TabFiles({ job, mut, toast }) {
 }
 
 /* ---------- Client portal sharing ---------- */
-function TabPortal({ job, brand, mut, toast, currentUser }) {
+function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "" }) {
   const [busy, setBusy] = useState(false);
   const portalUrl = (tok) => `${window.location.origin}/?portal=${tok}`;
-  const snapshot = (tok) => buildPortalSnapshot(job, brand, tok);
+  const portalSettings = { ...DEFAULT_PORTAL_SETTINGS, ...(job.portal || {}) };
+  const progress = portalProgressFor({ ...job, stageLabel });
+  const snapshot = (tok) => buildPortalSnapshot({ ...job, stageLabel }, brand, tok);
   const publishPortal = async () => {
     const db = DB();
     const tok = job.portalToken || (uid("p") + Math.random().toString(36).slice(2, 10));
@@ -6841,10 +7469,21 @@ function TabPortal({ job, brand, mut, toast, currentUser }) {
     ["estimate", "Estimate", job.estimate.number || "No estimate yet"],
     ["contract", "Contract", job.contract.number || "No contract yet"],
     ["photos", "Photo album", `${job.photos.length} photos`],
+    ["documents", "Documents", `${(job.files || []).filter((file) => file.shared).length} shared`],
     ["invoice", "Invoice & balance", ""],
   ];
   return (
     <>
+      <Card style={{ marginBottom: 12 }}>
+        <CardTitle right={<Chip tone="blue">{PORTAL_STEPS[progress]}</Chip>}>Customer project tracker</CardTitle>
+        <PortalTracker step={progress} accent={T.accent} compact />
+        <Field label="Customer-facing stage" hint="Set this manually when the internal board is more detailed than the homeowner needs.">
+          <select data-testid="portal-progress" style={selStyle} value={progress}
+            onChange={(e) => mut((j) => ({ ...j, portalProgress: Number(e.target.value) }))}>
+            {PORTAL_STEPS.map((step, index) => <option key={step} value={index}>{step}</option>)}
+          </select>
+        </Field>
+      </Card>
       <Card style={{ marginBottom: 12 }}>
         <CardTitle>Updates from your team</CardTitle>
         {(job.notes || []).filter((n) => n.customerVisible).length === 0 ? (
@@ -6871,19 +7510,42 @@ function TabPortal({ job, brand, mut, toast, currentUser }) {
             </div>
             <button onClick={() => mut((j) => ({ ...j, portal: { ...j.portal, [k]: !j.portal[k] } }))} style={{
               width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer",
-              background: job.portal[k] ? T.accent : "#D6D9DE", position: "relative", transition: "background .15s",
+              background: portalSettings[k] ? T.accent : "#D6D9DE", position: "relative", transition: "background .15s",
             }}>
               <span style={{
-                position: "absolute", top: 3, left: job.portal[k] ? 22 : 3,
+                position: "absolute", top: 3, left: portalSettings[k] ? 22 : 3,
                 width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s",
               }} />
             </button>
           </div>
         ))}
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", marginBottom: 4 }}>CUSTOMER TOOLS</div>
+          {[
+            ["quoteRequests", "Request changes to the current quote"],
+            ["addOnQuotes", "Request pricing for future work"],
+            ["notifyStage", "Queue text/email updates when the stage changes"],
+          ].map(([key, label]) => (
+            <label key={key} style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0", borderBottom: `1px solid ${S.line}`, fontSize: 13.5 }}>
+              <input type="checkbox" checked={!!portalSettings[key]}
+                onChange={(e) => mut((j) => ({ ...j, portal: { ...DEFAULT_PORTAL_SETTINGS, ...(j.portal || {}), [key]: e.target.checked } }))}
+                style={{ width: 18, height: 18, accentColor: T.accent }} />
+              {label}
+            </label>
+          ))}
+        </div>
         {job.portalToken && (
           <div style={{ marginTop: 14 }}>
             <CardTitle>Messages with the homeowner</CardTitle>
             <PortalThread token={job.portalToken} meRole="team" meName={currentUser ? currentUser.name : "Team"} accent={T.accent} />
+          </div>
+        )}
+        {job.portalToken && (portalSettings.quoteRequests || portalSettings.addOnQuotes) && (
+          <div style={{ marginTop: 16 }}>
+            <CardTitle>Customer quote requests</CardTitle>
+            <PortalRequestCenter token={job.portalToken} jobId={job.id} role="team"
+              customerName={job.name} accent={T.accent}
+              allowQuoteChanges={portalSettings.quoteRequests} allowAddOns={portalSettings.addOnQuotes} />
           </div>
         )}
         {job.portalToken && (
@@ -6914,16 +7576,21 @@ function TabPortal({ job, brand, mut, toast, currentUser }) {
             <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>{job.address}</div>
           </div>
           <div style={{ padding: 14 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Project status</div>
-            <Chip tone="blue">In progress</Chip>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Project tracker</div>
+            <PortalTracker step={progress} accent={T.accent} compact />
             <div style={{ marginTop: 14, fontSize: 13, fontWeight: 700 }}>Shared with you</div>
-            {rows.filter(([k]) => job.portal[k]).map(([k, label]) => (
+            {rows.filter(([k]) => portalSettings[k]).map(([k, label]) => (
               <div key={k} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: `1px solid ${S.line}` }}>
                 <FileText size={15} color={T.accent} /><span style={{ fontSize: 14 }}>{label}</span>
               </div>
             ))}
-            {rows.every(([k]) => !job.portal[k]) && (
+            {rows.every(([k]) => !portalSettings[k]) && (
               <div style={{ fontSize: 13, color: S.sub, marginTop: 8 }}>Nothing shared yet.</div>
+            )}
+            {(portalSettings.quoteRequests || portalSettings.addOnQuotes) && (
+              <div style={{ marginTop: 12, background: T.accentSoft, borderRadius: 9, padding: "9px 10px", fontSize: 12.5, color: T.accent, fontWeight: 700 }}>
+                Customer can request quote changes{portalSettings.addOnQuotes ? " and future project pricing" : ""}.
+              </div>
             )}
             <div style={{ fontSize: 12, color: S.sub, marginTop: 14 }}>
               Questions? {brand.phone} · {brand.email}
@@ -9193,7 +9860,7 @@ function JobImport({ jobs, setJobs, stages, users, onBack, toast, currentUser })
       estimate: mkEstimate(), contract: mkContract(),
       photos: [], tasks: [], files: [], payments: [], messages: [], crewId: null, workOrder: null,
       fin: { materials: [], labor: [], other: [], commissionRate: 60, structure: "grossProfit", overheadPct: 10, reimbursements: [] },
-      portal: { estimate: false, contract: false, photos: false, invoice: false },
+      portal: { ...DEFAULT_PORTAL_SETTINGS },
       review: { sent: false, clicked: false, posted: false },
     }));
     setJobs([...jobs, ...built]);
@@ -9776,7 +10443,11 @@ function useDbSync(st) {
 
         const { data: apRows } = await db.from("crm_appointments").select("*");
         if (alive && apRows) {
-          const aps = apRows.map((r) => ({ id: r.id, jobId: r.job_id, type: r.type, date: r.date, time: r.time || "", notes: r.notes || "" }));
+          const aps = apRows.map((r) => ({
+            id: r.id, jobId: r.job_id, type: r.type, date: r.date, time: r.time || "", notes: r.notes || "",
+            category: r.category || categoryForAppointment(r.type), assignedTo: r.assigned_to || "",
+            durationMin: r.duration_min || 60, status: r.status || "Scheduled",
+          }));
           aps.forEach((a) => apptRefs.current.set(a.id, a));
           setAppointments(aps);
         }
@@ -9850,7 +10521,7 @@ function useDbSync(st) {
           const published = changed.filter((j) => j.portalToken);
           if (published.length && st.brandRef) {
             const snaps = published.map((j) => ({
-              ...buildPortalSnapshot({ ...j, stageLabel: (st.stagesRef || []).find((x) => x.id === j.stageId)?.label || "" }, st.brandRef, j.portalToken),
+              ...buildPortalSnapshot({ ...j, stageLabel: ((st.stagesRef || []).find((x) => x.id === j.stageId) || {}).name || ((st.stagesRef || []).find((x) => x.id === j.stageId) || {}).label || "" }, st.brandRef, j.portalToken),
               revoked: false,
             }));
             await db.from("crm_portal").upsert(snaps);
@@ -9884,7 +10555,9 @@ function useDbSync(st) {
         const removed = [...apptRefs.current.keys()].filter((id) => !current.has(id));
         if (changed.length) {
           await db.from("crm_appointments").upsert(changed.map((a) => ({
-            id: a.id, job_id: a.jobId, type: a.type, date: a.date, time: a.time || null, notes: a.notes || null, created_by: userName,
+            id: a.id, job_id: a.jobId, type: a.type, date: a.date, time: a.time || null, notes: a.notes || null,
+            category: a.category || categoryForAppointment(a.type), assigned_to: a.assignedTo || null,
+            duration_min: a.durationMin || 60, status: a.status || "Scheduled", created_by: userName,
           })));
           changed.forEach((a) => apptRefs.current.set(a.id, a));
         }
@@ -10027,7 +10700,10 @@ export default function SupremeCRM() {
   const [chatSeenCount, setChatSeenCount] = useState(0);
   const [pwDone, setPwDone] = useState(false);
   const [changePwOpen, setChangePwOpen] = useState(false);
-  const [apptTypes, setApptTypes] = useState(["Inspection", "Adjuster meeting", "Estimate presentation", "Production start", "Final walkthrough"]);
+  const [apptTypes, setApptTypes] = useState([
+    "Inspection", "Adjuster meeting", "Estimate presentation", "Production start",
+    "Final walkthrough", "Service issue", "Material delivery", "Trailer / dump run",
+  ]);
   const [integrations, setIntegrations] = useState({
     /* Gmail is per-user: each rep connects their own mailbox so email
        goes out under their name and replies land in their inbox.
@@ -10044,6 +10720,7 @@ export default function SupremeCRM() {
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [quickTaskOpen, setQuickTaskOpen] = useState(false);
+  const [quickJobId, setQuickJobId] = useState(null);
   const [inboxPick, setInboxPick] = useState(false);
   const [boardStage, setBoardStage] = useState(null);
   const [leadSeed, setLeadSeed] = useState(null);
@@ -10125,10 +10802,27 @@ export default function SupremeCRM() {
   const moveStage = (jobId, stageId) => {
     const jb = jobs.find((x) => x.id === jobId);
     const stage = stages.find((x) => x.id === stageId);
-    setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, stageId, daysInStage: 0, updated: "just now" } : j)));
+    const stageName = stage ? (stage.name || stage.label || "the next stage") : "";
+    setJobs((prev) => prev.map((j) => {
+      if (j.id !== jobId) return j;
+      const next = { ...j, stageId, daysInStage: 0, updated: "just now" };
+      if (j.portal?.notifyStage && stage) {
+        const channel = j.consent?.sms?.granted ? "sms" : j.consent?.email?.granted ? "email" : null;
+        if (channel) {
+          const first = (j.name || "").split(" ")[0];
+          next.messages = [...(j.messages || []), {
+            id: uid("m"), kind: channel, audience: "Customer", to: channel === "sms" ? (j.phone || j.name) : (j.email || j.name),
+            subject: channel === "email" ? `Project update — ${stageName}` : "",
+            body: `Hi ${first}, your project at ${j.address} has moved to: ${stageName}. You can view the latest status in your customer portal.`,
+            status: "Queued", at: new Date().toISOString().slice(0, 16).replace("T", " "),
+          }];
+        }
+      }
+      return next;
+    }));
     if (jb && stage) {
-      logAct({ kind: "stage", jobId, jobName: jb.name, text: `moved ${jb.name} to "${stage.label}"` });
-      toast(`Moved to ${stage.label}`);
+      logAct({ kind: "stage", jobId, jobName: jb.name, text: `moved ${jb.name} to "${stageName}"` });
+      toast(`Moved to ${stageName}${jb.portal?.notifyStage ? " — customer update queued when consent is available" : ""}`);
     }
   };
 
@@ -10140,14 +10834,41 @@ export default function SupremeCRM() {
 
   const createLead = (f) => {
     const id = uid("j");
+    const contactId = f.existingContactId || uid("ct");
+    const propertyId = f.existingPropertyId || uid("pr");
     const at = nowStamp();
     const repSeat = users.find((u) => u.name === f.assignee);
     const rate = repSeat && repSeat.commissionRate != null ? repSeat.commissionRate : 60;
-    setJobs((prev) => [{
+    const customerName = `${f.first} ${f.last}`.trim();
+    const existingPropertyJob = f.existingPropertyId ? jobs.find((j) => propertyKey(j) === f.existingPropertyId) : null;
+    const address = existingPropertyJob?.address || [f.street, f.city, f.stateSel].filter(Boolean).join(", ");
+    const intake = {
+      ...BLANK_INTAKE,
+      roofTypes: f.roofTypes || [],
+      roofAge: f.roofAge || "",
+      layers: f.layers || "",
+      workRequested: f.workRequested || [],
+      reasonForCalling: f.reasonForCalling || "",
+      propertyUse: f.propertyUse || "",
+      decisionTimeline: f.decisionTimeline || "",
+      notes: f.notes || "",
+    };
+    const job = {
       id, name: `${f.first} ${f.last}`.trim(),
-      address: [f.street, f.city, f.stateSel].filter(Boolean).join(", "),
-      zip: f.zip.trim(), state: f.stateSel,
-      lat: f.lat ?? null, lng: f.lng ?? null,
+      contactId, propertyId,
+      contact: { id: contactId, name: customerName, first: f.first, last: f.last, phone: f.phone, email: f.email },
+      property: {
+        ...(existingPropertyJob?.property || {}),
+        id: propertyId, address, street: existingPropertyJob?.property?.street || f.street,
+        city: existingPropertyJob?.property?.city || f.city, state: existingPropertyJob?.property?.state || f.stateSel,
+        zip: existingPropertyJob?.property?.zip || f.zip.trim(),
+        lat: existingPropertyJob?.property?.lat ?? f.lat ?? null, lng: existingPropertyJob?.property?.lng ?? f.lng ?? null,
+        use: existingPropertyJob?.property?.use || f.propertyUse || "",
+      },
+      intake,
+      address,
+      zip: existingPropertyJob?.zip || f.zip.trim(), state: existingPropertyJob?.state || f.stateSel,
+      lat: existingPropertyJob?.lat ?? f.lat ?? null, lng: existingPropertyJob?.lng ?? f.lng ?? null,
       value: 0, stageId: stages[0].id, assignee: f.assignee, leadSource: f.leadSource || "—",
       daysInStage: 0, updated: "just now", claimType: f.claimType, schedDate: null,
       phone: f.phone, email: f.email,
@@ -10161,17 +10882,28 @@ export default function SupremeCRM() {
         deductible: f.deductible, coverage: f.coverage, oLaw: f.oLaw,
         endorsements: { rps: f.rps, cosmetic: f.cosmetic, windHailDed: f.windHailDed, acvRoof: f.acvRoof, matching: f.matching },
       } : null,
-      checklist: { ...BLANK_CHECKLIST }, measurements: { ...BLANK_MEASURE },
+      checklist: {
+        ...BLANK_CHECKLIST,
+        roofAge: f.roofAge || "",
+        layers: f.layers || "",
+        roofType: f.roofTypes || [],
+        notes: f.notes || "",
+      },
+      measurements: { ...BLANK_MEASURE },
       estimate: mkEstimate(), contract: mkContract(),
       photos: [], tasks: [{ id: uid("t"), label: "Schedule inspection", done: false }],
       files: [], payments: [],
       fin: { materials: [], labor: [], other: [], commissionRate: rate, structure: "grossProfit", overheadPct: 10, reimbursements: [] },
-      portal: { estimate: false, contract: false, photos: false, invoice: false }, crewId: null, messages: [], workOrder: null,
+      portal: { ...DEFAULT_PORTAL_SETTINGS }, crewId: null, messages: [], workOrder: null,
       review: { sent: false, clicked: false, posted: false },
-    }, ...prev]);
+    };
+    setJobs((prev) => [job, ...prev]);
     logAct({ kind: "lead", jobId: job.id, jobName: job.name, text: `created new lead ${job.name} (${job.leadSource})` });
     toast("Lead created");
+    setNewLeadOpen(false);
+    setLeadSeed(null);
     setOpenJobId(id); setNav("jobs");
+    return id;
   };
 
   if (authFlowError && !pwDone) {
@@ -10244,6 +10976,7 @@ export default function SupremeCRM() {
   const showMoney = canSeeMoney(liveUser);
 
   const openJob = openJobId ? jobs.find((j) => j.id === openJobId) : null;
+  const quickJob = quickJobId ? jobs.find((j) => j.id === quickJobId) : null;
   const openJobScreen = (id) => { setOpenJobId(id); setNav("jobs"); };
   const backToBoard = () => setOpenJobId(null);
 
@@ -10288,14 +11021,15 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           )}
           <div style={{ paddingTop: 14 }}><AnnouncementBar announcements={announcements} /></div>
           <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav}
-            onNewLead={() => setNewLeadOpen(true)} onQuickTask={() => setQuickTaskOpen(true)}
+            onNewLead={() => { setLeadSeed(null); setNewLeadOpen(true); }} onQuickTask={() => setQuickTaskOpen(true)}
             onOpenStage={(id) => { setBoardStage(id); setNav("jobs"); }} brand={brand}
             appointments={appointments} apptTypes={apptTypes} />
         </>
       ) : nav === "jobs" ? (
         <JobBoard jobs={jobs} stages={stages} filters={filters}
           onOpenFilters={() => setFiltersOpen(true)} onOpenWorkflow={() => setWorkflowOpen(true)}
-          onOpenJob={openJobScreen} onMoveStage={moveStage} onNewLead={() => setNewLeadOpen(true)}
+          onOpenJob={openJobScreen} onMoveStage={moveStage} onNewLead={() => { setLeadSeed(null); setNewLeadOpen(true); }}
+          onQuickAction={(jobId) => setQuickJobId(jobId)}
           focusStage={boardStage} onClearFocus={() => setBoardStage(null)} />
       ) : nav === "inbox" ? (
         <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)} />
@@ -10309,10 +11043,11 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "calendar" ? (
         <CalendarView jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}
           appointments={appointments} setAppointments={setAppointments}
-          apptTypes={apptTypes} setApptTypes={setApptTypes} toast={toast} onLog={logAct}
+          apptTypes={apptTypes} setApptTypes={setApptTypes} toast={toast} onLog={logAct} users={users}
           onQueueMessage={(jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))} />
       ) : nav === "contacts" ? (
-        <Contacts jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
+        <Contacts jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}
+          onAddProject={(contactId) => { setLeadSeed({ contactId }); setNewLeadOpen(true); }} />
       ) : nav === "reviews" ? (
         <ReviewSettings settings={reviewSettings} setSettings={setReviewSettings} jobs={jobs}
           onBack={() => setNav("more")} brand={brand} setBrandFromReviews={setBrand} mut={mutJob} toast={toast} />
@@ -10396,7 +11131,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       }}>
         <NavBtn id="home" icon={Home} label="Home" />
         <NavBtn id="jobs" icon={Briefcase} label="Jobs" />
-        <button onClick={() => setNewLeadOpen(true)} style={{
+        <button onClick={() => { setLeadSeed(null); setNewLeadOpen(true); }} style={{
           border: "none", cursor: "pointer", background: T.accent, color: "#fff",
           width: 52, height: 52, borderRadius: 999, display: "grid", placeItems: "center",
           margin: "0 10px", transform: "translateY(-12px)", boxShadow: "0 6px 16px rgba(27,109,224,.35)",
@@ -10406,7 +11141,11 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <NavBtn id="more" icon={Menu} label="More" badge={unreadMentions} />
       </div>
 
-      <NewLeadSheet open={newLeadOpen} onClose={() => setNewLeadOpen(false)} onCreate={createLead} brand={brand} leadSources={leadSources} users={users} />
+      <JobQuickPanel job={quickJob} onClose={() => setQuickJobId(null)} onOpenJob={openJobScreen}
+        mutJob={mutJob} appointments={appointments} setAppointments={setAppointments}
+        calls={calls} setCalls={setCalls} currentUser={liveUser} toast={toast} onLog={logAct} apptTypes={apptTypes} />
+      <NewLeadSheet open={newLeadOpen} onClose={() => { setNewLeadOpen(false); setLeadSeed(null); }} onCreate={createLead}
+        brand={brand} leadSources={leadSources} users={users} jobs={jobs} seed={leadSeed} />
       <Sheet open={inboxPick} onClose={() => setInboxPick(false)} title="Message a customer">
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>Pick who this is going to — the composer opens on their job with templates ready.</div>
         {jobs.filter((j) => !DEAD_STAGES.includes(j.stageId)).map((j, i2) => (

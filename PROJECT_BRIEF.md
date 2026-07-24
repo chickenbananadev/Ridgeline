@@ -51,8 +51,10 @@ browser-dashboard steps or SQL/code he pastes into a web editor.
 ## Migrations (paste into Supabase SQL Editor)
 `supabase/migrations/` — 002 core persistence, 003 public branding,
 004 client portal, 005 auto-profile trigger (role needs `::user_role`
-cast), 006 portal messages.
-**002–005 are run and verified. 006 is NOT yet run.**
+cast), 006 portal messages, 007 operations calendar fields,
+008 portal quote requests.
+**002–005 are run and verified. 006, 007, 008 must run in that order —
+confirm each with Jacob before assuming.**
 
 ## Feature state
 Persistence is live: jobs, org settings, appointments, activity, chat,
@@ -72,6 +74,19 @@ orders with line-level receiving, warranty tracking plus a searchable
 warranty center, call log with lead-source attribution, announcements,
 crews with docs and paid totals, vendors, price list, categorized More
 menu, Today strip and pipeline card on home, System check diagnostic.
+
+Builds 1–3 (merged July 24 from an offline working session; details in
+BUILD_NOTES.md / BUILD_2_NOTES.md / BUILD_3_NOTES.md): guided lead
+intake that prefills the inspection checklist, contacts/properties
+split from jobs with multi-property customer cards and repeat-project
+reuse, board-card Quick add (notes, calls, texts, tasks, appointments),
+operations calendar (Sales/Production/Issues/Delivery views, durations,
+statuses, resource assignment, overlap blocking, ZIP travel warnings),
+seven-step homeowner project tracker with per-job override, portal
+document sharing with Internal/Shared control, customer quote-change
+and future-work requests with a team review queue, and queued customer
+updates on stage moves gated by SMS/email consent. Test suites:
+`npm run test:smoke` / `test:features` / `test:build2` / `test:build3`.
 
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
