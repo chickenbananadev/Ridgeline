@@ -1,66 +1,115 @@
 # Ridgeline — Project Brief
 
-Read this first in any new working session. It is the source of truth for
-what exists, where it lives, and what not to redo.
+Read this first in any new session. Source of truth for what exists,
+where it lives, and what must not be redone.
 
 ## What this is
-Ridgeline: a roofing CRM for Supreme Building Group (competitor to
-AccuLynx/Roofr). Owner: Jacob Henderson (jacob@supremebuildinggroup.com).
-Git commits must be authored as `Jacobhenderson.36@gmail.com` — Vercel
-blocks any other author on this account.
+Ridgeline: a roofing CRM for Supreme Building Group (competes with
+AccuLynx / Roofr / ServiceTitan). Owner: Jacob Henderson. He works
+**from a phone only — no terminal, ever.** All server setup must be
+browser-dashboard steps or SQL/code he pastes into a web editor.
 
-## Infrastructure — DO NOT RE-CREATE ANY OF THIS
-- **GitHub**: github.com/chickenbananadev/Ridgeline (private, branch: main)
-- **Vercel**: TWO projects exist from a duplicate import: `ridgeline`
-  (URL ridgeline-kappa.vercel.app) and `ridgeline-kaj8`. Both build from
-  this repo. Environment variables have been added to at least one.
-  NEVER instruct importing the repo to Vercel again — that is how the
-  duplicate happened. One project should eventually be deleted after
-  confirming the other is fully working.
-- **Supabase**: project ref `wkvcsgzlsdidysoyzcwm` ("Ridgeline - SBG").
-  Schema in supabase/schema.sql (NOTE: seeds 8 stages; app uses 12 —
-  unreconciled). Edge Function supabase/functions/invite-user/index.ts
-  exists in repo; deploy status uncertain — check before assuming.
-- **Env vars** (Vite requires the VITE_ prefix): VITE_SUPABASE_URL,
-  VITE_SUPABASE_ANON_KEY, VITE_GEOAPIFY_KEY. Values live in the Vercel
-  dashboard — do not ask for them again, and never commit them.
+## Hard rules
+- **Commit author must be `Jacobhenderson.36@gmail.com` / "Jacob Henderson".**
+  Vercel blocks every other author on this account.
+- **Run the smoke test before every push:**
+  `npx esbuild ridgeline.jsx --loader:.jsx=jsx --jsx=automatic --bundle --external:react --external:react-dom --external:lucide-react --format=cjs --outfile=app.test.cjs && node smoke.test.cjs`
+  Expects `console.error captured: 0`. It has caught four blank-page bugs.
+- **Never re-import the repo to Vercel** — that created the duplicate
+  project `ridgeline-kaj8`. Never re-create the Supabase project.
+- When giving Jacob SQL, **paste the contents in a code block.** He once
+  pasted a filename into the SQL editor because the instruction said
+  "copy the file."
+
+## Infrastructure (ALL ALREADY EXISTS)
+- **GitHub**: github.com/chickenbananadev/Ridgeline (private, `main`)
+- **Live app**: https://ridgeline-kappa.vercel.app (Vercel project
+  `ridgeline`). A duplicate `ridgeline-kaj8` also exists; delete it only
+  after kappa is confirmed stable.
+- **Supabase**: project ref `wkvcsgzlsdidysoyzcwm` ("Ridgeline - SBG")
+- **Env vars** (Production, confirmed present): `VITE_SUPABASE_URL`,
+  `VITE_SUPABASE_ANON_KEY`, `VITE_GEOAPIFY_KEY`
+- **Auth URL config**: Site URL `https://ridgeline-kappa.vercel.app`
+  (the missing `https://` broke every invite link — that is fixed).
+  Redirect URLs include the same address plus `/**`.
+- **Custom SMTP**: Gmail (smtp.gmail.com:465, app password). Required —
+  Supabase's built-in mailer only delivers to project team members.
 
 ## Codebase
-- Single file: `ridgeline.jsx` (~7,500 lines, React, inline styles,
-  lucide-react, no localStorage). Entry: src/main.jsx maps env →
-  window.__SUPABASE__/__AUTH__/__GEOAPIFY_KEY__.
-- Test: `node smoke.test.cjs` after building `app.test.cjs` with esbuild
-  (see package scripts / prior transcripts). Run it before every push —
-  it has caught three shipped-crash-level bugs.
-- Brand: Supreme Building Group, #28373E primary / #1B6DE0 accent, live
-  theme object `T` (colors editable in-app). Slogan: "Committed to
-  Supreme Quality and Results." Review link:
-  https://tinyurl.com/Supreme-Building-Group-Review
+- `ridgeline.jsx` — single file, ~10,000 lines, one default export
+  `SupremeCRM`. React, inline styles, lucide-react icons.
+- `src/main.jsx` — maps env into `window.__SUPABASE__` / `__AUTH__` /
+  `__GEOAPIFY_KEY__`; also holds the auth adapter (signIn, resetPassword,
+  updatePassword, inviteSeat, inviteSeatViaLink, sendSms).
+- `smoke.test.cjs` — jsdom walk: login → every screen → 16 job tabs →
+  team-chat send with a mention.
+- Patch style that works: python3 heredocs with assert-guarded string
+  replaces, so a missed anchor writes nothing.
+- After each pass: `cp ridgeline.jsx /mnt/user-data/outputs/supreme-crm.jsx`,
+  commit, push, `present_files`.
 
-## Feature state (July 2026)
-Built and working on seed data: 12-stage pipeline, job board, job detail
-(16 tabs incl. estimate builder w/ margin controls + templates + document
-builder, contract w/ deposit modes + editable terms, work orders without
-pricing, financials/commission engine w/ 4 structures), Roofr CSV import,
-insurance hub (OH cites verified; KY/IL placeholders — do not present as
-verified), price list w/ margin editing, calendar w/ appointments +
-task deadlines, inbox, activity feed (role-scoped), team chat
-(@mentions, job tags), notes w/ customer-visible toggle + portal
-updates, vendors, lead sources, per-user Gmail model, review manager
-w/ rating gate (Google review gating warning included — keep it).
+## Migrations (paste into Supabase SQL Editor)
+`supabase/migrations/` — 002 core persistence, 003 public branding,
+004 client portal, 005 auto-profile trigger (role needs `::user_role`
+cast), 006 portal messages.
+**002–005 are run and verified. 006 is NOT yet run.**
 
-## The one big thing NOT done
-**Persistence.** Everything runs on in-memory seed data and resets on
-refresh. Next phase: wire jobs/customers to Supabase, then
-notes/tasks/appointments/activity/chat, then photos (needs Supabase
-Storage; recommend Pro plan before go-live). Until this lands, the app
-is a demo, not a tool.
+## Feature state
+Persistence is live: jobs, org settings, appointments, activity, chat,
+branding, portals all save to Supabase. Jobs start empty in live mode
+(no demo seeds); Roofr CSV import brings real data in.
 
-## Known honest limits (do not promise otherwise)
-- Email/SMS sending needs Gmail OAuth (Google Cloud + Edge Function) and
-  Twilio w/ 10DLC. Composing/queueing/consent gating already work.
-- Google reviews cannot be auto-posted (no API exists). Rating-gate flow
-  with internal recovery is the compliant ceiling.
-- Email "Viewed" tracking needs a pixel backend (comes with Gmail).
-- Jacob works phone-only — no terminal. All server setup must be
-  browser-dashboard instructions or code he pastes into web editors.
+Built and working: 12-stage pipeline with board, job detail (16 tabs),
+estimate builder with margin controls and templates, contracts with
+deposit modes, invoices, work orders, real PDF/print via a document
+engine, public client portal with live auto-republish and two-way
+messaging, inspection checklist with multi-select, financials and
+4-structure commission engine with cap-out worksheet, insurance hub,
+activity feed (role-scoped), team chat (@mentions, job tags, bubbles),
+notes with customer-visible toggle and full edit/delete audit trail,
+tasks with deadlines and times, calendar, dispatch board, purchase
+orders with line-level receiving, warranty tracking plus a searchable
+warranty center, call log with lead-source attribution, announcements,
+crews with docs and paid totals, vendors, price list, categorized More
+menu, Today strip and pipeline card on home, System check diagnostic.
+
+## Known-good debugging habits
+- **More → System check** first for any "not working" report. It tests
+  the connection, every table, and whether writes are permitted.
+- Blank page after an action = almost always a JS crash. Reproduce in
+  jsdom before guessing; two were temporal-dead-zone errors from reading
+  a `const` declared further down the component.
+- Components defined **inside** another component remount every render:
+  inputs lose focus after one character and taps get swallowed on touch.
+  All such components are hoisted; keep it that way.
+
+## Open / pending
+1. **Migration 006** (portal messages) — Jacob must run it.
+2. **Twilio**: rotate the auth token (it was pasted in chat), set
+   `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` in
+   Edge Function secrets, deploy `supabase/functions/send-sms`, and
+   check toll-free verification for +18556000482.
+3. **Gmail OAuth**: needs a Google Cloud project and a token-exchange
+   Edge Function. Walkthrough already in the app's Integrations screen.
+4. **Photos** are stored as data URLs inside jsonb. Migrate to Supabase
+   Storage and move to the Pro plan ($25/mo) before go-live — the free
+   tier pauses after a week of inactivity, which production cannot have.
+5. **Cap-out CSV redesign** — Jacob's Excel format is at
+   docs.google.com/spreadsheets/d/1G8qP-8zXufP-zXLYfixELJlcrNLM1Lyz and
+   is unreadable via Drive tools (uploaded .xlsx). Ask him to Save-as
+   Google Sheets or to describe the columns.
+6. **Edge Function deploys have failed twice on mobile.** The app now
+   works without them (invite falls back to a magic link). If one is
+   truly needed, offer the GitHub-integration route instead of the editor.
+7. Recommended next features: Stripe payments, then point-of-sale
+   financing (Wisetack/GreenSky), then QuickBooks sync.
+
+## Honest limits (do not promise otherwise)
+- Google reviews cannot be auto-posted; no API exists. The compliant
+  ask-first flow is built.
+- Email open tracking needs a pixel backend (arrives with Gmail).
+- @mention push notifications need a notification service; the in-app
+  badge and toast work today.
+- Job edits sync on refresh, last-write-wins. No live field merging.
+- KY and IL insurance citations are unverified placeholders. Ohio's are
+  verified.
