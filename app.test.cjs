@@ -2458,43 +2458,55 @@ function Login({ brand: brand2, users, onLogin }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, marginTop: 6 }, children: brand2.slogan })
       ] }),
       mode === "login" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
-          {
-            style: inputStyle,
-            type: "email",
-            autoComplete: "username",
-            value: email,
-            onChange: (e) => setEmail(e.target.value),
-            placeholder: "you@supremebuildinggroup.com"
-          }
-        ) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Password", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
-          {
-            style: inputStyle,
-            type: "password",
-            autoComplete: "current-password",
-            value: pw,
-            onChange: (e) => setPw(e.target.value),
-            placeholder: "Enter your password",
-            onKeyDown: (e) => {
-              if (e.key === "Enter" && live && email && pw) submit();
-            }
-          }
-        ) }),
-        err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Sign-in failed", tone: "red", children: err }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 9, alignItems: "center", fontSize: 13.5, color: S.ink, cursor: "pointer", margin: "4px 0 14px" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", { onSubmit: (e) => {
+          e.preventDefault();
+          submit();
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             "input",
             {
-              type: "checkbox",
-              checked: remember,
-              onChange: (e) => setRemember(e.target.checked),
-              style: { width: 17, height: 17, accentColor: T.accent }
+              style: inputStyle,
+              type: "email",
+              name: "email",
+              id: "ridgeline-email",
+              autoComplete: "username",
+              autoCapitalize: "none",
+              autoCorrect: "off",
+              value: email,
+              onChange: (e) => setEmail(e.target.value),
+              placeholder: "you@supremebuildinggroup.com"
             }
-          ),
-          "Remember my email on this device"
+          ) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Password", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: inputStyle,
+              type: "password",
+              name: "password",
+              id: "ridgeline-password",
+              autoComplete: "current-password",
+              value: pw,
+              onChange: (e) => setPw(e.target.value),
+              placeholder: "Enter your password",
+              onKeyDown: (e) => {
+                if (e.key === "Enter" && live && email && pw) submit();
+              }
+            }
+          ) }),
+          err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Sign-in failed", tone: "red", children: err }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 9, alignItems: "center", fontSize: 13.5, color: S.ink, cursor: "pointer", margin: "4px 0 14px" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                type: "checkbox",
+                checked: remember,
+                onChange: (e) => setRemember(e.target.checked),
+                style: { width: 17, height: 17, accentColor: T.accent }
+              }
+            ),
+            "Remember my email on this device"
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "submit", style: { display: "none" }, "aria-hidden": "true", tabIndex: -1 })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           Btn,
@@ -4793,6 +4805,92 @@ function PublicPortal({ token }) {
       ] })
     ] })
   ] });
+}
+function PasswordSetScreen({ brand: brand2, mode, onDone, toast: toast2 }) {
+  const [pw, setPw] = (0, import_react.useState)("");
+  const [pw2, setPw2] = (0, import_react.useState)("");
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const [err, setErr] = (0, import_react.useState)("");
+  const weak = pw.length > 0 && pw.length < 8;
+  const submit = async () => {
+    setErr("");
+    if (pw.length < 8) {
+      setErr("Use at least 8 characters.");
+      return;
+    }
+    if (pw !== pw2) {
+      setErr("The two passwords don't match.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await AUTH().updatePassword(pw);
+      toast2 && toast2("Password updated");
+      onDone(true);
+    } catch (e) {
+      setErr(e && e.message || "Couldn't update the password. The reset link may have expired \u2014 request a new one.");
+    }
+    setBusy(false);
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+    minHeight: "100vh",
+    background: S.bg,
+    display: "grid",
+    placeItems: "center",
+    padding: 20,
+    fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif"
+  }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "100%", maxWidth: 380 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center", marginBottom: 22 }, children: [
+      brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "", style: { height: 60, maxWidth: 200, objectFit: "contain", margin: "0 auto 12px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+        width: 58,
+        height: 58,
+        margin: "0 auto 12px",
+        borderRadius: 15,
+        background: brand2.primary,
+        color: "#fff",
+        display: "grid",
+        placeItems: "center",
+        fontWeight: 800
+      }, children: brand2.short }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800, color: S.ink }, children: mode === "recovery" ? "Choose a new password" : "Change your password" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, marginTop: 5, lineHeight: 1.5 }, children: mode === "recovery" ? "You followed a reset link. Pick a new password to finish signing in." : "Enter a new password for your account." })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", { onSubmit: (e) => {
+        e.preventDefault();
+        submit();
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "New password", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            style: inputStyle,
+            type: "password",
+            name: "new-password",
+            autoComplete: "new-password",
+            value: pw,
+            onChange: (e) => setPw(e.target.value),
+            placeholder: "At least 8 characters"
+          }
+        ) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Confirm new password", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            style: inputStyle,
+            type: "password",
+            name: "confirm-password",
+            autoComplete: "new-password",
+            value: pw2,
+            onChange: (e) => setPw2(e.target.value)
+          }
+        ) }),
+        weak && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#92600A", marginBottom: 8 }, children: "A bit short \u2014 8 characters minimum." }),
+        err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: "#B42318", marginBottom: 10, lineHeight: 1.5 }, children: err }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "submit", style: { display: "none" }, "aria-hidden": "true", tabIndex: -1 }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, disabled: busy || !pw || !pw2, onClick: submit, children: busy ? "Saving\u2026" : "Save password" })
+      ] }),
+      mode !== "recovery" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%", marginTop: 9 }, onClick: () => onDone(false), children: "Cancel" })
+    ] })
+  ] }) });
 }
 function PillGroup({ options, value, onPick, multi = false }) {
   const vals = multi ? Array.isArray(value) ? value : [] : [];
@@ -8231,7 +8329,7 @@ function LeadSourceManager({ sources, setSources, jobs, onBack, toast: toast2 })
     ] }) }, src))
   ] });
 }
-function BrandingEditor({ brand: brand2, setBrand, onBack, toast: toast2 }) {
+function BrandingEditor({ brand: brand2, setBrand, onBack, toast: toast2, brandErr = "" }) {
   const set = (k) => (e) => setBrand({ ...brand2, [k]: e.target.value });
   const logoRef = (0, import_react.useRef)(null);
   const onLogo = (e) => {
@@ -8259,6 +8357,16 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast: toast2 }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: logoRef, type: "file", accept: "image/*", onChange: onLogo, style: { display: "none" } }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Company branding", onBack }),
+    brandErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      marginTop: 12,
+      background: "#FDECEA",
+      border: "1px solid #F5C6C0",
+      borderRadius: 11,
+      padding: "11px 13px",
+      fontSize: 13,
+      color: "#7A1D12",
+      lineHeight: 1.5
+    }, children: brandErr }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 14 }, children: "One place for company identity. Login, documents, the client portal, and review messages all read from here \u2014 colors repaint the whole app the moment you change them." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Logo", hint: "Shows on the login screen, the loading screen, and document headers. PNG with a transparent background works best.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 14 }, children: [
@@ -9729,7 +9837,8 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
     ["leadsources", import_lucide_react.Filter, "Lead sources", "Add or remove the options reps pick from"],
     ["vendors", import_lucide_react.Building2, "Vendors & suppliers", "Material suppliers and their account details"],
     ["reviews", import_lucide_react.Star, "Review automation", "Google review requests"],
-    ["branding", import_lucide_react.Settings, "Company branding", "Name, colors, review link"]
+    ["branding", import_lucide_react.Settings, "Company branding", "Name, colors, review link"],
+    ["password", import_lucide_react.Lock, "Change my password", "Update your sign-in password"]
   ];
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 24, fontWeight: 800, color: S.ink, marginBottom: 4 }, children: "More" }),
@@ -9831,6 +9940,7 @@ function useBrandSync(brand2, setBrand, hasSession) {
   const lastSaved = (0, import_react.useRef)(null);
   const loadedOnce = (0, import_react.useRef)(false);
   const timer = (0, import_react.useRef)(null);
+  const [brandErr, setBrandErr] = (0, import_react.useState)("");
   (0, import_react.useEffect)(() => {
     const db = DB();
     if (!db) return;
@@ -9853,13 +9963,21 @@ function useBrandSync(brand2, setBrand, hasSession) {
     if (JSON.stringify(brand2) === JSON.stringify(lastSaved.current)) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
-      lastSaved.current = brand2;
-      db.from("crm_brand").upsert({ id: 1, data: brand2, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+      db.from("crm_brand").upsert({ id: 1, data: brand2, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).then(({ error }) => {
+        if (error) {
+          const missing = /relation .*crm_brand.* does not exist|schema cache/i.test(error.message || "");
+          setBrandErr(missing ? "Branding can't save: the crm_brand table doesn't exist yet. Run the branding migration in Supabase \u2192 SQL Editor, then reload." : "Branding save failed: " + (error.message || "unknown error"));
+        } else {
+          lastSaved.current = brand2;
+          setBrandErr("");
+        }
+      });
     }, 900);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
   }, [brand2, hasSession]);
+  return brandErr;
 }
 function useDbSync(st) {
   const {
@@ -10083,6 +10201,7 @@ function useDbSync(st) {
 function SupremeCRM() {
   const portalToken = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("portal") : null;
   if (portalToken) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PublicPortal, { token: portalToken });
+  const isRecovery = typeof window !== "undefined" && (new URLSearchParams(window.location.search).get("recovery") === "1" || /type=recovery/.test(window.location.hash || ""));
   const [currentUser, setCurrentUser] = (0, import_react.useState)(null);
   const [users, setUsers] = (0, import_react.useState)(SEED_USERS);
   const [booting, setBooting] = (0, import_react.useState)(liveAuth());
@@ -10137,6 +10256,8 @@ function SupremeCRM() {
   const [chatMsgs, setChatMsgs] = (0, import_react.useState)([]);
   const [announcements, setAnnouncements] = (0, import_react.useState)([]);
   const [chatSeenCount, setChatSeenCount] = (0, import_react.useState)(0);
+  const [pwDone, setPwDone] = (0, import_react.useState)(false);
+  const [changePwOpen, setChangePwOpen] = (0, import_react.useState)(false);
   const [apptTypes, setApptTypes] = (0, import_react.useState)(["Inspection", "Adjuster meeting", "Estimate presentation", "Production start", "Final walkthrough"]);
   const [integrations, setIntegrations] = (0, import_react.useState)({
     /* Gmail is per-user: each rep connects their own mailbox so email
@@ -10193,7 +10314,7 @@ function SupremeCRM() {
     if (d.reviewSettings) setReviewSettings(d.reviewSettings);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
-  useBrandSync(brand2, setBrand, liveAuth() ? !!currentUser : true);
+  const brandErr = useBrandSync(brand2, setBrand, liveAuth() ? !!currentUser : true);
   const { hydrated, syncErr } = useDbSync({
     ready: liveAuth() ? !!currentUser : true,
     isCrew: !!(currentUser && currentUser.role === "crew"),
@@ -10307,6 +10428,26 @@ function SupremeCRM() {
     setOpenJobId(id);
     setNav("jobs");
   };
+  if (isRecovery && liveAuth() && !pwDone) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      PasswordSetScreen,
+      {
+        brand: brand2,
+        mode: "recovery",
+        toast: toast2,
+        onDone: () => {
+          setPwDone(true);
+          try {
+            window.history.replaceState({}, "", window.location.pathname);
+          } catch {
+          }
+        }
+      }
+    );
+  }
+  if (changePwOpen) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PasswordSetScreen, { brand: brand2, mode: "change", toast: toast2, onDone: () => setChangePwOpen(false) });
+  }
   if (booting || liveAuth() && currentUser && !hydrated) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center" }, children: [
       brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: brand2.company, style: { height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
@@ -10463,7 +10604,7 @@ function SupremeCRM() {
         onMoveStage: moveStage,
         onNewLead: () => setNewLeadOpen(true)
       }
-    ) : nav === "inbox" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Inbox, { jobs, onOpenJob: openJobScreen, onCompose: () => setInboxPick(true) }) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand: brand2, onNav: setNav, onLogout: async () => {
+    ) : nav === "inbox" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Inbox, { jobs, onOpenJob: openJobScreen, onCompose: () => setInboxPick(true) }) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand: brand2, onNav: (id) => id === "password" ? setChangePwOpen(true) : setNav(id), onLogout: async () => {
       const a = AUTH();
       if (a) {
         try {
@@ -10620,8 +10761,8 @@ function SupremeCRM() {
         toast: toast2,
         brand: brand2
       }
-    ) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand: brand2, setBrand, onBack: () => setNav("more"), toast: toast2 }) : null,
-    syncErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+    ) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand: brand2, setBrand, onBack: () => setNav("more"), toast: toast2, brandErr }) : null,
+    (syncErr || brandErr) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
       position: "fixed",
       top: 0,
       left: 0,
@@ -10633,7 +10774,7 @@ function SupremeCRM() {
       lineHeight: 1.45,
       padding: "9px 14px",
       textAlign: "center"
-    }, children: syncErr }),
+    }, children: brandErr || syncErr }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
       position: "fixed",
       bottom: 0,

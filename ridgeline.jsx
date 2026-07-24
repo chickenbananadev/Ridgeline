@@ -1991,12 +1991,13 @@ function Login({ brand, users, onLogin }) {
 
         {mode === "login" && (
           <>
+            <form onSubmit={(e) => { e.preventDefault(); submit(); }}>
             <Field label="Email">
-              <input style={inputStyle} type="email" autoComplete="username" value={email}
+              <input style={inputStyle} type="email" name="email" id="ridgeline-email" autoComplete="username" autoCapitalize="none" autoCorrect="off" value={email}
                 onChange={(e) => setEmail(e.target.value)} placeholder="you@supremebuildinggroup.com" />
             </Field>
             <Field label="Password">
-              <input style={inputStyle} type="password" autoComplete="current-password" value={pw}
+              <input style={inputStyle} type="password" name="password" id="ridgeline-password" autoComplete="current-password" value={pw}
                 onChange={(e) => setPw(e.target.value)} placeholder="Enter your password"
                 onKeyDown={(e) => { if (e.key === "Enter" && live && email && pw) submit(); }} />
             </Field>
@@ -2006,6 +2007,8 @@ function Login({ brand, users, onLogin }) {
                   style={{ width: 17, height: 17, accentColor: T.accent }} />
                 Remember my email on this device
               </label>
+              <button type="submit" style={{ display: "none" }} aria-hidden="true" tabIndex={-1} />
+            </form>
             <Btn
               onClick={live ? submit : () => setMode("account")}
               disabled={busy || (live && (!email.trim() || !pw))}
@@ -4062,6 +4065,70 @@ function PublicPortal({ token }) {
             </div>
             <div><a href={`mailto:${d.email}`} style={{ color: prim }}>{d.email}</a></div>
           </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function PasswordSetScreen({ brand, mode, onDone, toast }) {
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const weak = pw.length > 0 && pw.length < 8;
+  const submit = async () => {
+    setErr("");
+    if (pw.length < 8) { setErr("Use at least 8 characters."); return; }
+    if (pw !== pw2) { setErr("The two passwords don't match."); return; }
+    setBusy(true);
+    try {
+      await AUTH().updatePassword(pw);
+      toast && toast("Password updated");
+      onDone(true);
+    } catch (e) {
+      setErr((e && e.message) || "Couldn't update the password. The reset link may have expired — request a new one.");
+    }
+    setBusy(false);
+  };
+  return (
+    <div style={{ minHeight: "100vh", background: S.bg, display: "grid", placeItems: "center", padding: 20,
+      fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 380 }}>
+        <div style={{ textAlign: "center", marginBottom: 22 }}>
+          {brand.logo
+            ? <img src={brand.logo} alt="" style={{ height: 60, maxWidth: 200, objectFit: "contain", margin: "0 auto 12px", display: "block" }} />
+            : <div style={{ width: 58, height: 58, margin: "0 auto 12px", borderRadius: 15, background: brand.primary,
+                color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }}>{brand.short}</div>}
+          <div style={{ fontSize: 20, fontWeight: 800, color: S.ink }}>
+            {mode === "recovery" ? "Choose a new password" : "Change your password"}
+          </div>
+          <div style={{ fontSize: 13.5, color: S.sub, marginTop: 5, lineHeight: 1.5 }}>
+            {mode === "recovery"
+              ? "You followed a reset link. Pick a new password to finish signing in."
+              : "Enter a new password for your account."}
+          </div>
+        </div>
+        <Card>
+          <form onSubmit={(e) => { e.preventDefault(); submit(); }}>
+            <Field label="New password">
+              <input style={inputStyle} type="password" name="new-password" autoComplete="new-password"
+                value={pw} onChange={(e) => setPw(e.target.value)} placeholder="At least 8 characters" />
+            </Field>
+            <Field label="Confirm new password">
+              <input style={inputStyle} type="password" name="confirm-password" autoComplete="new-password"
+                value={pw2} onChange={(e) => setPw2(e.target.value)} />
+            </Field>
+            {weak && <div style={{ fontSize: 12.5, color: "#92600A", marginBottom: 8 }}>A bit short — 8 characters minimum.</div>}
+            {err && <div style={{ fontSize: 13, color: "#B42318", marginBottom: 10, lineHeight: 1.5 }}>{err}</div>}
+            <button type="submit" style={{ display: "none" }} aria-hidden="true" tabIndex={-1} />
+            <Btn style={{ width: "100%" }} disabled={busy || !pw || !pw2} onClick={submit}>
+              {busy ? "Saving…" : "Save password"}
+            </Btn>
+          </form>
+          {mode !== "recovery" && (
+            <Btn kind="ghost" style={{ width: "100%", marginTop: 9 }} onClick={() => onDone(false)}>Cancel</Btn>
+          )}
         </Card>
       </div>
     </div>
@@ -7101,7 +7168,7 @@ function LeadSourceManager({ sources, setSources, jobs, onBack, toast }) {
   );
 }
 
-function BrandingEditor({ brand, setBrand, onBack, toast }) {
+function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
   const set = (k) => (e) => setBrand({ ...brand, [k]: e.target.value });
   const logoRef = useRef(null);
   const onLogo = (e) => {
@@ -7125,6 +7192,12 @@ function BrandingEditor({ brand, setBrand, onBack, toast }) {
     <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
       <input ref={logoRef} type="file" accept="image/*" onChange={onLogo} style={{ display: "none" }} />
       <SubHeader title="Company branding" onBack={onBack} />
+      {brandErr && (
+        <div style={{ marginTop: 12, background: "#FDECEA", border: "1px solid #F5C6C0", borderRadius: 11,
+          padding: "11px 13px", fontSize: 13, color: "#7A1D12", lineHeight: 1.5 }}>
+          {brandErr}
+        </div>
+      )}
       <Card style={{ marginTop: 14 }}>
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 14 }}>
           One place for company identity. Login, documents, the client portal, and review messages all read from
@@ -8453,6 +8526,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
     ["vendors", Building2, "Vendors & suppliers", "Material suppliers and their account details"],
     ["reviews", Star, "Review automation", "Google review requests"],
     ["branding", Settings, "Company branding", "Name, colors, review link"],
+    ["password", Lock, "Change my password", "Update your sign-in password"],
   ];
   return (
     <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
@@ -8570,6 +8644,7 @@ function useBrandSync(brand, setBrand, hasSession) {
   const lastSaved = useRef(null);
   const loadedOnce = useRef(false);
   const timer = useRef(null);
+  const [brandErr, setBrandErr] = useState("");
 
   /* Public read: works before login, which is the whole point — the
      login screen needs the logo before anyone has signed in. */
@@ -8597,11 +8672,23 @@ function useBrandSync(brand, setBrand, hasSession) {
     if (JSON.stringify(brand) === JSON.stringify(lastSaved.current)) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
-      lastSaved.current = brand;
-      db.from("crm_brand").upsert({ id: 1, data: brand, updated_at: new Date().toISOString() });
+      db.from("crm_brand").upsert({ id: 1, data: brand, updated_at: new Date().toISOString() })
+        .then(({ error }) => {
+          if (error) {
+            /* Do not mark it saved, so the next edit retries. */
+            const missing = /relation .*crm_brand.* does not exist|schema cache/i.test(error.message || "");
+            setBrandErr(missing
+              ? "Branding can't save: the crm_brand table doesn't exist yet. Run the branding migration in Supabase → SQL Editor, then reload."
+              : "Branding save failed: " + (error.message || "unknown error"));
+          } else {
+            lastSaved.current = brand;
+            setBrandErr("");
+          }
+        });
     }, 900);
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [brand, hasSession]);
+  return brandErr;
 }
 
 function useDbSync(st) {
@@ -8816,6 +8903,15 @@ export default function SupremeCRM() {
     ? new URLSearchParams(window.location.search).get("portal") : null;
   if (portalToken) return <PublicPortal token={portalToken} />;
 
+  /* Password reset: Supabase sends the user back with either
+     ?recovery=1 or a #type=recovery fragment. Either way we show the
+     set-password screen rather than dropping them on a login form that
+     they cannot get past. */
+  const isRecovery = typeof window !== "undefined" && (
+    new URLSearchParams(window.location.search).get("recovery") === "1" ||
+    /type=recovery/.test(window.location.hash || "")
+  );
+
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState(SEED_USERS);
   const [booting, setBooting] = useState(liveAuth());
@@ -8868,6 +8964,8 @@ export default function SupremeCRM() {
   const [chatMsgs, setChatMsgs] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [chatSeenCount, setChatSeenCount] = useState(0);
+  const [pwDone, setPwDone] = useState(false);
+  const [changePwOpen, setChangePwOpen] = useState(false);
   const [apptTypes, setApptTypes] = useState(["Inspection", "Adjuster meeting", "Estimate presentation", "Production start", "Final walkthrough"]);
   const [integrations, setIntegrations] = useState({
     /* Gmail is per-user: each rep connects their own mailbox so email
@@ -8914,7 +9012,7 @@ export default function SupremeCRM() {
     if (d.reviewSettings) setReviewSettings(d.reviewSettings);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
-  useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true);
+  const brandErr = useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true);
   const { hydrated, syncErr } = useDbSync({
     ready: liveAuth() ? !!currentUser : true,
     isCrew: !!(currentUser && currentUser.role === "crew"),
@@ -9011,6 +9109,13 @@ export default function SupremeCRM() {
     setOpenJobId(id); setNav("jobs");
   };
 
+  if (isRecovery && liveAuth() && !pwDone) {
+    return <PasswordSetScreen brand={brand} mode="recovery" toast={toast}
+      onDone={() => { setPwDone(true); try { window.history.replaceState({}, "", window.location.pathname); } catch {} }} />;
+  }
+  if (changePwOpen) {
+    return <PasswordSetScreen brand={brand} mode="change" toast={toast} onDone={() => setChangePwOpen(false)} />;
+  }
   if (booting || (liveAuth() && currentUser && !hydrated)) {
     return (
       <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff" }}>
@@ -9113,7 +9218,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "inbox" ? (
         <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)} />
       ) : nav === "more" ? (
-        <MoreMenu brand={brand} onNav={setNav} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
+        <MoreMenu brand={brand} onNav={(id) => (id === "password" ? setChangePwOpen(true) : setNav(id))} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
       ) : nav === "insurance" ? (
         <InsuranceHub jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} toast={toast} />
       ) : nav === "performance" ? (
@@ -9166,15 +9271,15 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <TeamManager users={users} setUsers={setUsers} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} brand={brand} />
       ) : nav === "branding" ? (
-        <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} />
+        <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} brandErr={brandErr} />
       ) : null}
 
-      {syncErr && (
+      {(syncErr || brandErr) && (
         <div style={{
           position: "fixed", top: 0, left: 0, right: 0, zIndex: 90,
           background: "#7A1D12", color: "#fff", fontSize: 12.5, lineHeight: 1.45,
           padding: "9px 14px", textAlign: "center",
-        }}>{syncErr}</div>
+        }}>{brandErr || syncErr}</div>
       )}
 
       {/* Bottom navigation */}

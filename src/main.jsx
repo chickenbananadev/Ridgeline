@@ -24,10 +24,24 @@ if (url && anon) {
     },
     async signOut() { await supabase.auth.signOut(); },
     async resetPassword(email) {
+      /* The link must land back on this app with the recovery token in
+         the URL hash; the app detects it and shows the new-password
+         screen. Supabase also requires this exact origin to be listed
+         under Authentication -> URL Configuration -> Redirect URLs. */
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
+        redirectTo: window.location.origin + "/?recovery=1",
       });
       if (error) throw error;
+    },
+    async updatePassword(newPassword) {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+    },
+    async exchangeRecovery() {
+      /* Supabase JS parses the hash automatically on load; this just
+         reports whether we ended up with a session from it. */
+      const { data } = await supabase.auth.getSession();
+      return data.session;
     },
     async getSession() {
       const { data } = await supabase.auth.getSession();
