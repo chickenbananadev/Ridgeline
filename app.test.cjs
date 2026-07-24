@@ -2570,7 +2570,7 @@ function Login({ brand: brand2, users, onLogin }) {
     ] })
   ] });
 }
-function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask }) {
+function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage }) {
   const totalPipeline = jobs.filter((j) => !DEAD_STAGES.includes(j.stageId) && j.stageId !== "s10").reduce((s, j) => s + j.value, 0);
   const stale = jobs.filter((j) => j.daysInStage >= 14 && !["s10", "s11", "s12"].includes(j.stageId));
   const approvedPlus = jobs.filter((j) => WON_STAGES.includes(j.stageId));
@@ -2590,6 +2590,60 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
       userName.split(" ")[0]
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, marginTop: 4 }, children: (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { weekday: "long", month: "long", day: "numeric" }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("jobs"), children: "Open board \u2192" }), children: "Pipeline" }),
+      (() => {
+        const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
+        const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
+        const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
+        const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 26, fontWeight: 800, color: S.ink }, children: activeTotal }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13, color: S.sub }, children: [
+              "active ",
+              activeTotal === 1 ? "job" : "jobs",
+              " \xB7 ",
+              money(totalPipeline)
+            ] })
+          ] }),
+          liveStages.map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            "button",
+            {
+              onClick: () => onOpenStage && onOpenStage(st.id),
+              style: {
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                border: "none",
+                background: "none",
+                cursor: "pointer",
+                padding: "7px 0",
+                borderTop: `1px solid ${S.line}`
+              },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: st.label }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }, children: st.value > 0 ? money(st.value) : "" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }, children: st.count })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 5, borderRadius: 99, background: S.soft, marginTop: 5, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+                  width: `${st.count / maxCount * 100}%`,
+                  height: "100%",
+                  borderRadius: 99,
+                  background: st.count ? T.accent : "transparent"
+                } }) })
+              ]
+            },
+            st.id
+          )),
+          lost > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 9 }, children: [
+            lost,
+            " lost or unqualified \u2014 not counted above"
+          ] })
+        ] });
+      })()
+    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 18 }, children: [
       ["Pipeline value", money(totalPipeline), "Open jobs, all stages"],
       ["Signed value", money(signedValue), "Approved and beyond"],
@@ -3669,8 +3723,14 @@ function WorkflowEditor({ open, onClose, stages, setStages }) {
   );
 }
 var arrowBtn = { border: "1px solid #E5E7EB", background: "#fff", borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14 };
-function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead }) {
+function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, focusStage, onClearFocus }) {
   const dragJob = (0, import_react.useRef)(null);
+  const focusRef = (0, import_react.useRef)(null);
+  (0, import_react.useEffect)(() => {
+    if (focusStage && focusRef.current && focusRef.current.scrollIntoView) {
+      focusRef.current.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+    }
+  }, [focusStage]);
   const [view, setView] = (0, import_react.useState)("board");
   const [moveMenuFor, setMoveMenuFor] = (0, import_react.useState)(null);
   const [q, setQ] = (0, import_react.useState)("");
@@ -3868,6 +3928,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
         "div",
         {
+          ref: focusStage === stage.id ? focusRef : null,
           onDragOver: (e) => {
             e.preventDefault();
             setDragOver(stage.id);
@@ -10476,6 +10537,7 @@ function SupremeCRM() {
   const [newLeadOpen, setNewLeadOpen] = (0, import_react.useState)(false);
   const [quickTaskOpen, setQuickTaskOpen] = (0, import_react.useState)(false);
   const [inboxPick, setInboxPick] = (0, import_react.useState)(false);
+  const [boardStage, setBoardStage] = (0, import_react.useState)(null);
   const [qt, setQt] = (0, import_react.useState)({ jobId: "", label: "", due: "", time: "" });
   const [toastMsg, setToastMsg] = (0, import_react.useState)("");
   const [filters, setFilters] = (0, import_react.useState)({ sort: "updated", assignees: [], stages: [], sources: [] });
@@ -10809,7 +10871,11 @@ function SupremeCRM() {
           userName,
           go: setNav,
           onNewLead: () => setNewLeadOpen(true),
-          onQuickTask: () => setQuickTaskOpen(true)
+          onQuickTask: () => setQuickTaskOpen(true),
+          onOpenStage: (id) => {
+            setBoardStage(id);
+            setNav("jobs");
+          }
         }
       )
     ] }) : nav === "jobs" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -10822,7 +10888,9 @@ function SupremeCRM() {
         onOpenWorkflow: () => setWorkflowOpen(true),
         onOpenJob: openJobScreen,
         onMoveStage: moveStage,
-        onNewLead: () => setNewLeadOpen(true)
+        onNewLead: () => setNewLeadOpen(true),
+        focusStage: boardStage,
+        onClearFocus: () => setBoardStage(null)
       }
     ) : nav === "inbox" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Inbox, { jobs, onOpenJob: openJobScreen, onCompose: () => setInboxPick(true) }) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand: brand2, onNav: (id) => id === "password" ? setChangePwOpen(true) : setNav(id), onLogout: async () => {
       const a = AUTH();

@@ -2067,7 +2067,7 @@ function Login({ brand, users, onLogin }) {
 /* ================================================================
    DASHBOARD
    ================================================================ */
-function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask }) {
+function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage }) {
   const totalPipeline = jobs.filter((j) => !DEAD_STAGES.includes(j.stageId) && j.stageId !== "s10").reduce((s, j) => s + j.value, 0);
   const stale = jobs.filter((j) => j.daysInStage >= 14 && !["s10","s11","s12"].includes(j.stageId));
   const approvedPlus = jobs.filter((j) => WON_STAGES.includes(j.stageId));
@@ -2090,6 +2090,53 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
       <div style={{ fontSize: 14, color: S.sub, marginTop: 4 }}>
         {new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
       </div>
+
+      {/* Pipeline at a glance — counts and dollars per stage, tap to filter the board */}
+      <Card style={{ marginTop: 16 }}>
+        <CardTitle right={<button style={linkBtn} onClick={() => go("jobs")}>Open board →</button>}>Pipeline</CardTitle>
+        {(() => {
+          const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
+          const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
+          const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
+          const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
+          return (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+                <span style={{ fontSize: 26, fontWeight: 800, color: S.ink }}>{activeTotal}</span>
+                <span style={{ fontSize: 13, color: S.sub }}>active {activeTotal === 1 ? "job" : "jobs"} · {money(totalPipeline)}</span>
+              </div>
+              {liveStages.map((st) => (
+                <button key={st.id} onClick={() => onOpenStage && onOpenStage(st.id)}
+                  style={{
+                    display: "block", width: "100%", textAlign: "left", border: "none", background: "none",
+                    cursor: "pointer", padding: "7px 0", borderTop: `1px solid ${S.line}`,
+                  }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {st.label}
+                    </span>
+                    <span style={{ fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }}>{st.value > 0 ? money(st.value) : ""}</span>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }}>
+                      {st.count}
+                    </span>
+                  </div>
+                  <div style={{ height: 5, borderRadius: 99, background: S.soft, marginTop: 5, overflow: "hidden" }}>
+                    <div style={{
+                      width: `${(st.count / maxCount) * 100}%`, height: "100%", borderRadius: 99,
+                      background: st.count ? T.accent : "transparent",
+                    }} />
+                  </div>
+                </button>
+              ))}
+              {lost > 0 && (
+                <div style={{ fontSize: 12, color: S.sub, marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 9 }}>
+                  {lost} lost or unqualified — not counted above
+                </div>
+              )}
+            </>
+          );
+        })()}
+      </Card>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 18 }}>
         {[
@@ -3074,8 +3121,14 @@ const arrowBtn = { border: "1px solid #E5E7EB", background: "#fff", borderRadius
 /* ================================================================
    JOB BOARD — kanban with drag between stages + tap-to-move
    ================================================================ */
-function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead }) {
+function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, focusStage, onClearFocus }) {
   const dragJob = useRef(null);
+  const focusRef = useRef(null);
+  useEffect(() => {
+    if (focusStage && focusRef.current && focusRef.current.scrollIntoView) {
+      focusRef.current.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+    }
+  }, [focusStage]);
   const [view, setView] = useState("board");
   const [moveMenuFor, setMoveMenuFor] = useState(null);
   const [q, setQ] = useState("");
@@ -3215,7 +3268,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
             const inStage = filtered.filter((j) => j.stageId === stage.id);
             const total = inStage.reduce((s, j) => s + j.value, 0);
             return (
-              <div key={stage.id}
+              <div key={stage.id} ref={focusStage === stage.id ? focusRef : null}
                 onDragOver={(e) => { e.preventDefault(); setDragOver(stage.id); }}
                 onDragLeave={() => setDragOver(null)}
                 onDrop={() => {
@@ -9225,6 +9278,7 @@ export default function SupremeCRM() {
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [quickTaskOpen, setQuickTaskOpen] = useState(false);
   const [inboxPick, setInboxPick] = useState(false);
+  const [boardStage, setBoardStage] = useState(null);
   const [qt, setQt] = useState({ jobId: "", label: "", due: "", time: "" });
   const [toastMsg, setToastMsg] = useState("");
   const [filters, setFilters] = useState({ sort: "updated", assignees: [], stages: [], sources: [] });
@@ -9464,12 +9518,14 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           )}
           <div style={{ paddingTop: 14 }}><AnnouncementBar announcements={announcements} /></div>
           <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav}
-            onNewLead={() => setNewLeadOpen(true)} onQuickTask={() => setQuickTaskOpen(true)} />
+            onNewLead={() => setNewLeadOpen(true)} onQuickTask={() => setQuickTaskOpen(true)}
+            onOpenStage={(id) => { setBoardStage(id); setNav("jobs"); }} />
         </>
       ) : nav === "jobs" ? (
         <JobBoard jobs={jobs} stages={stages} filters={filters}
           onOpenFilters={() => setFiltersOpen(true)} onOpenWorkflow={() => setWorkflowOpen(true)}
-          onOpenJob={openJobScreen} onMoveStage={moveStage} onNewLead={() => setNewLeadOpen(true)} />
+          onOpenJob={openJobScreen} onMoveStage={moveStage} onNewLead={() => setNewLeadOpen(true)}
+          focusStage={boardStage} onClearFocus={() => setBoardStage(null)} />
       ) : nav === "inbox" ? (
         <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)} />
       ) : nav === "more" ? (
