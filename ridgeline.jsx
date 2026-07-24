@@ -5142,24 +5142,55 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
     setBody(mergeTemplate(t.body, ctx));
     setTo(t.audience);
   };
-  const send = () => {
+  const [sending, setSending] = useState(false);
+  const send = async () => {
     const audience = to;
     if (!consentOk(compose, audience)) { toast("No consent on file — cannot send"); return; }
     const addr = recipient(audience);
     if (!addr) { toast(audience === "Crew" ? "Assign a crew first" : "No contact on file"); return; }
-    const myGmail = (integrations.gmailByUser || {})[currentUser.id] || { connected: false };
-    const live = compose === "sms" ? integrations.sms.connected : myGmail.connected;
-    mut((j) => ({
+    const msgId = uid("msg");
+    const record = (status) => mut((j) => ({
       ...j,
       messages: [...(j.messages || []), {
-        id: uid("msg"), kind: compose, audience, to: addr,
+        id: msgId, kind: compose, audience, to: addr,
         subject: compose === "email" ? subject : "",
-        body, at: nowStamp(), by: currentUser.name,
-        status: live ? "Sent" : "Queued — no provider connected",
+        body, at: nowStamp(), by: currentUser.name, status,
       }],
     }));
+
+    /* Texts go through the send-sms function, which holds the Twilio
+       credentials. Anything client-side would expose them. */
+    if (compose === "sms") {
+      const auth = AUTH();
+      if (auth && auth.sendSms) {
+        setSending(true);
+        try {
+          await auth.sendSms({ to: addr, body, jobId: job.id });
+          record("Sent");
+          setCompose(null);
+          toast("Text sent");
+        } catch (e) {
+          const m = (e && e.message) || "Could not send";
+          const notSetUp = /not configured|Function not found|Failed to send a request|non-2xx/i.test(m);
+          record(notSetUp ? "Queued — texting not set up yet" : `Failed — ${m}`);
+          toast(notSetUp
+            ? "Texting isn't set up on this project yet — saved to the thread"
+            : `Twilio: ${m}`);
+          setCompose(null);
+        }
+        setSending(false);
+        return;
+      }
+      record("Queued — no provider connected");
+      setCompose(null);
+      toast("Saved to thread — connect a provider to deliver");
+      return;
+    }
+
+    const myGmail = (integrations.gmailByUser || {})[currentUser.id] || { connected: false };
+    record(myGmail.connected ? "Sent" : "Queued — no provider connected");
     setCompose(null);
-    toast(live ? "Message sent" : "Saved to thread — connect a provider to deliver");
+    toast(myGmail.connected ? "Message sent" : "Saved to thread — connect a provider to deliver");
   };
 
   const available = templates.filter((t) => t.kind === compose);
@@ -5217,7 +5248,7 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
         footer={
           <div style={{ display: "flex", gap: 10 }}>
             <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setCompose(null)}>Cancel</Btn>
-            <Btn style={{ flex: 2 }} disabled={!body.trim() || !consentOk(compose, to)} onClick={send}>
+            <Btn style={{ flex: 2 }} disabled={sending || !body.trim() || !consentOk(compose, to)} onClick={send}>
               <Send size={14} /> {consentOk(compose, to) ? "Send" : "No consent"}
             </Btn>
           </div>

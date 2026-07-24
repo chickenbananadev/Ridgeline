@@ -6000,7 +6000,8 @@ function TabMessages({ job: job2, mut, toast: toast2, brand: brand2, templates, 
     setBody(mergeTemplate(t.body, ctx));
     setTo(t.audience);
   };
-  const send = () => {
+  const [sending, setSending] = (0, import_react.useState)(false);
+  const send = async () => {
     const audience = to;
     if (!consentOk(compose, audience)) {
       toast2("No consent on file \u2014 cannot send");
@@ -6011,12 +6012,11 @@ function TabMessages({ job: job2, mut, toast: toast2, brand: brand2, templates, 
       toast2(audience === "Crew" ? "Assign a crew first" : "No contact on file");
       return;
     }
-    const myGmail = (integrations.gmailByUser || {})[currentUser.id] || { connected: false };
-    const live = compose === "sms" ? integrations.sms.connected : myGmail.connected;
-    mut((j) => ({
+    const msgId = uid("msg");
+    const record = (status) => mut((j) => ({
       ...j,
       messages: [...j.messages || [], {
-        id: uid("msg"),
+        id: msgId,
         kind: compose,
         audience,
         to: addr,
@@ -6024,11 +6024,37 @@ function TabMessages({ job: job2, mut, toast: toast2, brand: brand2, templates, 
         body,
         at: nowStamp(),
         by: currentUser.name,
-        status: live ? "Sent" : "Queued \u2014 no provider connected"
+        status
       }]
     }));
+    if (compose === "sms") {
+      const auth = AUTH();
+      if (auth && auth.sendSms) {
+        setSending(true);
+        try {
+          await auth.sendSms({ to: addr, body, jobId: job2.id });
+          record("Sent");
+          setCompose(null);
+          toast2("Text sent");
+        } catch (e) {
+          const m = e && e.message || "Could not send";
+          const notSetUp = /not configured|Function not found|Failed to send a request|non-2xx/i.test(m);
+          record(notSetUp ? "Queued \u2014 texting not set up yet" : `Failed \u2014 ${m}`);
+          toast2(notSetUp ? "Texting isn't set up on this project yet \u2014 saved to the thread" : `Twilio: ${m}`);
+          setCompose(null);
+        }
+        setSending(false);
+        return;
+      }
+      record("Queued \u2014 no provider connected");
+      setCompose(null);
+      toast2("Saved to thread \u2014 connect a provider to deliver");
+      return;
+    }
+    const myGmail = (integrations.gmailByUser || {})[currentUser.id] || { connected: false };
+    record(myGmail.connected ? "Sent" : "Queued \u2014 no provider connected");
     setCompose(null);
-    toast2(live ? "Message sent" : "Saved to thread \u2014 connect a provider to deliver");
+    toast2(myGmail.connected ? "Message sent" : "Saved to thread \u2014 connect a provider to deliver");
   };
   const available = templates.filter((t) => t.kind === compose);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -6088,7 +6114,7 @@ function TabMessages({ job: job2, mut, toast: toast2, brand: brand2, templates, 
         title: compose === "email" ? "New email" : "New text",
         footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => setCompose(null), children: "Cancel" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { flex: 2 }, disabled: !body.trim() || !consentOk(compose, to), onClick: send, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { flex: 2 }, disabled: sending || !body.trim() || !consentOk(compose, to), onClick: send, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 14 }),
             " ",
             consentOk(compose, to) ? "Send" : "No consent"

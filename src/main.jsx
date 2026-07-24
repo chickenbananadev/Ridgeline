@@ -78,6 +78,20 @@ if (url && anon) {
        The metadata rides along so the auto-profile trigger fills in
        name, role, and title. Requires email signups to be enabled in
        Authentication -> Sign In / Providers. */
+    async sendSms({ to, body, jobId }) {
+      const { data, error } = await supabase.functions.invoke("send-sms", { body: { to, body, jobId } });
+      if (error) {
+        /* Surface Twilio's own wording where we can get at it. */
+        let detail = error.message || "Could not send";
+        try {
+          const ctx = await error.context?.json?.();
+          if (ctx && ctx.error) detail = ctx.error;
+        } catch { /* keep the generic message */ }
+        throw new Error(detail);
+      }
+      if (data && data.error) throw new Error(data.error);
+      return data;
+    },
     async inviteSeatViaLink({ name, email, role, title, commission_rate }) {
       const { error } = await supabase.auth.signInWithOtp({
         email,
