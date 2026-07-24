@@ -7143,7 +7143,11 @@ function BrandingEditor({ brand, setBrand, onBack, toast }) {
         <Field label="Slogan"><input style={inputStyle} value={brand.slogan} onChange={set("slogan")} /></Field>
         <Field label="Main phone"><input style={inputStyle} value={brand.phone} onChange={set("phone")} /></Field>
         <Field label="Email"><input style={inputStyle} value={brand.email} onChange={set("email")} /></Field>
-        <Field label="Head office address"><input style={inputStyle} value={brand.address} onChange={set("address")} /></Field>
+        <Field label="Head office address">
+          <AddressAutocomplete value={brand.address} placeholder="Start typing the address…"
+            onChange={(v) => setBrand({ ...brand, address: v })}
+            onPick={(p2) => setBrand({ ...brand, address: p2.formatted || p2.street || brand.address })} />
+        </Field>
         <Field label="Google review link"><input style={inputStyle} value={brand.googleReviewLink} onChange={set("googleReviewLink")} /></Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Primary color">
@@ -7196,7 +7200,11 @@ function BrandingEditor({ brand, setBrand, onBack, toast }) {
               <Field label="Office phone"><input style={inputStyle} value={l.phone} inputMode="tel" onChange={(e) => setLoc(i, "phone", formatPhone(e.target.value))} /></Field>
               <Field label="Office email"><input style={inputStyle} type="email" value={l.email || ""} onChange={(e) => setLoc(i, "email", e.target.value)} /></Field>
             </div>
-            <Field label="Address"><input style={inputStyle} value={l.address} onChange={(e) => setLoc(i, "address", e.target.value)} /></Field>
+            <Field label="Address">
+              <AddressAutocomplete value={l.address} placeholder="Start typing the address…"
+                onChange={(v) => setLoc(i, "address", v)}
+                onPick={(p2) => setLoc(i, "address", p2.formatted || p2.street || l.address)} />
+            </Field>
           </div>
         ))}
       </Card>

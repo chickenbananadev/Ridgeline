@@ -8275,7 +8275,15 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast: toast2 }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Slogan", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.slogan, onChange: set("slogan") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Main phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.phone, onChange: set("phone") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.email, onChange: set("email") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Head office address", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.address, onChange: set("address") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Head office address", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        AddressAutocomplete,
+        {
+          value: brand2.address,
+          placeholder: "Start typing the address\u2026",
+          onChange: (v) => setBrand({ ...brand2, address: v }),
+          onPick: (p2) => setBrand({ ...brand2, address: p2.formatted || p2.street || brand2.address })
+        }
+      ) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Google review link", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.googleReviewLink, onChange: set("googleReviewLink") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Primary color", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "color", value: brand2.primary, onChange: set("primary"), style: { ...inputStyle, height: 46, padding: 4 } }) }),
@@ -8328,7 +8336,15 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast: toast2 }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Office phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: l.phone, inputMode: "tel", onChange: (e) => setLoc(i, "phone", formatPhone(e.target.value)) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Office email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: l.email || "", onChange: (e) => setLoc(i, "email", e.target.value) }) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Address", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: l.address, onChange: (e) => setLoc(i, "address", e.target.value) }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Address", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          AddressAutocomplete,
+          {
+            value: l.address,
+            placeholder: "Start typing the address\u2026",
+            onChange: (v) => setLoc(i, "address", v),
+            onPick: (p2) => setLoc(i, "address", p2.formatted || p2.street || l.address)
+          }
+        ) })
       ] }, l.id))
     ] })
   ] });
