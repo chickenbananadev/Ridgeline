@@ -11694,6 +11694,197 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast: toast2
     )
   ] });
 }
+var SETUP_ITEMS = [
+  {
+    id: "anthropic",
+    label: "AI assistant (Anthropic)",
+    secret: true,
+    unlocks: "Knowledge assistant, email and text drafting, document search.",
+    where: "Vercel \u2192 Settings \u2192 Environment Variables",
+    keyName: "ANTHROPIC_API_KEY",
+    steps: [
+      "Go to console.anthropic.com and sign in.",
+      "API keys \u2192 Create key. Copy it once \u2014 it is never shown again.",
+      "Vercel \u2192 project 'ridgeline' \u2192 Settings \u2192 Environment Variables.",
+      "Add ANTHROPIC_API_KEY, paste the value, scope Production, Save.",
+      "Deployments \u2192 latest \u2192 Redeploy so the new variable is picked up."
+    ],
+    note: "Never add this with a VITE_ prefix. VITE_ variables are compiled into the browser bundle and would be public."
+  },
+  {
+    id: "twilio",
+    label: "Texting (Twilio)",
+    secret: true,
+    unlocks: "Outbound texts, stage-change notifications, appointment reminders.",
+    where: "Supabase \u2192 Edge Functions \u2192 Secrets",
+    keyName: "TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER",
+    steps: [
+      "Twilio console \u2192 rotate the auth token (the old one was pasted in chat).",
+      "Supabase \u2192 Edge Functions \u2192 Secrets \u2192 add all three values.",
+      "Deploy the send-sms function.",
+      "Check toll-free verification status for the sending number."
+    ],
+    config: [["twilioFrom", "Sending number", "+1 855 600 0482"]]
+  },
+  {
+    id: "gmail",
+    label: "Email (Gmail OAuth)",
+    secret: true,
+    unlocks: "Sending email from your own address, open tracking.",
+    where: "Supabase \u2192 Edge Functions \u2192 Secrets",
+    keyName: "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET",
+    steps: [
+      "Google Cloud Console \u2192 new project \u2192 enable the Gmail API.",
+      "OAuth consent screen \u2192 External \u2192 add your address as a test user.",
+      "Credentials \u2192 OAuth client ID \u2192 Web application.",
+      "Add the Vercel URL as an authorised redirect URI.",
+      "Put the client ID and secret into Supabase Edge Function secrets."
+    ],
+    config: [["gmailAccount", "Sending address", "jacob@supremebuildinggroup.com"]]
+  },
+  {
+    id: "storage",
+    label: "File storage (Supabase)",
+    secret: false,
+    unlocks: "Real photo and document uploads instead of data URLs in the database.",
+    where: "Supabase dashboard",
+    keyName: "No key \u2014 a plan change and a bucket",
+    steps: [
+      "Supabase \u2192 Settings \u2192 Billing \u2192 upgrade to Pro ($25/mo).",
+      "Storage \u2192 New bucket \u2192 name it job-files \u2192 keep it private.",
+      "Tell me when it exists and I will wire uploads to it."
+    ],
+    note: "The free tier pauses a project after a week of inactivity. Production cannot run on it."
+  },
+  {
+    id: "geoapify",
+    label: "Address lookup (Geoapify)",
+    secret: false,
+    unlocks: "Address autocomplete on lead intake.",
+    where: "Vercel \u2192 Environment Variables",
+    keyName: "VITE_GEOAPIFY_KEY",
+    steps: ["Already configured. Nothing to do."],
+    doneByDefault: true
+  },
+  {
+    id: "supabase",
+    label: "Database (Supabase)",
+    secret: false,
+    unlocks: "Everything \u2014 jobs, portals, chat, activity.",
+    where: "Vercel \u2192 Environment Variables",
+    keyName: "VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY",
+    steps: ["Already configured. Nothing to do."],
+    doneByDefault: true
+  }
+];
+function SetupKeys({ apiSetup, setApiSetup, currentUser, onBack, toast: toast2 }) {
+  const admin = !!(currentUser && currentUser.role === "admin");
+  const [openId, setOpenId] = (0, import_react.useState)(null);
+  if (!admin) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Setup & keys", onBack }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 16 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub }, children: "This screen is restricted to admins." }) })
+    ] });
+  }
+  const st = apiSetup || {};
+  const statusOf = (it) => it.doneByDefault && st[it.id] === void 0 ? "done" : st[it.id] || "todo";
+  const setStatus = (id, v) => setApiSetup({ ...st, [id]: v });
+  const setConfig = (k, v) => setApiSetup({ ...st, config: { ...st.config || {}, [k]: v } });
+  const remaining = SETUP_ITEMS.filter((it) => statusOf(it) !== "done").length;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Setup & keys", onBack }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, color: S.ink }, children: remaining === 0 ? "Everything is connected." : remaining + " still to connect" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }, children: "Secrets are never typed into this app. Ridgeline runs in the browser with a public key, so anything saved here would be readable by every seat. Each card tells you the exact dashboard and variable name instead." })
+    ] }),
+    SETUP_ITEMS.map((it) => {
+      const stt = statusOf(it);
+      const open = openId === it.id;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, pad: 0, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setOpenId(open ? null : it.id), style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          width: "100%",
+          border: "none",
+          background: "none",
+          cursor: "pointer",
+          textAlign: "left",
+          padding: 16
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14.5, fontWeight: 700, color: S.ink }, children: it.label }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 2 }, children: it.unlocks })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: stt === "done" ? "green" : stt === "doing" ? "blue" : "gray", children: stt === "done" ? "Done" : stt === "doing" ? "In progress" : "To do" })
+        ] }),
+        open && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "0 16px 16px", borderTop: `1px solid ${S.line}` }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, margin: "12px 0 4px" }, children: "Where it goes" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 600, color: S.ink }, children: it.where }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 8 }, children: "Variable name" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+            fontSize: 12.5,
+            fontFamily: "ui-monospace, monospace",
+            color: S.ink,
+            background: S.soft,
+            borderRadius: 8,
+            padding: "8px 10px",
+            marginTop: 4,
+            wordBreak: "break-all"
+          }, children: it.keyName }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, margin: "14px 0 6px" }, children: "Steps" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ol", { style: { margin: 0, paddingLeft: 18, fontSize: 13, color: S.ink, lineHeight: 1.65 }, children: it.steps.map((x, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("li", { children: x }, i)) }),
+          it.note && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+            fontSize: 12.5,
+            color: S.ink,
+            background: "#FFF6E5",
+            border: "1px solid #F0D9A8",
+            borderRadius: 8,
+            padding: "9px 11px",
+            marginTop: 12,
+            lineHeight: 1.5
+          }, children: it.note }),
+          (it.config || []).map(([k, label, ph]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label, hint: "Not a secret \u2014 safe to store.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: inputStyle,
+              placeholder: ph,
+              value: (st.config || {})[k] || "",
+              onChange: (e) => setConfig(k, e.target.value)
+            }
+          ) }) }, k)),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 14 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              Btn,
+              {
+                small: true,
+                kind: stt === "doing" ? "primary" : "ghost",
+                onClick: () => {
+                  setStatus(it.id, "doing");
+                  toast2 && toast2("Marked in progress");
+                },
+                children: "In progress"
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              Btn,
+              {
+                small: true,
+                kind: stt === "done" ? "primary" : "ghost",
+                onClick: () => {
+                  setStatus(it.id, "done");
+                  toast2 && toast2("Marked done");
+                },
+                children: "Done"
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => setStatus(it.id, "todo"), children: "Reset" })
+          ] })
+        ] })
+      ] }, it.id);
+    })
+  ] });
+}
 function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
   const groups = [
     ["Sales", [
@@ -11726,6 +11917,7 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
       ["integrations", import_lucide_react.Share2, "Integrations", "Gmail, texting, CompanyCam"],
       ["import", import_lucide_react.Upload, "Import jobs", "Bring a pipeline in from CSV"],
       ["password", import_lucide_react.Lock, "Change my password", "Update your sign-in password"],
+      currentUser && currentUser.role === "admin" && ["setupkeys", import_lucide_react.Lock, "Setup & keys", "API keys and services still to connect"],
       ["syscheck", import_lucide_react.AlertTriangle, "System check", "Test the database connection and setup"]
     ]]
   ];
@@ -11751,7 +11943,7 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12.5, fontWeight: 800, letterSpacing: ".07em", color: S.sub }, children: group.toUpperCase() }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronDown, { size: 16, color: S.sub, style: { transform: open[group] ? "none" : "rotate(-90deg)", transition: "transform .15s" } })
       ] }),
-      open[group] && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 0, style: { overflow: "hidden" }, children: items.map(([id, Icon, label, sub], i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onNav(id), style: {
+      open[group] && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 0, style: { overflow: "hidden" }, children: items.filter(Boolean).map(([id, Icon, label, sub], i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onNav(id), style: {
         display: "flex",
         alignItems: "center",
         gap: 13,
@@ -12247,7 +12439,8 @@ function SupremeCRM() {
     followUpDays: 3,
     template: "Hi {first_name}, thank you for trusting {company} with your home! If we earned it, a quick Google review means the world to our small team: {review_link}"
   });
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings];
+  const [apiSetup, setApiSetup] = (0, import_react.useState)({});
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup];
   const orgPack = () => ({
     announcements,
     calls,
@@ -12261,6 +12454,7 @@ function SupremeCRM() {
     crews,
     vendors,
     reviewSettings,
+    apiSetup,
     version: 1
   });
   const unpackOrg = (d) => {
@@ -12276,6 +12470,7 @@ function SupremeCRM() {
     if (d.crews) setCrews(d.crews);
     if (d.vendors) setVendors(d.vendors);
     if (d.reviewSettings) setReviewSettings(d.reviewSettings);
+    if (d.apiSetup) setApiSetup(d.apiSetup);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
   const brandErr = useBrandSync(brand2, setBrand, liveAuth() ? !!currentUser : true);
@@ -12851,6 +13046,15 @@ function SupremeCRM() {
         setCrews,
         currentUser: liveUser,
         jobs,
+        onBack: () => setNav("more"),
+        toast: toast2
+      }
+    ) : nav === "setupkeys" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      SetupKeys,
+      {
+        apiSetup,
+        setApiSetup,
+        currentUser: liveUser,
         onBack: () => setNav("more"),
         toast: toast2
       }

@@ -10165,6 +10165,188 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
   );
 }
 
+
+/* ------------------------------------------------------------------
+   Setup & API keys — admin only.
+
+   Deliberate design note: Ridgeline is a browser app talking straight
+   to Supabase with the public anon key. Anything written into crm_org
+   is readable by every signed-in seat, so hiding a field behind an
+   admin check hides the button, not the value. Real secrets therefore
+   never get typed in here — this screen tracks WHERE each one goes
+   (Vercel env var or Supabase Edge Function secret), what it unlocks,
+   and whether it is done. Only non-secret config (a from-number, an
+   account email) is stored locally.
+------------------------------------------------------------------- */
+const SETUP_ITEMS = [
+  {
+    id: "anthropic", label: "AI assistant (Anthropic)", secret: true,
+    unlocks: "Knowledge assistant, email and text drafting, document search.",
+    where: "Vercel → Settings → Environment Variables",
+    keyName: "ANTHROPIC_API_KEY",
+    steps: [
+      "Go to console.anthropic.com and sign in.",
+      "API keys → Create key. Copy it once — it is never shown again.",
+      "Vercel → project 'ridgeline' → Settings → Environment Variables.",
+      "Add ANTHROPIC_API_KEY, paste the value, scope Production, Save.",
+      "Deployments → latest → Redeploy so the new variable is picked up.",
+    ],
+    note: "Never add this with a VITE_ prefix. VITE_ variables are compiled into the browser bundle and would be public.",
+  },
+  {
+    id: "twilio", label: "Texting (Twilio)", secret: true,
+    unlocks: "Outbound texts, stage-change notifications, appointment reminders.",
+    where: "Supabase → Edge Functions → Secrets",
+    keyName: "TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER",
+    steps: [
+      "Twilio console → rotate the auth token (the old one was pasted in chat).",
+      "Supabase → Edge Functions → Secrets → add all three values.",
+      "Deploy the send-sms function.",
+      "Check toll-free verification status for the sending number.",
+    ],
+    config: [["twilioFrom", "Sending number", "+1 855 600 0482"]],
+  },
+  {
+    id: "gmail", label: "Email (Gmail OAuth)", secret: true,
+    unlocks: "Sending email from your own address, open tracking.",
+    where: "Supabase → Edge Functions → Secrets",
+    keyName: "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET",
+    steps: [
+      "Google Cloud Console → new project → enable the Gmail API.",
+      "OAuth consent screen → External → add your address as a test user.",
+      "Credentials → OAuth client ID → Web application.",
+      "Add the Vercel URL as an authorised redirect URI.",
+      "Put the client ID and secret into Supabase Edge Function secrets.",
+    ],
+    config: [["gmailAccount", "Sending address", "jacob@supremebuildinggroup.com"]],
+  },
+  {
+    id: "storage", label: "File storage (Supabase)", secret: false,
+    unlocks: "Real photo and document uploads instead of data URLs in the database.",
+    where: "Supabase dashboard",
+    keyName: "No key — a plan change and a bucket",
+    steps: [
+      "Supabase → Settings → Billing → upgrade to Pro ($25/mo).",
+      "Storage → New bucket → name it job-files → keep it private.",
+      "Tell me when it exists and I will wire uploads to it.",
+    ],
+    note: "The free tier pauses a project after a week of inactivity. Production cannot run on it.",
+  },
+  {
+    id: "geoapify", label: "Address lookup (Geoapify)", secret: false,
+    unlocks: "Address autocomplete on lead intake.",
+    where: "Vercel → Environment Variables",
+    keyName: "VITE_GEOAPIFY_KEY",
+    steps: ["Already configured. Nothing to do."],
+    doneByDefault: true,
+  },
+  {
+    id: "supabase", label: "Database (Supabase)", secret: false,
+    unlocks: "Everything — jobs, portals, chat, activity.",
+    where: "Vercel → Environment Variables",
+    keyName: "VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY",
+    steps: ["Already configured. Nothing to do."],
+    doneByDefault: true,
+  },
+];
+
+function SetupKeys({ apiSetup, setApiSetup, currentUser, onBack, toast }) {
+  const admin = !!(currentUser && currentUser.role === "admin");
+  const [openId, setOpenId] = useState(null);
+  if (!admin) {
+    return (
+      <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+        <SubHeader title="Setup & keys" onBack={onBack} />
+        <Card style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 14, color: S.sub }}>
+            This screen is restricted to admins.
+          </div>
+        </Card>
+      </div>
+    );
+  }
+  const st = apiSetup || {};
+  const statusOf = (it) => (it.doneByDefault && st[it.id] === undefined ? "done" : st[it.id] || "todo");
+  const setStatus = (id, v) => setApiSetup({ ...st, [id]: v });
+  const setConfig = (k, v) => setApiSetup({ ...st, config: { ...(st.config || {}), [k]: v } });
+  const remaining = SETUP_ITEMS.filter((it) => statusOf(it) !== "done").length;
+
+  return (
+    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Setup & keys" onBack={onBack} />
+      <Card style={{ marginTop: 16 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>
+          {remaining === 0 ? "Everything is connected." : remaining + " still to connect"}
+        </div>
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }}>
+          Secrets are never typed into this app. Ridgeline runs in the browser
+          with a public key, so anything saved here would be readable by every
+          seat. Each card tells you the exact dashboard and variable name
+          instead.
+        </div>
+      </Card>
+
+      {SETUP_ITEMS.map((it) => {
+        const stt = statusOf(it);
+        const open = openId === it.id;
+        return (
+          <Card key={it.id} style={{ marginTop: 12 }} pad={0}>
+            <button onClick={() => setOpenId(open ? null : it.id)} style={{
+              display: "flex", alignItems: "center", gap: 12, width: "100%",
+              border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 16,
+            }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{it.label}</div>
+                <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2 }}>{it.unlocks}</div>
+              </span>
+              <Chip tone={stt === "done" ? "green" : stt === "doing" ? "blue" : "gray"}>
+                {stt === "done" ? "Done" : stt === "doing" ? "In progress" : "To do"}
+              </Chip>
+            </button>
+            {open && (
+              <div style={{ padding: "0 16px 16px", borderTop: `1px solid ${S.line}` }}>
+                <div style={{ fontSize: 12.5, color: S.sub, margin: "12px 0 4px" }}>Where it goes</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: S.ink }}>{it.where}</div>
+                <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8 }}>Variable name</div>
+                <div style={{
+                  fontSize: 12.5, fontFamily: "ui-monospace, monospace", color: S.ink,
+                  background: S.soft, borderRadius: 8, padding: "8px 10px", marginTop: 4, wordBreak: "break-all",
+                }}>{it.keyName}</div>
+                <div style={{ fontSize: 12.5, color: S.sub, margin: "14px 0 6px" }}>Steps</div>
+                <ol style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: S.ink, lineHeight: 1.65 }}>
+                  {it.steps.map((x, i) => <li key={i}>{x}</li>)}
+                </ol>
+                {it.note && (
+                  <div style={{
+                    fontSize: 12.5, color: S.ink, background: "#FFF6E5", border: "1px solid #F0D9A8",
+                    borderRadius: 8, padding: "9px 11px", marginTop: 12, lineHeight: 1.5,
+                  }}>{it.note}</div>
+                )}
+                {(it.config || []).map(([k, label, ph]) => (
+                  <div key={k} style={{ marginTop: 12 }}>
+                    <Field label={label} hint="Not a secret — safe to store.">
+                      <input style={inputStyle} placeholder={ph}
+                        value={(st.config || {})[k] || ""}
+                        onChange={(e) => setConfig(k, e.target.value)} />
+                    </Field>
+                  </div>
+                ))}
+                <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                  <Btn small kind={stt === "doing" ? "primary" : "ghost"}
+                    onClick={() => { setStatus(it.id, "doing"); toast && toast("Marked in progress"); }}>In progress</Btn>
+                  <Btn small kind={stt === "done" ? "primary" : "ghost"}
+                    onClick={() => { setStatus(it.id, "done"); toast && toast("Marked done"); }}>Done</Btn>
+                  <Btn small kind="ghost" onClick={() => setStatus(it.id, "todo")}>Reset</Btn>
+                </div>
+              </div>
+            )}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 function MoreMenu({ onNav, onLogout, brand, currentUser }) {
   const groups = [
     ["Sales", [
@@ -10197,6 +10379,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
       ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam"],
       ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
       ["password", Lock, "Change my password", "Update your sign-in password"],
+      currentUser && currentUser.role === "admin" && ["setupkeys", Lock, "Setup & keys", "API keys and services still to connect"],
       ["syscheck", AlertTriangle, "System check", "Test the database connection and setup"],
     ]],
   ];
@@ -10222,7 +10405,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
           </button>
           {open[group] && (
             <Card pad={0} style={{ overflow: "hidden" }}>
-              {items.map(([id, Icon, label, sub], i2) => (
+              {items.filter(Boolean).map(([id, Icon, label, sub], i2) => (
                 <button key={id} onClick={() => onNav(id)} style={{
                   display: "flex", alignItems: "center", gap: 13, width: "100%",
                   border: "none", background: "none", cursor: "pointer", textAlign: "left",
@@ -10732,11 +10915,15 @@ export default function SupremeCRM() {
     template: "Hi {first_name}, thank you for trusting {company} with your home! If we earned it, a quick Google review means the world to our small team: {review_link}",
   });
 
+  /* Setup checklist state. Status flags and non-secret config only —
+     never an actual secret; see the note on SetupKeys. */
+  const [apiSetup, setApiSetup] = useState({});
+
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings];
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup];
   const orgPack = () => ({
     announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates,
-    priceList, companyDocs, crews, vendors, reviewSettings, version: 1,
+    priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, version: 1,
   });
   const unpackOrg = (d) => {
     if (d.announcements) setAnnouncements(d.announcements);
@@ -10751,6 +10938,7 @@ export default function SupremeCRM() {
     if (d.crews) setCrews(d.crews);
     if (d.vendors) setVendors(d.vendors);
     if (d.reviewSettings) setReviewSettings(d.reviewSettings);
+    if (d.apiSetup) setApiSetup(d.apiSetup);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
   const brandErr = useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true);
@@ -11094,6 +11282,9 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onBack={() => setNav("more")} toast={toast} brand={brand} />
       ) : nav === "crews" ? (
         <CrewManager crews={crews} setCrews={setCrews} currentUser={liveUser} jobs={jobs}
+          onBack={() => setNav("more")} toast={toast} />
+      ) : nav === "setupkeys" ? (
+        <SetupKeys apiSetup={apiSetup} setApiSetup={setApiSetup} currentUser={liveUser}
           onBack={() => setNav("more")} toast={toast} />
       ) : nav === "integrations" ? (
         <Integrations integrations={integrations} setIntegrations={setIntegrations}
