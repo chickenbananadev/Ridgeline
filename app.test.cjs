@@ -4852,8 +4852,8 @@ function PasswordSetScreen({ brand: brand2, mode, onDone, toast: toast2 }) {
         placeItems: "center",
         fontWeight: 800
       }, children: brand2.short }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800, color: S.ink }, children: mode === "recovery" ? "Choose a new password" : "Change your password" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, marginTop: 5, lineHeight: 1.5 }, children: mode === "recovery" ? "You followed a reset link. Pick a new password to finish signing in." : "Enter a new password for your account." })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800, color: S.ink }, children: mode === "invite" ? "Welcome \u2014 set your password" : mode === "recovery" ? "Choose a new password" : "Change your password" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, marginTop: 5, lineHeight: 1.5 }, children: mode === "invite" ? `You've been added to the ${brand2.company} team. Choose a password to finish setting up your account.` : mode === "recovery" ? "You followed a reset link. Pick a new password to finish signing in." : "Enter a new password for your account." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", { onSubmit: (e) => {
@@ -4888,7 +4888,7 @@ function PasswordSetScreen({ brand: brand2, mode, onDone, toast: toast2 }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "submit", style: { display: "none" }, "aria-hidden": "true", tabIndex: -1 }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, disabled: busy || !pw || !pw2, onClick: submit, children: busy ? "Saving\u2026" : "Save password" })
       ] }),
-      mode !== "recovery" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%", marginTop: 9 }, onClick: () => onDone(false), children: "Cancel" })
+      mode === "change" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%", marginTop: 9 }, onClick: () => onDone(false), children: "Cancel" })
     ] })
   ] }) });
 }
@@ -10211,7 +10211,19 @@ function useDbSync(st) {
 function SupremeCRM() {
   const portalToken = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("portal") : null;
   if (portalToken) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PublicPortal, { token: portalToken });
-  const isRecovery = typeof window !== "undefined" && (new URLSearchParams(window.location.search).get("recovery") === "1" || /type=recovery/.test(window.location.hash || ""));
+  const authFlow = (() => {
+    if (typeof window === "undefined") return null;
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get("recovery") === "1") return "recovery";
+    const hash = window.location.hash || "";
+    const m = /type=(recovery|invite|signup|magiclink|email_change)/.exec(hash);
+    if (m) return m[1];
+    if (qs.get("type")) return qs.get("type");
+    if (/error_code=|error=/.test(hash)) return "error";
+    return null;
+  })();
+  const isRecovery = authFlow && authFlow !== "error";
+  const authFlowError = authFlow === "error" ? decodeURIComponent((/error_description=([^&]+)/.exec(window.location.hash || "") || [, ""])[1] || "").replace(/\+/g, " ") : "";
   const [currentUser, setCurrentUser] = (0, import_react.useState)(null);
   const [users, setUsers] = (0, import_react.useState)(SEED_USERS);
   const [booting, setBooting] = (0, import_react.useState)(liveAuth());
@@ -10438,12 +10450,32 @@ function SupremeCRM() {
     setOpenJobId(id);
     setNav("jobs");
   };
+  if (authFlowError && !pwDone) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      minHeight: "100vh",
+      background: S.bg,
+      display: "grid",
+      placeItems: "center",
+      padding: 22,
+      fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif"
+    }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { maxWidth: 360, textAlign: "center" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, color: S.ink }, children: "That link didn't work" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, marginTop: 8, lineHeight: 1.55 }, children: authFlowError || "The link may have expired or already been used." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { marginTop: 16 }, onClick: () => {
+        try {
+          window.history.replaceState({}, "", window.location.pathname);
+        } catch {
+        }
+        setPwDone(true);
+      }, children: "Go to sign in" })
+    ] }) });
+  }
   if (isRecovery && liveAuth() && !pwDone) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       PasswordSetScreen,
       {
         brand: brand2,
-        mode: "recovery",
+        mode: authFlow === "invite" ? "invite" : "recovery",
         toast: toast2,
         onDone: () => {
           setPwDone(true);

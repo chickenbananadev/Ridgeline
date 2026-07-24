@@ -4101,12 +4101,15 @@ function PasswordSetScreen({ brand, mode, onDone, toast }) {
             : <div style={{ width: 58, height: 58, margin: "0 auto 12px", borderRadius: 15, background: brand.primary,
                 color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }}>{brand.short}</div>}
           <div style={{ fontSize: 20, fontWeight: 800, color: S.ink }}>
-            {mode === "recovery" ? "Choose a new password" : "Change your password"}
+            {mode === "invite" ? "Welcome — set your password"
+              : mode === "recovery" ? "Choose a new password" : "Change your password"}
           </div>
           <div style={{ fontSize: 13.5, color: S.sub, marginTop: 5, lineHeight: 1.5 }}>
-            {mode === "recovery"
-              ? "You followed a reset link. Pick a new password to finish signing in."
-              : "Enter a new password for your account."}
+            {mode === "invite"
+              ? `You've been added to the ${brand.company} team. Choose a password to finish setting up your account.`
+              : mode === "recovery"
+                ? "You followed a reset link. Pick a new password to finish signing in."
+                : "Enter a new password for your account."}
           </div>
         </div>
         <Card>
@@ -4126,7 +4129,7 @@ function PasswordSetScreen({ brand, mode, onDone, toast }) {
               {busy ? "Saving…" : "Save password"}
             </Btn>
           </form>
-          {mode !== "recovery" && (
+          {mode === "change" && (
             <Btn kind="ghost" style={{ width: "100%", marginTop: 9 }} onClick={() => onDone(false)}>Cancel</Btn>
           )}
         </Card>
@@ -8919,10 +8922,29 @@ export default function SupremeCRM() {
      ?recovery=1 or a #type=recovery fragment. Either way we show the
      set-password screen rather than dropping them on a login form that
      they cannot get past. */
-  const isRecovery = typeof window !== "undefined" && (
-    new URLSearchParams(window.location.search).get("recovery") === "1" ||
-    /type=recovery/.test(window.location.hash || "")
-  );
+  /* Supabase sends several link types that all end with the user
+     needing to choose a password: recovery (forgot password), invite
+     (admin added a seat), signup confirmation, and magiclink. All of
+     them arrive as a hash fragment or a query flag. Handling only
+     recovery meant invited users landed on a login form holding a
+     token nothing read — the link appeared broken. */
+  const authFlow = (() => {
+    if (typeof window === "undefined") return null;
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get("recovery") === "1") return "recovery";
+    const hash = window.location.hash || "";
+    const m = /type=(recovery|invite|signup|magiclink|email_change)/.exec(hash);
+    if (m) return m[1];
+    if (qs.get("type")) return qs.get("type");
+    /* Some templates deliver an error instead — surface it rather than
+       silently showing the login form. */
+    if (/error_code=|error=/.test(hash)) return "error";
+    return null;
+  })();
+  const isRecovery = authFlow && authFlow !== "error";
+  const authFlowError = authFlow === "error"
+    ? decodeURIComponent((/error_description=([^&]+)/.exec(window.location.hash || "") || [, ""])[1] || "").replace(/\+/g, " ")
+    : "";
 
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState(SEED_USERS);
@@ -9121,8 +9143,22 @@ export default function SupremeCRM() {
     setOpenJobId(id); setNav("jobs");
   };
 
+  if (authFlowError && !pwDone) {
+    return (
+      <div style={{ minHeight: "100vh", background: S.bg, display: "grid", placeItems: "center", padding: 22,
+        fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif" }}>
+        <div style={{ maxWidth: 360, textAlign: "center" }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: S.ink }}>That link didn't work</div>
+          <div style={{ fontSize: 14, color: S.sub, marginTop: 8, lineHeight: 1.55 }}>{authFlowError || "The link may have expired or already been used."}</div>
+          <Btn style={{ marginTop: 16 }} onClick={() => { try { window.history.replaceState({}, "", window.location.pathname); } catch {} setPwDone(true); }}>
+            Go to sign in
+          </Btn>
+        </div>
+      </div>
+    );
+  }
   if (isRecovery && liveAuth() && !pwDone) {
-    return <PasswordSetScreen brand={brand} mode="recovery" toast={toast}
+    return <PasswordSetScreen brand={brand} mode={authFlow === "invite" ? "invite" : "recovery"} toast={toast}
       onDone={() => { setPwDone(true); try { window.history.replaceState({}, "", window.location.pathname); } catch {} }} />;
   }
   if (changePwOpen) {
