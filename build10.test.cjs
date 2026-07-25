@@ -32,7 +32,8 @@ ok(Object.keys(msgs[0].reactions).length === 2, "multiple distinct reactions coe
 /* --- source guarantees --- */
 ok(src.includes("const CHAT_EMOJI"), "emoji set defined");
 ok(src.includes("const toggleReaction"), "reaction handler exists");
-ok(src.includes('aria-label="React to this message"'), "every message has a react affordance");
+ok(src.includes('aria-label="More reactions"'), "messages expose a full reaction picker");
+ok(src.includes("setActionsFor(showActions ? null : m.id)"), "tapping a message reveals its actions");
 ok(src.includes("reactions: r.reactions || {}"), "reactions hydrate from the database");
 ok(src.includes('db.from("crm_chat").update({ reactions:'), "reactions sync back");
 ok(src.includes("const reactionSig"), "only changed reaction maps are written");
@@ -45,7 +46,7 @@ ok(src.includes('[["team", "Team chat"], ["customers", "Customers"]]'), "inbox h
 ok(src.includes("unreadChat"), "inbox tracks unread team messages");
 ok(src.includes('label="Inbox" badge={Math.max(0, chatMsgs.length - chatSeenCount)}'), "nav badge counts unread chat");
 ok(src.includes('["inbox", MessageCircle, "Team chat"'), "More menu points team chat at the inbox");
-ok(src.includes("onBack, embedded = false }"), "TeamChat is embeddable");
+ok(src.includes("embedded = false, onDeleteMsg }"), "TeamChat is embeddable and can delete");
 ok(!src.includes('onBack={() => { setChatSeenCount(chatMsgs.length); setNav("more"); }} />'),
   "standalone chat route no longer renders a separate screen");
 

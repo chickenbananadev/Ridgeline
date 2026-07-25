@@ -2683,8 +2683,8 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
                   <div style={{ fontSize: 11.5, fontWeight: 700, color: colorOf(m.by) }}>
                     {m.by} <span style={{ color: S.sub, fontWeight: 400 }}>{String(m.at || "").slice(11, 16)}</span>
                   </div>
-                  <div style={{ fontSize: 13.5, color: m.deletedAt ? S.sub : S.ink, fontStyle: m.deletedAt ? "italic" : "normal", lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                    {m.deletedAt ? "Message deleted" : m.text}
+                  <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                    {m.text}
                   </div>
                   {m.reactions && Object.keys(m.reactions).length > 0 && (
                     <div style={{ display: "flex", gap: 4, marginTop: 3 }}>
@@ -10505,35 +10505,97 @@ function ActivityFeed({ activity, currentUser, onOpenJob, onBack }) {
   );
 }
 
-/* A small, deliberate set. A full emoji keyboard is a search problem;
-   these are the ones a roofing crew actually uses to answer fast. */
-const CHAT_EMOJI = ["👍", "✅", "🔥", "👀", "🙏", "😂", "❤️", "🎉", "😬", "🚨"];
+/* Emoji, grouped the way a picker expects. Deliberately a curated set
+   rather than the full Unicode table: a searchable few hundred covers
+   real use, loads instantly, and avoids shipping a dependency. */
+const EMOJI_GROUPS = [
+  ["Reactions", ["👍", "👎", "✅", "❌", "🔥", "👀", "🙏", "💯", "⭐", "🚨", "⚠️", "❗", "❓", "👏", "🤝", "💪", "🫡", "🙌"]],
+  ["Faces", ["😀", "😂", "🤣", "😊", "😍", "😎", "🤔", "😅", "😬", "😴", "🙃", "😉", "😢", "😤", "😱", "🤯", "🥴", "🤠", "🫠", "😐", "🙄", "😏", "🥳", "🤞"]],
+  ["Work", ["🏠", "🏗️", "🔨", "🪜", "🧰", "📏", "📐", "🪚", "🔧", "⚙️", "🚚", "🛻", "📦", "📋", "📝", "📸", "📞", "📧", "💰", "💵", "🧾", "📊", "📅", "⏰"]],
+  ["Weather", ["☀️", "🌤️", "⛅", "🌧️", "⛈️", "🌩️", "🌨️", "❄️", "🌪️", "💨", "🌈", "🧊"]],
+  ["Other", ["☕", "🍕", "🎉", "🎯", "🏆", "🚀", "💡", "🔒", "🔑", "📍", "🗺️", "♻️", "✔️", "➕", "➖", "🔴", "🟡", "🟢", "🔵", "⚫"]],
+];
+/* Quick reactions offered inline — the ones actually used in a hurry. */
+const CHAT_EMOJI = ["👍", "✅", "🔥", "👀", "🙏", "😂"];
 
-function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false }) {
+function EmojiPicker({ onPick, onClose }) {
+  const [q, setQ] = useState("");
+  const [group, setGroup] = useState(EMOJI_GROUPS[0][0]);
+  const needle = q.trim().toLowerCase();
+  /* Searching flattens the groups; otherwise the tabs are the index. */
+  const shown = needle
+    ? EMOJI_GROUPS.flatMap(([g, list]) => g.toLowerCase().includes(needle) ? list : [])
+    : (EMOJI_GROUPS.find(([g]) => g === group) || EMOJI_GROUPS[0])[1];
+  return (
+    <div style={{
+      border: `1px solid ${S.line}`, borderRadius: 12, background: "#fff",
+      boxShadow: "0 8px 24px rgba(16,24,40,.12)", padding: 10, marginBottom: 8,
+    }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+        <input style={{ ...inputStyle, flex: 1, padding: "7px 10px", fontSize: 13 }}
+          value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search reactions, faces, work…" />
+        <button onClick={onClose} aria-label="Close emoji picker" style={{
+          border: "none", background: "none", cursor: "pointer", color: S.sub, padding: "0 4px",
+        }}><X size={16} /></button>
+      </div>
+      {!needle && (
+        <div style={{ display: "flex", gap: 5, overflowX: "auto", marginBottom: 8, paddingBottom: 2 }}>
+          {EMOJI_GROUPS.map(([g]) => (
+            <button key={g} onClick={() => setGroup(g)} style={{
+              border: `1px solid ${group === g ? T.accent : S.line}`,
+              background: group === g ? T.accentSoft : "#fff",
+              color: group === g ? T.accent : S.sub,
+              borderRadius: 999, padding: "4px 10px", fontSize: 11.5, fontWeight: 700,
+              cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit",
+            }}>{g}</button>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(38px, 1fr))", gap: 3, maxHeight: 180, overflowY: "auto" }}>
+        {shown.map((e2) => (
+          <button key={e2} onClick={() => onPick(e2)} style={{
+            border: "none", background: "none", borderRadius: 8, height: 36,
+            fontSize: 20, cursor: "pointer", lineHeight: 1,
+          }}>{e2}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg }) {
   const [txt, setTxt] = useState("");
-  const [reactFor, setReactFor] = useState(null);   // message id being reacted to
-  const [editing, setEditing] = useState(null);     // { id, text }
-  const [confirmDel, setConfirmDel] = useState(null); // message being deleted
-  const [emojiOpen, setEmojiOpen] = useState(false); // composer emoji tray
   const [mentionOpen, setMentionOpen] = useState(false);
   const [tagOpen, setTagOpen] = useState(false);
-  const [tagged, setTagged] = useState(null); // jobId
+  const [tagged, setTagged] = useState(null);
+  const [reactFor, setReactFor] = useState(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(null);
+  const [actionsFor, setActionsFor] = useState(null);
   const inputRef = useRef(null);
+  const endRef = useRef(null);
   const me = (currentUser && currentUser.name) || "Unknown";
+  const isAdmin = !!(currentUser && currentUser.role === "admin");
+
+  /* New messages should not leave you scrolled halfway up a thread. */
+  useEffect(() => {
+    if (endRef.current && endRef.current.scrollIntoView) {
+      endRef.current.scrollIntoView({ block: "end" });
+    }
+  }, [msgs.length]);
+
   const send = () => {
     const t = txt.trim();
     if (!t) return;
-    const mentions = (users || [])
-      .filter((u) => u && u.name && t.includes(`@${u.name}`))
-      .map((u) => u.name);
+    const mentions = (users || []).filter((u) => u && u.name && t.includes(`@${u.name}`)).map((u) => u.name);
     setMsgs([...(msgs || []), {
       id: uid("cm"), by: me, at: new Date().toISOString().slice(0, 16).replace("T", " "),
-      text: t, mentions, jobId: tagged || null,
+      text: t, mentions, jobId: tagged || null, reactions: {},
     }]);
-    setTxt(""); setTagged(null); setMentionOpen(false);
+    setTxt(""); setTagged(null); setMentionOpen(false); setEmojiOpen(false);
   };
-  /* Toggling is per-person: tapping an emoji you already used removes
-     it, so a reaction row never lies about who is on it. */
+
   const toggleReaction = (msgId, emoji) => {
     setMsgs((prev) => (prev || []).map((m) => {
       if (m.id !== msgId) return m;
@@ -10544,30 +10606,28 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
       if (who.length) r[emoji] = who; else delete r[emoji];
       return { ...m, reactions: r };
     }));
-    setReactFor(null);
+    setReactFor(null); setActionsFor(null);
   };
 
-  /* Edit and delete are limited to your own messages; an admin can also
-     remove someone else's, which is the moderation case. Deletes are
-     soft so a thread that was replied to does not develop holes. */
-  const canEdit = (m) => m.by === me && !m.deletedAt;
-  const canDelete = (m) => (m.by === me || (currentUser && currentUser.role === "admin")) && !m.deletedAt;
+  /* Authorship rules: you may edit and delete your own; an admin may
+     delete anyone's. Deletion is permanent — the row goes. */
+  const canEdit = (m) => m.by === me;
+  const canDelete = (m) => m.by === me || isAdmin;
 
   const saveEdit = () => {
     if (!editing || !editing.text.trim()) return;
     const t = editing.text.trim();
     setMsgs((prev) => (prev || []).map((m) => m.id === editing.id
-      ? { ...m, text: t, editedAt: new Date().toISOString().slice(0, 16).replace("T", " ") }
-      : m));
+      ? { ...m, text: t, editedAt: new Date().toISOString().slice(0, 16).replace("T", " ") } : m));
     setEditing(null);
   };
 
   const doDelete = () => {
     if (!confirmDel) return;
-    setMsgs((prev) => (prev || []).map((m) => m.id === confirmDel.id
-      ? { ...m, deletedAt: new Date().toISOString().slice(0, 16).replace("T", " "), deletedBy: me }
-      : m));
-    setConfirmDel(null);
+    const id = confirmDel.id;
+    setMsgs((prev) => (prev || []).filter((m) => m.id !== id));
+    if (onDeleteMsg) onDeleteMsg(id);
+    setConfirmDel(null); setActionsFor(null);
   };
 
   const insert = (frag) => {
@@ -10578,157 +10638,173 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
     });
     if (inputRef.current) inputRef.current.focus();
   };
-  const renderText = (t, onDark) => String(t || "").split(/(@[A-Za-z][\w'-]*(?: [A-Za-z][\w'-]*)?)/g).map((part, i2) =>
+
+  const renderText = (t) => String(t || "").split(/(@[A-Za-z][\w'-]*(?: [A-Za-z][\w'-]*)?)/g).map((part, i2) =>
     part && part.startsWith("@")
-      ? <b key={i2} style={{ color: onDark ? "#9DC4F8" : T.accent }}>{part}</b>
+      ? <b key={i2} style={{ color: T.accent, background: T.accentSoft, borderRadius: 4, padding: "0 3px" }}>{part}</b>
       : <span key={i2}>{part}</span>);
+
   const jobOf = (id) => (jobs || []).find((j) => j.id === id);
-  /* Defensive: a profile with a blank name used to crash the whole
-     screen here, which looked like "sending broke the app". */
   const initials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
+  const AV_COLORS = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
+  const colorOf = (n) => AV_COLORS[Math.abs(String(n || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV_COLORS.length];
+
   return (
     <div style={embedded ? { paddingBottom: 8 } : { padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }}>
       {!embedded && <SubHeader title="Team chat" onBack={onBack} />}
-      {!embedded && (
-        <div style={{ fontSize: 12.5, color: S.sub, margin: "10px 0 12px", lineHeight: 1.5 }}>
-          One channel for the whole company. @ someone when a customer calls in for them; tag the job so the thread
-          is one tap away.
+
+      {msgs.length === 0 && (
+        <div style={{ padding: "28px 8px", textAlign: "center" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>This is the beginning of the channel</div>
+          <div style={{ fontSize: 13, color: S.sub, marginTop: 5, lineHeight: 1.5 }}>
+            One channel for the whole company. @ someone when a customer calls
+            in for them, and tag the job so the thread is one tap away.
+          </div>
         </div>
       )}
-      {msgs.length === 0 && (
-        <Card><div style={{ fontSize: 14, color: S.sub }}>No messages yet — say something.</div></Card>
-      )}
+
       {(msgs || []).map((m, mi) => {
         const j = m.jobId ? jobOf(m.jobId) : null;
-        const mine = m.by === me;
         const mentioned = Array.isArray(m.mentions) && m.mentions.includes(me);
         const prev = mi > 0 ? msgs[mi - 1] : null;
         const day = String(m.at || "").slice(0, 10);
         const newDay = !prev || String(prev.at || "").slice(0, 10) !== day;
-        const sameAuthor = prev && prev.by === m.by && !newDay;
-        const AV_COLORS = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
-        const avColor = AV_COLORS[Math.abs(String(m.by || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV_COLORS.length];
+        /* Slack-style grouping: consecutive messages from one person
+           within the same day share a header and drop the avatar. */
+        const grouped = prev && prev.by === m.by && !newDay;
+        const showActions = actionsFor === m.id;
         return (
           <React.Fragment key={m.id}>
-          {newDay && (
-            <div style={{ textAlign: "center", margin: "16px 0 4px" }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: S.sub, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 99, padding: "4px 12px" }}>
-                {day === new Date().toISOString().slice(0, 10) ? "Today" : day}
-              </span>
-            </div>
-          )}
-          <div style={{ display: "flex", gap: 9, marginTop: sameAuthor ? 3 : 12, flexDirection: mine ? "row-reverse" : "row" }}>
-            {sameAuthor ? <span style={{ width: 32, flexShrink: 0 }} /> : (
-              <span style={{
-                width: 32, height: 32, borderRadius: 99, background: mine ? T.primary : avColor,
-                color: "#fff", display: "grid", placeItems: "center",
-                fontSize: 11.5, fontWeight: 800, flexShrink: 0, marginTop: 2,
-              }}>{initials(m.by)}</span>
+            {newDay && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "18px 0 10px" }}>
+                <span style={{ flex: 1, height: 1, background: S.line }} />
+                <span style={{ fontSize: 11, fontWeight: 800, color: S.sub, whiteSpace: "nowrap" }}>
+                  {day === todayIso() ? "Today" : day}
+                </span>
+                <span style={{ flex: 1, height: 1, background: S.line }} />
+              </div>
             )}
-            <div style={{
-              maxWidth: "80%", background: mine ? T.primary : mentioned ? "#FDF6EC" : "#fff",
-              border: mine ? "none" : `1px solid ${mentioned ? "#F0DFC5" : S.line}`,
-              color: mine ? "#fff" : S.ink,
-              borderRadius: mine ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-              padding: "9px 13px",
-              boxShadow: "0 1px 2px rgba(16,24,40,.04)",
-            }}>
-              {!sameAuthor && !mine && (
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: avColor, marginBottom: 2 }}>{m.by}</div>
-              )}
-              {m.deletedAt ? (
-                <div style={{ fontSize: 13.5, lineHeight: 1.45, fontStyle: "italic", color: mine ? "rgba(255,255,255,.6)" : S.sub }}>
-                  Message deleted{m.deletedBy && m.deletedBy !== m.by ? ` by ${m.deletedBy}` : ""}
-                </div>
-              ) : editing && editing.id === m.id ? (
-                <div>
-                  <textarea autoFocus style={{ ...inputStyle, minHeight: 60, resize: "vertical", color: S.ink }}
-                    value={editing.text} onChange={(e) => setEditing({ ...editing, text: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEdit(); }
-                      if (e.key === "Escape") setEditing(null);
-                    }} />
-                  <div style={{ display: "flex", gap: 6, marginTop: 7 }}>
-                    <Btn small kind="ghost" style={{ flex: 1 }} onClick={() => setEditing(null)}>Cancel</Btn>
-                    <Btn small style={{ flex: 1 }} disabled={!editing.text.trim()} onClick={saveEdit}>Save</Btn>
-                  </div>
-                </div>
+            <div
+              onClick={() => setActionsFor(showActions ? null : m.id)}
+              style={{
+                display: "flex", gap: 10, padding: grouped ? "1px 8px" : "7px 8px 1px",
+                background: showActions ? S.bg : mentioned ? "#FFFBF2" : "transparent",
+                borderLeft: mentioned ? "3px solid #E8B931" : "3px solid transparent",
+                borderRadius: 6, cursor: "pointer", position: "relative",
+              }}>
+              {grouped ? (
+                <span style={{ width: 34, flexShrink: 0, fontSize: 9.5, color: "#C7CBD1", textAlign: "right", paddingTop: 3 }}>
+                  {showActions ? String(m.at || "").slice(11, 16) : ""}
+                </span>
               ) : (
-                <div style={{ fontSize: 14.5, lineHeight: 1.45 }}>{renderText(m.text, mine)}</div>
+                <span style={{
+                  width: 34, height: 34, borderRadius: 8, background: colorOf(m.by), flexShrink: 0,
+                  color: "#fff", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800,
+                }}>{initials(m.by)}</span>
               )}
-              <div style={{ fontSize: 10, color: mine ? "rgba(255,255,255,.65)" : "#B4B9C0", marginTop: 3, textAlign: "right" }}>
-                {String(m.at || "").slice(11, 16)}{m.editedAt && !m.deletedAt ? " · edited" : ""}
-              </div>
-              {j && (
-                <button onClick={() => onOpenJob(j.id)} style={{
-                  marginTop: 7, border: `1px solid ${mine ? "rgba(255,255,255,.3)" : S.line}`,
-                  background: mine ? "rgba(255,255,255,.12)" : S.bg, color: mine ? "#fff" : S.ink,
-                  borderRadius: 9, padding: "6px 10px", fontSize: 12.5, cursor: "pointer",
-                  display: "flex", gap: 6, alignItems: "center",
-                }}>
-                  <Home size={12} color={T.accent} /> {j.name} — {j.address}
-                </button>
-              )}
-            </div>
-            {!m.deletedAt && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, alignSelf: "flex-end", marginBottom: 4, flexShrink: 0 }}>
-                <button aria-label="React to this message" onClick={() => setReactFor(reactFor === m.id ? null : m.id)}
-                  style={{ border: "none", background: "none", cursor: "pointer", padding: 0, color: "#C7CBD1", lineHeight: 0 }}>
-                  <Smile size={15} />
-                </button>
-                {canEdit(m) && (
-                  <button aria-label="Edit this message" onClick={() => { setReactFor(null); setEditing({ id: m.id, text: m.text }); }}
-                    style={{ border: "none", background: "none", cursor: "pointer", padding: 0, color: "#C7CBD1", lineHeight: 0 }}>
-                    <Pencil size={13} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {!grouped && (
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 7, marginBottom: 1 }}>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: S.ink }}>{m.by}</span>
+                    <span style={{ fontSize: 11, color: S.sub }}>{String(m.at || "").slice(11, 16)}</span>
+                    {m.by === me && <span style={{ fontSize: 10, color: S.sub, fontWeight: 700 }}>you</span>}
+                  </div>
+                )}
+                {editing && editing.id === m.id ? (
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <textarea autoFocus style={{ ...inputStyle, minHeight: 62, resize: "vertical" }}
+                      value={editing.text} onChange={(e) => setEditing({ ...editing, text: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEdit(); }
+                        if (e.key === "Escape") setEditing(null);
+                      }} />
+                    <div style={{ display: "flex", gap: 7, marginTop: 7 }}>
+                      <Btn small kind="ghost" style={{ flex: 1 }} onClick={() => setEditing(null)}>Cancel</Btn>
+                      <Btn small style={{ flex: 1 }} disabled={!editing.text.trim()} onClick={saveEdit}>Save</Btn>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 14.5, lineHeight: 1.5, color: S.ink, wordBreak: "break-word" }}>
+                    {renderText(m.text)}
+                    {m.editedAt && <span style={{ fontSize: 10.5, color: S.sub }}> (edited)</span>}
+                  </div>
+                )}
+
+                {j && (
+                  <button onClick={(e) => { e.stopPropagation(); onOpenJob(j.id); }} style={{
+                    marginTop: 6, border: `1px solid ${S.line}`, background: "#fff",
+                    borderLeft: `3px solid ${T.accent}`, borderRadius: 7, padding: "7px 10px",
+                    fontSize: 12.5, cursor: "pointer", display: "flex", gap: 7, alignItems: "center",
+                    color: S.ink, fontFamily: "inherit", textAlign: "left",
+                  }}>
+                    <Home size={12} color={T.accent} />
+                    <span><b>{j.name}</b> · {j.address}</span>
                   </button>
                 )}
-                {canDelete(m) && (
-                  <button aria-label="Delete this message" onClick={() => { setReactFor(null); setConfirmDel(m); }}
-                    style={{ border: "none", background: "none", cursor: "pointer", padding: 0, color: "#E0A9A4", lineHeight: 0 }}>
-                    <Trash2 size={13} />
-                  </button>
+
+                {m.reactions && Object.keys(m.reactions).length > 0 && (
+                  <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 5 }}>
+                    {Object.entries(m.reactions).map(([emoji, who]) => {
+                      const onIt = Array.isArray(who) && who.includes(me);
+                      return (
+                        <button key={emoji} title={(who || []).join(", ")}
+                          onClick={(e) => { e.stopPropagation(); toggleReaction(m.id, emoji); }}
+                          style={{
+                            border: `1px solid ${onIt ? T.accent : S.line}`,
+                            background: onIt ? T.accentSoft : "#fff",
+                            borderRadius: 999, padding: "1px 7px", fontSize: 12.5, cursor: "pointer",
+                            display: "flex", gap: 4, alignItems: "center", fontFamily: "inherit",
+                          }}>
+                          <span>{emoji}</span>
+                          <span style={{ fontSize: 10.5, fontWeight: 800, color: onIt ? T.accent : S.sub }}>{(who || []).length}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {showActions && !editing && (
+                  <div onClick={(e) => e.stopPropagation()} style={{
+                    display: "flex", gap: 4, marginTop: 7, flexWrap: "wrap", alignItems: "center",
+                  }}>
+                    {CHAT_EMOJI.map((e2) => (
+                      <button key={e2} onClick={() => toggleReaction(m.id, e2)} style={{
+                        border: `1px solid ${S.line}`, background: "#fff", borderRadius: 8,
+                        width: 32, height: 32, fontSize: 16, cursor: "pointer", lineHeight: 1,
+                      }}>{e2}</button>
+                    ))}
+                    <button onClick={() => setReactFor(reactFor === m.id ? null : m.id)} aria-label="More reactions" style={{
+                      border: `1px solid ${S.line}`, background: "#fff", borderRadius: 8,
+                      width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center", color: S.sub,
+                    }}><Plus size={14} /></button>
+                    {canEdit(m) && (
+                      <button onClick={() => { setEditing({ id: m.id, text: m.text }); setActionsFor(null); }} style={{
+                        border: `1px solid ${S.line}`, background: "#fff", borderRadius: 8,
+                        height: 32, padding: "0 10px", cursor: "pointer", fontSize: 12, fontWeight: 700,
+                        color: S.ink, display: "flex", gap: 5, alignItems: "center", fontFamily: "inherit",
+                      }}><Pencil size={12} /> Edit</button>
+                    )}
+                    {canDelete(m) && (
+                      <button onClick={() => setConfirmDel(m)} style={{
+                        border: "1px solid #F5C6C0", background: "#FDECEA", borderRadius: 8,
+                        height: 32, padding: "0 10px", cursor: "pointer", fontSize: 12, fontWeight: 700,
+                        color: "#B3261E", display: "flex", gap: 5, alignItems: "center", fontFamily: "inherit",
+                      }}><Trash2 size={12} /> Delete</button>
+                    )}
+                  </div>
+                )}
+
+                {reactFor === m.id && (
+                  <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 7 }}>
+                    <EmojiPicker onPick={(e2) => toggleReaction(m.id, e2)} onClose={() => setReactFor(null)} />
+                  </div>
                 )}
               </div>
-            )}
-          </div>
-
-          {/* Reaction pills sit under the bubble, aligned to its side. */}
-          {!m.deletedAt && m.reactions && Object.keys(m.reactions).length > 0 && (
-            <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4, paddingLeft: mine ? 0 : 41, paddingRight: mine ? 41 : 0, justifyContent: mine ? "flex-end" : "flex-start" }}>
-              {Object.entries(m.reactions).map(([emoji, who]) => {
-                const onIt = Array.isArray(who) && who.includes(me);
-                return (
-                  <button key={emoji} title={(who || []).join(", ")} onClick={() => toggleReaction(m.id, emoji)}
-                    style={{
-                      border: `1px solid ${onIt ? T.accent : S.line}`, background: onIt ? T.accentSoft : "#fff",
-                      borderRadius: 999, padding: "2px 8px", fontSize: 12.5, cursor: "pointer",
-                      display: "flex", gap: 4, alignItems: "center", fontFamily: "inherit",
-                    }}>
-                    <span>{emoji}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: onIt ? T.accent : S.sub }}>{(who || []).length}</span>
-                  </button>
-                );
-              })}
             </div>
-          )}
-
-          {reactFor === m.id && (
-            <div style={{
-              display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6,
-              paddingLeft: mine ? 0 : 41, paddingRight: mine ? 41 : 0,
-              justifyContent: mine ? "flex-end" : "flex-start",
-            }}>
-              {CHAT_EMOJI.map((e2) => (
-                <button key={e2} onClick={() => toggleReaction(m.id, e2)} style={{
-                  border: `1px solid ${S.line}`, background: "#fff", borderRadius: 9,
-                  width: 34, height: 34, fontSize: 17, cursor: "pointer", lineHeight: 1,
-                }}>{e2}</button>
-              ))}
-            </div>
-          )}
           </React.Fragment>
         );
       })}
+      <div ref={endRef} />
 
       <div style={embedded ? {
         position: "sticky", bottom: 0, background: "#fff", borderTop: `1px solid ${S.line}`,
@@ -10739,34 +10815,49 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
       }}>
         {tagged && (
           <div style={{ marginBottom: 7 }}>
-            <Chip tone="blue">Tagged: {(jobOf(tagged) || {}).name} <button onClick={() => setTagged(null)} style={{ border: "none", background: "none", cursor: "pointer", color: "inherit", fontWeight: 800 }}>×</button></Chip>
+            <Chip tone="blue">Tagged: {(jobOf(tagged) || {}).name}
+              <button onClick={() => setTagged(null)} style={{ border: "none", background: "none", cursor: "pointer", color: "inherit", fontWeight: 800 }}>×</button>
+            </Chip>
           </div>
         )}
         {emojiOpen && (
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
-            {CHAT_EMOJI.map((e2) => (
-              <button key={e2} onClick={() => { setTxt((v) => v + e2); if (inputRef.current) inputRef.current.focus(); }}
-                style={{ border: `1px solid ${S.line}`, background: "#fff", borderRadius: 9, width: 36, height: 36, fontSize: 18, cursor: "pointer", lineHeight: 1 }}>
-                {e2}
-              </button>
-            ))}
-          </div>
+          <EmojiPicker onPick={(e2) => { setTxt((v) => v + e2); if (inputRef.current) inputRef.current.focus(); }}
+            onClose={() => setEmojiOpen(false)} />
         )}
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-          <Btn kind="ghost" small onClick={() => { setMentionOpen(true); }}>@</Btn>
-          <Btn kind="ghost" small onClick={() => { setTagOpen(true); }}><Home size={13} /></Btn>
-          <Btn kind="ghost" small onClick={() => setEmojiOpen((v) => !v)}><Smile size={14} /></Btn>
-          <textarea ref={inputRef} style={{ ...inputStyle, flex: 1, minHeight: 42, maxHeight: 110, resize: "none", fontFamily: "inherit" }}
+        {/* Composer as one bordered box, with its tools inside it. */}
+        <div style={{ border: `1px solid ${S.line}`, borderRadius: 12, background: "#fff", overflow: "hidden" }}>
+          <textarea ref={inputRef} rows={1}
+            style={{
+              width: "100%", boxSizing: "border-box", border: "none", outline: "none",
+              padding: "11px 13px 4px", fontSize: 15, fontFamily: "inherit", resize: "none",
+              minHeight: 42, maxHeight: 120, color: S.ink, background: "transparent",
+            }}
             value={txt} placeholder="Message the team…"
             onChange={(e) => {
               const v = e.target.value;
               setTxt(v);
-              /* Typing "@" opens the picker right there, like Slack. */
               const tail = v.slice(v.lastIndexOf("@") + 1);
               setMentionOpen(v.includes("@") && !tail.includes(" ") && v.lastIndexOf("@") >= v.length - 20);
             }}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
-          <Btn onClick={send} disabled={!txt.trim()}><Send size={15} /></Btn>
+          <div style={{ display: "flex", alignItems: "center", gap: 2, padding: "2px 7px 7px" }}>
+            <button onClick={() => setEmojiOpen((v) => !v)} aria-label="Emoji" style={{
+              border: "none", background: "none", cursor: "pointer", padding: 6, color: S.sub, lineHeight: 0,
+            }}><Smile size={17} /></button>
+            <button onClick={() => setMentionOpen(true)} aria-label="Mention someone" style={{
+              border: "none", background: "none", cursor: "pointer", padding: "6px 8px",
+              color: S.sub, fontSize: 15, fontWeight: 800, lineHeight: 1, fontFamily: "inherit",
+            }}>@</button>
+            <button onClick={() => setTagOpen(true)} aria-label="Tag a job" style={{
+              border: "none", background: "none", cursor: "pointer", padding: 6, color: S.sub, lineHeight: 0,
+            }}><Home size={16} /></button>
+            <span style={{ flex: 1 }} />
+            <button onClick={send} disabled={!txt.trim()} aria-label="Send" style={{
+              border: "none", background: txt.trim() ? T.accent : "#E3E6EA", color: "#fff",
+              borderRadius: 8, width: 34, height: 30, cursor: txt.trim() ? "pointer" : "default",
+              display: "grid", placeItems: "center",
+            }}><Send size={15} /></button>
+          </div>
         </div>
       </div>
 
@@ -10774,14 +10865,16 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
         footer={
           <div style={{ display: "flex", gap: 10 }}>
             <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setConfirmDel(null)}>Cancel</Btn>
-            <Btn style={{ flex: 1, background: "#B3261E", borderColor: "#B3261E" }} onClick={doDelete}>Delete</Btn>
+            <Btn data-testid="confirm-chat-delete" style={{ flex: 1, background: "#B3261E", borderColor: "#B3261E" }}
+              onClick={doDelete}>Delete</Btn>
           </div>
         }>
         {confirmDel && (
           <div>
             <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.5 }}>
-              This removes the message for everyone. The thread keeps a
-              placeholder so replies around it still make sense.
+              This removes the message permanently, for everyone. It cannot be
+              recovered.
+              {confirmDel.by !== me && <> You are deleting <b>{confirmDel.by}</b>'s message as an admin.</>}
             </div>
             <div style={{ background: S.soft, borderRadius: 9, padding: "10px 12px", marginTop: 10, fontSize: 13.5, color: S.ink }}>
               {confirmDel.text}
@@ -10794,10 +10887,20 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
         {(users || []).filter((u) => u && u.name && u.active !== false && u.name !== me).map((u, i2) => (
           <button key={u.id} onClick={() => { insert(`@${u.name}`); setMentionOpen(false); }} style={{
             width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer",
-            padding: "12px 4px", borderTop: i2 ? `1px solid ${S.line}` : "none", fontSize: 14.5, fontWeight: 600,
-          }}>@{u.name} <span style={{ fontSize: 12, color: S.sub, fontWeight: 400 }}>· {u.title}</span></button>
+            padding: "12px 4px", borderTop: i2 ? `1px solid ${S.line}` : "none", display: "flex", gap: 10, alignItems: "center",
+          }}>
+            <span style={{
+              width: 30, height: 30, borderRadius: 8, background: colorOf(u.name), color: "#fff",
+              display: "grid", placeItems: "center", fontSize: 11, fontWeight: 800,
+            }}>{initials(u.name)}</span>
+            <span>
+              <span style={{ display: "block", fontSize: 14.5, fontWeight: 700, color: S.ink }}>{u.name}</span>
+              <span style={{ fontSize: 12, color: S.sub }}>{u.title}</span>
+            </span>
+          </button>
         ))}
       </Sheet>
+
       <Sheet open={tagOpen} onClose={() => setTagOpen(false)} title="Tag a job">
         {jobs.filter((j) => !DEAD_STAGES.includes(j.stageId)).map((j, i2) => (
           <button key={j.id} onClick={() => { setTagged(j.id); setTagOpen(false); }} style={{
@@ -12827,7 +12930,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
   );
 }
 
-function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat }) {
+function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat, onDeleteMsg }) {
   /* Team chat and customer messages are both messages, so they live
      under one Inbox rather than two destinations. Team opens first —
      it is the one with unread counts attached to the nav badge. */
@@ -12867,7 +12970,7 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
 
       {pane === "team" ? (
         <TeamChat msgs={chatMsgs} setMsgs={setChatMsgs} users={users} jobs={jobs}
-          currentUser={currentUser} onOpenJob={onOpenJob} embedded />
+          currentUser={currentUser} onOpenJob={onOpenJob} embedded onDeleteMsg={onDeleteMsg} />
       ) : (
       <>
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
@@ -13069,7 +13172,7 @@ function useDbSync(st) {
 
         const { data: chatRows } = await db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
         if (alive && chatRows) {
-          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, deletedAt: r.deleted_at ? String(r.deleted_at).slice(0, 16).replace("T", " ") : null, deletedBy: r.deleted_by || null }));
+          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null }));
           msgs.forEach((m) => persistedChat.current.add(m.id));
           setChatMsgs(msgs);
         }
@@ -13093,7 +13196,7 @@ function useDbSync(st) {
         if (persistedChat.current.has(r.id)) return;
         persistedChat.current.add(r.id);
         setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev :
-          [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, deletedAt: r.deleted_at ? String(r.deleted_at).slice(0, 16).replace("T", " ") : null, deletedBy: r.deleted_by || null }]);
+          [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null }]);
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_activity" }, (payload) => {
         const r = payload.new;
@@ -13229,14 +13332,12 @@ function useDbSync(st) {
     const db = DB();
     if (!db || !ready || !hydrated) return;
     (chatMsgs || []).forEach((m) => {
-      const sig = JSON.stringify([m.text, m.editedAt || null, m.deletedAt || null]);
+      const sig = JSON.stringify([m.text, m.editedAt || null]);
       if (editSig.current[m.id] === undefined) { editSig.current[m.id] = sig; return; }
       if (editSig.current[m.id] === sig) return;
       editSig.current[m.id] = sig;
-      db.from("crm_chat").update({
-        body: m.text, edited_at: m.editedAt || null,
-        deleted_at: m.deletedAt || null, deleted_by: m.deletedBy || null,
-      }).eq("id", m.id).then(() => {}, () => {});
+      db.from("crm_chat").update({ body: m.text, edited_at: m.editedAt || null })
+        .eq("id", m.id).then(() => {}, () => {});
     });
   }, [chatMsgs, ready, hydrated]);
 
@@ -13772,7 +13873,14 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)}
           chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} users={users} currentUser={liveUser}
           unreadChat={Math.max(0, chatMsgs.length - chatSeenCount)}
-          onSeenChat={() => setChatSeenCount(chatMsgs.length)} />
+          onSeenChat={() => setChatSeenCount(chatMsgs.length)}
+          onDeleteMsg={(id) => {
+            /* Remove the row for real. Failure is non-fatal: the message
+               is already gone locally and will not come back unless a
+               refresh re-hydrates it, which surfaces the problem. */
+            const db = DB();
+            if (db) db.from("crm_chat").delete().eq("id", id).then(() => {}, () => {});
+          }} />
       ) : nav === "more" ? (
         <MoreMenu brand={brand} onNav={(id) => (id === "password" ? setChangePwOpen(true) : setNav(id))} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
       ) : nav === "insurance" ? (
@@ -13818,7 +13926,14 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)}
           chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} users={users} currentUser={liveUser}
           unreadChat={Math.max(0, chatMsgs.length - chatSeenCount)}
-          onSeenChat={() => setChatSeenCount(chatMsgs.length)} />
+          onSeenChat={() => setChatSeenCount(chatMsgs.length)}
+          onDeleteMsg={(id) => {
+            /* Remove the row for real. Failure is non-fatal: the message
+               is already gone locally and will not come back unless a
+               refresh re-hydrates it, which surfaces the problem. */
+            const db = DB();
+            if (db) db.from("crm_chat").delete().eq("id", id).then(() => {}, () => {});
+          }} />
       ) : nav === "vendors" ? (
         <VendorManager vendors={vendors} setVendors={setVendors} currentUser={liveUser}
           onBack={() => setNav("more")} toast={toast} />
