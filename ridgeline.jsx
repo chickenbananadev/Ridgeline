@@ -4551,9 +4551,32 @@ const JOB_TABS = [
   ["tasks", "Tasks"], ["files", "Files"], ["portal", "Portal"],
 ];
 
-/* Seventeen tabs in one scrolling strip meant hunting. They are the
-   same tabs, grouped by what you are actually doing: inspecting,
-   selling, building, or talking to the customer. */
+/* Collapsible sections, in the order they are worked. Replaces a
+   seventeen-tab scrolling strip: on a phone, scanning a stack of
+   labelled headers beats hunting sideways through tabs, and several
+   can be open at once. Each renders exactly the component the tab
+   did. */
+const JOB_SECTIONS = [
+  ["overview", "Overview", ClipboardList],
+  ["checklist", "Inspection checklist", CheckCircle2],
+  ["ventilation", "Ventilation", Wrench],
+  ["measure", "Measurements", Package],
+  ["photos", "Photos", Camera],
+  ["estimate", "Estimate", FileText],
+  ["contract", "Contract", PenLine],
+  ["materials", "Materials", Package],
+  ["report", "Report", ScrollText],
+  ["workorder", "Work order", ClipboardList],
+  ["tasks", "Tasks", CheckCircle2],
+  ["files", "Attachments", Layers],
+  ["financials", "Financials", DollarSign],
+  ["payments", "Payments", Receipt],
+  ["invoice", "Invoice", Receipt],
+  ["messages", "Messages", MessageCircle],
+  ["portal", "Client portal", Share2],
+];
+
+/* Retained: the tab groups still drive which sections a seat may see. */
 const JOB_TAB_GROUPS = [
   ["Inspect", ["overview", "checklist", "ventilation", "measure", "photos"]],
   ["Sell", ["estimate", "contract", "materials", "report"]],
@@ -4565,8 +4588,13 @@ const JOB_TAB_GROUPS = [
 function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [], ccToken = null,
   estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null }) {
   const [tab, setTab] = useState(openTab || "overview");
-  /* Honour a requested tab when the job is opened from a deep link. */
-  useEffect(() => { if (openTab) setTab(openTab); }, [openTab, job.id]);
+  /* Which sections are expanded. Overview opens by default; a deep link
+     opens its own section too so the caller lands on real content. */
+  const [open, setOpen] = useState(() => ({ overview: true, ...(openTab ? { [openTab]: true } : {}) }));
+  const [activityOpen, setActivityOpen] = useState(false);
+  useEffect(() => {
+    if (openTab) { setTab(openTab); setOpen((o) => ({ ...o, [openTab]: true })); }
+  }, [openTab, job.id]);
   const [delOpen, setDelOpen] = useState(false);
   const [delTyped, setDelTyped] = useState("");
   const MONEY_TABS = ["estimate", "contract", "financials", "payments", "invoice"];
@@ -4596,6 +4624,36 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           <div style={{ fontSize: 13, color: S.sub, margin: "8px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>
             <MapPin size={13} /> {job.address}
           </div>
+          {/* Header actions in the shape Roofr uses: activity behind a
+              clock, directions, then the primary quick-action row. */}
+          <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
+            <button aria-label="Activity log" onClick={() => setActivityOpen(true)} style={{
+              width: 38, height: 38, borderRadius: 999, border: "none", background: T.accentSoft,
+              display: "grid", placeItems: "center", cursor: "pointer", color: T.accent,
+            }}>
+              <RefreshCw size={17} />
+            </button>
+            {job.address && (
+              <a href={directionsLink(job.address)} target="_blank" rel="noreferrer" aria-label="Directions" style={{
+                width: 38, height: 38, borderRadius: 999, background: T.accentSoft,
+                display: "grid", placeItems: "center", color: T.accent, textDecoration: "none",
+              }}>
+                <MapPin size={17} />
+              </a>
+            )}
+            <button onClick={() => setOpen((o) => {
+              /* Expand everything, or collapse back to Overview. */
+              const anyOpen = JOB_SECTIONS.filter(([id]) => id !== "overview").some(([id]) => o[id]);
+              if (anyOpen) return { overview: true };
+              const all = {}; JOB_SECTIONS.forEach(([id]) => { all[id] = true; }); return all;
+            })} style={{
+              border: "none", background: T.primary, color: "#fff", borderRadius: 999,
+              padding: "0 18px", height: 38, fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+            }}>
+              Expand all
+            </button>
+          </div>
+
           {/* Quick actions on the job: call, text, directions, upload —
               the four things a rep reaches for standing in a driveway. */}
           <div style={{ display: "flex", gap: 7, margin: "12px 0 10px" }}>
@@ -4637,42 +4695,21 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
             </select>
           </div>
         </div>
-        {(() => {
-          const allowed = new Set(visibleTabs.map(([id]) => id));
-          const labelOf = (id) => (JOB_TABS.find(([tid]) => tid === id) || [id, id])[1];
-          const groups = JOB_TAB_GROUPS
-            .map(([name, ids]) => [name, ids.filter((id) => allowed.has(id))])
-            .filter(([, ids]) => ids.length);
-          const activeGroup = (groups.find(([, ids]) => ids.includes(tab)) || groups[0] || ["", []]);
-          return (
-            <>
-              <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "0 12px 8px" }}>
-                {groups.map(([name, ids]) => {
-                  const on = activeGroup[0] === name;
-                  return (
-                    <button key={name} onClick={() => { if (!ids.includes(tab)) setTab(ids[0]); }} style={{
-                      border: `1.5px solid ${on ? T.accent : S.line}`,
-                      background: on ? T.accentSoft : "#fff", color: on ? T.accent : S.ink,
-                      borderRadius: 999, padding: "6px 13px", fontSize: 12.5, fontWeight: 800,
-                      cursor: "pointer", whiteSpace: "nowrap",
-                    }}>{name}</button>
-                  );
-                })}
-              </div>
-              <div style={{ display: "flex", gap: 4, overflowX: "auto", padding: "0 12px" }}>
-                {activeGroup[1].map((id) => (
-                  <button key={id} onClick={() => setTab(id)} style={{
-                    border: "none", background: "none", cursor: "pointer", whiteSpace: "nowrap",
-                    padding: "10px 12px", fontSize: 14, fontWeight: 700,
-                    color: tab === id ? T.accent : S.sub,
-                    borderBottom: tab === id ? `2.5px solid ${T.accent}` : "2.5px solid transparent",
-                  }}>{labelOf(id)}</button>
-                ))}
-              </div>
-            </>
-          );
-        })()}
+
       </div>
+      <Sheet open={activityOpen} onClose={() => setActivityOpen(false)} title="Activity">
+        {(() => {
+          const mine = (activity || []).filter((a) => a.jobId === job.id);
+          if (!mine.length) return <div style={{ fontSize: 13.5, color: S.sub }}>Nothing logged on this job yet.</div>;
+          return mine.map((a, i2) => (
+            <div key={a.id || i2} style={{ padding: "10px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }}>
+              <div style={{ fontSize: 11.5, color: S.sub }}>{a.at} · {a.by}</div>
+              <div style={{ fontSize: 13.5, color: S.ink, marginTop: 2, lineHeight: 1.5 }}>{a.text}</div>
+            </div>
+          ));
+        })()}
+      </Sheet>
+
       <Sheet open={delOpen} onClose={() => { setDelOpen(false); setDelTyped(""); }} title="Delete job"
         footer={
           <div style={{ display: "flex", gap: 10 }}>
@@ -4693,28 +4730,98 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
         </Field>
       </Sheet>
       <div style={{ padding: 16 }}>
-        {tab === "overview" && <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand}
-          currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} />}
-        {tab === "checklist" && <TabChecklist job={job} mut={mut} toast={toast} />}
-        {tab === "ventilation" && <TabVentilation job={job} mut={mut} toast={toast} />}
-        {tab === "measure" && <TabMeasure job={job} mut={mut} toast={toast} />}
-        {tab === "materials" && <TabMaterials job={job} mut={mut} toast={toast} />}
-        {tab === "estimate" && <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
-          estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} />}
-        {tab === "contract" && <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast} />}
-        {tab === "report" && <TabReport job={job} brand={brand} juris={juris} />}
-        {tab === "messages" && <TabMessages job={job} mut={mut} toast={toast} brand={brand}
-          templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />}
-        {tab === "photos" && <TabPhotos job={job} mut={mut} toast={toast} ccToken={ccToken} />}
-        {tab === "financials" && <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />}
-        {tab === "payments" && <TabPayments job={job} mut={mut} toast={toast} />}
-        {tab === "invoice" && <TabInvoice job={job} brand={brand} mut={mut} toast={toast} />}
-        {tab === "workorder" && <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
-          crews={crews} templates={templates} currentUser={currentUser} users={users} />}
-        {tab === "tasks" && <TabTasks job={job} mut={mut} toast={toast} />}
-        {tab === "files" && <TabFiles job={job} mut={mut} toast={toast} />}
-        {tab === "portal" && <TabPortal job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser}
-          stageLabel={(stages.find((stage) => stage.id === job.stageId) || {}).name || ""} />}
+        {(() => {
+          const allowed = new Set(visibleTabs.map(([id]) => id));
+          const render = (id) => {
+            switch (id) {
+              case "overview": return <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand}
+                currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} />;
+              case "checklist": return <TabChecklist job={job} mut={mut} toast={toast} />;
+              case "ventilation": return <TabVentilation job={job} mut={mut} toast={toast} />;
+              case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
+              case "materials": return <TabMaterials job={job} mut={mut} toast={toast} />;
+              case "estimate": return <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
+                estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} />;
+              case "contract": return <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast} />;
+              case "report": return <TabReport job={job} brand={brand} juris={juris} />;
+              case "messages": return <TabMessages job={job} mut={mut} toast={toast} brand={brand}
+                templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />;
+              case "photos": return <TabPhotos job={job} mut={mut} toast={toast} ccToken={ccToken} />;
+              case "financials": return <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />;
+              case "payments": return <TabPayments job={job} mut={mut} toast={toast} />;
+              case "invoice": return <TabInvoice job={job} brand={brand} mut={mut} toast={toast} />;
+              case "workorder": return <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
+                crews={crews} templates={templates} currentUser={currentUser} users={users} />;
+              case "tasks": return <TabTasks job={job} mut={mut} toast={toast} />;
+              case "files": return <TabFiles job={job} mut={mut} toast={toast} />;
+              case "portal": return <TabPortal job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser}
+                stageLabel={(stages.find((stage) => stage.id === job.stageId) || {}).name || ""} />;
+              default: return null;
+            }
+          };
+          return JOB_SECTIONS.filter(([id]) => allowed.has(id)).map(([id, label, Icon]) => {
+            const isOpen = !!open[id];
+            return (
+              <div key={id} style={{
+                border: `1px solid ${S.line}`, borderRadius: 12, marginBottom: 10,
+                background: "#fff", overflow: "hidden",
+              }}>
+                <button onClick={() => setOpen((o) => ({ ...o, [id]: !o[id] }))} style={{
+                  display: "flex", alignItems: "center", gap: 11, width: "100%",
+                  border: "none", background: isOpen ? "#fff" : S.bg, cursor: "pointer",
+                  textAlign: "left", padding: "14px 15px", fontFamily: "inherit",
+                }}>
+                  <Icon size={17} color={T.accent} />
+                  <span style={{ flex: 1, fontSize: 15.5, fontWeight: 800, color: S.ink }}>{label}</span>
+                  {isOpen ? <ChevronUp size={17} color={S.sub} /> : <ChevronDown size={17} color={S.sub} />}
+                </button>
+                {isOpen && (
+                  <div style={{ padding: "2px 13px 15px", borderTop: `1px solid ${S.line}` }}>
+                    {render(id)}
+                  </div>
+                )}
+              </div>
+            );
+          });
+        })()}
+
+        {/* Connection footer, in the shape Roofr uses: who made the job,
+            when, and where its CompanyCam project lives. */}
+        <Card style={{ marginTop: 6 }}>
+          <KV k="Created by" v={job.assignee || "—"} />
+          <KV k="Job type" v={job.claimType || "—"} />
+          {job.companyCam ? (
+            <>
+              <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 10, paddingTop: 10 }}>
+                <KV k="Connected to" v="CompanyCam" />
+                <KV k="Project" v={job.companyCam.name || job.name} />
+              </div>
+              <a href={job.companyCam.url} target="_blank" rel="noreferrer"
+                style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 10, color: T.accent, fontWeight: 700, fontSize: 13.5, textDecoration: "none" }}>
+                View project in CC <ExternalLink size={14} />
+              </a>
+            </>
+          ) : (
+            <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 10, paddingTop: 10, fontSize: 12.5, color: S.sub }}>
+              Not connected to CompanyCam. Open the Photos section to create or link a project.
+            </div>
+          )}
+        </Card>
+
+        {isAdmin && onDelete && (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14, padding: "0 4px" }}>
+            <button onClick={() => { setDelTyped(""); setDelOpen(true); }} style={{
+              border: "none", background: "none", cursor: "pointer", color: "#B3261E",
+              fontSize: 14.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 7,
+              padding: 0, fontFamily: "inherit",
+            }}>
+              <Trash2 size={17} /> Delete job
+            </button>
+            <span style={{ fontSize: 11.5, color: S.sub, fontStyle: "italic", lineHeight: 1.4 }}>
+              Removes every note, photo, estimate and message on it.
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

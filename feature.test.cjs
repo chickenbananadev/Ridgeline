@@ -87,7 +87,8 @@ function clickFieldChoice(labelText, choiceText) {
   assert(document.body.textContent.includes("Active leak"), "Intake reason should appear in the job");
   assert(document.body.textContent.includes("Roof replacement"), "Requested work should appear in the job");
 
-  clickButton("Checklist");
+  // Sections are collapsible now; the header expands the section.
+  clickButton("Inspection checklist");
   clickFieldChoice("Structure type", "Single Family");
   clickFieldChoice("Overall roof condition", "Good");
 

@@ -72079,12 +72079,24 @@ var JOB_TABS = [
   ["files", "Files"],
   ["portal", "Portal"]
 ];
-var JOB_TAB_GROUPS = [
-  ["Inspect", ["overview", "checklist", "ventilation", "measure", "photos"]],
-  ["Sell", ["estimate", "contract", "materials", "report"]],
-  ["Build", ["workorder", "tasks", "files"]],
-  ["Money", ["financials", "payments", "invoice"]],
-  ["Customer", ["messages", "portal"]]
+var JOB_SECTIONS = [
+  ["overview", "Overview", import_lucide_react.ClipboardList],
+  ["checklist", "Inspection checklist", import_lucide_react.CheckCircle2],
+  ["ventilation", "Ventilation", import_lucide_react.Wrench],
+  ["measure", "Measurements", import_lucide_react.Package],
+  ["photos", "Photos", import_lucide_react.Camera],
+  ["estimate", "Estimate", import_lucide_react.FileText],
+  ["contract", "Contract", import_lucide_react.PenLine],
+  ["materials", "Materials", import_lucide_react.Package],
+  ["report", "Report", import_lucide_react.ScrollText],
+  ["workorder", "Work order", import_lucide_react.ClipboardList],
+  ["tasks", "Tasks", import_lucide_react.CheckCircle2],
+  ["files", "Attachments", import_lucide_react.Layers],
+  ["financials", "Financials", import_lucide_react.DollarSign],
+  ["payments", "Payments", import_lucide_react.Receipt],
+  ["invoice", "Invoice", import_lucide_react.Receipt],
+  ["messages", "Messages", import_lucide_react.MessageCircle],
+  ["portal", "Client portal", import_lucide_react.Share2]
 ];
 function JobDetail({
   job,
@@ -72116,8 +72128,13 @@ function JobDetail({
   openTab = null
 }) {
   const [tab, setTab] = (0, import_react.useState)(openTab || "overview");
+  const [open, setOpen] = (0, import_react.useState)(() => ({ overview: true, ...openTab ? { [openTab]: true } : {} }));
+  const [activityOpen, setActivityOpen] = (0, import_react.useState)(false);
   (0, import_react.useEffect)(() => {
-    if (openTab) setTab(openTab);
+    if (openTab) {
+      setTab(openTab);
+      setOpen((o) => ({ ...o, [openTab]: true }));
+    }
   }, [openTab, job.id]);
   const [delOpen, setDelOpen] = (0, import_react.useState)(false);
   const [delTyped, setDelTyped] = (0, import_react.useState)("");
@@ -72129,130 +72146,148 @@ function JobDetail({
   const stage = stages.find((s) => s.id === job.stageId);
   const juris = jurisdictionForZip(job.zip);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.bg, minHeight: "100vh", paddingBottom: 110 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: "#fff", borderBottom: `1px solid ${S.line}` }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 0" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          SubHeader,
-          {
-            title: job.name,
-            onBack,
-            right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: stage ? stage.name : "\u2014" }),
-              isAdmin && onDelete && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                "button",
-                {
-                  "aria-label": "Delete job",
-                  onClick: () => {
-                    setDelTyped("");
-                    setDelOpen(true);
-                  },
-                  style: {
-                    border: `1px solid ${S.line}`,
-                    background: "#fff",
-                    borderRadius: 999,
-                    width: 34,
-                    height: 34,
-                    display: "grid",
-                    placeItems: "center",
-                    cursor: "pointer",
-                    color: "#B3261E"
-                  },
-                  children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15 })
-                }
-              )
-            ] })
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, margin: "8px 0 2px", display: "flex", alignItems: "center", gap: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 13 }),
-          " ",
-          job.address
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, margin: "12px 0 10px" }, children: (() => {
-          const tel = String(job.phone || job.contact?.phone || "").replace(/\D/g, "");
-          const Act = ({ href, onClick, icon: Icon, label, disabled }) => {
-            const inner = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: {
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 4,
-              padding: "9px 0",
-              borderRadius: 10,
-              border: `1px solid ${S.line}`,
-              background: disabled ? "#F7F8FA" : "#fff",
-              color: disabled ? "#C7CBD1" : T.accent,
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: disabled ? "default" : "pointer",
-              width: "100%"
-            }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, { size: 17 }),
-              " ",
-              label
-            ] });
-            if (disabled) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1 }, children: inner });
-            if (href) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href, target: href.startsWith("http") ? "_blank" : void 0, rel: "noreferrer", style: { flex: 1, textDecoration: "none" }, children: inner });
-            return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick, style: { flex: 1, border: "none", background: "none", padding: 0, cursor: "pointer" }, children: inner });
-          };
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Act, { href: tel ? `tel:${tel}` : null, icon: import_lucide_react.Phone, label: "Call", disabled: !tel }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Act, { href: tel ? `sms:${tel}` : null, icon: import_lucide_react.MessageCircle, label: "Text", disabled: !tel }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Act, { href: directionsLink(job.address), icon: import_lucide_react.MapPin, label: "Directions", disabled: !job.address }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Act, { onClick: () => setTab("files"), icon: import_lucide_react.Upload, label: "Upload" })
-          ] });
-        })() }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, margin: "10px 0 12px", flexWrap: "wrap" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: job.claimType === "Insurance" ? "blue" : "gray", children: job.claimType === "Unknown" ? "Claim TBD" : job.claimType }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "slate", children: job.state }),
-          job.value > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: money(job.value) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: job.assignee })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "select",
-          {
-            value: job.stageId,
-            onChange: (e) => onMoveStage(job.id, e.target.value),
-            style: { ...selStyle, width: "auto", padding: "8px 10px", fontSize: 13, fontWeight: 700 },
-            children: stages.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: s.id, children: s.name }, s.id))
-          }
-        ) })
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: "#fff", borderBottom: `1px solid ${S.line}` }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 0" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        SubHeader,
+        {
+          title: job.name,
+          onBack,
+          right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: stage ? stage.name : "\u2014" }),
+            isAdmin && onDelete && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "button",
+              {
+                "aria-label": "Delete job",
+                onClick: () => {
+                  setDelTyped("");
+                  setDelOpen(true);
+                },
+                style: {
+                  border: `1px solid ${S.line}`,
+                  background: "#fff",
+                  borderRadius: 999,
+                  width: 34,
+                  height: 34,
+                  display: "grid",
+                  placeItems: "center",
+                  cursor: "pointer",
+                  color: "#B3261E"
+                },
+                children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15 })
+              }
+            )
+          ] })
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, margin: "8px 0 2px", display: "flex", alignItems: "center", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 13 }),
+        " ",
+        job.address
       ] }),
-      (() => {
-        const allowed = new Set(visibleTabs.map(([id]) => id));
-        const labelOf = (id) => (JOB_TABS.find(([tid]) => tid === id) || [id, id])[1];
-        const groups = JOB_TAB_GROUPS.map(([name, ids]) => [name, ids.filter((id) => allowed.has(id))]).filter(([, ids]) => ids.length);
-        const activeGroup = groups.find(([, ids]) => ids.includes(tab)) || groups[0] || ["", []];
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, overflowX: "auto", padding: "0 12px 8px" }, children: groups.map(([name, ids]) => {
-            const on = activeGroup[0] === name;
-            return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => {
-              if (!ids.includes(tab)) setTab(ids[0]);
-            }, style: {
-              border: `1.5px solid ${on ? T.accent : S.line}`,
-              background: on ? T.accentSoft : "#fff",
-              color: on ? T.accent : S.ink,
-              borderRadius: 999,
-              padding: "6px 13px",
-              fontSize: 12.5,
-              fontWeight: 800,
-              cursor: "pointer",
-              whiteSpace: "nowrap"
-            }, children: name }, name);
-          }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 4, overflowX: "auto", padding: "0 12px" }, children: activeGroup[1].map((id) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setTab(id), style: {
-            border: "none",
-            background: "none",
-            cursor: "pointer",
-            whiteSpace: "nowrap",
-            padding: "10px 12px",
-            fontSize: 14,
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "aria-label": "Activity log", onClick: () => setActivityOpen(true), style: {
+          width: 38,
+          height: 38,
+          borderRadius: 999,
+          border: "none",
+          background: T.accentSoft,
+          display: "grid",
+          placeItems: "center",
+          cursor: "pointer",
+          color: T.accent
+        }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.RefreshCw, { size: 17 }) }),
+        job.address && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: directionsLink(job.address), target: "_blank", rel: "noreferrer", "aria-label": "Directions", style: {
+          width: 38,
+          height: 38,
+          borderRadius: 999,
+          background: T.accentSoft,
+          display: "grid",
+          placeItems: "center",
+          color: T.accent,
+          textDecoration: "none"
+        }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 17 }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setOpen((o) => {
+          const anyOpen = JOB_SECTIONS.filter(([id]) => id !== "overview").some(([id]) => o[id]);
+          if (anyOpen) return { overview: true };
+          const all = {};
+          JOB_SECTIONS.forEach(([id]) => {
+            all[id] = true;
+          });
+          return all;
+        }), style: {
+          border: "none",
+          background: T.primary,
+          color: "#fff",
+          borderRadius: 999,
+          padding: "0 18px",
+          height: 38,
+          fontSize: 14,
+          fontWeight: 800,
+          cursor: "pointer",
+          fontFamily: "inherit"
+        }, children: "Expand all" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, margin: "12px 0 10px" }, children: (() => {
+        const tel = String(job.phone || job.contact?.phone || "").replace(/\D/g, "");
+        const Act = ({ href, onClick, icon: Icon, label, disabled }) => {
+          const inner = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: {
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 4,
+            padding: "9px 0",
+            borderRadius: 10,
+            border: `1px solid ${S.line}`,
+            background: disabled ? "#F7F8FA" : "#fff",
+            color: disabled ? "#C7CBD1" : T.accent,
+            fontSize: 11,
             fontWeight: 700,
-            color: tab === id ? T.accent : S.sub,
-            borderBottom: tab === id ? `2.5px solid ${T.accent}` : "2.5px solid transparent"
-          }, children: labelOf(id) }, id)) })
+            cursor: disabled ? "default" : "pointer",
+            width: "100%"
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, { size: 17 }),
+            " ",
+            label
+          ] });
+          if (disabled) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1 }, children: inner });
+          if (href) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href, target: href.startsWith("http") ? "_blank" : void 0, rel: "noreferrer", style: { flex: 1, textDecoration: "none" }, children: inner });
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick, style: { flex: 1, border: "none", background: "none", padding: 0, cursor: "pointer" }, children: inner });
+        };
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Act, { href: tel ? `tel:${tel}` : null, icon: import_lucide_react.Phone, label: "Call", disabled: !tel }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Act, { href: tel ? `sms:${tel}` : null, icon: import_lucide_react.MessageCircle, label: "Text", disabled: !tel }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Act, { href: directionsLink(job.address), icon: import_lucide_react.MapPin, label: "Directions", disabled: !job.address }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Act, { onClick: () => setTab("files"), icon: import_lucide_react.Upload, label: "Upload" })
         ] });
-      })()
-    ] }),
+      })() }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, margin: "10px 0 12px", flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: job.claimType === "Insurance" ? "blue" : "gray", children: job.claimType === "Unknown" ? "Claim TBD" : job.claimType }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "slate", children: job.state }),
+        job.value > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: money(job.value) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: job.assignee })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "select",
+        {
+          value: job.stageId,
+          onChange: (e) => onMoveStage(job.id, e.target.value),
+          style: { ...selStyle, width: "auto", padding: "8px 10px", fontSize: 13, fontWeight: 700 },
+          children: stages.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: s.id, children: s.name }, s.id))
+        }
+      ) })
+    ] }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: activityOpen, onClose: () => setActivityOpen(false), title: "Activity", children: (() => {
+      const mine = (activity || []).filter((a) => a.jobId === job.id);
+      if (!mine.length) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "Nothing logged on this job yet." });
+      return mine.map((a, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "10px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub }, children: [
+          a.at,
+          " \xB7 ",
+          a.by
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, marginTop: 2, lineHeight: 1.5 }, children: a.text })
+      ] }, a.id || i2));
+    })() }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
       Sheet,
       {
@@ -72302,82 +72337,181 @@ function JobDetail({
       }
     ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: 16 }, children: [
-      tab === "overview" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        TabOverview,
-        {
-          job,
-          juris,
-          mut,
-          toast: toast2,
-          reviewSettings,
-          brand: brand2,
-          currentUser,
-          onLog,
-          leadSources,
-          activity
-        }
-      ),
-      tab === "checklist" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChecklist, { job, mut, toast: toast2 }),
-      tab === "ventilation" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabVentilation, { job, mut, toast: toast2 }),
-      tab === "measure" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabMeasure, { job, mut, toast: toast2 }),
-      tab === "materials" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabMaterials, { job, mut, toast: toast2 }),
-      tab === "estimate" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        TabEstimate,
-        {
-          job,
-          brand: brand2,
-          mut,
-          toast: toast2,
-          estimateTemplates,
-          setEstimateTemplates
-        }
-      ),
-      tab === "contract" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabContract, { job, brand: brand2, setBrand, mut, toast: toast2 }),
-      tab === "report" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabReport, { job, brand: brand2, juris }),
-      tab === "messages" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        TabMessages,
-        {
-          job,
-          mut,
-          toast: toast2,
-          brand: brand2,
-          templates,
-          crews,
-          integrations,
-          currentUser,
-          users
-        }
-      ),
-      tab === "photos" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPhotos, { job, mut, toast: toast2, ccToken }),
-      tab === "financials" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancials, { job, mut, toast: toast2, isAdmin, currentUser, brand: brand2 }),
-      tab === "payments" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPayments, { job, mut, toast: toast2 }),
-      tab === "invoice" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabInvoice, { job, brand: brand2, mut, toast: toast2 }),
-      tab === "workorder" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        TabWorkOrder,
-        {
-          job,
-          mut,
-          toast: toast2,
-          brand: brand2,
-          crews,
-          templates,
-          currentUser,
-          users
-        }
-      ),
-      tab === "tasks" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabTasks, { job, mut, toast: toast2 }),
-      tab === "files" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFiles, { job, mut, toast: toast2 }),
-      tab === "portal" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        TabPortal,
-        {
-          job,
-          brand: brand2,
-          mut,
-          toast: toast2,
-          currentUser,
-          stageLabel: (stages.find((stage2) => stage2.id === job.stageId) || {}).name || ""
-        }
-      )
+      (() => {
+        const allowed = new Set(visibleTabs.map(([id]) => id));
+        const render = (id) => {
+          switch (id) {
+            case "overview":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                TabOverview,
+                {
+                  job,
+                  juris,
+                  mut,
+                  toast: toast2,
+                  reviewSettings,
+                  brand: brand2,
+                  currentUser,
+                  onLog,
+                  leadSources,
+                  activity
+                }
+              );
+            case "checklist":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChecklist, { job, mut, toast: toast2 });
+            case "ventilation":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabVentilation, { job, mut, toast: toast2 });
+            case "measure":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabMeasure, { job, mut, toast: toast2 });
+            case "materials":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabMaterials, { job, mut, toast: toast2 });
+            case "estimate":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                TabEstimate,
+                {
+                  job,
+                  brand: brand2,
+                  mut,
+                  toast: toast2,
+                  estimateTemplates,
+                  setEstimateTemplates
+                }
+              );
+            case "contract":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabContract, { job, brand: brand2, setBrand, mut, toast: toast2 });
+            case "report":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabReport, { job, brand: brand2, juris });
+            case "messages":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                TabMessages,
+                {
+                  job,
+                  mut,
+                  toast: toast2,
+                  brand: brand2,
+                  templates,
+                  crews,
+                  integrations,
+                  currentUser,
+                  users
+                }
+              );
+            case "photos":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPhotos, { job, mut, toast: toast2, ccToken });
+            case "financials":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancials, { job, mut, toast: toast2, isAdmin, currentUser, brand: brand2 });
+            case "payments":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPayments, { job, mut, toast: toast2 });
+            case "invoice":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabInvoice, { job, brand: brand2, mut, toast: toast2 });
+            case "workorder":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                TabWorkOrder,
+                {
+                  job,
+                  mut,
+                  toast: toast2,
+                  brand: brand2,
+                  crews,
+                  templates,
+                  currentUser,
+                  users
+                }
+              );
+            case "tasks":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabTasks, { job, mut, toast: toast2 });
+            case "files":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFiles, { job, mut, toast: toast2 });
+            case "portal":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                TabPortal,
+                {
+                  job,
+                  brand: brand2,
+                  mut,
+                  toast: toast2,
+                  currentUser,
+                  stageLabel: (stages.find((stage2) => stage2.id === job.stageId) || {}).name || ""
+                }
+              );
+            default:
+              return null;
+          }
+        };
+        return JOB_SECTIONS.filter(([id]) => allowed.has(id)).map(([id, label, Icon]) => {
+          const isOpen = !!open[id];
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+            border: `1px solid ${S.line}`,
+            borderRadius: 12,
+            marginBottom: 10,
+            background: "#fff",
+            overflow: "hidden"
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setOpen((o) => ({ ...o, [id]: !o[id] })), style: {
+              display: "flex",
+              alignItems: "center",
+              gap: 11,
+              width: "100%",
+              border: "none",
+              background: isOpen ? "#fff" : S.bg,
+              cursor: "pointer",
+              textAlign: "left",
+              padding: "14px 15px",
+              fontFamily: "inherit"
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, { size: 17, color: T.accent }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { flex: 1, fontSize: 15.5, fontWeight: 800, color: S.ink }, children: label }),
+              isOpen ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronUp, { size: 17, color: S.sub }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronDown, { size: 17, color: S.sub })
+            ] }),
+            isOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "2px 13px 15px", borderTop: `1px solid ${S.line}` }, children: render(id) })
+          ] }, id);
+        });
+      })(),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Created by", v: job.assignee || "\u2014" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Job type", v: job.claimType || "\u2014" }),
+        job.companyCam ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: `1px solid ${S.line}`, marginTop: 10, paddingTop: 10 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Connected to", v: "CompanyCam" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Project", v: job.companyCam.name || job.name })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            "a",
+            {
+              href: job.companyCam.url,
+              target: "_blank",
+              rel: "noreferrer",
+              style: { display: "flex", alignItems: "center", gap: 7, marginTop: 10, color: T.accent, fontWeight: 700, fontSize: 13.5, textDecoration: "none" },
+              children: [
+                "View project in CC ",
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ExternalLink, { size: 14 })
+              ]
+            }
+          )
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { borderTop: `1px solid ${S.line}`, marginTop: 10, paddingTop: 10, fontSize: 12.5, color: S.sub }, children: "Not connected to CompanyCam. Open the Photos section to create or link a project." })
+      ] }),
+      isAdmin && onDelete && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 12, marginTop: 14, padding: "0 4px" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
+          setDelTyped("");
+          setDelOpen(true);
+        }, style: {
+          border: "none",
+          background: "none",
+          cursor: "pointer",
+          color: "#B3261E",
+          fontSize: 14.5,
+          fontWeight: 700,
+          display: "flex",
+          alignItems: "center",
+          gap: 7,
+          padding: 0,
+          fontFamily: "inherit"
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 17 }),
+          " Delete job"
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub, fontStyle: "italic", lineHeight: 1.4 }, children: "Removes every note, photo, estimate and message on it." })
+      ] })
     ] })
   ] });
 }
