@@ -68495,6 +68495,21 @@ var STRUCTURES = [
     blurb: "Rate % of total contract value, regardless of job cost."
   }
 ];
+function jobReps(job) {
+  const list = Array.isArray(job && job.reps) ? job.reps.filter((r) => r && r.name) : [];
+  if (list.length) {
+    return list.map((r) => ({ name: r.name, split: Number(r.split) || 0 }));
+  }
+  return job && job.assignee ? [{ name: job.assignee, split: 100 }] : [];
+}
+function repSplitTotal(job) {
+  return jobReps(job).reduce((a, r) => a + (Number(r.split) || 0), 0);
+}
+function repSplitValid(job) {
+  const reps = jobReps(job);
+  if (!reps.length) return true;
+  return Math.abs(repSplitTotal(job) - 100) < 0.01;
+}
 function computeCapOut(job) {
   const { materials, labor, other, cogs } = computeFin(job.fin);
   const contract = job.contract.price || estimateTotal(job.estimate) || job.value || 0;
@@ -68534,6 +68549,13 @@ function computeCapOut(job) {
     ...(job.fin.reimbursements || []).filter((r) => r.status === "Needs paid")
   ];
   const needsPaidTotal = needsPaid.reduce((s, l) => s + num(l.amt), 0);
+  const reps = jobReps(job);
+  const splitsOk = repSplitValid(job);
+  const repShares = reps.map((r) => ({
+    name: r.name,
+    split: r.split,
+    amount: commission * ((Number(r.split) || 0) / 100)
+  }));
   return {
     contract,
     materials,
@@ -68549,6 +68571,10 @@ function computeCapOut(job) {
     overheadPct,
     commission,
     netCompany,
+    reps,
+    repShares,
+    splitsOk,
+    splitTotal: repSplitTotal(job),
     repPctGross: gross > 0 ? commission / gross * 100 : 0,
     coPctGross: gross > 0 ? netCompany / gross * 100 : 0,
     repPctJob: contract ? commission / contract * 100 : 0,
@@ -70002,7 +70028,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast:
   const [range, setRange] = (0, import_react.useState)("all");
   const [tab, setTab] = (0, import_react.useState)("summary");
   const scoped = (0, import_react.useMemo)(
-    () => scope === "company" ? jobs : jobs.filter((j) => j.assignee === scope),
+    () => scope === "company" ? jobs : jobs.filter((j) => jobReps(j).some((r) => r.name === scope)),
     [jobs, scope]
   );
   const stat = (0, import_react.useMemo)(() => {
@@ -70049,14 +70075,17 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast:
     };
   }, [scoped]);
   const reps = (0, import_react.useMemo)(() => users.filter((u) => u.role !== "crew").map((u) => {
-    const mine = jobs.filter((j) => j.assignee === u.name);
+    const mine = jobs.filter((j) => jobReps(j).some((r) => r.name === u.name));
     const won = mine.filter((j) => WON_STAGES.includes(j.stageId));
     const lost = mine.filter((j) => j.stageId === "s11");
     const caps = won.map((j) => computeCapOut(j));
     const decided = won.length + lost.length;
     const revenue = caps.reduce((x, c) => x + c.contract, 0);
     const gross = caps.reduce((x, c) => x + c.gross, 0);
-    const commission = caps.reduce((x, c) => x + c.commission, 0);
+    const commission = caps.reduce((x, c) => {
+      const share = (c.repShares || []).find((r) => r.name === u.name);
+      return x + (share ? share.amount : c.commission);
+    }, 0);
     const reimb = caps.reduce((x, c) => x + c.reimbTotal, 0);
     return {
       name: u.name,
@@ -72354,7 +72383,9 @@ function JobDetail({
                   currentUser,
                   onLog,
                   leadSources,
-                  activity
+                  activity,
+                  users,
+                  isAdmin
                 }
               );
             case "checklist":
@@ -72516,7 +72547,7 @@ function JobDetail({
   ] });
 }
 function TabOverview({ job, juris, mut, toast: toast2, reviewSettings, brand: brand2, currentUser = { name: "Team" }, onLog = () => {
-}, leadSources = LEAD_SOURCES, activity = [] }) {
+}, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false }) {
   const notes = job.notes || [];
   const [noteTxt, setNoteTxt] = (0, import_react.useState)("");
   const [noteVisible, setNoteVisible] = (0, import_react.useState)(false);
@@ -72593,6 +72624,79 @@ function TabOverview({ job, juris, mut, toast: toast2, reviewSettings, brand: br
           }
         ) })
       ] }),
+      (() => {
+        const reps = jobReps(job);
+        const total = repSplitTotal(job);
+        const valid = repSplitValid(job);
+        const roster = (users || []).filter((u) => u && u.name && u.active !== false);
+        const setReps = (next) => mut((j) => ({
+          ...j,
+          reps: next,
+          /* assignee stays in step so the board, portal and existing
+             reports keep working without knowing about splits. */
+          assignee: next.length ? next[0].name : j.assignee
+        }));
+        const addRep = (name) => {
+          if (!name || reps.some((r) => r.name === name)) return;
+          const next = reps.length === 1 ? [{ ...reps[0], split: 50 }, { name, split: 50 }] : [...reps, { name, split: 0 }];
+          setReps(next);
+          onLog({ kind: "lead", jobId: job.id, jobName: job.name, text: `added ${name} to ${job.name}` });
+        };
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 14 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 600, color: S.ink, marginBottom: 6 }, children: "Sales team" }),
+          reps.map((r, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 7 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+              "select",
+              {
+                style: { ...selStyle, flex: 1, minHeight: 42 },
+                value: r.name,
+                onChange: (e) => {
+                  const nm = e.target.value;
+                  const next = reps.map((x, k) => k === i2 ? { ...x, name: nm } : x);
+                  setReps(next);
+                  onLog({ kind: "lead", jobId: job.id, jobName: job.name, text: `changed rep on ${job.name} to ${nm}` });
+                },
+                children: [
+                  !roster.some((u) => u.name === r.name) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: r.name, children: r.name }),
+                  roster.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: u.name, children: u.name }, u.id))
+                ]
+              }
+            ),
+            reps.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "input",
+                {
+                  style: { ...inputStyle, width: 74, textAlign: "right", minHeight: 42 },
+                  inputMode: "decimal",
+                  value: r.split,
+                  onChange: (e) => setReps(reps.map((x, k) => k === i2 ? { ...x, split: e.target.value } : x))
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.sub }, children: "%" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "aria-label": `Remove ${r.name}`, onClick: () => {
+                const next = reps.filter((_, k) => k !== i2);
+                setReps(next.length === 1 ? [{ ...next[0], split: 100 }] : next);
+              }, style: { border: "none", background: "none", cursor: "pointer", color: "#B42318", lineHeight: 0 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15 }) })
+            ] }),
+            reps.length === 1 && i2 === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub, whiteSpace: "nowrap" }, children: "100%" })
+          ] }, r.name + i2)),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: { ...selStyle, minHeight: 42 }, value: "", onChange: (e) => {
+            addRep(e.target.value);
+            e.target.value = "";
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Add another rep\u2026" }),
+            roster.filter((u) => !reps.some((r) => r.name === u.name)).map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: u.name, children: u.name }, u.id))
+          ] }),
+          reps.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 8 }, children: [
+            valid ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: "#177245", fontWeight: 600 }, children: [
+              "Splits total 100% \u2014 commission divides ",
+              reps.map((r) => `${r.split}%`).join(" / "),
+              "."
+            ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: `Splits total ${total}%, not 100%`, tone: "red", children: "The cap-out will not settle until these add up. Nothing is rebalanced automatically \u2014 a share should only change because someone changed it." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }, children: "Each rep takes a share of the same commission pool, so the company pays the same total whether one rep or three worked the job." })
+          ] })
+        ] });
+      })(),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Job type", hint: "Sets which task pathway this job follows.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         PillGroup,
         {
@@ -76395,7 +76499,14 @@ function TabFinancials({ job, mut, toast: toast2, isAdmin, currentUser, brand: b
         ${secRow("REIMBURSEMENTS (out of pocket)")}
         ${totRow("Total Reimbursements", cap.reimbTotal)}
         ${cap.needsPaidTotal > 0 ? `<tr><td style="color:#B3261E"><b>Still owed (Needs paid)</b></td><td class="r" style="color:#B3261E"><b>${money2(cap.needsPaidTotal)}</b></td><td class="muted">Vendors/reps not yet paid</td><td></td></tr>` : ""}
-        <tr class="band payout"><td><b>JACOB PAYOUT</b></td><td class="r"><b>${money2(cap.payout)}</b></td><td class="muted">Commission + reimbursements</td><td></td></tr>
+        ${cap.repShares.length > 1 ? `
+        ${secRow("COMMISSION SPLIT")}
+        ${cap.repShares.map((r) => `<tr><td>${esc(r.name)}</td><td class="r">${money2(r.amount)}</td><td class="muted">${esc(String(r.split))}% of the commission pool</td><td></td></tr>`).join("")}
+        ${!cap.splitsOk ? `<tr><td colspan="4" style="color:#B3261E"><b>Splits total ${esc(String(cap.splitTotal))}%, not 100% \u2014 do not pay from this sheet until corrected.</b></td></tr>` : ""}
+        <tr class="band payout"><td><b>TOTAL PAYOUT</b></td><td class="r"><b>${money2(cap.payout)}</b></td><td class="muted">Commission pool + reimbursements</td><td></td></tr>
+        ` : `
+        <tr class="band payout"><td><b>${esc(cap.repShares[0] && cap.repShares[0].name || "REP")} PAYOUT</b></td><td class="r"><b>${money2(cap.payout)}</b></td><td class="muted">Commission + reimbursements</td><td></td></tr>
+        `}
       </tbody></table>
       <div class="sig">
         <div><div class="sigline"></div><div class="siglbl">Rep signature / date</div></div>
@@ -76590,6 +76701,20 @@ function TabFinancials({ job, mut, toast: toast2, isAdmin, currentUser, brand: b
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Reimbursement total", v: money(cap.reimbTotal) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Total rep payout (commission + reimbursements)", v: money(cap.payout), strong: true })
       ] })
+    ] }),
+    cap.repShares.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: cap.splitsOk ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "100%" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "red", children: [
+        cap.splitTotal,
+        "%"
+      ] }), children: "Commission split" }),
+      !cap.splitsOk && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Splits do not total 100%", tone: "red", children: [
+        "These shares add up to ",
+        cap.splitTotal,
+        "%, so the figures below do not account for the whole commission. Fix the split on the Overview section before paying anyone."
+      ] }),
+      cap.repShares.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: `${r.name} \u2014 ${r.split}%`, v: money(r.amount) }, r.name)),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { borderTop: `1px solid ${S.line}`, marginTop: 8, paddingTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Commission pool", v: money(cap.commission), strong: true }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: "One pool, divided by share \u2014 the company pays the same total regardless of how many reps worked the job." })
     ] }),
     cap.needsPaidTotal > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: money(cap.needsPaidTotal) + " still owed", tone: "red", children: [
       cap.needsPaid.length,

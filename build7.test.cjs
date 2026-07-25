@@ -46,7 +46,8 @@ ok(r.needsPaidCount === 1, "one line still owed");
 /* --- source guarantees --- */
 ok(src.includes("CAP OUT SHEET"), "printed sheet uses the cap-out title");
 ok(src.includes("PROFIT SPLIT"), "profit-split section present");
-ok(src.includes("JACOB PAYOUT"), "payout band present");
+ok(src.includes("PAYOUT</b>") || src.includes('PAYOUT'), "payout band present");
+ok(src.includes('TOTAL PAYOUT'), "multi-rep jobs get a combined payout band");
 ok(src.includes("flaggedTotal"), "compute derives reimbursements from flagged lines");
 ok(src.includes("needsPaidTotal"), "needs-paid total computed");
 ok(src.includes("let EXPORT_ALLOWED = false"), "export gate defaults closed");

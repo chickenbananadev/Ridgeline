@@ -1535,6 +1535,29 @@ const STRUCTURES = [
   { id: "grossContract", label: "Gross Contract", usesRate: true, usesOverhead: false,
     blurb: "Rate % of total contract value, regardless of job cost." },
 ];
+/* Who is on a job, and for what share of the commission.
+   Older jobs carry a single `assignee` string; they normalise to one
+   rep at 100% so nothing has to be migrated. The first entry is the
+   primary rep — the one shown on the board, the portal and reports. */
+function jobReps(job) {
+  const list = Array.isArray(job && job.reps) ? job.reps.filter((r) => r && r.name) : [];
+  if (list.length) {
+    return list.map((r) => ({ name: r.name, split: Number(r.split) || 0 }));
+  }
+  return job && job.assignee ? [{ name: job.assignee, split: 100 }] : [];
+}
+function repSplitTotal(job) {
+  return jobReps(job).reduce((a, r) => a + (Number(r.split) || 0), 0);
+}
+/* Splits are validated rather than silently normalised. Quietly
+   rescaling 60/60 to 50/50 would pay someone a number they never
+   agreed to; the UI flags it and the cap-out refuses to look settled. */
+function repSplitValid(job) {
+  const reps = jobReps(job);
+  if (!reps.length) return true;
+  return Math.abs(repSplitTotal(job) - 100) < 0.01;
+}
+
 function computeCapOut(job) {
   const { materials, labor, other, cogs } = computeFin(job.fin);
   const contract = job.contract.price || estimateTotal(job.estimate) || job.value || 0;
@@ -1578,11 +1601,25 @@ function computeCapOut(job) {
     ...(job.fin.reimbursements || []).filter((r) => r.status === "Needs paid"),
   ];
   const needsPaidTotal = needsPaid.reduce((s, l) => s + num(l.amt), 0);
+  /* Multi-rep jobs split the pool, they do not each earn their own
+     rate on it. That keeps the company's total commission identical
+     whether one rep or three worked the job — the alternative makes
+     cost swing with staffing, which is how a job quietly goes upside
+     down. */
+  const reps = jobReps(job);
+  const splitsOk = repSplitValid(job);
+  const repShares = reps.map((r) => ({
+    name: r.name,
+    split: r.split,
+    amount: commission * ((Number(r.split) || 0) / 100),
+  }));
+
   return {
     contract, materials, labor, other, cogs, gross,
     grossMargin: contract ? (gross / contract) * 100 : 0,
     structure, base, baseLabel, overheadAlloc, overheadPct,
-    commission, netCompany,
+    commission, netCompany, reps, repShares, splitsOk,
+    splitTotal: repSplitTotal(job),
     repPctGross: gross > 0 ? (commission / gross) * 100 : 0,
     coPctGross: gross > 0 ? (netCompany / gross) * 100 : 0,
     repPctJob: contract ? (commission / contract) * 100 : 0,
@@ -2836,7 +2873,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
   const [tab, setTab] = useState("summary");
 
   const scoped = useMemo(
-    () => (scope === "company" ? jobs : jobs.filter((j) => j.assignee === scope)),
+    () => (scope === "company" ? jobs : jobs.filter((j) => jobReps(j).some((r) => r.name === scope))),
     [jobs, scope]);
 
   const stat = useMemo(() => {
@@ -2875,14 +2912,20 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
   }, [scoped]);
 
   const reps = useMemo(() => users.filter((u) => u.role !== "crew").map((u) => {
-    const mine = jobs.filter((j) => j.assignee === u.name);
+    /* A shared job counts for everyone on it, but each rep is credited
+       only their share of the commission — otherwise a 50/50 job would
+       show full commission twice and the company total would double. */
+    const mine = jobs.filter((j) => jobReps(j).some((r) => r.name === u.name));
     const won = mine.filter((j) => WON_STAGES.includes(j.stageId));
     const lost = mine.filter((j) => j.stageId === "s11");
     const caps = won.map((j) => computeCapOut(j));
     const decided = won.length + lost.length;
     const revenue = caps.reduce((x, c) => x + c.contract, 0);
     const gross = caps.reduce((x, c) => x + c.gross, 0);
-    const commission = caps.reduce((x, c) => x + c.commission, 0);
+    const commission = caps.reduce((x, c) => {
+      const share = (c.repShares || []).find((r) => r.name === u.name);
+      return x + (share ? share.amount : c.commission);
+    }, 0);
     const reimb = caps.reduce((x, c) => x + c.reimbTotal, 0);
     return {
       name: u.name, leads: mine.length, won: won.length,
@@ -4735,7 +4778,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           const render = (id) => {
             switch (id) {
               case "overview": return <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand}
-                currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} />;
+                currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} users={users} isAdmin={isAdmin} />;
               case "checklist": return <TabChecklist job={job} mut={mut} toast={toast} />;
               case "ventilation": return <TabVentilation job={job} mut={mut} toast={toast} />;
               case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
@@ -4828,7 +4871,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
 }
 
 /* ---------- Overview ---------- */
-function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [] }) {
+function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false }) {
   const notes = job.notes || [];
   const [noteTxt, setNoteTxt] = useState("");
   const [noteVisible, setNoteVisible] = useState(false);
@@ -4887,6 +4930,96 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
               onChange={(e) => mut((j) => ({ ...j, referredBy: e.target.value }))} />
           </Field>
         </div>
+        {/* Sales team on this job. The first rep is the primary — the
+            name that shows on the board, the portal and reports. Splits
+            divide the commission pool; they are validated rather than
+            auto-balanced, because quietly rescaling someone's number is
+            how a payout dispute starts. */}
+        {(() => {
+          const reps = jobReps(job);
+          const total = repSplitTotal(job);
+          const valid = repSplitValid(job);
+          const roster = (users || []).filter((u) => u && u.name && u.active !== false);
+          const setReps = (next) => mut((j) => ({
+            ...j, reps: next,
+            /* assignee stays in step so the board, portal and existing
+               reports keep working without knowing about splits. */
+            assignee: next.length ? next[0].name : j.assignee,
+          }));
+          const addRep = (name) => {
+            if (!name || reps.some((r) => r.name === name)) return;
+            /* Two reps default to an even split; beyond that the new
+               entry starts at 0 so nobody's agreed share silently moves. */
+            const next = reps.length === 1
+              ? [{ ...reps[0], split: 50 }, { name, split: 50 }]
+              : [...reps, { name, split: 0 }];
+            setReps(next);
+            onLog({ kind: "lead", jobId: job.id, jobName: job.name, text: `added ${name} to ${job.name}` });
+          };
+          return (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: S.ink, marginBottom: 6 }}>Sales team</div>
+              {reps.map((r, i2) => (
+                <div key={r.name + i2} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 7 }}>
+                  <select style={{ ...selStyle, flex: 1, minHeight: 42 }} value={r.name}
+                    onChange={(e) => {
+                      const nm = e.target.value;
+                      const next = reps.map((x, k) => k === i2 ? { ...x, name: nm } : x);
+                      setReps(next);
+                      onLog({ kind: "lead", jobId: job.id, jobName: job.name, text: `changed rep on ${job.name} to ${nm}` });
+                    }}>
+                    {!roster.some((u) => u.name === r.name) && <option value={r.name}>{r.name}</option>}
+                    {roster.map((u) => <option key={u.id} value={u.name}>{u.name}</option>)}
+                  </select>
+                  {reps.length > 1 && (
+                    <>
+                      <input style={{ ...inputStyle, width: 74, textAlign: "right", minHeight: 42 }}
+                        inputMode="decimal" value={r.split}
+                        onChange={(e) => setReps(reps.map((x, k) => k === i2 ? { ...x, split: e.target.value } : x))} />
+                      <span style={{ fontSize: 13, color: S.sub }}>%</span>
+                      <button aria-label={`Remove ${r.name}`} onClick={() => {
+                        const next = reps.filter((_, k) => k !== i2);
+                        setReps(next.length === 1 ? [{ ...next[0], split: 100 }] : next);
+                      }} style={{ border: "none", background: "none", cursor: "pointer", color: "#B42318", lineHeight: 0 }}>
+                        <Trash2 size={15} />
+                      </button>
+                    </>
+                  )}
+                  {reps.length === 1 && i2 === 0 && (
+                    <span style={{ fontSize: 12, color: S.sub, whiteSpace: "nowrap" }}>100%</span>
+                  )}
+                </div>
+              ))}
+              <select style={{ ...selStyle, minHeight: 42 }} value="" onChange={(e) => { addRep(e.target.value); e.target.value = ""; }}>
+                <option value="">Add another rep…</option>
+                {roster.filter((u) => !reps.some((r) => r.name === u.name)).map((u) => (
+                  <option key={u.id} value={u.name}>{u.name}</option>
+                ))}
+              </select>
+              {reps.length > 1 && (
+                <div style={{ marginTop: 8 }}>
+                  {valid ? (
+                    <div style={{ fontSize: 12.5, color: "#177245", fontWeight: 600 }}>
+                      Splits total 100% — commission divides {reps.map((r) => `${r.split}%`).join(" / ")}.
+                    </div>
+                  ) : (
+                    <Callout label={`Splits total ${total}%, not 100%`} tone="red">
+                      The cap-out will not settle until these add up. Nothing is
+                      rebalanced automatically — a share should only change
+                      because someone changed it.
+                    </Callout>
+                  )}
+                  <div style={{ fontSize: 11.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }}>
+                    Each rep takes a share of the same commission pool, so the
+                    company pays the same total whether one rep or three worked
+                    the job.
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         <Field label="Job type" hint="Sets which task pathway this job follows.">
           <PillGroup options={["Retail", "Insurance", "Commercial", "Unknown"]} value={job.claimType}
             onPick={(v) => { mut((j) => ({ ...j, claimType: v })); onLog({ kind: "lead", jobId: job.id, jobName: job.name, text: `set ${job.name} to ${v} path` }); }} />
@@ -8457,7 +8590,14 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
         ${secRow("REIMBURSEMENTS (out of pocket)")}
         ${totRow("Total Reimbursements", cap.reimbTotal)}
         ${cap.needsPaidTotal > 0 ? `<tr><td style="color:#B3261E"><b>Still owed (Needs paid)</b></td><td class="r" style="color:#B3261E"><b>${money2(cap.needsPaidTotal)}</b></td><td class="muted">Vendors/reps not yet paid</td><td></td></tr>` : ""}
-        <tr class="band payout"><td><b>JACOB PAYOUT</b></td><td class="r"><b>${money2(cap.payout)}</b></td><td class="muted">Commission + reimbursements</td><td></td></tr>
+        ${cap.repShares.length > 1 ? `
+        ${secRow("COMMISSION SPLIT")}
+        ${cap.repShares.map((r) => `<tr><td>${esc(r.name)}</td><td class="r">${money2(r.amount)}</td><td class="muted">${esc(String(r.split))}% of the commission pool</td><td></td></tr>`).join("")}
+        ${!cap.splitsOk ? `<tr><td colspan="4" style="color:#B3261E"><b>Splits total ${esc(String(cap.splitTotal))}%, not 100% — do not pay from this sheet until corrected.</b></td></tr>` : ""}
+        <tr class="band payout"><td><b>TOTAL PAYOUT</b></td><td class="r"><b>${money2(cap.payout)}</b></td><td class="muted">Commission pool + reimbursements</td><td></td></tr>
+        ` : `
+        <tr class="band payout"><td><b>${esc((cap.repShares[0] && cap.repShares[0].name) || "REP")} PAYOUT</b></td><td class="r"><b>${money2(cap.payout)}</b></td><td class="muted">Commission + reimbursements</td><td></td></tr>
+        `}
       </tbody></table>
       <div class="sig">
         <div><div class="sigline"></div><div class="siglbl">Rep signature / date</div></div>
@@ -8608,6 +8748,31 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
           <KV k="Total rep payout (commission + reimbursements)" v={money(cap.payout)} strong />
         </div>
       </Card>
+      {cap.repShares.length > 1 && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={cap.splitsOk
+            ? <Chip tone="green">100%</Chip>
+            : <Chip tone="red">{cap.splitTotal}%</Chip>}>Commission split</CardTitle>
+          {!cap.splitsOk && (
+            <Callout label="Splits do not total 100%" tone="red">
+              These shares add up to {cap.splitTotal}%, so the figures below
+              do not account for the whole commission. Fix the split on the
+              Overview section before paying anyone.
+            </Callout>
+          )}
+          {cap.repShares.map((r) => (
+            <KV key={r.name} k={`${r.name} — ${r.split}%`} v={money(r.amount)} />
+          ))}
+          <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 8, paddingTop: 8 }}>
+            <KV k="Commission pool" v={money(cap.commission)} strong />
+          </div>
+          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+            One pool, divided by share — the company pays the same total
+            regardless of how many reps worked the job.
+          </div>
+        </Card>
+      )}
+
       {cap.needsPaidTotal > 0 && (
         <Callout label={money(cap.needsPaidTotal) + " still owed"} tone="red">
           {cap.needsPaid.length} {cap.needsPaid.length === 1 ? "item is" : "items are"} marked
