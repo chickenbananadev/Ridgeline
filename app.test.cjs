@@ -72106,10 +72106,12 @@ var JOB_TABS = [
   ["workorder", "Work order"],
   ["tasks", "Tasks"],
   ["files", "Files"],
-  ["portal", "Portal"]
+  ["portal", "Portal"],
+  ["claim", "Insurance claim"]
 ];
 var JOB_SECTIONS = [
   ["overview", "Overview", import_lucide_react.ClipboardList],
+  ["claim", "Insurance claim", import_lucide_react.Shield],
   ["checklist", "Inspection checklist", import_lucide_react.CheckCircle2],
   ["ventilation", "Ventilation", import_lucide_react.Wrench],
   ["measure", "Measurements", import_lucide_react.Package],
@@ -72390,6 +72392,8 @@ function JobDetail({
                   isAdmin
                 }
               );
+            case "claim":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabClaim, { job, mut, toast: toast2, brand: brand2 });
             case "checklist":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChecklist, { job, mut, toast: toast2 });
             case "ventilation":
@@ -72471,7 +72475,11 @@ function JobDetail({
               return null;
           }
         };
-        return JOB_SECTIONS.filter(([id]) => allowed.has(id)).map(([id, label, Icon]) => {
+        const relevant = JOB_SECTIONS.filter(([id]) => {
+          if (id === "claim") return job.claimType === "Insurance";
+          return allowed.has(id);
+        });
+        return relevant.map(([id, label, Icon]) => {
           const isOpen = !!open[id];
           return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
             border: `1px solid ${S.line}`,
@@ -74640,6 +74648,330 @@ function ventMath(v) {
     needIntakeUnits,
     half
   };
+}
+var CLAIM_STAGES = [
+  ["filed", "Claim filed", "Waiting on the carrier to assign an adjuster"],
+  ["adjuster", "Adjuster pending", "Inspection scheduled or scope under review"],
+  ["scope", "Scope approved", "Carrier issued the scope \u2014 check it line by line"],
+  ["supplement", "Supplement filed", "Submitted with photos and code cites, awaiting a decision"],
+  ["scheduled", "Scheduled", "Approved and on the production calendar"],
+  ["invoiced", "Invoiced", "Completed invoice sent \u2014 depreciation should release"],
+  ["closed", "Closed", "Everything collected"]
+];
+var SUPPLEMENT_STATUS = ["Draft", "Filed", "Approved", "Denied", "Paid"];
+function claimMath(job) {
+  const c = job.claim || {};
+  const ins = job.insurance || {};
+  const n = (x) => num(x);
+  const rcv = n(c.rcv);
+  const acv = n(c.acv);
+  const deductible = n(c.deductible || ins.deductible);
+  const nonRecov = n(c.nonRecoverable);
+  const heldBack = Math.max(0, rcv - acv - deductible);
+  const recoverable = Math.max(0, heldBack - nonRecov);
+  const sups = Array.isArray(c.supplements) ? c.supplements : [];
+  const supFiled = sups.filter((s) => s.status === "Filed").reduce((a, s) => a + n(s.amount), 0);
+  const supApproved = sups.filter((s) => s.status === "Approved" || s.status === "Paid").reduce((a, s) => a + n(s.amount), 0);
+  const supPaid = sups.filter((s) => s.status === "Paid").reduce((a, s) => a + n(s.amount), 0);
+  const supDenied = sups.filter((s) => s.status === "Denied").reduce((a, s) => a + n(s.amount), 0);
+  const acvReceived = n(c.acvReceived);
+  const depReceived = n(c.depReceived);
+  const deductibleCollected = n(c.deductibleCollected);
+  const depOutstanding = Math.max(0, recoverable - depReceived);
+  const supOutstanding = Math.max(0, supApproved - supPaid);
+  const owedByCarrier = depOutstanding + supOutstanding;
+  const claimValue = rcv + supApproved;
+  const collected = acvReceived + depReceived + supPaid + deductibleCollected;
+  const outstanding = Math.max(0, claimValue - collected);
+  const flags = [];
+  if (rcv > 0 && acv > 0 && heldBack === 0 && deductible === 0) {
+    flags.push("No deductible recorded \u2014 confirm it against the carrier's worksheet before invoicing.");
+  }
+  if (nonRecov > 0) {
+    flags.push(`${money(nonRecov)} is non-recoverable depreciation. The carrier will never pay it \u2014 the homeowner covers that gap or the job absorbs it.`);
+  }
+  if (c.stage === "invoiced" && depOutstanding > 0) {
+    flags.push(`${money(depOutstanding)} of depreciation is still outstanding after invoicing. Chase the carrier.`);
+  }
+  if (supFiled > 0) {
+    flags.push(`${money(supFiled)} of supplements are filed and undecided.`);
+  }
+  if (deductible > 0 && deductibleCollected === 0 && (c.stage === "scheduled" || c.stage === "invoiced" || c.stage === "closed")) {
+    flags.push(`The ${money(deductible)} deductible has not been collected. It is the homeowner's to pay \u2014 absorbing or rebating it is fraud exposure.`);
+  }
+  if (supDenied > 0) {
+    flags.push(`${money(supDenied)} of supplements were denied. Re-file with code cites and photos, or write it off deliberately.`);
+  }
+  return {
+    rcv,
+    acv,
+    deductible,
+    nonRecov,
+    heldBack,
+    recoverable,
+    sups,
+    supFiled,
+    supApproved,
+    supPaid,
+    supDenied,
+    acvReceived,
+    depReceived,
+    deductibleCollected,
+    depOutstanding,
+    supOutstanding,
+    owedByCarrier,
+    claimValue,
+    collected,
+    outstanding,
+    flags
+  };
+}
+function TabClaim({ job, mut, toast: toast2, brand: brand2 }) {
+  const c = job.claim || {};
+  const ins = job.insurance || {};
+  const m = claimMath(job);
+  const set = (k) => (v) => mut((j) => ({ ...j, claim: { ...j.claim || {}, [k]: v } }));
+  const setIns = (k) => (v) => mut((j) => ({ ...j, insurance: { ...j.insurance || {}, [k]: v } }));
+  const stageIdx = Math.max(0, CLAIM_STAGES.findIndex(([id]) => id === (c.stage || "filed")));
+  const addSup = () => mut((j) => ({
+    ...j,
+    claim: {
+      ...j.claim || {},
+      supplements: [
+        ...(j.claim || {}).supplements || [],
+        { id: uid("sup"), desc: "", amount: "", status: "Draft", at: nowStamp() }
+      ]
+    }
+  }));
+  const editSup = (id, k, v) => mut((j) => ({
+    ...j,
+    claim: {
+      ...j.claim || {},
+      supplements: ((j.claim || {}).supplements || []).map((s) => s.id === id ? { ...s, [k]: v } : s)
+    }
+  }));
+  const delSup = (id) => mut((j) => ({
+    ...j,
+    claim: {
+      ...j.claim || {},
+      supplements: ((j.claim || {}).supplements || []).filter((s) => s.id !== id)
+    }
+  }));
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { borderLeft: `4px solid ${m.owedByCarrier > 0 ? "#E8B931" : S.line}` }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }, children: "OWED BY CARRIER" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 34, fontWeight: 800, color: m.owedByCarrier > 0 ? "#9A6B00" : S.ink, marginTop: 4, lineHeight: 1.1 }, children: money(m.owedByCarrier) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }, children: "Depreciation releases on the completed invoice; supplements release when the carrier approves them." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 12, borderTop: `1px solid ${S.line}`, paddingTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }, children: "DEPRECIATION" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, color: S.ink, marginTop: 2 }, children: money(m.depOutstanding) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }, children: "SUPPLEMENTS" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, color: S.ink, marginTop: 2 }, children: money(m.supOutstanding) })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { flex: 1 }, pad: 14, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }, children: "ACV RECEIVED" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 19, fontWeight: 800, color: S.ink, marginTop: 3 }, children: money(m.acvReceived) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 2 }, children: [
+          "of ",
+          money(m.acv)
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { flex: 1 }, pad: 14, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }, children: "DEDUCTIBLE" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 19, fontWeight: 800, color: m.deductible > 0 && m.deductibleCollected === 0 ? "#B3261E" : S.ink, marginTop: 3 }, children: money(Math.max(0, m.deductible - m.deductibleCollected)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 2 }, children: m.deductibleCollected > 0 ? `${money(m.deductibleCollected)} collected` : "uncollected" })
+      ] })
+    ] }),
+    m.flags.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: m.flags.length }), children: "Watch list" }),
+      m.flags.map((f, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, padding: "7px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.AlertTriangle, { size: 14, color: "#9A6B00", style: { flexShrink: 0, marginTop: 2 } }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.ink, lineHeight: 1.5 }, children: f })
+      ] }, i2))
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Claim pipeline" }),
+      CLAIM_STAGES.map(([id, label, sub], i2) => {
+        const done = i2 < stageIdx;
+        const current = i2 === stageIdx;
+        const dateKey = `${id}At`;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 11, alignItems: "flex-start", padding: "9px 0" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "button",
+              {
+                "aria-label": `Set stage to ${label}`,
+                onClick: () => {
+                  set("stage")(id);
+                  if (!c[dateKey]) set(dateKey)(todayIso());
+                },
+                style: { border: "none", background: "none", cursor: "pointer", padding: 0, lineHeight: 0 },
+                children: done ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 19, color: "#177245" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Circle, { size: 19, color: current ? T.accent : "#D6D9DE", strokeWidth: current ? 3 : 2 })
+              }
+            ),
+            i2 < CLAIM_STAGES.length - 1 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 2, flex: 1, minHeight: 20, background: done ? "#177245" : S.line, marginTop: 2 } })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0, paddingBottom: 4 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14.5, fontWeight: current ? 800 : 600, color: current ? T.accent : done ? S.ink : S.sub }, children: label }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 1, lineHeight: 1.45 }, children: sub }),
+            c[dateKey] && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 3 }, children: c[dateKey] })
+          ] })
+        ] }, id);
+      })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Carrier & adjuster" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Carrier", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: ins.carrier || "", onChange: (e) => setIns("carrier")(e.target.value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Claim number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: ins.claim || "", onChange: (e) => setIns("claim")(e.target.value) }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Policy number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: ins.policy || "", onChange: (e) => setIns("policy")(e.target.value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date of loss", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: c.dateOfLoss || "", onChange: (e) => set("dateOfLoss")(e.target.value) }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Adjuster", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: ins.adjusterName || "", onChange: (e) => setIns("adjusterName")(e.target.value) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Adjuster phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "tel", value: ins.adjusterPhone || "", onChange: (e) => setIns("adjusterPhone")(e.target.value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Adjuster email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: ins.adjusterEmail || "", onChange: (e) => setIns("adjusterEmail")(e.target.value) }) })
+      ] }),
+      (ins.adjusterPhone || ins.adjusterEmail) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 2 }, children: [
+        ins.adjusterPhone && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `tel:${String(ins.adjusterPhone).replace(/\D/g, "")}`, style: { flex: 1, textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { width: "100%" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Phone, { size: 13 }),
+          " Call adjuster"
+        ] }) }),
+        ins.adjusterEmail && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `mailto:${ins.adjusterEmail}?subject=${encodeURIComponent(`Claim ${ins.claim || ""} \u2014 ${job.address}`)}`, style: { flex: 1, textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { width: "100%" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Mail, { size: 13 }),
+          " Email"
+        ] }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Coverage type", hint: "An ACV policy never releases depreciation \u2014 the gap is the homeowner's.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["RCV", "ACV"], value: ins.coverage || "RCV", onPick: setIns("coverage") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 10, alignItems: "center", padding: "9px 0", fontSize: 13.5, cursor: "pointer" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: !!ins.oLaw,
+            onChange: (e) => setIns("oLaw")(e.target.checked),
+            style: { width: 18, height: 18, accentColor: T.accent }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontWeight: 600 }, children: "Ordinance & Law coverage" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: "Pays for code upgrades the old roof did not have." })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Settlement" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "RCV (total scope)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.rcv || "", onChange: (e) => set("rcv")(e.target.value), placeholder: "0.00" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "ACV (first cheque)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.acv || "", onChange: (e) => set("acv")(e.target.value), placeholder: "0.00" }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deductible", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.deductible || ins.deductible || "", onChange: (e) => set("deductible")(e.target.value), placeholder: "0.00" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Non-recoverable", hint: "Never paid.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.nonRecoverable || "", onChange: (e) => set("nonRecoverable")(e.target.value), placeholder: "0.00" }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.soft, borderRadius: 10, padding: "11px 13px", marginTop: 4 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Carrier holds back", v: money(m.heldBack) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Recoverable depreciation", v: money(m.recoverable), strong: true }),
+        m.nonRecov > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Non-recoverable", v: `\u2212 ${money(m.nonRecov)}` }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }, children: "Held back is RCV less ACV less the deductible \u2014 derived, not typed, so the two can never disagree." })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, fontWeight: 800 }, children: money(m.supApproved) }), children: "Supplements" }),
+      m.sups.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }, children: "Nothing filed. Check the carrier's scope line by line against the Insurance hub's trigger list before accepting it." }),
+      m.sups.map((sp) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderBottom: `1px solid ${S.line}`, paddingBottom: 10, marginBottom: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: { ...inputStyle, flex: 1, padding: "9px 11px" },
+              value: sp.desc,
+              placeholder: "e.g. Drip edge, 180 LF \u2014 R905.2.8.5",
+              onChange: (e) => editSup(sp.id, "desc", e.target.value)
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: { ...inputStyle, width: 92, textAlign: "right", padding: "9px 11px" },
+              inputMode: "decimal",
+              value: sp.amount,
+              onChange: (e) => editSup(sp.id, "amount", e.target.value)
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => delSup(sp.id), style: { border: "none", background: "none", cursor: "pointer", lineHeight: 0 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 5, marginTop: 7, flexWrap: "wrap" }, children: SUPPLEMENT_STATUS.map((st) => {
+          const on = (sp.status || "Draft") === st;
+          const tone = st === "Denied" ? "#B3261E" : st === "Approved" || st === "Paid" ? "#177245" : T.accent;
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => editSup(sp.id, "status", st), style: {
+            border: `1.5px solid ${on ? tone : S.line}`,
+            background: on ? st === "Denied" ? "#FDECEA" : st === "Approved" || st === "Paid" ? "#EAF6EE" : T.accentSoft : "#fff",
+            color: on ? tone : S.sub,
+            borderRadius: 8,
+            padding: "5px 11px",
+            fontSize: 12,
+            fontWeight: 800,
+            cursor: "pointer",
+            fontFamily: "inherit"
+          }, children: st }, st);
+        }) })
+      ] }, sp.id)),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { width: "100%" }, onClick: addSup, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+        " Add supplement"
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Money received" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "ACV cheque", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.acvReceived || "", onChange: (e) => set("acvReceived")(e.target.value), placeholder: "0.00" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Depreciation cheque", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.depReceived || "", onChange: (e) => set("depReceived")(e.target.value), placeholder: "0.00" }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deductible collected", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.deductibleCollected || "", onChange: (e) => set("deductibleCollected")(e.target.value), placeholder: "0.00" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.soft, borderRadius: 10, padding: "11px 13px", marginTop: 4 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Claim value (RCV + approved supplements)", v: money(m.claimValue) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Collected", v: money(m.collected) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Still outstanding", v: money(m.outstanding), strong: true })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Mortgage company" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Carriers name the mortgagee on the cheque when there is a loan. It then needs endorsing and often an inspection before funds release \u2014 the most common reason a paid claim still has not funded." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 10, alignItems: "center", padding: "4px 0 10px", fontSize: 13.5, cursor: "pointer" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: !!c.mortgagee,
+            onChange: (e) => set("mortgagee")(e.target.checked),
+            style: { width: 18, height: 18, accentColor: T.accent }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 600 }, children: "Mortgage company is on the cheque" })
+      ] }),
+      c.mortgagee && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Lender", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: c.mortgageeName || "", onChange: (e) => set("mortgageeName")(e.target.value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Endorsement status", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          PillGroup,
+          {
+            options: ["Not sent", "Sent", "Inspection needed", "Released"],
+            value: c.mortgageeStatus || "Not sent",
+            onPick: set("mortgageeStatus")
+          }
+        ) })
+      ] })
+    ] })
+  ] });
 }
 function TabVentilation({ job, mut, toast: toast2 }) {
   const v = job.ventilation || { atticSqFt: "", ratio: "150", exhaustId: "oc-ventsure", exhaustQty: "", intakeId: "soffit-cont", intakeQty: "" };

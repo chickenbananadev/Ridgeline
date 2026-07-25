@@ -4592,7 +4592,7 @@ const JOB_TABS = [
   ["report", "Report"], ["messages", "Messages"],
   ["photos", "Photos"], ["financials", "Financials"],
   ["payments", "Payments"], ["invoice", "Invoice"], ["workorder", "Work order"],
-  ["tasks", "Tasks"], ["files", "Files"], ["portal", "Portal"],
+  ["tasks", "Tasks"], ["files", "Files"], ["portal", "Portal"], ["claim", "Insurance claim"],
 ];
 
 /* Collapsible sections, in the order they are worked. Replaces a
@@ -4602,6 +4602,7 @@ const JOB_TABS = [
    did. */
 const JOB_SECTIONS = [
   ["overview", "Overview", ClipboardList],
+  ["claim", "Insurance claim", Shield],
   ["checklist", "Inspection checklist", CheckCircle2],
   ["ventilation", "Ventilation", Wrench],
   ["measure", "Measurements", Package],
@@ -4787,6 +4788,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
             switch (id) {
               case "overview": return <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand}
                 currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} users={users} isAdmin={isAdmin} />;
+              case "claim": return <TabClaim job={job} mut={mut} toast={toast} brand={brand} />;
               case "checklist": return <TabChecklist job={job} mut={mut} toast={toast} />;
               case "ventilation": return <TabVentilation job={job} mut={mut} toast={toast} />;
               case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
@@ -4810,7 +4812,13 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               default: return null;
             }
           };
-          return JOB_SECTIONS.filter(([id]) => allowed.has(id)).map(([id, label, Icon]) => {
+          /* The claim section is meaningless on a retail job; it appears
+             only where there is actually a carrier involved. */
+          const relevant = JOB_SECTIONS.filter(([id]) => {
+            if (id === "claim") return job.claimType === "Insurance";
+            return allowed.has(id);
+          });
+          return relevant.map(([id, label, Icon]) => {
             const isOpen = !!open[id];
             return (
               <div key={id} style={{
@@ -6933,6 +6941,396 @@ function ventMath(v) {
     totalIn2, upperPct, balanced, meets, shortfall, starved, findEx, findIn,
     needExhaustUnits, needIntakeUnits, half,
   };
+}
+
+/* ==================================================================
+   INSURANCE CLAIM
+
+   The money on an insurance job does not arrive in one piece, and the
+   usual way a claim leaks is that nobody is tracking which piece is
+   still outstanding. The arithmetic this section runs:
+
+     RCV                       total replacement cost the carrier owes
+     − depreciation            held back until the work is done
+     − deductible              the homeowner's, never the contractor's
+     = ACV                     the first cheque
+
+   Recoverable depreciation releases once the completed invoice goes
+   in. Non-recoverable never comes — on an ACV policy that gap is the
+   homeowner's, and it is far better discovered at signing than at
+   cap-out. Approved supplements are owed on top of all of it.
+
+   "Owed by carrier" is therefore: recoverable depreciation not yet
+   received, plus approved supplements not yet received.
+================================================================== */
+const CLAIM_STAGES = [
+  ["filed", "Claim filed", "Waiting on the carrier to assign an adjuster"],
+  ["adjuster", "Adjuster pending", "Inspection scheduled or scope under review"],
+  ["scope", "Scope approved", "Carrier issued the scope — check it line by line"],
+  ["supplement", "Supplement filed", "Submitted with photos and code cites, awaiting a decision"],
+  ["scheduled", "Scheduled", "Approved and on the production calendar"],
+  ["invoiced", "Invoiced", "Completed invoice sent — depreciation should release"],
+  ["closed", "Closed", "Everything collected"],
+];
+const SUPPLEMENT_STATUS = ["Draft", "Filed", "Approved", "Denied", "Paid"];
+
+function claimMath(job) {
+  const c = job.claim || {};
+  const ins = job.insurance || {};
+  const n = (x) => num(x);
+  const rcv = n(c.rcv);
+  const acv = n(c.acv);
+  const deductible = n(c.deductible || ins.deductible);
+  const nonRecov = n(c.nonRecoverable);
+  /* Depreciation is derived, not typed: RCV minus ACV minus the
+     deductible is what the carrier is holding back. Letting someone
+     type it separately guarantees the two disagree eventually. */
+  const heldBack = Math.max(0, rcv - acv - deductible);
+  const recoverable = Math.max(0, heldBack - nonRecov);
+
+  const sups = Array.isArray(c.supplements) ? c.supplements : [];
+  const supFiled = sups.filter((s) => s.status === "Filed").reduce((a, s) => a + n(s.amount), 0);
+  const supApproved = sups.filter((s) => s.status === "Approved" || s.status === "Paid").reduce((a, s) => a + n(s.amount), 0);
+  const supPaid = sups.filter((s) => s.status === "Paid").reduce((a, s) => a + n(s.amount), 0);
+  const supDenied = sups.filter((s) => s.status === "Denied").reduce((a, s) => a + n(s.amount), 0);
+
+  const acvReceived = n(c.acvReceived);
+  const depReceived = n(c.depReceived);
+  const deductibleCollected = n(c.deductibleCollected);
+
+  const depOutstanding = Math.max(0, recoverable - depReceived);
+  const supOutstanding = Math.max(0, supApproved - supPaid);
+  const owedByCarrier = depOutstanding + supOutstanding;
+
+  /* Total job value from the carrier's side: the approved scope plus
+     approved supplements. Compared against the contract elsewhere. */
+  const claimValue = rcv + supApproved;
+  const collected = acvReceived + depReceived + supPaid + deductibleCollected;
+  const outstanding = Math.max(0, claimValue - collected);
+
+  /* Things that quietly cost money. Surfaced rather than buried. */
+  const flags = [];
+  if (rcv > 0 && acv > 0 && heldBack === 0 && deductible === 0) {
+    flags.push("No deductible recorded — confirm it against the carrier's worksheet before invoicing.");
+  }
+  if (nonRecov > 0) {
+    flags.push(`${money(nonRecov)} is non-recoverable depreciation. The carrier will never pay it — the homeowner covers that gap or the job absorbs it.`);
+  }
+  if (c.stage === "invoiced" && depOutstanding > 0) {
+    flags.push(`${money(depOutstanding)} of depreciation is still outstanding after invoicing. Chase the carrier.`);
+  }
+  if (supFiled > 0) {
+    flags.push(`${money(supFiled)} of supplements are filed and undecided.`);
+  }
+  if (deductible > 0 && deductibleCollected === 0 && (c.stage === "scheduled" || c.stage === "invoiced" || c.stage === "closed")) {
+    flags.push(`The ${money(deductible)} deductible has not been collected. It is the homeowner's to pay — absorbing or rebating it is fraud exposure.`);
+  }
+  if (supDenied > 0) {
+    flags.push(`${money(supDenied)} of supplements were denied. Re-file with code cites and photos, or write it off deliberately.`);
+  }
+
+  return {
+    rcv, acv, deductible, nonRecov, heldBack, recoverable,
+    sups, supFiled, supApproved, supPaid, supDenied,
+    acvReceived, depReceived, deductibleCollected,
+    depOutstanding, supOutstanding, owedByCarrier,
+    claimValue, collected, outstanding, flags,
+  };
+}
+
+function TabClaim({ job, mut, toast, brand }) {
+  const c = job.claim || {};
+  const ins = job.insurance || {};
+  const m = claimMath(job);
+  const set = (k) => (v) => mut((j) => ({ ...j, claim: { ...(j.claim || {}), [k]: v } }));
+  const setIns = (k) => (v) => mut((j) => ({ ...j, insurance: { ...(j.insurance || {}), [k]: v } }));
+  const stageIdx = Math.max(0, CLAIM_STAGES.findIndex(([id]) => id === (c.stage || "filed")));
+
+  const addSup = () => mut((j) => ({
+    ...j,
+    claim: {
+      ...(j.claim || {}),
+      supplements: [...((j.claim || {}).supplements || []),
+        { id: uid("sup"), desc: "", amount: "", status: "Draft", at: nowStamp() }],
+    },
+  }));
+  const editSup = (id, k, v) => mut((j) => ({
+    ...j,
+    claim: {
+      ...(j.claim || {}),
+      supplements: ((j.claim || {}).supplements || []).map((s) => s.id === id ? { ...s, [k]: v } : s),
+    },
+  }));
+  const delSup = (id) => mut((j) => ({
+    ...j,
+    claim: {
+      ...(j.claim || {}),
+      supplements: ((j.claim || {}).supplements || []).filter((s) => s.id !== id),
+    },
+  }));
+
+  return (
+    <>
+      {/* Owed by carrier — the number worth opening the job for. */}
+      <Card style={{ borderLeft: `4px solid ${m.owedByCarrier > 0 ? "#E8B931" : S.line}` }}>
+        <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }}>OWED BY CARRIER</div>
+        <div style={{ fontSize: 34, fontWeight: 800, color: m.owedByCarrier > 0 ? "#9A6B00" : S.ink, marginTop: 4, lineHeight: 1.1 }}>
+          {money(m.owedByCarrier)}
+        </div>
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }}>
+          Depreciation releases on the completed invoice; supplements release
+          when the carrier approves them.
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 12, borderTop: `1px solid ${S.line}`, paddingTop: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }}>DEPRECIATION</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: S.ink, marginTop: 2 }}>{money(m.depOutstanding)}</div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }}>SUPPLEMENTS</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: S.ink, marginTop: 2 }}>{money(m.supOutstanding)}</div>
+          </div>
+        </div>
+      </Card>
+
+      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+        <Card style={{ flex: 1 }} pad={14}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }}>ACV RECEIVED</div>
+          <div style={{ fontSize: 19, fontWeight: 800, color: S.ink, marginTop: 3 }}>{money(m.acvReceived)}</div>
+          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2 }}>of {money(m.acv)}</div>
+        </Card>
+        <Card style={{ flex: 1 }} pad={14}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }}>DEDUCTIBLE</div>
+          <div style={{ fontSize: 19, fontWeight: 800, color: m.deductible > 0 && m.deductibleCollected === 0 ? "#B3261E" : S.ink, marginTop: 3 }}>
+            {money(Math.max(0, m.deductible - m.deductibleCollected))}
+          </div>
+          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2 }}>
+            {m.deductibleCollected > 0 ? `${money(m.deductibleCollected)} collected` : "uncollected"}
+          </div>
+        </Card>
+      </div>
+
+      {m.flags.length > 0 && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={<Chip tone="amber">{m.flags.length}</Chip>}>Watch list</CardTitle>
+          {m.flags.map((f, i2) => (
+            <div key={i2} style={{ display: "flex", gap: 8, padding: "7px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }}>
+              <AlertTriangle size={14} color="#9A6B00" style={{ flexShrink: 0, marginTop: 2 }} />
+              <span style={{ fontSize: 13, color: S.ink, lineHeight: 1.5 }}>{f}</span>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* Pipeline — where this claim actually is. */}
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Claim pipeline</CardTitle>
+        {CLAIM_STAGES.map(([id, label, sub], i2) => {
+          const done = i2 < stageIdx;
+          const current = i2 === stageIdx;
+          const dateKey = `${id}At`;
+          return (
+            <div key={id} style={{ display: "flex", gap: 11, alignItems: "flex-start", padding: "9px 0" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+                <button aria-label={`Set stage to ${label}`}
+                  onClick={() => { set("stage")(id); if (!c[dateKey]) set(dateKey)(todayIso()); }}
+                  style={{ border: "none", background: "none", cursor: "pointer", padding: 0, lineHeight: 0 }}>
+                  {done
+                    ? <CheckCircle2 size={19} color="#177245" />
+                    : <Circle size={19} color={current ? T.accent : "#D6D9DE"} strokeWidth={current ? 3 : 2} />}
+                </button>
+                {i2 < CLAIM_STAGES.length - 1 && (
+                  <span style={{ width: 2, flex: 1, minHeight: 20, background: done ? "#177245" : S.line, marginTop: 2 }} />
+                )}
+              </div>
+              <div style={{ flex: 1, minWidth: 0, paddingBottom: 4 }}>
+                <div style={{ fontSize: 14.5, fontWeight: current ? 800 : 600, color: current ? T.accent : done ? S.ink : S.sub }}>
+                  {label}
+                </div>
+                <div style={{ fontSize: 12, color: S.sub, marginTop: 1, lineHeight: 1.45 }}>{sub}</div>
+                {c[dateKey] && <div style={{ fontSize: 11.5, color: S.sub, marginTop: 3 }}>{c[dateKey]}</div>}
+              </div>
+            </div>
+          );
+        })}
+      </Card>
+
+      {/* Carrier and adjuster */}
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Carrier & adjuster</CardTitle>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Carrier">
+            <input style={inputStyle} value={ins.carrier || ""} onChange={(e) => setIns("carrier")(e.target.value)} />
+          </Field>
+          <Field label="Claim number">
+            <input style={inputStyle} value={ins.claim || ""} onChange={(e) => setIns("claim")(e.target.value)} />
+          </Field>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Policy number">
+            <input style={inputStyle} value={ins.policy || ""} onChange={(e) => setIns("policy")(e.target.value)} />
+          </Field>
+          <Field label="Date of loss">
+            <input style={dateInputStyle} type="date" value={c.dateOfLoss || ""} onChange={(e) => set("dateOfLoss")(e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Adjuster">
+          <input style={inputStyle} value={ins.adjusterName || ""} onChange={(e) => setIns("adjusterName")(e.target.value)} />
+        </Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Adjuster phone">
+            <input style={inputStyle} type="tel" value={ins.adjusterPhone || ""} onChange={(e) => setIns("adjusterPhone")(e.target.value)} />
+          </Field>
+          <Field label="Adjuster email">
+            <input style={inputStyle} type="email" value={ins.adjusterEmail || ""} onChange={(e) => setIns("adjusterEmail")(e.target.value)} />
+          </Field>
+        </div>
+        {(ins.adjusterPhone || ins.adjusterEmail) && (
+          <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
+            {ins.adjusterPhone && (
+              <a href={`tel:${String(ins.adjusterPhone).replace(/\D/g, "")}`} style={{ flex: 1, textDecoration: "none" }}>
+                <Btn kind="soft" small style={{ width: "100%" }}><Phone size={13} /> Call adjuster</Btn>
+              </a>
+            )}
+            {ins.adjusterEmail && (
+              <a href={`mailto:${ins.adjusterEmail}?subject=${encodeURIComponent(`Claim ${ins.claim || ""} — ${job.address}`)}`} style={{ flex: 1, textDecoration: "none" }}>
+                <Btn kind="soft" small style={{ width: "100%" }}><Mail size={13} /> Email</Btn>
+              </a>
+            )}
+          </div>
+        )}
+        <Field label="Coverage type" hint="An ACV policy never releases depreciation — the gap is the homeowner's.">
+          <PillGroup options={["RCV", "ACV"]} value={ins.coverage || "RCV"} onPick={setIns("coverage")} />
+        </Field>
+        <label style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0", fontSize: 13.5, cursor: "pointer" }}>
+          <input type="checkbox" checked={!!ins.oLaw} onChange={(e) => setIns("oLaw")(e.target.checked)}
+            style={{ width: 18, height: 18, accentColor: T.accent }} />
+          <span>
+            <span style={{ display: "block", fontWeight: 600 }}>Ordinance &amp; Law coverage</span>
+            <span style={{ fontSize: 11.5, color: S.sub }}>Pays for code upgrades the old roof did not have.</span>
+          </span>
+        </label>
+      </Card>
+
+      {/* The money */}
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Settlement</CardTitle>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="RCV (total scope)">
+            <input style={inputStyle} inputMode="decimal" value={c.rcv || ""} onChange={(e) => set("rcv")(e.target.value)} placeholder="0.00" />
+          </Field>
+          <Field label="ACV (first cheque)">
+            <input style={inputStyle} inputMode="decimal" value={c.acv || ""} onChange={(e) => set("acv")(e.target.value)} placeholder="0.00" />
+          </Field>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Deductible">
+            <input style={inputStyle} inputMode="decimal" value={c.deductible || ins.deductible || ""} onChange={(e) => set("deductible")(e.target.value)} placeholder="0.00" />
+          </Field>
+          <Field label="Non-recoverable" hint="Never paid.">
+            <input style={inputStyle} inputMode="decimal" value={c.nonRecoverable || ""} onChange={(e) => set("nonRecoverable")(e.target.value)} placeholder="0.00" />
+          </Field>
+        </div>
+        <div style={{ background: S.soft, borderRadius: 10, padding: "11px 13px", marginTop: 4 }}>
+          <KV k="Carrier holds back" v={money(m.heldBack)} />
+          <KV k="Recoverable depreciation" v={money(m.recoverable)} strong />
+          {m.nonRecov > 0 && <KV k="Non-recoverable" v={`− ${money(m.nonRecov)}`} />}
+          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }}>
+            Held back is RCV less ACV less the deductible — derived, not typed,
+            so the two can never disagree.
+          </div>
+        </div>
+      </Card>
+
+      {/* Supplements */}
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={<span style={{ fontSize: 13, fontWeight: 800 }}>{money(m.supApproved)}</span>}>Supplements</CardTitle>
+        {m.sups.length === 0 && (
+          <div style={{ fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
+            Nothing filed. Check the carrier's scope line by line against the
+            Insurance hub's trigger list before accepting it.
+          </div>
+        )}
+        {m.sups.map((sp) => (
+          <div key={sp.id} style={{ borderBottom: `1px solid ${S.line}`, paddingBottom: 10, marginBottom: 10 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} value={sp.desc}
+                placeholder="e.g. Drip edge, 180 LF — R905.2.8.5"
+                onChange={(e) => editSup(sp.id, "desc", e.target.value)} />
+              <span style={{ color: S.sub, fontSize: 13 }}>$</span>
+              <input style={{ ...inputStyle, width: 92, textAlign: "right", padding: "9px 11px" }} inputMode="decimal"
+                value={sp.amount} onChange={(e) => editSup(sp.id, "amount", e.target.value)} />
+              <button onClick={() => delSup(sp.id)} style={{ border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}>
+                <Trash2 size={15} color="#B42318" />
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: 5, marginTop: 7, flexWrap: "wrap" }}>
+              {SUPPLEMENT_STATUS.map((st) => {
+                const on = (sp.status || "Draft") === st;
+                const tone = st === "Denied" ? "#B3261E" : st === "Approved" || st === "Paid" ? "#177245" : T.accent;
+                return (
+                  <button key={st} onClick={() => editSup(sp.id, "status", st)} style={{
+                    border: `1.5px solid ${on ? tone : S.line}`,
+                    background: on ? (st === "Denied" ? "#FDECEA" : st === "Approved" || st === "Paid" ? "#EAF6EE" : T.accentSoft) : "#fff",
+                    color: on ? tone : S.sub, borderRadius: 8, padding: "5px 11px",
+                    fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+                  }}>{st}</button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+        <Btn kind="soft" small style={{ width: "100%" }} onClick={addSup}><Plus size={13} /> Add supplement</Btn>
+      </Card>
+
+      {/* What has actually landed */}
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Money received</CardTitle>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="ACV cheque">
+            <input style={inputStyle} inputMode="decimal" value={c.acvReceived || ""} onChange={(e) => set("acvReceived")(e.target.value)} placeholder="0.00" />
+          </Field>
+          <Field label="Depreciation cheque">
+            <input style={inputStyle} inputMode="decimal" value={c.depReceived || ""} onChange={(e) => set("depReceived")(e.target.value)} placeholder="0.00" />
+          </Field>
+        </div>
+        <Field label="Deductible collected">
+          <input style={inputStyle} inputMode="decimal" value={c.deductibleCollected || ""} onChange={(e) => set("deductibleCollected")(e.target.value)} placeholder="0.00" />
+        </Field>
+        <div style={{ background: S.soft, borderRadius: 10, padding: "11px 13px", marginTop: 4 }}>
+          <KV k="Claim value (RCV + approved supplements)" v={money(m.claimValue)} />
+          <KV k="Collected" v={money(m.collected)} />
+          <KV k="Still outstanding" v={money(m.outstanding)} strong />
+        </div>
+      </Card>
+
+      {/* Mortgage company — the most common reason a cheque sits uncashed */}
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Mortgage company</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Carriers name the mortgagee on the cheque when there is a loan. It
+          then needs endorsing and often an inspection before funds release —
+          the most common reason a paid claim still has not funded.
+        </div>
+        <label style={{ display: "flex", gap: 10, alignItems: "center", padding: "4px 0 10px", fontSize: 13.5, cursor: "pointer" }}>
+          <input type="checkbox" checked={!!c.mortgagee} onChange={(e) => set("mortgagee")(e.target.checked)}
+            style={{ width: 18, height: 18, accentColor: T.accent }} />
+          <span style={{ fontWeight: 600 }}>Mortgage company is on the cheque</span>
+        </label>
+        {c.mortgagee && (
+          <>
+            <Field label="Lender">
+              <input style={inputStyle} value={c.mortgageeName || ""} onChange={(e) => set("mortgageeName")(e.target.value)} />
+            </Field>
+            <Field label="Endorsement status">
+              <PillGroup options={["Not sent", "Sent", "Inspection needed", "Released"]}
+                value={c.mortgageeStatus || "Not sent"} onPick={set("mortgageeStatus")} />
+            </Field>
+          </>
+        )}
+      </Card>
+    </>
+  );
 }
 
 function TabVentilation({ job, mut, toast }) {
