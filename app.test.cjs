@@ -69311,10 +69311,13 @@ function Dashboard({
   onLog,
   users = [],
   mutJob,
-  onToggleTask
+  onToggleTask,
+  chatMsgs = [],
+  onSendChat
 }) {
   const [homeBoard, setHomeBoard] = (0, import_react.useState)("calendar");
   const [quick, setQuick] = (0, import_react.useState)(null);
+  const [homeChat, setHomeChat] = (0, import_react.useState)("");
   const [quickJob, setQuickJob] = (0, import_react.useState)("");
   const [quickText, setQuickText] = (0, import_react.useState)("");
   const [quickDue, setQuickDue] = (0, import_react.useState)("");
@@ -69682,6 +69685,65 @@ function Dashboard({
         ]
       }
     ),
+    onSendChat && (() => {
+      const recent = (chatMsgs || []).slice(-4);
+      const AV = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
+      const colorOf = (n) => AV[Math.abs(String(n || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV.length];
+      const initials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
+      const mine = (m) => m.by === userName;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("chat"), children: "Open chat \u2192" }), children: "Team chat" }),
+        recent.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10 }, children: "No messages yet \u2014 say something." }),
+        recent.map((m) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 0" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+            width: 26,
+            height: 26,
+            borderRadius: 99,
+            flexShrink: 0,
+            background: mine(m) ? T.primary : colorOf(m.by),
+            color: "#fff",
+            display: "grid",
+            placeItems: "center",
+            fontSize: 10,
+            fontWeight: 800
+          }, children: initials(m.by) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, fontWeight: 700, color: colorOf(m.by) }, children: [
+              m.by,
+              " ",
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontWeight: 400 }, children: String(m.at || "").slice(11, 16) })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }, children: m.text }),
+            m.reactions && Object.keys(m.reactions).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 4, marginTop: 3 }, children: Object.entries(m.reactions).map(([e2, who]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11, background: S.soft, borderRadius: 99, padding: "1px 6px" }, children: [
+              e2,
+              " ",
+              (who || []).length
+            ] }, e2)) })
+          ] })
+        ] }, m.id)),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 10 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: { ...inputStyle, flex: 1, minHeight: 40 },
+              value: homeChat,
+              placeholder: "Message the team\u2026",
+              onChange: (e) => setHomeChat(e.target.value),
+              onKeyDown: (e) => {
+                if (e.key === "Enter" && homeChat.trim()) {
+                  onSendChat(homeChat.trim());
+                  setHomeChat("");
+                }
+              }
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { disabled: !homeChat.trim(), onClick: () => {
+            onSendChat(homeChat.trim());
+            setHomeChat("");
+          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }) })
+        ] })
+      ] });
+    })(),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 16 }, children: (() => {
       const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
       const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
@@ -78199,8 +78261,11 @@ function ActivityFeed({ activity, currentUser, onOpenJob, onBack }) {
     ] }) }, a.id))
   ] });
 }
+var CHAT_EMOJI = ["\u{1F44D}", "\u2705", "\u{1F525}", "\u{1F440}", "\u{1F64F}", "\u{1F602}", "\u2764\uFE0F", "\u{1F389}", "\u{1F62C}", "\u{1F6A8}"];
 function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }) {
   const [txt, setTxt] = (0, import_react.useState)("");
+  const [reactFor, setReactFor] = (0, import_react.useState)(null);
+  const [emojiOpen, setEmojiOpen] = (0, import_react.useState)(false);
   const [mentionOpen, setMentionOpen] = (0, import_react.useState)(false);
   const [tagOpen, setTagOpen] = (0, import_react.useState)(false);
   const [tagged, setTagged] = (0, import_react.useState)(null);
@@ -78221,6 +78286,20 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
     setTxt("");
     setTagged(null);
     setMentionOpen(false);
+  };
+  const toggleReaction = (msgId, emoji) => {
+    setMsgs((prev) => (prev || []).map((m) => {
+      if (m.id !== msgId) return m;
+      const r = { ...m.reactions || {} };
+      const who = Array.isArray(r[emoji]) ? [...r[emoji]] : [];
+      const at = who.indexOf(me);
+      if (at >= 0) who.splice(at, 1);
+      else who.push(me);
+      if (who.length) r[emoji] = who;
+      else delete r[emoji];
+      return { ...m, reactions: r };
+    }));
+    setReactFor(null);
   };
   const insert = (frag) => {
     setTxt((prev) => {
@@ -78294,8 +78373,72 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
               " \u2014 ",
               j.address
             ] })
-          ] })
-        ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              "aria-label": "React to this message",
+              onClick: () => setReactFor(reactFor === m.id ? null : m.id),
+              style: {
+                border: "none",
+                background: "none",
+                cursor: "pointer",
+                padding: "0 2px",
+                alignSelf: "flex-end",
+                color: "#C7CBD1",
+                flexShrink: 0,
+                lineHeight: 0,
+                marginBottom: 4
+              },
+              children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Smile, { size: 15 })
+            }
+          )
+        ] }),
+        m.reactions && Object.keys(m.reactions).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4, paddingLeft: mine ? 0 : 41, paddingRight: mine ? 41 : 0, justifyContent: mine ? "flex-end" : "flex-start" }, children: Object.entries(m.reactions).map(([emoji, who]) => {
+          const onIt = Array.isArray(who) && who.includes(me);
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            "button",
+            {
+              title: (who || []).join(", "),
+              onClick: () => toggleReaction(m.id, emoji),
+              style: {
+                border: `1px solid ${onIt ? T.accent : S.line}`,
+                background: onIt ? T.accentSoft : "#fff",
+                borderRadius: 999,
+                padding: "2px 8px",
+                fontSize: 12.5,
+                cursor: "pointer",
+                display: "flex",
+                gap: 4,
+                alignItems: "center",
+                fontFamily: "inherit"
+              },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: emoji }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11, fontWeight: 700, color: onIt ? T.accent : S.sub }, children: (who || []).length })
+              ]
+            },
+            emoji
+          );
+        }) }),
+        reactFor === m.id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+          display: "flex",
+          gap: 4,
+          flexWrap: "wrap",
+          marginTop: 6,
+          paddingLeft: mine ? 0 : 41,
+          paddingRight: mine ? 41 : 0,
+          justifyContent: mine ? "flex-end" : "flex-start"
+        }, children: CHAT_EMOJI.map((e2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => toggleReaction(m.id, e2), style: {
+          border: `1px solid ${S.line}`,
+          background: "#fff",
+          borderRadius: 9,
+          width: 34,
+          height: 34,
+          fontSize: 17,
+          cursor: "pointer",
+          lineHeight: 1
+        }, children: e2 }, e2)) })
       ] }, m.id);
     }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
@@ -78313,6 +78456,18 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
         " ",
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setTagged(null), style: { border: "none", background: "none", cursor: "pointer", color: "inherit", fontWeight: 800 }, children: "\xD7" })
       ] }) }),
+      emojiOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }, children: CHAT_EMOJI.map((e2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "button",
+        {
+          onClick: () => {
+            setTxt((v) => v + e2);
+            if (inputRef.current) inputRef.current.focus();
+          },
+          style: { border: `1px solid ${S.line}`, background: "#fff", borderRadius: 9, width: 36, height: 36, fontSize: 18, cursor: "pointer", lineHeight: 1 },
+          children: e2
+        },
+        e2
+      )) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "flex-end" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => {
           setMentionOpen(true);
@@ -78320,6 +78475,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => {
           setTagOpen(true);
         }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Home, { size: 13 }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => setEmojiOpen((v) => !v), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Smile, { size: 14 }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "textarea",
           {
@@ -80786,7 +80942,7 @@ function useDbSync(st) {
         }
         const { data: chatRows } = await db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
         if (alive && chatRows) {
-          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id }));
+          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {} }));
           msgs.forEach((m) => persistedChat.current.add(m.id));
           setChatMsgs(msgs);
         }
@@ -80807,7 +80963,7 @@ function useDbSync(st) {
       const r = payload.new;
       if (persistedChat.current.has(r.id)) return;
       persistedChat.current.add(r.id);
-      setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev : [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id }]);
+      setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev : [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {} }]);
     }).on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_activity" }, (payload) => {
       const r = payload.new;
       if (persistedActivity.current.has(r.id)) return;
@@ -80922,9 +81078,27 @@ function useDbSync(st) {
       by_name: m.by,
       body: m.text,
       mentions: m.mentions || [],
-      job_id: m.jobId || null
+      job_id: m.jobId || null,
+      reactions: m.reactions || {}
     }))).then(({ error }) => {
       if (error) fresh.forEach((m) => persistedChat.current.delete(m.id));
+    });
+  }, [chatMsgs, ready, hydrated]);
+  const reactionSig = (0, import_react.useRef)({});
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db || !ready || !hydrated) return;
+    (chatMsgs || []).forEach((m) => {
+      const sig = JSON.stringify(m.reactions || {});
+      if (reactionSig.current[m.id] === void 0) {
+        reactionSig.current[m.id] = sig;
+        return;
+      }
+      if (reactionSig.current[m.id] === sig) return;
+      reactionSig.current[m.id] = sig;
+      db.from("crm_chat").update({ reactions: m.reactions || {} }).eq("id", m.id).then(() => {
+      }, () => {
+      });
     });
   }, [chatMsgs, ready, hydrated]);
   const packStr = JSON.stringify(st.orgDeps);
@@ -81530,7 +81704,20 @@ function SupremeCRM() {
           onLog: logAct,
           users,
           mutJob,
-          onToggleTask: (jobId, taskId) => mutJob(jobId, (j) => ({ ...j, tasks: j.tasks.map((x) => x.id === taskId ? { ...x, done: !x.done, doneAt: !x.done ? (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ") : null } : x) }))
+          onToggleTask: (jobId, taskId) => mutJob(jobId, (j) => ({ ...j, tasks: j.tasks.map((x) => x.id === taskId ? { ...x, done: !x.done, doneAt: !x.done ? (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ") : null } : x) })),
+          chatMsgs,
+          onSendChat: (text) => {
+            const mentions = (users || []).filter((u) => u && u.name && text.includes(`@${u.name}`)).map((u) => u.name);
+            setChatMsgs((prev) => [...prev || [], {
+              id: uid("cm"),
+              by: userName,
+              at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " "),
+              text,
+              mentions,
+              jobId: null,
+              reactions: {}
+            }]);
+          }
         }
       )
     ] }) : nav === "jobs" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(

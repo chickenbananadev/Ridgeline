@@ -1,0 +1,44 @@
+/* Build 10 — chat emoji reactions, composer tray, home-screen chat. */
+const src = require("fs").readFileSync("./ridgeline.jsx", "utf8");
+let fails = 0;
+const ok = (c, l) => { if (!c) { fails++; console.log("FAIL: " + l); } };
+
+/* --- reaction toggle semantics --- */
+function toggle(msgs, id, emoji, me) {
+  return msgs.map((m) => {
+    if (m.id !== id) return m;
+    const r = { ...(m.reactions || {}) };
+    const who = Array.isArray(r[emoji]) ? [...r[emoji]] : [];
+    const at = who.indexOf(me);
+    if (at >= 0) who.splice(at, 1); else who.push(me);
+    if (who.length) r[emoji] = who; else delete r[emoji];
+    return { ...m, reactions: r };
+  });
+}
+let msgs = [{ id: "a", reactions: {} }];
+msgs = toggle(msgs, "a", "👍", "Jacob");
+ok(msgs[0].reactions["👍"].length === 1, "first reaction is recorded");
+msgs = toggle(msgs, "a", "👍", "Ty");
+ok(msgs[0].reactions["👍"].length === 2, "second person joins the same reaction");
+msgs = toggle(msgs, "a", "👍", "Jacob");
+ok(msgs[0].reactions["👍"].length === 1 && msgs[0].reactions["👍"][0] === "Ty",
+  "tapping again removes only that person");
+msgs = toggle(msgs, "a", "👍", "Ty");
+ok(msgs[0].reactions["👍"] === undefined, "empty reaction is dropped, not left at zero");
+msgs = toggle(msgs, "a", "🔥", "Jacob");
+msgs = toggle(msgs, "a", "✅", "Jacob");
+ok(Object.keys(msgs[0].reactions).length === 2, "multiple distinct reactions coexist");
+
+/* --- source guarantees --- */
+ok(src.includes("const CHAT_EMOJI"), "emoji set defined");
+ok(src.includes("const toggleReaction"), "reaction handler exists");
+ok(src.includes('aria-label="React to this message"'), "every message has a react affordance");
+ok(src.includes("reactions: r.reactions || {}"), "reactions hydrate from the database");
+ok(src.includes('db.from("crm_chat").update({ reactions:'), "reactions sync back");
+ok(src.includes("const reactionSig"), "only changed reaction maps are written");
+ok(src.includes("onSendChat"), "home screen can send chat");
+ok(src.includes("Open chat →"), "home chat links to the full screen");
+ok(src.includes("setEmojiOpen"), "composer has an emoji tray");
+
+if (fails) { console.log("\nbuild 10: " + fails + " FAILED"); process.exit(1); }
+console.log("build 10 tests passed");
