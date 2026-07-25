@@ -69713,7 +69713,7 @@ function Dashboard({
               " ",
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontWeight: 400 }, children: String(m.at || "").slice(11, 16) })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }, children: m.text }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: m.deletedAt ? S.sub : S.ink, fontStyle: m.deletedAt ? "italic" : "normal", lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }, children: m.deletedAt ? "Message deleted" : m.text }),
             m.reactions && Object.keys(m.reactions).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 4, marginTop: 3 }, children: Object.entries(m.reactions).map(([e2, who]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11, background: S.soft, borderRadius: 99, padding: "1px 6px" }, children: [
               e2,
               " ",
@@ -78265,6 +78265,8 @@ var CHAT_EMOJI = ["\u{1F44D}", "\u2705", "\u{1F525}", "\u{1F440}", "\u{1F64F}", 
 function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false }) {
   const [txt, setTxt] = (0, import_react.useState)("");
   const [reactFor, setReactFor] = (0, import_react.useState)(null);
+  const [editing, setEditing] = (0, import_react.useState)(null);
+  const [confirmDel, setConfirmDel] = (0, import_react.useState)(null);
   const [emojiOpen, setEmojiOpen] = (0, import_react.useState)(false);
   const [mentionOpen, setMentionOpen] = (0, import_react.useState)(false);
   const [tagOpen, setTagOpen] = (0, import_react.useState)(false);
@@ -78300,6 +78302,19 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
       return { ...m, reactions: r };
     }));
     setReactFor(null);
+  };
+  const canEdit = (m) => m.by === me && !m.deletedAt;
+  const canDelete = (m) => (m.by === me || currentUser && currentUser.role === "admin") && !m.deletedAt;
+  const saveEdit = () => {
+    if (!editing || !editing.text.trim()) return;
+    const t = editing.text.trim();
+    setMsgs((prev) => (prev || []).map((m) => m.id === editing.id ? { ...m, text: t, editedAt: (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ") } : m));
+    setEditing(null);
+  };
+  const doDelete = () => {
+    if (!confirmDel) return;
+    setMsgs((prev) => (prev || []).map((m) => m.id === confirmDel.id ? { ...m, deletedAt: (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " "), deletedBy: me } : m));
+    setConfirmDel(null);
   };
   const insert = (frag) => {
     setTxt((prev) => {
@@ -78352,8 +78367,35 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
             boxShadow: "0 1px 2px rgba(16,24,40,.04)"
           }, children: [
             !sameAuthor && !mine && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 700, color: avColor, marginBottom: 2 }, children: m.by }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14.5, lineHeight: 1.45 }, children: renderText(m.text, mine) }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10, color: mine ? "rgba(255,255,255,.65)" : "#B4B9C0", marginTop: 3, textAlign: "right" }, children: String(m.at || "").slice(11, 16) }),
+            m.deletedAt ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13.5, lineHeight: 1.45, fontStyle: "italic", color: mine ? "rgba(255,255,255,.6)" : S.sub }, children: [
+              "Message deleted",
+              m.deletedBy && m.deletedBy !== m.by ? ` by ${m.deletedBy}` : ""
+            ] }) : editing && editing.id === m.id ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "textarea",
+                {
+                  autoFocus: true,
+                  style: { ...inputStyle, minHeight: 60, resize: "vertical", color: S.ink },
+                  value: editing.text,
+                  onChange: (e) => setEditing({ ...editing, text: e.target.value }),
+                  onKeyDown: (e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      saveEdit();
+                    }
+                    if (e.key === "Escape") setEditing(null);
+                  }
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 7 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", style: { flex: 1 }, onClick: () => setEditing(null), children: "Cancel" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, style: { flex: 1 }, disabled: !editing.text.trim(), onClick: saveEdit, children: "Save" })
+              ] })
+            ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14.5, lineHeight: 1.45 }, children: renderText(m.text, mine) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 10, color: mine ? "rgba(255,255,255,.65)" : "#B4B9C0", marginTop: 3, textAlign: "right" }, children: [
+              String(m.at || "").slice(11, 16),
+              m.editedAt && !m.deletedAt ? " \xB7 edited" : ""
+            ] }),
             j && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: {
               marginTop: 7,
               border: `1px solid ${mine ? "rgba(255,255,255,.3)" : S.line}`,
@@ -78374,27 +78416,43 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
               j.address
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "button",
-            {
-              "aria-label": "React to this message",
-              onClick: () => setReactFor(reactFor === m.id ? null : m.id),
-              style: {
-                border: "none",
-                background: "none",
-                cursor: "pointer",
-                padding: "0 2px",
-                alignSelf: "flex-end",
-                color: "#C7CBD1",
-                flexShrink: 0,
-                lineHeight: 0,
-                marginBottom: 4
-              },
-              children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Smile, { size: 15 })
-            }
-          )
+          !m.deletedAt && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, alignSelf: "flex-end", marginBottom: 4, flexShrink: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "button",
+              {
+                "aria-label": "React to this message",
+                onClick: () => setReactFor(reactFor === m.id ? null : m.id),
+                style: { border: "none", background: "none", cursor: "pointer", padding: 0, color: "#C7CBD1", lineHeight: 0 },
+                children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Smile, { size: 15 })
+              }
+            ),
+            canEdit(m) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "button",
+              {
+                "aria-label": "Edit this message",
+                onClick: () => {
+                  setReactFor(null);
+                  setEditing({ id: m.id, text: m.text });
+                },
+                style: { border: "none", background: "none", cursor: "pointer", padding: 0, color: "#C7CBD1", lineHeight: 0 },
+                children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Pencil, { size: 13 })
+              }
+            ),
+            canDelete(m) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "button",
+              {
+                "aria-label": "Delete this message",
+                onClick: () => {
+                  setReactFor(null);
+                  setConfirmDel(m);
+                },
+                style: { border: "none", background: "none", cursor: "pointer", padding: 0, color: "#E0A9A4", lineHeight: 0 },
+                children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 13 })
+              }
+            )
+          ] })
         ] }),
-        m.reactions && Object.keys(m.reactions).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4, paddingLeft: mine ? 0 : 41, paddingRight: mine ? 41 : 0, justifyContent: mine ? "flex-end" : "flex-start" }, children: Object.entries(m.reactions).map(([emoji, who]) => {
+        !m.deletedAt && m.reactions && Object.keys(m.reactions).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4, paddingLeft: mine ? 0 : 41, paddingRight: mine ? 41 : 0, justifyContent: mine ? "flex-end" : "flex-start" }, children: Object.entries(m.reactions).map(([emoji, who]) => {
           const onIt = Array.isArray(who) && who.includes(me);
           return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
             "button",
@@ -78507,6 +78565,22 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { onClick: send, disabled: !txt.trim(), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }) })
       ] })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      Sheet,
+      {
+        open: !!confirmDel,
+        onClose: () => setConfirmDel(null),
+        title: "Delete message",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => setConfirmDel(null), children: "Cancel" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 1, background: "#B3261E", borderColor: "#B3261E" }, onClick: doDelete, children: "Delete" })
+        ] }),
+        children: confirmDel && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.5 }, children: "This removes the message for everyone. The thread keeps a placeholder so replies around it still make sense." }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: S.soft, borderRadius: 9, padding: "10px 12px", marginTop: 10, fontSize: 13.5, color: S.ink }, children: confirmDel.text })
+        ] })
+      }
+    ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: mentionOpen, onClose: () => setMentionOpen(false), title: "Mention someone", children: (users || []).filter((u) => u && u.name && u.active !== false && u.name !== me).map((u, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
       insert(`@${u.name}`);
       setMentionOpen(false);
@@ -80984,7 +81058,7 @@ function useDbSync(st) {
         }
         const { data: chatRows } = await db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
         if (alive && chatRows) {
-          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {} }));
+          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, deletedAt: r.deleted_at ? String(r.deleted_at).slice(0, 16).replace("T", " ") : null, deletedBy: r.deleted_by || null }));
           msgs.forEach((m) => persistedChat.current.add(m.id));
           setChatMsgs(msgs);
         }
@@ -81005,7 +81079,7 @@ function useDbSync(st) {
       const r = payload.new;
       if (persistedChat.current.has(r.id)) return;
       persistedChat.current.add(r.id);
-      setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev : [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {} }]);
+      setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev : [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, deletedAt: r.deleted_at ? String(r.deleted_at).slice(0, 16).replace("T", " ") : null, deletedBy: r.deleted_by || null }]);
     }).on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_activity" }, (payload) => {
       const r = payload.new;
       if (persistedActivity.current.has(r.id)) return;
@@ -81139,6 +81213,28 @@ function useDbSync(st) {
       if (reactionSig.current[m.id] === sig) return;
       reactionSig.current[m.id] = sig;
       db.from("crm_chat").update({ reactions: m.reactions || {} }).eq("id", m.id).then(() => {
+      }, () => {
+      });
+    });
+  }, [chatMsgs, ready, hydrated]);
+  const editSig = (0, import_react.useRef)({});
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db || !ready || !hydrated) return;
+    (chatMsgs || []).forEach((m) => {
+      const sig = JSON.stringify([m.text, m.editedAt || null, m.deletedAt || null]);
+      if (editSig.current[m.id] === void 0) {
+        editSig.current[m.id] = sig;
+        return;
+      }
+      if (editSig.current[m.id] === sig) return;
+      editSig.current[m.id] = sig;
+      db.from("crm_chat").update({
+        body: m.text,
+        edited_at: m.editedAt || null,
+        deleted_at: m.deletedAt || null,
+        deleted_by: m.deletedBy || null
+      }).eq("id", m.id).then(() => {
       }, () => {
       });
     });

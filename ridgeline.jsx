@@ -2555,8 +2555,8 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
                   <div style={{ fontSize: 11.5, fontWeight: 700, color: colorOf(m.by) }}>
                     {m.by} <span style={{ color: S.sub, fontWeight: 400 }}>{String(m.at || "").slice(11, 16)}</span>
                   </div>
-                  <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                    {m.text}
+                  <div style={{ fontSize: 13.5, color: m.deletedAt ? S.sub : S.ink, fontStyle: m.deletedAt ? "italic" : "normal", lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                    {m.deletedAt ? "Message deleted" : m.text}
                   </div>
                   {m.reactions && Object.keys(m.reactions).length > 0 && (
                     <div style={{ display: "flex", gap: 4, marginTop: 3 }}>
@@ -10232,6 +10232,8 @@ const CHAT_EMOJI = ["👍", "✅", "🔥", "👀", "🙏", "😂", "❤️", "�
 function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false }) {
   const [txt, setTxt] = useState("");
   const [reactFor, setReactFor] = useState(null);   // message id being reacted to
+  const [editing, setEditing] = useState(null);     // { id, text }
+  const [confirmDel, setConfirmDel] = useState(null); // message being deleted
   const [emojiOpen, setEmojiOpen] = useState(false); // composer emoji tray
   const [mentionOpen, setMentionOpen] = useState(false);
   const [tagOpen, setTagOpen] = useState(false);
@@ -10263,6 +10265,29 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
       return { ...m, reactions: r };
     }));
     setReactFor(null);
+  };
+
+  /* Edit and delete are limited to your own messages; an admin can also
+     remove someone else's, which is the moderation case. Deletes are
+     soft so a thread that was replied to does not develop holes. */
+  const canEdit = (m) => m.by === me && !m.deletedAt;
+  const canDelete = (m) => (m.by === me || (currentUser && currentUser.role === "admin")) && !m.deletedAt;
+
+  const saveEdit = () => {
+    if (!editing || !editing.text.trim()) return;
+    const t = editing.text.trim();
+    setMsgs((prev) => (prev || []).map((m) => m.id === editing.id
+      ? { ...m, text: t, editedAt: new Date().toISOString().slice(0, 16).replace("T", " ") }
+      : m));
+    setEditing(null);
+  };
+
+  const doDelete = () => {
+    if (!confirmDel) return;
+    setMsgs((prev) => (prev || []).map((m) => m.id === confirmDel.id
+      ? { ...m, deletedAt: new Date().toISOString().slice(0, 16).replace("T", " "), deletedBy: me }
+      : m));
+    setConfirmDel(null);
   };
 
   const insert = (frag) => {
@@ -10331,9 +10356,28 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
               {!sameAuthor && !mine && (
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: avColor, marginBottom: 2 }}>{m.by}</div>
               )}
-              <div style={{ fontSize: 14.5, lineHeight: 1.45 }}>{renderText(m.text, mine)}</div>
+              {m.deletedAt ? (
+                <div style={{ fontSize: 13.5, lineHeight: 1.45, fontStyle: "italic", color: mine ? "rgba(255,255,255,.6)" : S.sub }}>
+                  Message deleted{m.deletedBy && m.deletedBy !== m.by ? ` by ${m.deletedBy}` : ""}
+                </div>
+              ) : editing && editing.id === m.id ? (
+                <div>
+                  <textarea autoFocus style={{ ...inputStyle, minHeight: 60, resize: "vertical", color: S.ink }}
+                    value={editing.text} onChange={(e) => setEditing({ ...editing, text: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveEdit(); }
+                      if (e.key === "Escape") setEditing(null);
+                    }} />
+                  <div style={{ display: "flex", gap: 6, marginTop: 7 }}>
+                    <Btn small kind="ghost" style={{ flex: 1 }} onClick={() => setEditing(null)}>Cancel</Btn>
+                    <Btn small style={{ flex: 1 }} disabled={!editing.text.trim()} onClick={saveEdit}>Save</Btn>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: 14.5, lineHeight: 1.45 }}>{renderText(m.text, mine)}</div>
+              )}
               <div style={{ fontSize: 10, color: mine ? "rgba(255,255,255,.65)" : "#B4B9C0", marginTop: 3, textAlign: "right" }}>
-                {String(m.at || "").slice(11, 16)}
+                {String(m.at || "").slice(11, 16)}{m.editedAt && !m.deletedAt ? " · edited" : ""}
               </div>
               {j && (
                 <button onClick={() => onOpenJob(j.id)} style={{
@@ -10346,17 +10390,30 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
                 </button>
               )}
             </div>
-            <button aria-label="React to this message" onClick={() => setReactFor(reactFor === m.id ? null : m.id)}
-              style={{
-                border: "none", background: "none", cursor: "pointer", padding: "0 2px",
-                alignSelf: "flex-end", color: "#C7CBD1", flexShrink: 0, lineHeight: 0, marginBottom: 4,
-              }}>
-              <Smile size={15} />
-            </button>
+            {!m.deletedAt && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, alignSelf: "flex-end", marginBottom: 4, flexShrink: 0 }}>
+                <button aria-label="React to this message" onClick={() => setReactFor(reactFor === m.id ? null : m.id)}
+                  style={{ border: "none", background: "none", cursor: "pointer", padding: 0, color: "#C7CBD1", lineHeight: 0 }}>
+                  <Smile size={15} />
+                </button>
+                {canEdit(m) && (
+                  <button aria-label="Edit this message" onClick={() => { setReactFor(null); setEditing({ id: m.id, text: m.text }); }}
+                    style={{ border: "none", background: "none", cursor: "pointer", padding: 0, color: "#C7CBD1", lineHeight: 0 }}>
+                    <Pencil size={13} />
+                  </button>
+                )}
+                {canDelete(m) && (
+                  <button aria-label="Delete this message" onClick={() => { setReactFor(null); setConfirmDel(m); }}
+                    style={{ border: "none", background: "none", cursor: "pointer", padding: 0, color: "#E0A9A4", lineHeight: 0 }}>
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Reaction pills sit under the bubble, aligned to its side. */}
-          {m.reactions && Object.keys(m.reactions).length > 0 && (
+          {!m.deletedAt && m.reactions && Object.keys(m.reactions).length > 0 && (
             <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4, paddingLeft: mine ? 0 : 41, paddingRight: mine ? 41 : 0, justifyContent: mine ? "flex-end" : "flex-start" }}>
               {Object.entries(m.reactions).map(([emoji, who]) => {
                 const onIt = Array.isArray(who) && who.includes(me);
@@ -10432,6 +10489,26 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
           <Btn onClick={send} disabled={!txt.trim()}><Send size={15} /></Btn>
         </div>
       </div>
+
+      <Sheet open={!!confirmDel} onClose={() => setConfirmDel(null)} title="Delete message"
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setConfirmDel(null)}>Cancel</Btn>
+            <Btn style={{ flex: 1, background: "#B3261E", borderColor: "#B3261E" }} onClick={doDelete}>Delete</Btn>
+          </div>
+        }>
+        {confirmDel && (
+          <div>
+            <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.5 }}>
+              This removes the message for everyone. The thread keeps a
+              placeholder so replies around it still make sense.
+            </div>
+            <div style={{ background: S.soft, borderRadius: 9, padding: "10px 12px", marginTop: 10, fontSize: 13.5, color: S.ink }}>
+              {confirmDel.text}
+            </div>
+          </div>
+        )}
+      </Sheet>
 
       <Sheet open={mentionOpen} onClose={() => setMentionOpen(false)} title="Mention someone">
         {(users || []).filter((u) => u && u.name && u.active !== false && u.name !== me).map((u, i2) => (
@@ -12712,7 +12789,7 @@ function useDbSync(st) {
 
         const { data: chatRows } = await db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
         if (alive && chatRows) {
-          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {} }));
+          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, deletedAt: r.deleted_at ? String(r.deleted_at).slice(0, 16).replace("T", " ") : null, deletedBy: r.deleted_by || null }));
           msgs.forEach((m) => persistedChat.current.add(m.id));
           setChatMsgs(msgs);
         }
@@ -12736,7 +12813,7 @@ function useDbSync(st) {
         if (persistedChat.current.has(r.id)) return;
         persistedChat.current.add(r.id);
         setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev :
-          [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {} }]);
+          [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, deletedAt: r.deleted_at ? String(r.deleted_at).slice(0, 16).replace("T", " ") : null, deletedBy: r.deleted_by || null }]);
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_activity" }, (payload) => {
         const r = payload.new;
@@ -12861,6 +12938,25 @@ function useDbSync(st) {
       reactionSig.current[m.id] = sig;
       db.from("crm_chat").update({ reactions: m.reactions || {} }).eq("id", m.id)
         .then(() => {}, () => {});
+    });
+  }, [chatMsgs, ready, hydrated]);
+
+  /* Edits and soft deletes sync the same way reactions do: a signature
+     per row, so only genuine changes are written. A database without
+     migration 012 fails harmlessly and the change still shows locally. */
+  const editSig = useRef({});
+  useEffect(() => {
+    const db = DB();
+    if (!db || !ready || !hydrated) return;
+    (chatMsgs || []).forEach((m) => {
+      const sig = JSON.stringify([m.text, m.editedAt || null, m.deletedAt || null]);
+      if (editSig.current[m.id] === undefined) { editSig.current[m.id] = sig; return; }
+      if (editSig.current[m.id] === sig) return;
+      editSig.current[m.id] = sig;
+      db.from("crm_chat").update({
+        body: m.text, edited_at: m.editedAt || null,
+        deleted_at: m.deletedAt || null, deleted_by: m.deletedBy || null,
+      }).eq("id", m.id).then(() => {}, () => {});
     });
   }, [chatMsgs, ready, hydrated]);
 
