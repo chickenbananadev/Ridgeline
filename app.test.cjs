@@ -69314,11 +69314,36 @@ function Dashboard({
   onToggleTask
 }) {
   const [homeBoard, setHomeBoard] = (0, import_react.useState)("calendar");
-  const todayIso = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-  const todaysAppts = appointments.filter((ap) => ap.date === todayIso).map((ap) => ({ ap, job: jobs.find((j) => j.id === ap.jobId) })).sort((a, b) => String(a.ap.time || "99").localeCompare(String(b.ap.time || "99")));
-  const todaysCrews = jobs.filter((j) => j.schedDate === todayIso);
-  const overdue = jobs.flatMap((j) => (j.tasks || []).filter((t) => !t.done && t.due && t.due < todayIso).map((t) => ({ job: j, t })));
-  const dueToday = jobs.flatMap((j) => (j.tasks || []).filter((t) => !t.done && t.due === todayIso).map((t) => ({ job: j, t })));
+  const [quick, setQuick] = (0, import_react.useState)(null);
+  const [quickJob, setQuickJob] = (0, import_react.useState)("");
+  const [quickText, setQuickText] = (0, import_react.useState)("");
+  const [quickDue, setQuickDue] = (0, import_react.useState)("");
+  const [quickTime, setQuickTime] = (0, import_react.useState)("");
+  const closeQuick = () => {
+    setQuick(null);
+    setQuickJob("");
+    setQuickText("");
+    setQuickDue("");
+    setQuickTime("");
+  };
+  const saveQuick = () => {
+    if (!quickJob || !quickText.trim()) return;
+    const text = quickText.trim();
+    if (quick === "task") {
+      mutJob(quickJob, (j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: text, done: false, due: quickDue || null, time: quickTime || null }] }));
+    } else if (quick === "call") {
+      mutJob(quickJob, (j) => ({ ...j, notes: [{ id: uid("n"), text: `Call \u2014 ${text}`, at: nowStamp(), by: userName }, ...j.notes || []] }));
+    } else {
+      mutJob(quickJob, (j) => ({ ...j, notes: [{ id: uid("n"), text, at: nowStamp(), by: userName }, ...j.notes || []] }));
+    }
+    toast2 && toast2(quick === "task" ? "Task added" : quick === "call" ? "Call logged" : "Note added");
+    closeQuick();
+  };
+  const todayIsoStr = todayIso();
+  const todaysAppts = appointments.filter((ap) => ap.date === todayIsoStr).map((ap) => ({ ap, job: jobs.find((j) => j.id === ap.jobId) })).sort((a, b) => String(a.ap.time || "99").localeCompare(String(b.ap.time || "99")));
+  const todaysCrews = jobs.filter((j) => j.schedDate === todayIsoStr);
+  const overdue = jobs.flatMap((j) => (j.tasks || []).filter((t) => !t.done && t.due && t.due < todayIsoStr).map((t) => ({ job: j, t })));
+  const dueToday = jobs.flatMap((j) => (j.tasks || []).filter((t) => !t.done && t.due === todayIsoStr).map((t) => ({ job: j, t })));
   const fmtTime = (t) => {
     if (!t) return "";
     const [h, m] = String(t).split(":").map(Number);
@@ -69352,6 +69377,31 @@ function Dashboard({
         brand2.address && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10, color: S.sub, marginTop: 3, lineHeight: 1.35 }, children: String(brand2.address).split(",")[1] ? String(brand2.address).split(",").slice(-2).join(",").trim() : brand2.address })
       ] })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, marginTop: 16 }, children: [
+      ["New lead", import_lucide_react.Plus, () => onNewLead && onNewLead()],
+      ["Note", import_lucide_react.PenLine, () => setQuick("note")],
+      ["Call", import_lucide_react.Phone, () => setQuick("call")],
+      ["Task", import_lucide_react.ClipboardList, () => setQuick("task")]
+    ].map(([label, Icon, fn]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: fn, style: {
+      flex: 1,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: 5,
+      border: `1px solid ${S.line}`,
+      background: "#fff",
+      borderRadius: 12,
+      padding: "11px 0",
+      cursor: "pointer",
+      color: T.accent,
+      fontSize: 11.5,
+      fontWeight: 700,
+      fontFamily: "inherit"
+    }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, { size: 18 }),
+      " ",
+      label
+    ] }, label)) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("calendar"), children: "Calendar \u2192" }), children: "Today" }),
       !todaysAppts.length && !todaysCrews.length && !overdue.length && !dueToday.length && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, paddingBottom: 2 }, children: "Nothing on the books for today. Add an appointment from the calendar, or schedule a roof from a job's Production tab." }),
@@ -69437,7 +69487,7 @@ function Dashboard({
           textAlign: "center",
           flexShrink: 0
         }, children: kind === "overdue" ? "Overdue" : "Due today" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(job.id), style: { flex: 1, minWidth: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(job.id, "tasks"), style: { flex: 1, minWidth: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block", textDecoration: t.done ? "line-through" : "none" }, children: t.label }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11.5, color: S.sub }, children: [
             job.name,
@@ -69597,6 +69647,41 @@ function Dashboard({
         }
       )
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+      Sheet,
+      {
+        open: !!quick,
+        onClose: closeQuick,
+        title: quick === "task" ? "New task" : quick === "call" ? "Log a call" : "Add a note",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: closeQuick, children: "Cancel" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 1 }, disabled: !quickJob || !quickText.trim(), onClick: saveQuick, children: "Save" })
+        ] }),
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Job", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: quickJob, onChange: (e) => setQuickJob(e.target.value), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Select a job\u2026" }),
+            jobs.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: j.id, children: [
+              j.name,
+              " \u2014 ",
+              j.address
+            ] }, j.id))
+          ] }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: quick === "task" ? "What needs doing" : quick === "call" ? "What was said" : "Note", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "textarea",
+            {
+              style: { ...inputStyle, minHeight: 90, resize: "vertical" },
+              value: quickText,
+              onChange: (e) => setQuickText(e.target.value),
+              placeholder: quick === "task" ? "Call adjuster back" : quick === "call" ? "Left a voicemail about the supplement" : "Homeowner prefers texts after 5"
+            }
+          ) }),
+          quick === "task" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Due date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: quickDue, onChange: (e) => setQuickDue(e.target.value) }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "By time", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, minHeight: 44 }, type: "time", value: quickTime, onChange: (e) => setQuickTime(e.target.value) }) })
+          ] })
+        ]
+      }
+    ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 16 }, children: (() => {
       const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
       const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
@@ -70192,6 +70277,13 @@ var CALENDAR_VIEWS = [
   ["issues", "Issues"],
   ["delivery", "Delivery"]
 ];
+function isoLocal(d) {
+  const dt = d instanceof Date ? d : new Date(d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+function todayIso() {
+  return isoLocal(/* @__PURE__ */ new Date());
+}
 function fmtClock(t) {
   if (!t || !String(t).includes(":")) return t || "";
   const [h, m] = String(t).split(":").map(Number);
@@ -71958,9 +72050,13 @@ function JobDetail({
   },
   leadSources = LEAD_SOURCES,
   activity = [],
-  onDelete = null
+  onDelete = null,
+  openTab = null
 }) {
-  const [tab, setTab] = (0, import_react.useState)("overview");
+  const [tab, setTab] = (0, import_react.useState)(openTab || "overview");
+  (0, import_react.useEffect)(() => {
+    if (openTab) setTab(openTab);
+  }, [openTab, job.id]);
   const [delOpen, setDelOpen] = (0, import_react.useState)(false);
   const [delTyped, setDelTyped] = (0, import_react.useState)("");
   const MONEY_TABS = ["estimate", "contract", "financials", "payments", "invoice"];
@@ -73641,13 +73737,13 @@ function warrantyEnd(installDate, years) {
   const d = /* @__PURE__ */ new Date(installDate + "T00:00:00");
   if (isNaN(d)) return null;
   d.setFullYear(d.getFullYear() + Number(years));
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 }
 function WarrantyCard({ job, mut }) {
   const w = job.warranty || {};
   const set = (k, v) => mut((j) => ({ ...j, warranty: { ...j.warranty || {}, [k]: v } }));
   const laborEnd = warrantyEnd(w.installDate, w.laborYears);
-  const expired = laborEnd && laborEnd < (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const expired = laborEnd && laborEnd < todayIso();
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 12 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: laborEnd && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: expired ? "red" : "green", children: expired ? "Labor expired" : `Labor thru ${laborEnd}` }), children: "Warranty" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 12, alignItems: "start" }, children: [
@@ -73688,8 +73784,8 @@ function WarrantyCenter({ jobs, onOpenJob, onBack }) {
   const [q, setQ] = (0, import_react.useState)("");
   const [mfr, setMfr] = (0, import_react.useState)("All");
   const [status, setStatus] = (0, import_react.useState)("All");
-  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-  const soon = new Date(Date.now() + 90 * 864e5).toISOString().slice(0, 10);
+  const today = todayIso();
+  const soon = isoLocal(new Date(Date.now() + 90 * 864e5));
   const rows = jobs.filter((j) => j.warranty && (j.warranty.installDate || j.warranty.mfr)).map((j) => {
     const w = j.warranty;
     const laborEnd = warrantyEnd(w.installDate, w.laborYears);
@@ -73743,8 +73839,8 @@ function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast: toast2, 
     d.setDate(d.getDate() + i);
     return d;
   });
-  const iso = (d) => d.toISOString().slice(0, 10);
-  const today = iso(/* @__PURE__ */ new Date());
+  const iso = (d) => isoLocal(d);
+  const today = todayIso();
   const activeCrews = crews.filter((c) => c.active !== false);
   const cellJobs = (crewId, d) => jobs.filter((j) => j.crewId === crewId && j.schedDate === iso(d));
   const unscheduled = jobs.filter((j) => ["s7", "s8"].includes(j.stageId) ? !j.schedDate || !j.crewId : j.schedDate && !j.crewId);
@@ -76770,7 +76866,7 @@ function TabTasks({ job, mut, toast: toast2 }) {
   const [due, setDue] = (0, import_react.useState)("");
   const [time, setTime] = (0, import_react.useState)("");
   const [suggest, setSuggest] = (0, import_react.useState)(null);
-  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const today = todayIso();
   const openTasks = job.tasks.filter((t) => !t.done);
   const doneTasks = job.tasks.filter((t) => t.done);
   const toggle = (t) => {
@@ -78627,8 +78723,8 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast: toast2 }) {
   const [f, setF] = (0, import_react.useState)({ name: "", cat: DOC_CATEGORIES[0], expires: "" });
   const fileRef = (0, import_react.useRef)(null);
   const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
-  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-  const soon = new Date(Date.now() + 60 * 864e5).toISOString().slice(0, 10);
+  const today = todayIso();
+  const soon = isoLocal(new Date(Date.now() + 60 * 864e5));
   const expiring = docs.filter((d) => d.expires && d.expires <= soon);
   const [viewing, setViewing] = (0, import_react.useState)(null);
   const list = docs.filter((d) => {
@@ -80950,6 +81046,7 @@ function SupremeCRM() {
   const [quickJobId, setQuickJobId] = (0, import_react.useState)(null);
   const [inboxPick, setInboxPick] = (0, import_react.useState)(false);
   const [boardStage, setBoardStage] = (0, import_react.useState)(null);
+  const [jobOpenTab, setJobOpenTab] = (0, import_react.useState)(null);
   const [boardView, setBoardView] = (0, import_react.useState)(() => {
     try {
       return localStorage.getItem("rl_board_view") || "board";
@@ -81328,8 +81425,9 @@ function SupremeCRM() {
   const showMoney = canSeeMoney(liveUser);
   const openJob = openJobId ? jobs.find((j) => j.id === openJobId) : null;
   const quickJob = quickJobId ? jobs.find((j) => j.id === quickJobId) : null;
-  const openJobScreen = (id) => {
+  const openJobScreen = (id, tab = null) => {
     setOpenJobId(id);
+    setJobOpenTab(tab);
     setNav("jobs");
   };
   const backToBoard = () => setOpenJobId(null);
@@ -81398,7 +81496,8 @@ function SupremeCRM() {
         leadSources,
         activity,
         ccToken,
-        onDelete: isAdmin ? deleteJobs : null
+        onDelete: isAdmin ? deleteJobs : null,
+        openTab: jobOpenTab
       }
     ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       liveDb() && jobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { margin: "14px 16px 0", background: "#EAF6EE", border: "1px solid #CDE8D6", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "#177245", lineHeight: 1.5 }, children: "Fresh database \u2014 no demo customers here. Everything you create now saves for real. Have a Roofr export? More \u2192 Import jobs pulls your whole pipeline in." }),

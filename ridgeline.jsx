@@ -2217,16 +2217,35 @@ function Login({ brand, users, onLogin }) {
 function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND,
   appointments = [], apptTypes = [], crews = [], setAppointments, setApptTypes, toast, onQueueMessage, onLog, users = [], mutJob, onToggleTask }) {
   const [homeBoard, setHomeBoard] = useState("calendar");
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const [quick, setQuick] = useState(null);        // "note" | "call" | "task"
+  const [quickJob, setQuickJob] = useState("");
+  const [quickText, setQuickText] = useState("");
+  const [quickDue, setQuickDue] = useState("");
+  const [quickTime, setQuickTime] = useState("");
+  const closeQuick = () => { setQuick(null); setQuickJob(""); setQuickText(""); setQuickDue(""); setQuickTime(""); };
+  const saveQuick = () => {
+    if (!quickJob || !quickText.trim()) return;
+    const text = quickText.trim();
+    if (quick === "task") {
+      mutJob(quickJob, (j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: text, done: false, due: quickDue || null, time: quickTime || null }] }));
+    } else if (quick === "call") {
+      mutJob(quickJob, (j) => ({ ...j, notes: [{ id: uid("n"), text: `Call — ${text}`, at: nowStamp(), by: userName }, ...(j.notes || [])] }));
+    } else {
+      mutJob(quickJob, (j) => ({ ...j, notes: [{ id: uid("n"), text, at: nowStamp(), by: userName }, ...(j.notes || [])] }));
+    }
+    toast && toast(quick === "task" ? "Task added" : quick === "call" ? "Call logged" : "Note added");
+    closeQuick();
+  };
+  const todayIsoStr = todayIso();
   const todaysAppts = appointments
-    .filter((ap) => ap.date === todayIso)
+    .filter((ap) => ap.date === todayIsoStr)
     .map((ap) => ({ ap, job: jobs.find((j) => j.id === ap.jobId) }))
     .sort((a, b) => String(a.ap.time || "99").localeCompare(String(b.ap.time || "99")));
-  const todaysCrews = jobs.filter((j) => j.schedDate === todayIso);
+  const todaysCrews = jobs.filter((j) => j.schedDate === todayIsoStr);
   const overdue = jobs.flatMap((j) =>
-    (j.tasks || []).filter((t) => !t.done && t.due && t.due < todayIso).map((t) => ({ job: j, t })));
+    (j.tasks || []).filter((t) => !t.done && t.due && t.due < todayIsoStr).map((t) => ({ job: j, t })));
   const dueToday = jobs.flatMap((j) =>
-    (j.tasks || []).filter((t) => !t.done && t.due === todayIso).map((t) => ({ job: j, t })));
+    (j.tasks || []).filter((t) => !t.done && t.due === todayIsoStr).map((t) => ({ job: j, t })));
   const fmtTime = (t) => {
     if (!t) return "";
     const [h, m] = String(t).split(":").map(Number);
@@ -2268,6 +2287,26 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
             </div>
           )}
         </div>
+      </div>
+
+      {/* Quick actions — the four things done between appointments. Log a
+          note or a call against a job without hunting for it first. */}
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        {[
+          ["New lead", Plus, () => onNewLead && onNewLead()],
+          ["Note", PenLine, () => setQuick("note")],
+          ["Call", Phone, () => setQuick("call")],
+          ["Task", ClipboardList, () => setQuick("task")],
+        ].map(([label, Icon, fn]) => (
+          <button key={label} onClick={fn} style={{
+            flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
+            border: `1px solid ${S.line}`, background: "#fff", borderRadius: 12,
+            padding: "11px 0", cursor: "pointer", color: T.accent, fontSize: 11.5, fontWeight: 700,
+            fontFamily: "inherit",
+          }}>
+            <Icon size={18} /> {label}
+          </button>
+        ))}
       </div>
 
       {/* Today — the 6am answer: where everyone needs to be, what's overdue.
@@ -2336,7 +2375,7 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
                 border: `1px solid ${kind === "overdue" ? "#F5C6C0" : "#CDE8D6"}`,
                 borderRadius: 8, padding: "5px 0", textAlign: "center", flexShrink: 0,
               }}>{kind === "overdue" ? "Overdue" : "Due today"}</span>
-              <button onClick={() => onOpenJob(job.id)} style={{ flex: 1, minWidth: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0 }}>
+              <button onClick={() => onOpenJob(job.id, "tasks")} style={{ flex: 1, minWidth: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0 }}>
                 <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block", textDecoration: t.done ? "line-through" : "none" }}>{t.label}</span>
                 <span style={{ fontSize: 11.5, color: S.sub }}>{job.name}{kind === "overdue" ? ` · was due ${t.due}` : (t.time ? ` · by ${fmtTime(t.time)}` : "")}</span>
               </button>
@@ -2461,6 +2500,33 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
           )}
         </Card>
       )}
+
+      <Sheet open={!!quick} onClose={closeQuick}
+        title={quick === "task" ? "New task" : quick === "call" ? "Log a call" : "Add a note"}
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={closeQuick}>Cancel</Btn>
+            <Btn style={{ flex: 1 }} disabled={!quickJob || !quickText.trim()} onClick={saveQuick}>Save</Btn>
+          </div>
+        }>
+        <Field label="Job">
+          <select style={selStyle} value={quickJob} onChange={(e) => setQuickJob(e.target.value)}>
+            <option value="">Select a job…</option>
+            {jobs.map((j) => <option key={j.id} value={j.id}>{j.name} — {j.address}</option>)}
+          </select>
+        </Field>
+        <Field label={quick === "task" ? "What needs doing" : quick === "call" ? "What was said" : "Note"}>
+          <textarea style={{ ...inputStyle, minHeight: 90, resize: "vertical" }}
+            value={quickText} onChange={(e) => setQuickText(e.target.value)}
+            placeholder={quick === "task" ? "Call adjuster back" : quick === "call" ? "Left a voicemail about the supplement" : "Homeowner prefers texts after 5"} />
+        </Field>
+        {quick === "task" && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Field label="Due date"><input style={dateInputStyle} type="date" value={quickDue} onChange={(e) => setQuickDue(e.target.value)} /></Field>
+            <Field label="By time"><input style={{ ...inputStyle, minHeight: 44 }} type="time" value={quickTime} onChange={(e) => setQuickTime(e.target.value)} /></Field>
+          </div>
+        )}
+      </Sheet>
 
       {/* Pipeline at a glance — counts and dollars per stage, tap to filter the board */}
       <Card style={{ marginTop: 16 }}>
@@ -3041,6 +3107,17 @@ function SubHeader({ title, onBack, right }) {
 const CALENDAR_VIEWS = [
   ["all", "All"], ["sales", "Sales"], ["production", "Production"], ["issues", "Issues"], ["delivery", "Delivery"],
 ];
+/* Dates in this app are local calendar days, not instants. toISOString
+   converts to UTC, so in a negative UTC offset a local midnight becomes
+   the previous day — which put every dispatch cell one day out and made
+   "today" roll over in the evening. These build the date from local
+   parts instead. */
+function isoLocal(d) {
+  const dt = d instanceof Date ? d : new Date(d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+function todayIso() { return isoLocal(new Date()); }
+
 function fmtClock(t) {
   if (!t || !String(t).includes(":")) return t || "";
   const [h, m] = String(t).split(":").map(Number);
@@ -4429,8 +4506,10 @@ const JOB_TAB_GROUPS = [
 ];
 
 function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [], ccToken = null,
-  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null }) {
-  const [tab, setTab] = useState("overview");
+  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null }) {
+  const [tab, setTab] = useState(openTab || "overview");
+  /* Honour a requested tab when the job is opened from a deep link. */
+  useEffect(() => { if (openTab) setTab(openTab); }, [openTab, job.id]);
   const [delOpen, setDelOpen] = useState(false);
   const [delTyped, setDelTyped] = useState("");
   const MONEY_TABS = ["estimate", "contract", "financials", "payments", "invoice"];
@@ -6000,14 +6079,14 @@ function warrantyEnd(installDate, years) {
   const d = new Date(installDate + "T00:00:00");
   if (isNaN(d)) return null;
   d.setFullYear(d.getFullYear() + Number(years));
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 }
 
 function WarrantyCard({ job, mut }) {
   const w = job.warranty || {};
   const set = (k, v) => mut((j) => ({ ...j, warranty: { ...(j.warranty || {}), [k]: v } }));
   const laborEnd = warrantyEnd(w.installDate, w.laborYears);
-  const expired = laborEnd && laborEnd < new Date().toISOString().slice(0, 10);
+  const expired = laborEnd && laborEnd < todayIso();
   return (
     <Card style={{ marginBottom: 12 }}>
       <CardTitle right={laborEnd && (
@@ -6043,8 +6122,8 @@ function WarrantyCenter({ jobs, onOpenJob, onBack }) {
   const [q, setQ] = useState("");
   const [mfr, setMfr] = useState("All");
   const [status, setStatus] = useState("All");
-  const today = new Date().toISOString().slice(0, 10);
-  const soon = new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10);
+  const today = todayIso();
+  const soon = isoLocal(new Date(Date.now() + 90 * 86400000));
   const rows = jobs
     .filter((j) => j.warranty && (j.warranty.installDate || j.warranty.mfr))
     .map((j) => {
@@ -6105,8 +6184,8 @@ function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded
   });
   const [assigning, setAssigning] = useState(null); // job being scheduled
   const days = [...Array(7)].map((_, i) => { const d = new Date(weekStart); d.setDate(d.getDate() + i); return d; });
-  const iso = (d) => d.toISOString().slice(0, 10);
-  const today = iso(new Date());
+  const iso = (d) => isoLocal(d);
+  const today = todayIso();
   const activeCrews = crews.filter((c) => c.active !== false);
   const cellJobs = (crewId, d) => jobs.filter((j) => j.crewId === crewId && j.schedDate === iso(d));
   const unscheduled = jobs.filter((j) =>
@@ -8742,7 +8821,7 @@ function TabTasks({ job, mut, toast }) {
   const [due, setDue] = useState("");
   const [time, setTime] = useState("");
   const [suggest, setSuggest] = useState(null); // { label } proposed next step
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIso();
   const openTasks = job.tasks.filter((t) => !t.done);
   const doneTasks = job.tasks.filter((t) => t.done);
 
@@ -10512,8 +10591,8 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   const fileRef = useRef(null);
   const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
 
-  const today = new Date().toISOString().slice(0, 10);
-  const soon = new Date(Date.now() + 60 * 864e5).toISOString().slice(0, 10);
+  const today = todayIso();
+  const soon = isoLocal(new Date(Date.now() + 60 * 864e5));
   const expiring = docs.filter((d) => d.expires && d.expires <= soon);
 
   const [viewing, setViewing] = useState(null);
@@ -12734,6 +12813,10 @@ export default function SupremeCRM() {
   const [quickJobId, setQuickJobId] = useState(null);
   const [inboxPick, setInboxPick] = useState(false);
   const [boardStage, setBoardStage] = useState(null);
+  /* Optional tab for deep links — tapping a task on the home screen opens
+     that job's Tasks tab. Declared here, above every early return, so hook
+     order stays stable. */
+  const [jobOpenTab, setJobOpenTab] = useState(null);
   /* Board vs list view lived inside JobBoard, so opening a job unmounted
      it and reset the choice to "board". Lifted here so it persists across
      navigation, and seeded from localStorage so it also survives a reload. */
@@ -13058,7 +13141,7 @@ export default function SupremeCRM() {
 
   const openJob = openJobId ? jobs.find((j) => j.id === openJobId) : null;
   const quickJob = quickJobId ? jobs.find((j) => j.id === quickJobId) : null;
-  const openJobScreen = (id) => { setOpenJobId(id); setNav("jobs"); };
+  const openJobScreen = (id, tab = null) => { setOpenJobId(id); setJobOpenTab(tab); setNav("jobs"); };
   const backToBoard = () => setOpenJobId(null);
 
   const NavBtn = ({ id, icon: Icon, label, badge = 0 }) => {
@@ -13092,7 +13175,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           crews={crews} setCrews={setCrews} templates={templates} integrations={integrations} users={users}
           estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} setBrand={setBrand}
           onLog={logAct} leadSources={leadSources} activity={activity} ccToken={ccToken}
-          onDelete={isAdmin ? deleteJobs : null} />
+          onDelete={isAdmin ? deleteJobs : null} openTab={jobOpenTab} />
       ) : nav === "home" ? (
         <>
           {liveDb() && jobs.length === 0 && (
