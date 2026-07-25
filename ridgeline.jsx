@@ -10229,7 +10229,7 @@ function ActivityFeed({ activity, currentUser, onOpenJob, onBack }) {
    these are the ones a roofing crew actually uses to answer fast. */
 const CHAT_EMOJI = ["👍", "✅", "🔥", "👀", "🙏", "😂", "❤️", "🎉", "😬", "🚨"];
 
-function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }) {
+function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false }) {
   const [txt, setTxt] = useState("");
   const [reactFor, setReactFor] = useState(null);   // message id being reacted to
   const [emojiOpen, setEmojiOpen] = useState(false); // composer emoji tray
@@ -10282,12 +10282,14 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
      screen here, which looked like "sending broke the app". */
   const initials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
   return (
-    <div style={{ padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }}>
-      <SubHeader title="Team chat" onBack={onBack} />
-      <div style={{ fontSize: 12.5, color: S.sub, margin: "10px 0 12px", lineHeight: 1.5 }}>
-        One channel for the whole company. @ someone when a customer calls in for them; tag the job so the thread
-        is one tap away. Messages sync across everyone's devices once the app is wired to the database.
-      </div>
+    <div style={embedded ? { paddingBottom: 8 } : { padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }}>
+      {!embedded && <SubHeader title="Team chat" onBack={onBack} />}
+      {!embedded && (
+        <div style={{ fontSize: 12.5, color: S.sub, margin: "10px 0 12px", lineHeight: 1.5 }}>
+          One channel for the whole company. @ someone when a customer calls in for them; tag the job so the thread
+          is one tap away.
+        </div>
+      )}
       {msgs.length === 0 && (
         <Card><div style={{ fontSize: 14, color: S.sub }}>No messages yet — say something.</div></Card>
       )}
@@ -10391,7 +10393,10 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
         );
       })}
 
-      <div style={{
+      <div style={embedded ? {
+        position: "sticky", bottom: 0, background: "#fff", borderTop: `1px solid ${S.line}`,
+        padding: "10px 0 4px", marginTop: 12,
+      } : {
         position: "fixed", left: 0, right: 0, bottom: 86, background: "#fff",
         borderTop: `1px solid ${S.line}`, padding: "10px 16px",
       }}>
@@ -12366,7 +12371,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
       ["insurance", Shield, "Insurance", "Clients, supplements, code lookup"],
     ]],
     ["Company", [
-      ["chat", MessageCircle, "Team chat", "Talk to the team — @ someone, tag a job"],
+      ["inbox", MessageCircle, "Team chat", "Now in the Inbox — @ someone, tag a job"],
       ["announcements", Megaphone, "Company announcements", "Posted to everyone's home screen"],
       ["team", HardHat, "Team & seats", canManageSeats(currentUser) ? "Add users, roles, logins" : "Who's on the team"],
       ["documents", FileText, "Documents", "Contracts, COIs, licenses, warranties"],
@@ -12465,8 +12470,13 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
   );
 }
 
-function Inbox({ jobs, onOpenJob, onCompose }) {
+function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat }) {
+  /* Team chat and customer messages are both messages, so they live
+     under one Inbox rather than two destinations. Team opens first —
+     it is the one with unread counts attached to the nav badge. */
+  const [pane, setPane] = useState("team");
   const [filter, setFilter] = useState("All");
+  useEffect(() => { if (pane === "team" && onSeenChat) onSeenChat(); }, [pane, chatMsgs && chatMsgs.length]); // eslint-disable-line
   const all = jobs.flatMap((j) => (j.messages || []).map((msg) => ({ job: j, msg })))
     .sort((x, y2) => (y2.msg.at || "").localeCompare(x.msg.at || ""));
   const list = all.filter(({ msg }) => {
@@ -12480,8 +12490,29 @@ function Inbox({ jobs, onOpenJob, onCompose }) {
     <div style={{ padding: "18px 16px 110px", background: S.bg, minHeight: "100vh" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>Inbox</div>
-        <Btn small onClick={onCompose}><Plus size={14} /> New message</Btn>
+        {pane === "customers" && <Btn small onClick={onCompose}><Plus size={14} /> New message</Btn>}
       </div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        {[["team", "Team chat"], ["customers", "Customers"]].map(([id, label]) => (
+          <button key={id} onClick={() => setPane(id)} style={{
+            flex: 1, border: `1.5px solid ${pane === id ? T.accent : S.line}`,
+            background: pane === id ? T.accentSoft : "#fff", color: pane === id ? T.accent : S.ink,
+            borderRadius: 999, padding: "9px 12px", fontSize: 13.5, fontWeight: 800, cursor: "pointer",
+            display: "flex", gap: 6, alignItems: "center", justifyContent: "center",
+          }}>
+            {label}
+            {id === "team" && unreadChat > 0 && (
+              <span style={{ background: "#B3261E", color: "#fff", borderRadius: 99, fontSize: 10.5, fontWeight: 800, padding: "1px 6px" }}>{unreadChat}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {pane === "team" ? (
+        <TeamChat msgs={chatMsgs} setMsgs={setChatMsgs} users={users} jobs={jobs}
+          currentUser={currentUser} onOpenJob={onOpenJob} embedded />
+      ) : (
+      <>
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
         {["All", "Sent", "Queued", "Viewed"].map((fl) => (
           <button key={fl} onClick={() => setFilter(fl)} style={{
@@ -12527,6 +12558,8 @@ function Inbox({ jobs, onOpenJob, onCompose }) {
         "Viewed" tracking needs the email backend — it works by embedding a tiny pixel that fires when the recipient
         opens the message. It arrives with the Gmail integration, not before.
       </div>
+      </>
+      )}
     </div>
   );
 }
@@ -13360,7 +13393,10 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           focusStage={boardStage} onClearFocus={() => setBoardStage(null)}
           view={boardView} setView={setBoardView} />
       ) : nav === "inbox" ? (
-        <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)} />
+        <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)}
+          chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} users={users} currentUser={liveUser}
+          unreadChat={Math.max(0, chatMsgs.length - chatSeenCount)}
+          onSeenChat={() => setChatSeenCount(chatMsgs.length)} />
       ) : nav === "more" ? (
         <MoreMenu brand={brand} onNav={(id) => (id === "password" ? setChangePwOpen(true) : setNav(id))} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
       ) : nav === "insurance" ? (
@@ -13401,9 +13437,12 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "activity" ? (
         <ActivityFeed activity={activity} currentUser={liveUser} onOpenJob={openJobScreen} onBack={() => setNav("more")} />
       ) : nav === "chat" ? (
-        <TeamChat msgs={chatMsgs} setMsgs={setChatMsgs} users={users} jobs={jobs}
-          currentUser={liveUser} onOpenJob={openJobScreen}
-          onBack={() => { setChatSeenCount(chatMsgs.length); setNav("more"); }} />
+        /* Chat lives in the Inbox now. Anything still pointing here —
+           the More menu, an old deep link — lands in the right place. */
+        <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)}
+          chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} users={users} currentUser={liveUser}
+          unreadChat={Math.max(0, chatMsgs.length - chatSeenCount)}
+          onSeenChat={() => setChatSeenCount(chatMsgs.length)} />
       ) : nav === "vendors" ? (
         <VendorManager vendors={vendors} setVendors={setVendors} currentUser={liveUser}
           onBack={() => setNav("more")} toast={toast} />
@@ -13471,7 +13510,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           margin: "0 10px", transform: "translateY(-12px)", boxShadow: "0 6px 16px rgba(27,109,224,.35)",
           flexShrink: 0,
         }}><Plus size={25} /></button>
-        <NavBtn id="inbox" icon={MessageCircle} label="Inbox" />
+        <NavBtn id="inbox" icon={MessageCircle} label="Inbox" badge={Math.max(0, chatMsgs.length - chatSeenCount)} />
         <NavBtn id="more" icon={Menu} label="More" badge={unreadMentions} />
       </div>
 

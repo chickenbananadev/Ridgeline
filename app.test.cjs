@@ -78262,7 +78262,7 @@ function ActivityFeed({ activity, currentUser, onOpenJob, onBack }) {
   ] });
 }
 var CHAT_EMOJI = ["\u{1F44D}", "\u2705", "\u{1F525}", "\u{1F440}", "\u{1F64F}", "\u{1F602}", "\u2764\uFE0F", "\u{1F389}", "\u{1F62C}", "\u{1F6A8}"];
-function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }) {
+function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false }) {
   const [txt, setTxt] = (0, import_react.useState)("");
   const [reactFor, setReactFor] = (0, import_react.useState)(null);
   const [emojiOpen, setEmojiOpen] = (0, import_react.useState)(false);
@@ -78312,9 +78312,9 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
   const renderText = (t, onDark) => String(t || "").split(/(@[A-Za-z][\w'-]*(?: [A-Za-z][\w'-]*)?)/g).map((part, i2) => part && part.startsWith("@") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { style: { color: onDark ? "#9DC4F8" : T.accent }, children: part }, i2) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: part }, i2));
   const jobOf = (id) => (jobs || []).find((j) => j.id === id);
   const initials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Team chat", onBack }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, margin: "10px 0 12px", lineHeight: 1.5 }, children: "One channel for the whole company. @ someone when a customer calls in for them; tag the job so the thread is one tap away. Messages sync across everyone's devices once the app is wired to the database." }),
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: embedded ? { paddingBottom: 8 } : { padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }, children: [
+    !embedded && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Team chat", onBack }),
+    !embedded && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, margin: "10px 0 12px", lineHeight: 1.5 }, children: "One channel for the whole company. @ someone when a customer calls in for them; tag the job so the thread is one tap away." }),
     msgs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub }, children: "No messages yet \u2014 say something." }) }),
     (msgs || []).map((m, mi) => {
       const j = m.jobId ? jobOf(m.jobId) : null;
@@ -78441,7 +78441,14 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack }
         }, children: e2 }, e2)) })
       ] }, m.id);
     }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: embedded ? {
+      position: "sticky",
+      bottom: 0,
+      background: "#fff",
+      borderTop: `1px solid ${S.line}`,
+      padding: "10px 0 4px",
+      marginTop: 12
+    } : {
       position: "fixed",
       left: 0,
       right: 0,
@@ -80642,7 +80649,7 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
       ["insurance", import_lucide_react.Shield, "Insurance", "Clients, supplements, code lookup"]
     ]],
     ["Company", [
-      ["chat", import_lucide_react.MessageCircle, "Team chat", "Talk to the team \u2014 @ someone, tag a job"],
+      ["inbox", import_lucide_react.MessageCircle, "Team chat", "Now in the Inbox \u2014 @ someone, tag a job"],
       ["announcements", import_lucide_react.Megaphone, "Company announcements", "Posted to everyone's home screen"],
       ["team", import_lucide_react.HardHat, "Team & seats", canManageSeats(currentUser) ? "Add users, roles, logins" : "Who's on the team"],
       ["documents", import_lucide_react.FileText, "Documents", "Contracts, COIs, licenses, warranties"],
@@ -80738,8 +80745,12 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%", marginTop: 8 }, onClick: onLogout, children: "Sign out" })
   ] });
 }
-function Inbox({ jobs, onOpenJob, onCompose }) {
+function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat }) {
+  const [pane, setPane] = (0, import_react.useState)("team");
   const [filter, setFilter] = (0, import_react.useState)("All");
+  (0, import_react.useEffect)(() => {
+    if (pane === "team" && onSeenChat) onSeenChat();
+  }, [pane, chatMsgs && chatMsgs.length]);
   const all = jobs.flatMap((j) => (j.messages || []).map((msg) => ({ job: j, msg }))).sort((x, y2) => (y2.msg.at || "").localeCompare(x.msg.at || ""));
   const list = all.filter(({ msg }) => {
     if (filter === "All") return true;
@@ -80751,53 +80762,84 @@ function Inbox({ jobs, onOpenJob, onCompose }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "18px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 24, fontWeight: 800, color: S.ink }, children: "Inbox" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, onClick: onCompose, children: [
+      pane === "customers" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, onClick: onCompose, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }),
         " New message"
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginBottom: 12 }, children: ["All", "Sent", "Queued", "Viewed"].map((fl) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setFilter(fl), style: {
-      border: `1.5px solid ${filter === fl ? T.accent : S.line}`,
-      background: filter === fl ? T.accentSoft : "#fff",
-      color: filter === fl ? T.accent : S.ink,
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, marginBottom: 14 }, children: [["team", "Team chat"], ["customers", "Customers"]].map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setPane(id), style: {
+      flex: 1,
+      border: `1.5px solid ${pane === id ? T.accent : S.line}`,
+      background: pane === id ? T.accentSoft : "#fff",
+      color: pane === id ? T.accent : S.ink,
       borderRadius: 999,
-      padding: "7px 14px",
-      fontSize: 13,
-      fontWeight: 600,
-      cursor: "pointer"
-    }, children: fl }, fl)) }),
-    list.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: all.length === 0 ? "No messages yet. Send one from a job's Messages tab, or start with New message." : "Nothing matches this filter." }) }),
-    list.map(({ job, msg }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 14, style: { marginTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(job.id), style: { border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, width: "100%" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 7, alignItems: "center", minWidth: 0 }, children: [
-          msg.kind === "email" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Mail, { size: 14, color: T.accent }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MessageCircle, { size: 14, color: T.accent }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 700, color: S.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: job.name })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", gap: 5, flexShrink: 0 }, children: [
-          msg.viewed && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Viewed" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: msg.status === "Sent" ? "blue" : "amber", children: msg.status === "Sent" ? "Sent" : "Queued" })
-        ] })
-      ] }),
-      msg.subject && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, marginTop: 5 }, children: msg.subject }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      padding: "9px 12px",
+      fontSize: 13.5,
+      fontWeight: 800,
+      cursor: "pointer",
+      display: "flex",
+      gap: 6,
+      alignItems: "center",
+      justifyContent: "center"
+    }, children: [
+      label,
+      id === "team" && unreadChat > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { background: "#B3261E", color: "#fff", borderRadius: 99, fontSize: 10.5, fontWeight: 800, padding: "1px 6px" }, children: unreadChat })
+    ] }, id)) }),
+    pane === "team" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      TeamChat,
+      {
+        msgs: chatMsgs,
+        setMsgs: setChatMsgs,
+        users,
+        jobs,
+        currentUser,
+        onOpenJob,
+        embedded: true
+      }
+    ) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginBottom: 12 }, children: ["All", "Sent", "Queued", "Viewed"].map((fl) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setFilter(fl), style: {
+        border: `1.5px solid ${filter === fl ? T.accent : S.line}`,
+        background: filter === fl ? T.accentSoft : "#fff",
+        color: filter === fl ? T.accent : S.ink,
+        borderRadius: 999,
+        padding: "7px 14px",
         fontSize: 13,
-        color: S.sub,
-        marginTop: 3,
-        lineHeight: 1.5,
-        display: "-webkit-box",
-        WebkitLineClamp: 2,
-        WebkitBoxOrient: "vertical",
-        overflow: "hidden"
-      }, children: msg.body }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 5 }, children: [
-        msg.audience,
-        " \xB7 ",
-        msg.to,
-        " \xB7 ",
-        msg.at
-      ] })
-    ] }) }, msg.id)),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 16, lineHeight: 1.55 }, children: '"Viewed" tracking needs the email backend \u2014 it works by embedding a tiny pixel that fires when the recipient opens the message. It arrives with the Gmail integration, not before.' })
+        fontWeight: 600,
+        cursor: "pointer"
+      }, children: fl }, fl)) }),
+      list.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: all.length === 0 ? "No messages yet. Send one from a job's Messages tab, or start with New message." : "Nothing matches this filter." }) }),
+      list.map(({ job, msg }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 14, style: { marginTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(job.id), style: { border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, width: "100%" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 7, alignItems: "center", minWidth: 0 }, children: [
+            msg.kind === "email" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Mail, { size: 14, color: T.accent }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MessageCircle, { size: 14, color: T.accent }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 700, color: S.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: job.name })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", gap: 5, flexShrink: 0 }, children: [
+            msg.viewed && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Viewed" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: msg.status === "Sent" ? "blue" : "amber", children: msg.status === "Sent" ? "Sent" : "Queued" })
+          ] })
+        ] }),
+        msg.subject && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, marginTop: 5 }, children: msg.subject }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+          fontSize: 13,
+          color: S.sub,
+          marginTop: 3,
+          lineHeight: 1.5,
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden"
+        }, children: msg.body }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 5 }, children: [
+          msg.audience,
+          " \xB7 ",
+          msg.to,
+          " \xB7 ",
+          msg.at
+        ] })
+      ] }) }, msg.id)),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 16, lineHeight: 1.55 }, children: '"Viewed" tracking needs the email backend \u2014 it works by embedding a tiny pixel that fires when the recipient opens the message. It arrives with the Gmail integration, not before.' })
+    ] })
   ] });
 }
 var DB = () => typeof window !== "undefined" ? window.__SUPABASE__ || null : null;
@@ -81740,7 +81782,20 @@ function SupremeCRM() {
         view: boardView,
         setView: setBoardView
       }
-    ) : nav === "inbox" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Inbox, { jobs, onOpenJob: openJobScreen, onCompose: () => setInboxPick(true) }) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand: brand2, onNav: (id) => id === "password" ? setChangePwOpen(true) : setNav(id), onLogout: async () => {
+    ) : nav === "inbox" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      Inbox,
+      {
+        jobs,
+        onOpenJob: openJobScreen,
+        onCompose: () => setInboxPick(true),
+        chatMsgs,
+        setChatMsgs,
+        users,
+        currentUser: liveUser,
+        unreadChat: Math.max(0, chatMsgs.length - chatSeenCount),
+        onSeenChat: () => setChatSeenCount(chatMsgs.length)
+      }
+    ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand: brand2, onNav: (id) => id === "password" ? setChangePwOpen(true) : setNav(id), onLogout: async () => {
       const a = AUTH();
       if (a) {
         try {
@@ -81846,20 +81901,23 @@ function SupremeCRM() {
           setLeadSeed(seed);
         }
       }
-    ) : nav === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActivityFeed, { activity, currentUser: liveUser, onOpenJob: openJobScreen, onBack: () => setNav("more") }) : nav === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-      TeamChat,
-      {
-        msgs: chatMsgs,
-        setMsgs: setChatMsgs,
-        users,
-        jobs,
-        currentUser: liveUser,
-        onOpenJob: openJobScreen,
-        onBack: () => {
-          setChatSeenCount(chatMsgs.length);
-          setNav("more");
+    ) : nav === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActivityFeed, { activity, currentUser: liveUser, onOpenJob: openJobScreen, onBack: () => setNav("more") }) : nav === "chat" ? (
+      /* Chat lives in the Inbox now. Anything still pointing here —
+         the More menu, an old deep link — lands in the right place. */
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        Inbox,
+        {
+          jobs,
+          onOpenJob: openJobScreen,
+          onCompose: () => setInboxPick(true),
+          chatMsgs,
+          setChatMsgs,
+          users,
+          currentUser: liveUser,
+          unreadChat: Math.max(0, chatMsgs.length - chatSeenCount),
+          onSeenChat: () => setChatSeenCount(chatMsgs.length)
         }
-      }
+      )
     ) : nav === "vendors" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       VendorManager,
       {
@@ -82018,7 +82076,7 @@ function SupremeCRM() {
         boxShadow: "0 6px 16px rgba(27,109,224,.35)",
         flexShrink: 0
       }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 25 }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NavBtn, { id: "inbox", icon: import_lucide_react.MessageCircle, label: "Inbox" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NavBtn, { id: "inbox", icon: import_lucide_react.MessageCircle, label: "Inbox", badge: Math.max(0, chatMsgs.length - chatSeenCount) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NavBtn, { id: "more", icon: import_lucide_react.Menu, label: "More", badge: unreadMentions })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
