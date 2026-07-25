@@ -17,7 +17,8 @@ ok(!src.includes('borderBottom: tab === id ? `2.5px solid ${T.accent}`'), "tab u
 /* accordion behaviour */
 ok(src.includes("const [open, setOpen] = useState(() => ({ overview: true"), "overview opens by default");
 ok(src.includes("setOpen((o) => ({ ...o, [id]: !o[id] }))"), "sections toggle independently");
-ok(src.includes("Expand all"), "expand-all control exists");
+ok(src.includes('anyOpen ? "Collapse all" : "Expand all"'), "the control is a labelled toggle, not one-way");
+ok(src.includes("if (anyOpen) return {};"), "collapse closes every section including Overview");
 
 /* activity behind the clock */
 ok(src.includes("const [activityOpen, setActivityOpen]"), "activity sheet state exists");

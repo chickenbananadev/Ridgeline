@@ -69431,6 +69431,124 @@ function Dashboard({
       " ",
       label
     ] }, label)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 16 }, children: (() => {
+      const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
+      const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
+      const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
+      const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
+      const RINGS = [
+        ["L", "Leads", "#F0B429", ["s1"]],
+        ["P", "Pipeline", "#F2711C", ["s2", "s3", "s4"]],
+        ["A", "Approved", "#63B54B", ["s5", "s6", "s7"]],
+        ["C", "Production", "#2BA4DE", ["s8", "s9"]],
+        ["I", "Invoicing", "#E0464B", ["s10"]]
+      ];
+      const ringData = RINGS.map(([letter, label, color, ids]) => ({
+        letter,
+        label,
+        color,
+        ids,
+        count: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.count, 0),
+        value: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.value, 0)
+      }));
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          paddingBottom: 12,
+          marginBottom: 4,
+          borderBottom: `1px solid ${S.line}`
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: "Current pipeline" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13, color: S.sub }, children: [
+            "Active jobs: ",
+            activeTotal
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", justifyContent: "space-around", gap: 4, padding: "14px 0 16px", flexWrap: "wrap" }, children: ringData.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          "button",
+          {
+            onClick: () => onOpenStage && onOpenStage(r.ids[0]),
+            "aria-label": `${r.label}: ${r.count} jobs`,
+            style: {
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              padding: "0 2px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 6,
+              minWidth: 56
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+                width: 46,
+                height: 46,
+                borderRadius: "50%",
+                background: r.color,
+                display: "grid",
+                placeItems: "center",
+                color: "#fff",
+                fontSize: 21,
+                fontWeight: 800
+              }, children: r.letter }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 17, fontWeight: 800, color: r.count ? "#F2711C" : "#C7CBD1" }, children: r.count }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub, whiteSpace: "nowrap" }, children: r.value > 0 ? money(r.value) : "\u2014" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 10.5, color: S.sub, letterSpacing: ".02em" }, children: r.label })
+            ]
+          },
+          r.letter
+        )) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => go("jobs"), style: {
+          ...linkBtn,
+          display: "block",
+          width: "100%",
+          textAlign: "center",
+          padding: "6px 0 10px",
+          fontSize: 13
+        }, children: "Open board \u2192" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: S.sub, borderTop: `1px solid ${S.line}`, paddingTop: 12, marginBottom: 2 }, children: [
+          "BY STAGE \xB7 ",
+          money(totalPipeline)
+        ] }),
+        liveStages.map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          "button",
+          {
+            onClick: () => onOpenStage && onOpenStage(st.id),
+            style: {
+              display: "block",
+              width: "100%",
+              textAlign: "left",
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              padding: "7px 0",
+              borderTop: `1px solid ${S.line}`
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: st.label }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }, children: st.value > 0 ? money(st.value) : "" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }, children: st.count })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 5, borderRadius: 99, background: S.soft, marginTop: 5, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+                width: `${st.count / maxCount * 100}%`,
+                height: "100%",
+                borderRadius: 99,
+                background: st.count ? T.accent : "transparent"
+              } }) })
+            ]
+          },
+          st.id
+        )),
+        lost > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 9 }, children: [
+          lost,
+          " lost or unqualified \u2014 not counted above"
+        ] })
+      ] });
+    })() }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("calendar"), children: "Calendar \u2192" }), children: "Today" }),
       !todaysAppts.length && !todaysCrews.length && !overdue.length && !dueToday.length && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, paddingBottom: 2 }, children: "Nothing on the books for today. Add an appointment from the calendar, or schedule a roof from a job's Production tab." }),
@@ -69770,124 +69888,6 @@ function Dashboard({
         ] })
       ] });
     })(),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 16 }, children: (() => {
-      const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
-      const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
-      const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
-      const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
-      const RINGS = [
-        ["L", "Leads", "#F0B429", ["s1"]],
-        ["P", "Pipeline", "#F2711C", ["s2", "s3", "s4"]],
-        ["A", "Approved", "#63B54B", ["s5", "s6", "s7"]],
-        ["C", "Production", "#2BA4DE", ["s8", "s9"]],
-        ["I", "Invoicing", "#E0464B", ["s10"]]
-      ];
-      const ringData = RINGS.map(([letter, label, color, ids]) => ({
-        letter,
-        label,
-        color,
-        ids,
-        count: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.count, 0),
-        value: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.value, 0)
-      }));
-      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          paddingBottom: 12,
-          marginBottom: 4,
-          borderBottom: `1px solid ${S.line}`
-        }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: "Current pipeline" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13, color: S.sub }, children: [
-            "Active jobs: ",
-            activeTotal
-          ] })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", justifyContent: "space-around", gap: 4, padding: "14px 0 16px", flexWrap: "wrap" }, children: ringData.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-          "button",
-          {
-            onClick: () => onOpenStage && onOpenStage(r.ids[0]),
-            "aria-label": `${r.label}: ${r.count} jobs`,
-            style: {
-              border: "none",
-              background: "none",
-              cursor: "pointer",
-              padding: "0 2px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 6,
-              minWidth: 56
-            },
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
-                width: 46,
-                height: 46,
-                borderRadius: "50%",
-                background: r.color,
-                display: "grid",
-                placeItems: "center",
-                color: "#fff",
-                fontSize: 21,
-                fontWeight: 800
-              }, children: r.letter }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 17, fontWeight: 800, color: r.count ? "#F2711C" : "#C7CBD1" }, children: r.count }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub, whiteSpace: "nowrap" }, children: r.value > 0 ? money(r.value) : "\u2014" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 10.5, color: S.sub, letterSpacing: ".02em" }, children: r.label })
-            ]
-          },
-          r.letter
-        )) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => go("jobs"), style: {
-          ...linkBtn,
-          display: "block",
-          width: "100%",
-          textAlign: "center",
-          padding: "6px 0 10px",
-          fontSize: 13
-        }, children: "Open board \u2192" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: S.sub, borderTop: `1px solid ${S.line}`, paddingTop: 12, marginBottom: 2 }, children: [
-          "BY STAGE \xB7 ",
-          money(totalPipeline)
-        ] }),
-        liveStages.map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-          "button",
-          {
-            onClick: () => onOpenStage && onOpenStage(st.id),
-            style: {
-              display: "block",
-              width: "100%",
-              textAlign: "left",
-              border: "none",
-              background: "none",
-              cursor: "pointer",
-              padding: "7px 0",
-              borderTop: `1px solid ${S.line}`
-            },
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: st.label }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }, children: st.value > 0 ? money(st.value) : "" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }, children: st.count })
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 5, borderRadius: 99, background: S.soft, marginTop: 5, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
-                width: `${st.count / maxCount * 100}%`,
-                height: "100%",
-                borderRadius: 99,
-                background: st.count ? T.accent : "transparent"
-              } }) })
-            ]
-          },
-          st.id
-        )),
-        lost > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 9 }, children: [
-          lost,
-          " lost or unqualified \u2014 not counted above"
-        ] })
-      ] });
-    })() }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 18 }, children: [
       ["Pipeline value", money(totalPipeline), "Open jobs, all stages"],
       ["Signed value", money(signedValue), "Approved and beyond"],
@@ -72235,26 +72235,28 @@ function JobDetail({
           color: T.accent,
           textDecoration: "none"
         }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 17 }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setOpen((o) => {
-          const anyOpen = JOB_SECTIONS.filter(([id]) => id !== "overview").some(([id]) => o[id]);
-          if (anyOpen) return { overview: true };
-          const all = {};
-          JOB_SECTIONS.forEach(([id]) => {
-            all[id] = true;
-          });
-          return all;
-        }), style: {
-          border: "none",
-          background: T.primary,
-          color: "#fff",
-          borderRadius: 999,
-          padding: "0 18px",
-          height: 38,
-          fontSize: 14,
-          fontWeight: 800,
-          cursor: "pointer",
-          fontFamily: "inherit"
-        }, children: "Expand all" })
+        (() => {
+          const anyOpen = JOB_SECTIONS.some(([id]) => open[id]);
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setOpen(() => {
+            if (anyOpen) return {};
+            const all = {};
+            JOB_SECTIONS.forEach(([id]) => {
+              all[id] = true;
+            });
+            return all;
+          }), style: {
+            border: "none",
+            background: T.primary,
+            color: "#fff",
+            borderRadius: 999,
+            padding: "0 18px",
+            height: 38,
+            fontSize: 14,
+            fontWeight: 800,
+            cursor: "pointer",
+            fontFamily: "inherit"
+          }, children: anyOpen ? "Collapse all" : "Expand all" });
+        })()
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, margin: "12px 0 10px" }, children: (() => {
         const tel = String(job.phone || job.contact?.phone || "").replace(/\D/g, "");

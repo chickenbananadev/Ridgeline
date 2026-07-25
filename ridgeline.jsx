@@ -2348,6 +2348,97 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         ))}
       </div>
 
+      {/* Pipeline at a glance — counts and dollars per stage, tap to filter the board */}
+      <Card style={{ marginTop: 16 }}>
+        {(() => {
+          const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
+          const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
+          const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
+          const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
+          /* Ring summary: five buckets of the twelve stages, each a
+             tappable letter that filters the board. Mirrors the at-a-glance
+             read Jacob wanted from his old dashboard. */
+          const RINGS = [
+            ["L", "Leads", "#F0B429", ["s1"]],
+            ["P", "Pipeline", "#F2711C", ["s2", "s3", "s4"]],
+            ["A", "Approved", "#63B54B", ["s5", "s6", "s7"]],
+            ["C", "Production", "#2BA4DE", ["s8", "s9"]],
+            ["I", "Invoicing", "#E0464B", ["s10"]],
+          ];
+          const ringData = RINGS.map(([letter, label, color, ids]) => ({
+            letter, label, color, ids,
+            count: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.count, 0),
+            value: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.value, 0),
+          }));
+          return (
+            <>
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${S.line}`,
+              }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>Current pipeline</span>
+                <span style={{ fontSize: 13, color: S.sub }}>Active jobs: {activeTotal}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-around", gap: 4, padding: "14px 0 16px", flexWrap: "wrap" }}>
+                {ringData.map((r) => (
+                  <button key={r.letter} onClick={() => onOpenStage && onOpenStage(r.ids[0])}
+                    aria-label={`${r.label}: ${r.count} jobs`}
+                    style={{
+                      border: "none", background: "none", cursor: "pointer", padding: "0 2px",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 56,
+                    }}>
+                    <span style={{
+                      width: 46, height: 46, borderRadius: "50%", background: r.color,
+                      display: "grid", placeItems: "center", color: "#fff", fontSize: 21, fontWeight: 800,
+                    }}>{r.letter}</span>
+                    <span style={{ fontSize: 17, fontWeight: 800, color: r.count ? "#F2711C" : "#C7CBD1" }}>{r.count}</span>
+                    <span style={{ fontSize: 11.5, color: S.sub, whiteSpace: "nowrap" }}>
+                      {r.value > 0 ? money(r.value) : "—"}
+                    </span>
+                    <span style={{ fontSize: 10.5, color: S.sub, letterSpacing: ".02em" }}>{r.label}</span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => go("jobs")} style={{
+                ...linkBtn, display: "block", width: "100%", textAlign: "center",
+                padding: "6px 0 10px", fontSize: 13,
+              }}>Open board →</button>
+              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: S.sub, borderTop: `1px solid ${S.line}`, paddingTop: 12, marginBottom: 2 }}>
+                BY STAGE · {money(totalPipeline)}
+              </div>
+              {liveStages.map((st) => (
+                <button key={st.id} onClick={() => onOpenStage && onOpenStage(st.id)}
+                  style={{
+                    display: "block", width: "100%", textAlign: "left", border: "none", background: "none",
+                    cursor: "pointer", padding: "7px 0", borderTop: `1px solid ${S.line}`,
+                  }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {st.label}
+                    </span>
+                    <span style={{ fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }}>{st.value > 0 ? money(st.value) : ""}</span>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }}>
+                      {st.count}
+                    </span>
+                  </div>
+                  <div style={{ height: 5, borderRadius: 99, background: S.soft, marginTop: 5, overflow: "hidden" }}>
+                    <div style={{
+                      width: `${(st.count / maxCount) * 100}%`, height: "100%", borderRadius: 99,
+                      background: st.count ? T.accent : "transparent",
+                    }} />
+                  </div>
+                </button>
+              ))}
+              {lost > 0 && (
+                <div style={{ fontSize: 12, color: S.sub, marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 9 }}>
+                  {lost} lost or unqualified — not counted above
+                </div>
+              )}
+            </>
+          );
+        })()}
+      </Card>
+
       {/* Today — the 6am answer: where everyone needs to be, what's overdue.
           Always rendered, including empty: a card that vanishes on a quiet
           day reads as a broken screen rather than a clear one. */}
@@ -2622,96 +2713,6 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         );
       })()}
 
-      {/* Pipeline at a glance — counts and dollars per stage, tap to filter the board */}
-      <Card style={{ marginTop: 16 }}>
-        {(() => {
-          const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
-          const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
-          const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
-          const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
-          /* Ring summary: five buckets of the twelve stages, each a
-             tappable letter that filters the board. Mirrors the at-a-glance
-             read Jacob wanted from his old dashboard. */
-          const RINGS = [
-            ["L", "Leads", "#F0B429", ["s1"]],
-            ["P", "Pipeline", "#F2711C", ["s2", "s3", "s4"]],
-            ["A", "Approved", "#63B54B", ["s5", "s6", "s7"]],
-            ["C", "Production", "#2BA4DE", ["s8", "s9"]],
-            ["I", "Invoicing", "#E0464B", ["s10"]],
-          ];
-          const ringData = RINGS.map(([letter, label, color, ids]) => ({
-            letter, label, color, ids,
-            count: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.count, 0),
-            value: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.value, 0),
-          }));
-          return (
-            <>
-              <div style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${S.line}`,
-              }}>
-                <span style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>Current pipeline</span>
-                <span style={{ fontSize: 13, color: S.sub }}>Active jobs: {activeTotal}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-around", gap: 4, padding: "14px 0 16px", flexWrap: "wrap" }}>
-                {ringData.map((r) => (
-                  <button key={r.letter} onClick={() => onOpenStage && onOpenStage(r.ids[0])}
-                    aria-label={`${r.label}: ${r.count} jobs`}
-                    style={{
-                      border: "none", background: "none", cursor: "pointer", padding: "0 2px",
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 56,
-                    }}>
-                    <span style={{
-                      width: 46, height: 46, borderRadius: "50%", background: r.color,
-                      display: "grid", placeItems: "center", color: "#fff", fontSize: 21, fontWeight: 800,
-                    }}>{r.letter}</span>
-                    <span style={{ fontSize: 17, fontWeight: 800, color: r.count ? "#F2711C" : "#C7CBD1" }}>{r.count}</span>
-                    <span style={{ fontSize: 11.5, color: S.sub, whiteSpace: "nowrap" }}>
-                      {r.value > 0 ? money(r.value) : "—"}
-                    </span>
-                    <span style={{ fontSize: 10.5, color: S.sub, letterSpacing: ".02em" }}>{r.label}</span>
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => go("jobs")} style={{
-                ...linkBtn, display: "block", width: "100%", textAlign: "center",
-                padding: "6px 0 10px", fontSize: 13,
-              }}>Open board →</button>
-              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: S.sub, borderTop: `1px solid ${S.line}`, paddingTop: 12, marginBottom: 2 }}>
-                BY STAGE · {money(totalPipeline)}
-              </div>
-              {liveStages.map((st) => (
-                <button key={st.id} onClick={() => onOpenStage && onOpenStage(st.id)}
-                  style={{
-                    display: "block", width: "100%", textAlign: "left", border: "none", background: "none",
-                    cursor: "pointer", padding: "7px 0", borderTop: `1px solid ${S.line}`,
-                  }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                    <span style={{ fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {st.label}
-                    </span>
-                    <span style={{ fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }}>{st.value > 0 ? money(st.value) : ""}</span>
-                    <span style={{ fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }}>
-                      {st.count}
-                    </span>
-                  </div>
-                  <div style={{ height: 5, borderRadius: 99, background: S.soft, marginTop: 5, overflow: "hidden" }}>
-                    <div style={{
-                      width: `${(st.count / maxCount) * 100}%`, height: "100%", borderRadius: 99,
-                      background: st.count ? T.accent : "transparent",
-                    }} />
-                  </div>
-                </button>
-              ))}
-              {lost > 0 && (
-                <div style={{ fontSize: 12, color: S.sub, marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 9 }}>
-                  {lost} lost or unqualified — not counted above
-                </div>
-              )}
-            </>
-          );
-        })()}
-      </Card>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 18 }}>
         {[
@@ -4684,17 +4685,24 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
                 <MapPin size={17} />
               </a>
             )}
-            <button onClick={() => setOpen((o) => {
-              /* Expand everything, or collapse back to Overview. */
-              const anyOpen = JOB_SECTIONS.filter(([id]) => id !== "overview").some(([id]) => o[id]);
-              if (anyOpen) return { overview: true };
-              const all = {}; JOB_SECTIONS.forEach(([id]) => { all[id] = true; }); return all;
-            })} style={{
-              border: "none", background: T.primary, color: "#fff", borderRadius: 999,
-              padding: "0 18px", height: 38, fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
-            }}>
-              Expand all
-            </button>
+            {(() => {
+              /* The control is a real toggle, and says which way it will
+                 go — a button permanently labelled "Expand all" reads as
+                 one-way even when it collapses. Collapse closes every
+                 section including Overview, so "collapse all" means it. */
+              const anyOpen = JOB_SECTIONS.some(([id]) => open[id]);
+              return (
+                <button onClick={() => setOpen(() => {
+                  if (anyOpen) return {};
+                  const all = {}; JOB_SECTIONS.forEach(([id]) => { all[id] = true; }); return all;
+                })} style={{
+                  border: "none", background: T.primary, color: "#fff", borderRadius: 999,
+                  padding: "0 18px", height: 38, fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+                }}>
+                  {anyOpen ? "Collapse all" : "Expand all"}
+                </button>
+              );
+            })()}
           </div>
 
           {/* Quick actions on the job: call, text, directions, upload —

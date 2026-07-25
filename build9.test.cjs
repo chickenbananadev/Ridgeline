@@ -33,5 +33,10 @@ ok(src.includes("const [jobOpenTab, setJobOpenTab]"), "deep-link tab state exist
 ok(src.includes('onOpenJob(job.id, "tasks")'), "home tasks open the Tasks tab");
 ok(src.includes("openTab = null }"), "JobDetail accepts a starting tab");
 
+/* --- home ordering: pipeline reads before today --- */
+const pipeIdx = src.indexOf("Pipeline at a glance");
+const todayIdx = src.indexOf("Today — the 6am answer");
+ok(pipeIdx > 0 && todayIdx > 0 && pipeIdx < todayIdx, "pipeline card renders above Today");
+
 if (fails) { console.log("\nbuild 9: " + fails + " FAILED"); process.exit(1); }
 console.log("build 9 tests passed");
