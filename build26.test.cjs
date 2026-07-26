@@ -116,7 +116,8 @@ ok(src.includes("clears ? { ...f, [k]: v, planArea: null, traced: false }"),
   "editing a traced facet's dimensions drops the stored area so the edit takes effect");
 
 /* --- the two bugs that made the tracer look inert --- */
-ok(src.includes("Number(h.lng)"), "the tracer reads lng, the field geoAutocomplete returns");
+ok(src.includes("await geocodeAddress(q)"), "the tracer uses the multi-provider chain");
+ok(!src.includes("geoAutocomplete(query"), "and no longer depends on the autocomplete helper");
 ok(!src.includes("setLon(h.lon)"), "the wrong field name is gone");
 ok(src.includes("[job.address, job.city, job.state, job.zip]"), "the geocode query uses every address part available");
 

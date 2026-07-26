@@ -9941,6 +9941,100 @@ function computeTakeoff(t) {
    which already accounts for the Mercator stretch — no separate
    correction, and no way for the two to disagree.
 ================================================================== */
+/* ==================================================================
+   GEOCODING — several providers, because one is not reliable enough
+
+   Finding the house was failing silently. The tracer used the existing
+   Geoapify autocomplete helper, which is built for partial typing as
+   someone fills a form, not for resolving a complete formatted
+   address, and it returns an empty array on any failure — a dead key,
+   a rate limit, a CORS refusal — so every failure looked identical and
+   said nothing.
+
+   This tries providers in order and reports which one answered, or
+   what each one said when none did. Nominatim goes first because it
+   sends permissive CORS headers and needs no key. The Census geocoder
+   is second and is the most accurate of the three for a US street
+   address. Geoapify is last, since it is the one carrying a key that
+   can expire.
+
+   Whatever happens, the user gets a text box and can search manually.
+   A tool that cannot be steered by hand when the automation misses is
+   a tool people stop trusting.
+================================================================== */
+const GEOCODERS = [
+  {
+    id: "nominatim", label: "OpenStreetMap",
+    async run(q) {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=${encodeURIComponent(q)}`;
+      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const r = (data || [])[0];
+      if (!r) throw new Error("no match");
+      return { lat: Number(r.lat), lon: Number(r.lon), label: r.display_name || q };
+    },
+  },
+  {
+    id: "census", label: "US Census",
+    async run(q) {
+      const url = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress`
+        + `?address=${encodeURIComponent(q)}&benchmark=Public_AR_Current&format=json`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const m = ((data.result || {}).addressMatches || [])[0];
+      if (!m) throw new Error("no match");
+      return { lat: Number(m.coordinates.y), lon: Number(m.coordinates.x), label: m.matchedAddress || q };
+    },
+  },
+  {
+    id: "geoapify", label: "Geoapify",
+    async run(q) {
+      if (!geoReady()) throw new Error("not configured");
+      const url = `${GEO_PROVIDER.base}/search?text=${encodeURIComponent(q)}`
+        + `&filter=countrycode:us&limit=1&format=json&apiKey=${GEO_PROVIDER.apiKey}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const r = (data.results || [])[0];
+      if (!r) throw new Error("no match");
+      return { lat: Number(r.lat), lon: Number(r.lon), label: r.formatted || q };
+    },
+  },
+];
+
+/* Returns { lat, lon, label, via } or { failed, tried } — never null,
+   so the caller always has something to show. */
+async function geocodeAddress(query) {
+  const q = String(query || "").trim();
+  if (!q) return { failed: true, tried: [], reason: "No address to look up." };
+  const tried = [];
+  for (const g of GEOCODERS) {
+    try {
+      const hit = await g.run(q);
+      if (hit && Number.isFinite(hit.lat) && Number.isFinite(hit.lon)) {
+        return { ...hit, via: g.label, tried };
+      }
+      tried.push(`${g.label}: no usable result`);
+    } catch (e) {
+      tried.push(`${g.label}: ${(e && e.message) || "failed"}`);
+    }
+  }
+  return { failed: true, tried, reason: "None of the lookup services could place that address." };
+}
+
+/* Accepts "39.2896, -84.5230" so a user can paste coordinates straight
+   off a phone's map app when an address will not resolve. */
+function parseLatLon(text) {
+  const m = String(text || "").match(/(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/);
+  if (!m) return null;
+  const lat = Number(m[1]), lon = Number(m[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  return { lat, lon };
+}
+
 const TILE = 256;
 const EARTH_CIRC = 156543.03392804097; // metres per pixel at zoom 0, equator
 
@@ -10041,6 +10135,10 @@ function AerialTracer({ job, onAddFacet, toast }) {
   const [pitch, setPitch] = useState(6);
   const [status, setStatus] = useState("idle");
   const [err, setErr] = useState("");
+  const [tried, setTried] = useState([]);
+  const [via, setVia] = useState("");
+  const [found, setFound] = useState("");
+  const [manual, setManual] = useState("");
   const [failed, setFailed] = useState(0);
   const wrapRef = useRef(null);
 
@@ -10051,18 +10149,33 @@ function AerialTracer({ job, onAddFacet, toast }) {
   const tiles = ready ? tileGrid(lon, lat, z, SIZE) : [];
   const mPerPx = ready ? metresPerPixel(lat, z) : 0;
 
-  /* Geocode once, from whatever the job actually has. */
-  const locate = async () => {
-    setStatus("locating"); setErr(""); setFailed(0);
-    const query = [job.address, job.city, job.state, job.zip].filter(Boolean).join(", ");
-    const hits = await geoAutocomplete(query || job.address || "");
-    const h = (hits || []).find((x) => x.lat != null && x.lng != null);
-    if (!h) {
-      setStatus("idle");
-      setErr("Could not place that address. Check the address and zip on the Overview section, then try again.");
+  const jobQuery = [job.address, job.city, job.state, job.zip].filter(Boolean).join(", ");
+
+  /* Look up whatever text is given. Coordinates pasted straight from a
+     phone's map app skip the lookup entirely. */
+  const locate = async (queryText) => {
+    const q = (queryText || "").trim() || jobQuery;
+    setStatus("locating"); setErr(""); setTried([]); setFailed(0);
+
+    const coords = parseLatLon(q);
+    if (coords) {
+      setLat(coords.lat); setLon(coords.lon); setPts([]);
+      setVia("coordinates"); setFound(`${coords.lat.toFixed(5)}, ${coords.lon.toFixed(5)}`);
+      setStatus("ready");
       return;
     }
-    setLat(Number(h.lat)); setLon(Number(h.lng)); setPts([]); setStatus("ready");
+
+    const hit = await geocodeAddress(q);
+    if (hit.failed) {
+      setStatus("idle");
+      setErr(hit.reason);
+      setTried(hit.tried || []);
+      setManual((m) => m || q);
+      return;
+    }
+    setLat(hit.lat); setLon(hit.lon); setPts([]);
+    setVia(hit.via); setFound(hit.label);
+    setStatus("ready");
   };
 
   /* Nudge the centre when the roof sits off to one side. */
@@ -10102,21 +10215,72 @@ function AerialTracer({ job, onAddFacet, toast }) {
             The plan area comes off the image and the slope factor turns it into
             roof area.
           </div>
-          <Btn style={{ width: "100%" }} onClick={locate} data-testid="locate-roof">
-            <MapPin size={14} /> Find this roof
-          </Btn>
-          {job.address && (
-            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 9, textAlign: "center" }}>
-              {job.address}
-            </div>
+          {jobQuery ? (
+            <>
+              <Btn style={{ width: "100%" }} onClick={() => locate()} data-testid="locate-roof">
+                <MapPin size={14} /> Find this roof
+              </Btn>
+              <div style={{ fontSize: 11.5, color: S.sub, marginTop: 9, textAlign: "center" }}>
+                Searching for {jobQuery}
+              </div>
+            </>
+          ) : (
+            <Callout label="No address on this job" tone="amber">
+              Add the address on the Overview section, or type one below.
+            </Callout>
           )}
+
+          {/* Always available, not just after a failure. If the job
+              address is wrong or the roof is round the back, typing the
+              right thing is faster than fixing the record first. */}
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${S.line}` }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: S.ink, marginBottom: 6 }}>
+              Or search manually
+            </div>
+            <input style={inputStyle} value={manual} onChange={(e) => setManual(e.target.value)}
+              placeholder="Address, or paste 39.2896, -84.5230"
+              onKeyDown={(e) => { if (e.key === "Enter" && manual.trim()) locate(manual); }} />
+            <Btn kind="soft" style={{ width: "100%", marginTop: 8 }} disabled={!manual.trim()}
+              onClick={() => locate(manual)} data-testid="manual-locate">
+              <Search size={14} /> Search
+            </Btn>
+            <div style={{ fontSize: 11, color: S.sub, marginTop: 7, lineHeight: 1.5 }}>
+              Coordinates work too. Long-press the roof in any map app, copy
+              what it gives you, and paste it here.
+            </div>
+          </div>
         </>
       )}
-      {status === "locating" && <div style={{ fontSize: 13, color: S.sub, padding: "6px 0" }}>Finding the address…</div>}
-      {err && <Callout label="Could not locate" tone="amber">{err}</Callout>}
+      {status === "locating" && <div style={{ fontSize: 13, color: S.sub, padding: "6px 0" }}>Looking that up…</div>}
+      {err && (
+        <Callout label="Could not find it" tone="amber">
+          {err}
+          {tried.length > 0 && (
+            <div style={{ marginTop: 7, fontSize: 11.5, lineHeight: 1.6 }}>
+              {tried.map((t, i) => <div key={i}>· {t}</div>)}
+            </div>
+          )}
+          <div style={{ marginTop: 7, fontSize: 12 }}>
+            Try a simpler address — house number, street and zip is usually
+            enough — or paste coordinates.
+          </div>
+        </Callout>
+      )}
 
       {ready && (
         <>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 9 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: S.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {found || "Located"}
+              </div>
+              <div style={{ fontSize: 10.5, color: S.sub }}>via {via}</div>
+            </div>
+            <Btn kind="ghost" small onClick={() => { setStatus("idle"); setPts([]); setManual(found || jobQuery); }}>
+              Search again
+            </Btn>
+          </div>
+
           {/* Zoom and imagery source */}
           <div style={{ display: "flex", gap: 7, marginBottom: 9 }}>
             {[19, 20, 21].map((zz) => (
