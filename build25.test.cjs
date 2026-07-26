@@ -44,7 +44,8 @@ ok(src.includes("Number(x.j.review.rating) <= 3"), "unhappy customers are held b
 
 /* --- measurement sources --- */
 ok(src.includes("Measure from"), "the takeoff explains where measurements come from");
-ok(src.includes("cannot measure a roof from a photograph"), "the limit is stated plainly");
+ok(src.includes("Pitch is the one thing no"), "the real limit — pitch — is stated plainly");
+ok(src.includes("Trace the roof below on free state aerial imagery"), "tracing leads the card");
 ok(src.includes("basemap=satellite"), "satellite view is one tap away");
 ok(src.includes("map_action=pano"), "street view is offered for storeys and elevation");
 ok(src.includes("the image cannot tell you the pitch"), "the satellite caveat is explicit");

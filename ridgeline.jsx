@@ -9898,6 +9898,290 @@ function computeTakeoff(t) {
   };
 }
 
+/* ==================================================================
+   AERIAL TRACING
+
+   Ohio and Kentucky both publish high-resolution leaf-off orthoimagery
+   in the PUBLIC DOMAIN, served through ArcGIS image services. That
+   matters twice over. Licensing: Mapbox and Google both prohibit
+   commercial tracing of their satellite layers without a paid
+   derivative licence, whereas OSIP and KyFromAbove carry no such
+   restriction. Quality: these are 3 to 6 inch leaf-off aerials flown
+   for the state, which is sharper than consumer satellite and, being
+   leaf-off, actually shows the roof rather than the tree over it.
+
+   Scale is exact rather than estimated. exportImage returns the image
+   for a bounding box we specify, so pixels-to-metres is arithmetic,
+   not a guess from a zoom level.
+
+   One correction that is easy to miss: Web Mercator stretches distance
+   by 1/cos(latitude). At Dayton's 39.76 degrees that is about 30
+   percent, and because area is two-dimensional the error compounds to
+   roughly 69 percent. Every traced area is corrected by cos squared of
+   the latitude. Without it a 2,000 sq ft roof measures 3,380.
+================================================================== */
+const AERIAL_SOURCES = {
+  OH: {
+    name: "Ohio OSIP",
+    detail: "6-inch leaf-off statewide orthoimagery, public domain",
+    url: "https://geo1.oit.ohio.gov/arcgis/rest/services/OSIP/OSIPIII_6in/ImageServer/exportImage",
+    fallback: "https://geo.oit.ohio.gov/arcgis/rest/services/OSIP/OSIP_6in_best_avail/ImageServer/exportImage",
+    credit: "Ohio Statewide Imagery Program (OGRIP) — public domain",
+  },
+  KY: {
+    name: "KyFromAbove",
+    detail: "3-inch leaf-off statewide orthoimagery, public domain",
+    url: "https://kyraster.ky.gov/arcgis/rest/services/ImageServices/Ky_KYAPED_Phase3_3IN_KYSPN/ImageServer/exportImage",
+    fallback: null,
+    credit: "KyFromAbove / Kentucky DGI — public domain",
+  },
+};
+
+const MERC_R = 6378137;
+function lonToMercX(lon) { return MERC_R * (lon * Math.PI / 180); }
+function latToMercY(lat) {
+  const r = lat * Math.PI / 180;
+  return MERC_R * Math.log(Math.tan(Math.PI / 4 + r / 2));
+}
+
+/* A square window of `spanM` ground metres centred on the point. The
+   span is given in true ground metres and inflated into Mercator
+   metres, so the window covers what the user actually asked for. */
+function aerialRequest(lat, lon, spanM, px, state) {
+  const src = AERIAL_SOURCES[state];
+  if (!src) return null;
+  const inflate = 1 / Math.cos(lat * Math.PI / 180);
+  const half = (spanM * inflate) / 2;
+  const cx = lonToMercX(lon), cy = latToMercY(lat);
+  const bbox = [cx - half, cy - half, cx + half, cy + half];
+  const qs = `bbox=${bbox.join(",")}&bboxSR=3857&imageSR=3857&size=${px},${px}`
+    + `&format=jpg&f=image`;
+  return {
+    src, bbox, px,
+    /* True ground metres per pixel, Mercator distortion removed. */
+    mPerPx: (spanM) / px,
+    url: `${src.url}?${qs}`,
+    fallbackUrl: src.fallback ? `${src.fallback}?${qs}` : null,
+  };
+}
+
+/* Shoelace. Returns signed area in square pixels; sign tells us the
+   winding direction, which we do not care about, so take the absolute. */
+function polygonAreaPx(pts) {
+  if (!pts || pts.length < 3) return 0;
+  let a = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length;
+    a += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+  }
+  return Math.abs(a) / 2;
+}
+function polygonPerimeterPx(pts) {
+  if (!pts || pts.length < 2) return 0;
+  let d = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const j = (i + 1) % pts.length;
+    d += Math.hypot(pts[j].x - pts[i].x, pts[j].y - pts[i].y);
+  }
+  return d;
+}
+const M2_TO_SQFT = 10.7639104167;
+const M_TO_FT = 3.280839895;
+
+/* Pixels to real feet. mPerPx is already true ground metres. */
+function tracedAreaSqFt(pts, mPerPx) {
+  return polygonAreaPx(pts) * mPerPx * mPerPx * M2_TO_SQFT;
+}
+function tracedLengthFt(pts, mPerPx) {
+  return polygonPerimeterPx(pts) * mPerPx * M_TO_FT;
+}
+
+function AerialTracer({ job, onAddFacet, toast }) {
+  const [lat, setLat] = useState(null);
+  const [lon, setLon] = useState(null);
+  const [span, setSpan] = useState(60);      // ground metres across
+  const [pts, setPts] = useState([]);
+  const [pitch, setPitch] = useState(6);
+  const [status, setStatus] = useState("idle");
+  const [err, setErr] = useState("");
+  const [imgFailed, setImgFailed] = useState(false);
+  const [usedFallback, setUsedFallback] = useState(false);
+  const wrapRef = useRef(null);
+
+  const state = (job.state || (job.address || "").match(/\b(OH|KY|IL)\b/)?.[1] || "").toUpperCase();
+  const source = AERIAL_SOURCES[state] || null;
+  const PX = 640;
+  const req = lat != null && lon != null ? aerialRequest(lat, lon, span, PX, state) : null;
+
+  const locate = async () => {
+    setStatus("locating"); setErr(""); setImgFailed(false); setUsedFallback(false);
+    const hits = await geoAutocomplete(job.address);
+    const h = (hits || [])[0];
+    if (!h || h.lat == null) {
+      setStatus("idle");
+      setErr("Could not place that address. Check it on the Overview section.");
+      return;
+    }
+    setLat(h.lat); setLon(h.lon); setPts([]); setStatus("ready");
+  };
+
+  const addPoint = (e) => {
+    if (!req) return;
+    const rect = wrapRef.current.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    const x = ((t.clientX - rect.left) / rect.width) * PX;
+    const y = ((t.clientY - rect.top) / rect.height) * PX;
+    setPts((p) => [...p, { x, y }]);
+  };
+
+  const areaSf = req ? tracedAreaSqFt(pts, req.mPerPx) : 0;
+  const perimFt = req ? tracedLengthFt(pts, req.mPerPx) : 0;
+  const roofSf = areaSf * slopeFactor(pitch);
+
+  if (!source) {
+    return (
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Trace from aerial</CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
+          Free public-domain aerial imagery is available for Ohio and Kentucky
+          jobs. This job's state is not set, or is outside those two — set the
+          state on the job and it will appear here.
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle right={<Chip tone="green">Free</Chip>}>Trace from aerial</CardTitle>
+      <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 11 }}>
+        <b>{source.name}</b> — {source.detail}. Leaf-off, so you see the roof
+        rather than the tree over it, and public domain, so tracing it for
+        commercial work carries no licence problem.
+      </div>
+
+      {status === "idle" && (
+        <Btn style={{ width: "100%" }} onClick={locate} data-testid="locate-roof">
+          <MapPin size={14} /> Find this roof
+        </Btn>
+      )}
+      {status === "locating" && <div style={{ fontSize: 13, color: S.sub }}>Locating…</div>}
+      {err && <Callout label="Could not locate" tone="amber">{err}</Callout>}
+
+      {req && (
+        <>
+          <div style={{ display: "flex", gap: 8, marginBottom: 9 }}>
+            {[40, 60, 90].map((s) => (
+              <button key={s} onClick={() => { setSpan(s); setPts([]); }} style={{
+                flex: 1, border: `1.5px solid ${span === s ? T.accent : S.line}`,
+                background: span === s ? T.accentSoft : "#fff", color: span === s ? T.accent : S.ink,
+                borderRadius: 999, padding: "7px 4px", fontSize: 12.5, fontWeight: 700,
+                cursor: "pointer", fontFamily: "inherit",
+              }}>{Math.round(s * M_TO_FT)} ft</button>
+            ))}
+          </div>
+
+          <div ref={wrapRef} onClick={addPoint}
+            style={{
+              position: "relative", width: "100%", aspectRatio: "1 / 1",
+              borderRadius: 11, overflow: "hidden", border: `1px solid ${S.line}`,
+              background: "#EAECEF", cursor: "crosshair", touchAction: "manipulation",
+            }}>
+            {/* Rendered as an img rather than drawn into the canvas: we
+                only need it underneath the overlay, and an img is not
+                subject to the cross-origin restrictions that would
+                otherwise taint a canvas. */}
+            <img
+              src={usedFallback && req.fallbackUrl ? req.fallbackUrl : req.url}
+              alt="Aerial view"
+              onError={() => {
+                if (!usedFallback && req.fallbackUrl) { setUsedFallback(true); return; }
+                setImgFailed(true);
+              }}
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+
+            {imgFailed && (
+              <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", padding: 20, textAlign: "center" }}>
+                <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
+                  The imagery service did not respond. It is a state government
+                  server and is occasionally down for maintenance — try again
+                  later, or measure on site.
+                </div>
+              </div>
+            )}
+
+            {/* Overlay: the traced outline. */}
+            <svg viewBox={`0 0 ${PX} ${PX}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
+              {pts.length > 1 && (
+                <polygon points={pts.map((p) => `${p.x},${p.y}`).join(" ")}
+                  fill="rgba(27,109,224,.25)" stroke="#1B6DE0" strokeWidth="3" />
+              )}
+              {pts.map((p, i) => (
+                <circle key={i} cx={p.x} cy={p.y} r="7" fill="#fff" stroke="#1B6DE0" strokeWidth="3" />
+              ))}
+            </svg>
+
+            {pts.length === 0 && !imgFailed && (
+              <div style={{
+                position: "absolute", left: 0, right: 0, bottom: 0, padding: "9px 12px",
+                background: "rgba(16,24,40,.72)", color: "#fff", fontSize: 12, lineHeight: 1.4,
+              }}>
+                Tap each corner of one roof plane. Trace the plane, not the whole roof.
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "flex", gap: 8, marginTop: 9 }}>
+            <Btn kind="ghost" small style={{ flex: 1 }} disabled={!pts.length}
+              onClick={() => setPts((p) => p.slice(0, -1))}>Undo point</Btn>
+            <Btn kind="ghost" small style={{ flex: 1 }} disabled={!pts.length}
+              onClick={() => setPts([])}>Clear</Btn>
+          </div>
+
+          {pts.length >= 3 && (
+            <div style={{ marginTop: 12, background: S.soft, borderRadius: 11, padding: "12px 13px" }}>
+              <KV k="Plan area traced" v={`${areaSf.toLocaleString(undefined, { maximumFractionDigits: 0 })} sq ft`} />
+              <KV k="Perimeter" v={`${perimFt.toLocaleString(undefined, { maximumFractionDigits: 0 })} ft`} />
+              <div style={{ margin: "10px 0 8px" }}>
+                <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 6 }}>
+                  Pitch of this plane — the image cannot tell you this, measure it on site
+                </div>
+                <select style={selStyle} value={pitch} onChange={(e) => setPitch(Number(e.target.value))}>
+                  {PITCH_OPTIONS.map((p) => <option key={p} value={p}>{p}/12</option>)}
+                </select>
+              </div>
+              <KV k="Roof area of this plane" v={`${roofSf.toLocaleString(undefined, { maximumFractionDigits: 0 })} sq ft`} strong />
+              <Btn style={{ width: "100%", marginTop: 11 }} data-testid="add-traced-facet"
+                onClick={() => {
+                  /* Stored as an equivalent rectangle so it slots into the
+                     existing facet maths untouched: the plan area is what
+                     matters and the slope factor is applied downstream. */
+                  const side = Math.sqrt(areaSf);
+                  onAddFacet({
+                    id: uid("fct"),
+                    name: `Traced plane ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+                    length: side.toFixed(1), width: side.toFixed(1), pitch,
+                  });
+                  setPts([]);
+                  toast("Plane added to the takeoff");
+                }}>
+                <Plus size={14} /> Add as a facet
+              </Btn>
+            </div>
+          )}
+
+          <div style={{ fontSize: 11, color: S.sub, marginTop: 11, lineHeight: 1.55 }}>
+            Scale is computed from the image's bounding box, not estimated from
+            a zoom level, and corrected for Web Mercator distortion at this
+            latitude. What the image cannot give you is pitch — measure that on
+            the roof. Imagery: {source.credit}.
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
 function TabTakeoff({ job, mut, toast, brand }) {
   const t = job.takeoff || { facets: [blankFacet()], wasteBand: "moderate", exposure: "arch" };
   const m = computeTakeoff(t);
@@ -10017,10 +10301,10 @@ function TabTakeoff({ job, mut, toast, brand }) {
       <Card>
         <CardTitle>Measure from</CardTitle>
         <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 11 }}>
-          This app cannot measure a roof from a photograph. Recovering pitch
-          needs stereo imagery or LIDAR, which is why EagleView flies aircraft.
-          What it can do is the arithmetic, exactly, from whichever of these
-          you use.
+          Trace the roof below on free state aerial imagery to get plan areas,
+          then set the pitch you measured on site. Pitch is the one thing no
+          overhead image can give you — recovering it needs stereo imagery or
+          LIDAR, which is why EagleView flies aircraft.
         </div>
         {job.address && (
           <>
@@ -10053,6 +10337,13 @@ function TabTakeoff({ job, mut, toast, brand }) {
           takeoff becomes your check on it.
         </div>
       </Card>
+
+      <AerialTracer job={job} toast={toast}
+        onAddFacet={(f) => mut((j) => {
+          const cur = j.takeoff || t;
+          const existing = (cur.facets || []).filter((x) => x.length || x.width);
+          return { ...j, takeoff: { ...cur, facets: [...existing, f] } };
+        })} />
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone={m.squares > 0 ? "green" : "gray"}>{n2(m.squaresWithWaste)} sq</Chip>}>
