@@ -1680,6 +1680,113 @@ const KY_COUNTY_ZIPS = {
   "Grant County": { "41097": "Williamstown", "41030": "Crittenden" },
 };
 
+/* ------------------------------------------------------------------
+   BUILDING DEPARTMENTS — researched July 2026 from official sources.
+
+   Most permitting in this corridor is county-level, so departments are
+   keyed by county with explicit exceptions where a city runs its own.
+   Every entry carries the source it came from so the office can
+   re-check it; phone numbers and staffing change, and a permit call to
+   a dead line costs a day.
+
+   The `except` field matters more than it looks. Greene County does
+   not cover its own city of Xenia, Clermont County covers every
+   village in the county but only commercial work in Brown, and Lewis
+   County KY has no residential building inspector at all. Getting
+   this wrong sends a rep to the wrong counter.
+------------------------------------------------------------------- */
+const COUNTY_DEPARTMENTS = {
+  "Montgomery County": {
+    office: "Montgomery County Building Regulations",
+    phone: "9372254622", address: "371 W Second St, Dayton, OH 45402",
+    web: "https://www.selectmcohio.com/building",
+    note: "Serves most jurisdictions in the county, including Huber Heights, as their building department.",
+    except: "Some cities run their own building or zoning office. Confirm the address is county-served before applying.",
+    checked: "Jul 2026",
+  },
+  "Greene County": {
+    office: "Greene County Department of Building Regulation",
+    phone: "9375627420", address: "667 Dayton-Xenia Rd, Xenia, OH 45385",
+    web: "https://www.greenecountyohio.gov/139/Building-Regulation",
+    note: "Residential and commercial permits and inspections for all use groups. Schedule inspections via the iWorQ portal or by phone before 3pm the prior workday.",
+    except: "Does NOT cover Fairborn, Xenia, Bowersville, Clifton, Cedarville or Yellow Springs — each runs its own. Xenia Building Division: 1(937)372-6389.",
+    checked: "Jul 2026",
+  },
+  "Warren County": {
+    office: "Warren County Building & Zoning",
+    phone: "5136951290", address: "406 Justice Drive, Room 167, Lebanon, OH 45036",
+    web: "https://www.warrencountyohio.gov",
+    note: "Mon-Fri 8:00-5:00. Permits and plan review via the iWorQ citizen portal; email buildinginspection@warrencountyohio.gov.",
+    except: "Springboro and some villages run their own building or zoning office. Confirm jurisdiction first.",
+    checked: "Jul 2026",
+  },
+  "Butler County": {
+    office: "Butler County Building & Zoning (Dept. of Development)",
+    phone: "5138873205", address: "130 High Street, Hamilton, OH 45011",
+    web: "https://www.bcohio.gov",
+    note: "Building, electrical and zoning for the unincorporated areas. Inspectors take calls 8:00-9:00am. Online permits via the Accela Citizen Portal.",
+    except: "Cities run their own. City of Hamilton building department: 1(513)785-7360, building@hamilton-oh.gov. Fairfield and Oxford also separate.",
+    checked: "Jul 2026",
+  },
+  "Hamilton County": {
+    office: "Hamilton County Planning + Development, Buildings + Inspections",
+    phone: "5139464550", address: "138 East Court Street, Room 801, Cincinnati, OH 45202",
+    web: "https://www.hamiltoncountyohio.gov/government/departments/planning_and_development/buildings_and_inspections/index.php",
+    note: "Unincorporated townships plus six contract jurisdictions. Fully digital since Feb 2025 — permits and inspections through ezTrak. Inspectors take calls 7:30-8:30am.",
+    except: "The City of Cincinnati runs its own Permit Center and is NOT county-served. Electrical permits and inspections go through Inspection Bureau Inc, not the county.",
+    checked: "Jul 2026",
+  },
+  "Clermont County": {
+    office: "Clermont County Permit Central / Building Inspection",
+    phone: "5137327213", address: "2275 Bauer Road, Batavia, OH 45103",
+    web: "http://building.clermontcountyohio.gov",
+    note: "State-certified for ALL residential and commercial construction in Clermont County, including every village. Administers the Residential Code of Ohio. Inspections must be scheduled a day ahead.",
+    except: "Also handles COMMERCIAL work in Brown County — but not residential there, and not Russellville or Hamersville.",
+    checked: "Jul 2026",
+  },
+  "Brown County": {
+    office: "Brown County — confirm the issuing authority for the address",
+    phone: "", address: "",
+    web: "http://building.clermontcountyohio.gov",
+    note: "Clermont County Building Inspection is certified for COMMERCIAL construction in most of Brown County. Residential permitting is handled locally and varies by village and township.",
+    except: "Clermont's certification excludes Russellville and Hamersville. For residential, call the township or village directly before tear-off.",
+    checked: "Jul 2026",
+  },
+  /* ---------- Kentucky ---------- */
+  "Mason County": {
+    office: "City of Maysville / Mason County Codes Department",
+    phone: "6065642525", address: "216 Bridge Street, Maysville, KY 41056",
+    web: "https://www.cityofmaysvilleky.gov/departments/codes_department/index.php",
+    note: "Building Official Jim Fawcett, 1(606)564-2525. Codes Officer 1(606)564-2504. Inspector in the office Mon, Tue, Wed and Fri 8:00-11:00am; field inspections in the afternoons, so call ahead. One- and two-family dwellings are built to the Kentucky Residential Code.",
+    except: "The Mason County Fiscal Court adopted the building code in 2006 and the same office serves both city and county. Ask whether the address is inside Maysville city limits — the permit form asks.",
+    checked: "Jul 2026",
+  },
+  "Lewis County": {
+    office: "No local building inspector",
+    phone: "", address: "",
+    web: "https://dhbc.ky.gov",
+    note: "Kentucky DHBC lists NO local building inspector for Lewis County. Residential work is governed by the Kentucky Residential Code but there is no local plan review or inspection office; commercial work goes to the state department.",
+    except: "Do not assume no inspector means no requirements — the KRC still applies, and the county clerk (1(606)796-3062, 112 2nd Street, Vanceburg) can point you at whoever handles zoning.",
+    checked: "Jul 2026",
+  },
+  "Kenton County": {
+    office: "Planning and Development Services of Kenton County (PDS)",
+    phone: "8599572408", address: "1840 Simon Kenton Way, Suite 3400, Covington, KY 41011",
+    web: "https://www.pdskc.org/services/one-stop-shop/building-permits/",
+    note: "City-county agency serving all 20 local governments in Kenton County. Main line 1(859)331-8980; building permits 1(859)957-2408. Applications can be filed online.",
+    except: "Some cities keep their own local building inspector — Erlanger, for example. PDS can tell you which applies.",
+    checked: "Jul 2026",
+  },
+  "Campbell County": {
+    office: "Campbell County Planning, Zoning & Building Inspections",
+    phone: "8592923880", address: "Campbell County, KY",
+    web: "https://campbellcountyky.gov",
+    note: "Mon-Fri 8:30-4:30. Email pzadmin@campbellcountyky.gov for a faster answer than the phone. Serves unincorporated Campbell County plus several cities.",
+    except: "Covers unincorporated areas and select cities only — Newport, Fort Thomas, Bellevue and Dayton KY may run their own. Confirm before applying.",
+    checked: "Jul 2026",
+  },
+};
+
 /* Flatten the county maps into jurisdiction records. Built once at
    module load rather than stored as literals, so adding a ZIP is a
    one-line change and the code basis can never drift between entries
@@ -1687,6 +1794,7 @@ const KY_COUNTY_ZIPS = {
 function buildMarketJurisdictions() {
   const out = {};
   const add = (zip, city, county, state) => {
+    const dept = COUNTY_DEPARTMENTS[county] || null;
     /* Keys ending in a letter are disambiguators for towns sharing a
        ZIP with another entry; strip them for the real key. */
     const z = zip.replace(/[a-z]$/, "");
@@ -1696,8 +1804,11 @@ function buildMarketJurisdictions() {
       zip: z, city, county, state,
       codeName: d.codeName, codeEdition: d.codeEdition,
       adoption: d.adoption, permit: d.permit,
-      inspector: { office: "", phone: "", address: "" },
-      needsContact: true,
+      inspector: dept
+        ? { office: dept.office, phone: dept.phone, address: dept.address,
+            web: dept.web, note: dept.note, except: dept.except, checked: dept.checked }
+        : { office: "", phone: "", address: "" },
+      needsContact: !dept,
       verified: false, sources: d.sources, verifiedDetail: { date: null, by: null },
     };
   };
@@ -11752,7 +11863,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {} })
                     {juris.sources.map((sid) => <SourceLink key={sid} srcId={sid} />)}
                   </div>
                 )}
-                {!juris.verified && juris.precision === "market" && (
+                {!juris.verified && juris.precision === "market" && juris.needsContact && (
                   <Callout label="City and county confirmed; office not yet on file">
                     Ohio and Kentucky both run statewide residential codes, so the
                     code basis above is right for this address. What is missing is
@@ -11811,10 +11922,35 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {} })
                     <KV k="Office" v={juris.inspector.office || "—"} />
                     <KV k="Phone" v={juris.inspector.phone ? fmtPhone(juris.inspector.phone) : "—"} />
                     <KV k="Address" v={juris.inspector.address || "—"} />
-                    {juris.inspector.phone && (
-                      <a href={telHref(juris.inspector.phone)} style={{ textDecoration: "none", display: "block", marginTop: 10 }}>
-                        <Btn kind="soft" small style={{ width: "100%" }}><Phone size={13} /> Call the department</Btn>
-                      </a>
+                    {juris.inspector.note && (
+                      <div style={{ fontSize: 12.5, color: S.ink, lineHeight: 1.55, marginTop: 9,
+                        background: S.soft, borderRadius: 9, padding: "10px 12px" }}>
+                        {juris.inspector.note}
+                      </div>
+                    )}
+                    {juris.inspector.except && (
+                      <Callout label="Check this before you apply" tone="amber">
+                        {juris.inspector.except}
+                      </Callout>
+                    )}
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      {juris.inspector.phone && (
+                        <a href={telHref(juris.inspector.phone)} style={{ flex: 1, textDecoration: "none" }}>
+                          <Btn kind="soft" small style={{ width: "100%" }}><Phone size={13} /> Call</Btn>
+                        </a>
+                      )}
+                      {juris.inspector.web && (
+                        <a href={juris.inspector.web} target="_blank" rel="noreferrer" style={{ flex: 1, textDecoration: "none" }}>
+                          <Btn kind="ghost" small style={{ width: "100%" }}>Website <ExternalLink size={12} /></Btn>
+                        </a>
+                      )}
+                    </div>
+                    {juris.inspector.checked && (
+                      <div style={{ fontSize: 11, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
+                        Looked up {juris.inspector.checked} from the department's own
+                        site. Numbers and staffing change — if it is stale, correct it
+                        here and it updates for everyone.
+                      </div>
                     )}
                   </>
                 )}

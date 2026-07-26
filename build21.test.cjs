@@ -49,9 +49,29 @@ ok(src.includes("a dead line on a permit call costs more than an empty field")
   || src.includes("dead\n                    line on a permit call costs more than an empty field"),
   "the blank-contact decision is explained");
 
-/* --- no invented contact data --- */
-const marketBlock = src.slice(src.indexOf("const OH_COUNTY_ZIPS"), src.indexOf("const MARKET_JURISDICTIONS"));
-ok(!/\(\d{3}\)\s?\d{3}-\d{4}/.test(marketBlock), "no fabricated phone numbers in the market data");
+/* --- researched departments --- */
+ok(src.includes("const COUNTY_DEPARTMENTS"), "department data exists");
+const counties = ["Montgomery County", "Greene County", "Warren County", "Butler County",
+  "Hamilton County", "Clermont County", "Mason County", "Lewis County",
+  "Kenton County", "Campbell County"];
+counties.forEach(function (c) {
+  ok(src.indexOf('"' + c + '": {') !== -1, c + " has a researched department record");
+});
+ok(src.includes("9372254622"), "Montgomery County number stored as digits");
+ok(src.includes("5139464550"), "Hamilton County number stored");
+ok(src.includes("6065642525"), "Maysville building official number stored");
+ok(src.includes("5137327213"), "Clermont Permit Central number stored");
+ok(src.includes("No local building inspector"), "Lewis County has no inspector, and says so");
+ok(src.includes("Does NOT cover Fairborn, Xenia"), "Greene County exclusions are recorded");
+ok(src.includes("City of Cincinnati runs its own Permit Center"), "Cincinnati is flagged as separate");
+ok(src.includes("not residential there"), "Clermont covers only commercial in Brown County");
+ok(src.includes('checked: "Jul 2026"'), "records carry a lookup date");
+ok(src.includes("Check this before you apply"), "exceptions are surfaced, not buried");
+ok(src.includes("needsContact: !dept"), "records with a department are not marked as missing one");
+
+/* phone numbers are stored as digits so formatting is single-sourced */
+const deptBlock = src.slice(src.indexOf("const COUNTY_DEPARTMENTS"), src.indexOf("/* Flatten the county maps"));
+ok(!/phone: "\(\d{3}\)/.test(deptBlock), "department phones are stored unformatted");
 
 if (fails) { console.log("\nbuild 21: " + fails + " FAILED"); process.exit(1); }
 console.log("build 21 tests passed");

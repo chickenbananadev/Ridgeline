@@ -68838,9 +68838,112 @@ var KY_COUNTY_ZIPS = {
   },
   "Grant County": { "41097": "Williamstown", "41030": "Crittenden" }
 };
+var COUNTY_DEPARTMENTS = {
+  "Montgomery County": {
+    office: "Montgomery County Building Regulations",
+    phone: "9372254622",
+    address: "371 W Second St, Dayton, OH 45402",
+    web: "https://www.selectmcohio.com/building",
+    note: "Serves most jurisdictions in the county, including Huber Heights, as their building department.",
+    except: "Some cities run their own building or zoning office. Confirm the address is county-served before applying.",
+    checked: "Jul 2026"
+  },
+  "Greene County": {
+    office: "Greene County Department of Building Regulation",
+    phone: "9375627420",
+    address: "667 Dayton-Xenia Rd, Xenia, OH 45385",
+    web: "https://www.greenecountyohio.gov/139/Building-Regulation",
+    note: "Residential and commercial permits and inspections for all use groups. Schedule inspections via the iWorQ portal or by phone before 3pm the prior workday.",
+    except: "Does NOT cover Fairborn, Xenia, Bowersville, Clifton, Cedarville or Yellow Springs \u2014 each runs its own. Xenia Building Division: 1(937)372-6389.",
+    checked: "Jul 2026"
+  },
+  "Warren County": {
+    office: "Warren County Building & Zoning",
+    phone: "5136951290",
+    address: "406 Justice Drive, Room 167, Lebanon, OH 45036",
+    web: "https://www.warrencountyohio.gov",
+    note: "Mon-Fri 8:00-5:00. Permits and plan review via the iWorQ citizen portal; email buildinginspection@warrencountyohio.gov.",
+    except: "Springboro and some villages run their own building or zoning office. Confirm jurisdiction first.",
+    checked: "Jul 2026"
+  },
+  "Butler County": {
+    office: "Butler County Building & Zoning (Dept. of Development)",
+    phone: "5138873205",
+    address: "130 High Street, Hamilton, OH 45011",
+    web: "https://www.bcohio.gov",
+    note: "Building, electrical and zoning for the unincorporated areas. Inspectors take calls 8:00-9:00am. Online permits via the Accela Citizen Portal.",
+    except: "Cities run their own. City of Hamilton building department: 1(513)785-7360, building@hamilton-oh.gov. Fairfield and Oxford also separate.",
+    checked: "Jul 2026"
+  },
+  "Hamilton County": {
+    office: "Hamilton County Planning + Development, Buildings + Inspections",
+    phone: "5139464550",
+    address: "138 East Court Street, Room 801, Cincinnati, OH 45202",
+    web: "https://www.hamiltoncountyohio.gov/government/departments/planning_and_development/buildings_and_inspections/index.php",
+    note: "Unincorporated townships plus six contract jurisdictions. Fully digital since Feb 2025 \u2014 permits and inspections through ezTrak. Inspectors take calls 7:30-8:30am.",
+    except: "The City of Cincinnati runs its own Permit Center and is NOT county-served. Electrical permits and inspections go through Inspection Bureau Inc, not the county.",
+    checked: "Jul 2026"
+  },
+  "Clermont County": {
+    office: "Clermont County Permit Central / Building Inspection",
+    phone: "5137327213",
+    address: "2275 Bauer Road, Batavia, OH 45103",
+    web: "http://building.clermontcountyohio.gov",
+    note: "State-certified for ALL residential and commercial construction in Clermont County, including every village. Administers the Residential Code of Ohio. Inspections must be scheduled a day ahead.",
+    except: "Also handles COMMERCIAL work in Brown County \u2014 but not residential there, and not Russellville or Hamersville.",
+    checked: "Jul 2026"
+  },
+  "Brown County": {
+    office: "Brown County \u2014 confirm the issuing authority for the address",
+    phone: "",
+    address: "",
+    web: "http://building.clermontcountyohio.gov",
+    note: "Clermont County Building Inspection is certified for COMMERCIAL construction in most of Brown County. Residential permitting is handled locally and varies by village and township.",
+    except: "Clermont's certification excludes Russellville and Hamersville. For residential, call the township or village directly before tear-off.",
+    checked: "Jul 2026"
+  },
+  /* ---------- Kentucky ---------- */
+  "Mason County": {
+    office: "City of Maysville / Mason County Codes Department",
+    phone: "6065642525",
+    address: "216 Bridge Street, Maysville, KY 41056",
+    web: "https://www.cityofmaysvilleky.gov/departments/codes_department/index.php",
+    note: "Building Official Jim Fawcett, 1(606)564-2525. Codes Officer 1(606)564-2504. Inspector in the office Mon, Tue, Wed and Fri 8:00-11:00am; field inspections in the afternoons, so call ahead. One- and two-family dwellings are built to the Kentucky Residential Code.",
+    except: "The Mason County Fiscal Court adopted the building code in 2006 and the same office serves both city and county. Ask whether the address is inside Maysville city limits \u2014 the permit form asks.",
+    checked: "Jul 2026"
+  },
+  "Lewis County": {
+    office: "No local building inspector",
+    phone: "",
+    address: "",
+    web: "https://dhbc.ky.gov",
+    note: "Kentucky DHBC lists NO local building inspector for Lewis County. Residential work is governed by the Kentucky Residential Code but there is no local plan review or inspection office; commercial work goes to the state department.",
+    except: "Do not assume no inspector means no requirements \u2014 the KRC still applies, and the county clerk (1(606)796-3062, 112 2nd Street, Vanceburg) can point you at whoever handles zoning.",
+    checked: "Jul 2026"
+  },
+  "Kenton County": {
+    office: "Planning and Development Services of Kenton County (PDS)",
+    phone: "8599572408",
+    address: "1840 Simon Kenton Way, Suite 3400, Covington, KY 41011",
+    web: "https://www.pdskc.org/services/one-stop-shop/building-permits/",
+    note: "City-county agency serving all 20 local governments in Kenton County. Main line 1(859)331-8980; building permits 1(859)957-2408. Applications can be filed online.",
+    except: "Some cities keep their own local building inspector \u2014 Erlanger, for example. PDS can tell you which applies.",
+    checked: "Jul 2026"
+  },
+  "Campbell County": {
+    office: "Campbell County Planning, Zoning & Building Inspections",
+    phone: "8592923880",
+    address: "Campbell County, KY",
+    web: "https://campbellcountyky.gov",
+    note: "Mon-Fri 8:30-4:30. Email pzadmin@campbellcountyky.gov for a faster answer than the phone. Serves unincorporated Campbell County plus several cities.",
+    except: "Covers unincorporated areas and select cities only \u2014 Newport, Fort Thomas, Bellevue and Dayton KY may run their own. Confirm before applying.",
+    checked: "Jul 2026"
+  }
+};
 function buildMarketJurisdictions() {
   const out = {};
   const add = (zip, city, county, state) => {
+    const dept = COUNTY_DEPARTMENTS[county] || null;
     const z = zip.replace(/[a-z]$/, "");
     if (out[z]) return;
     const d = STATE_DEFAULTS[state];
@@ -68853,8 +68956,16 @@ function buildMarketJurisdictions() {
       codeEdition: d.codeEdition,
       adoption: d.adoption,
       permit: d.permit,
-      inspector: { office: "", phone: "", address: "" },
-      needsContact: true,
+      inspector: dept ? {
+        office: dept.office,
+        phone: dept.phone,
+        address: dept.address,
+        web: dept.web,
+        note: dept.note,
+        except: dept.except,
+        checked: dept.checked
+      } : { office: "", phone: "", address: "" },
+      needsContact: !dept,
       verified: false,
       sources: d.sources,
       verifiedDetail: { date: null, by: null }
@@ -79906,7 +80017,7 @@ Authority: ${c.cite}`;
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Adoption", v: juris.adoption }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Permits", v: juris.permit }),
           juris.sources && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8 }, children: juris.sources.map((sid) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SourceLink, { srcId: sid }, sid)) }),
-          !juris.verified && juris.precision === "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "City and county confirmed; office not yet on file", children: "Ohio and Kentucky both run statewide residential codes, so the code basis above is right for this address. What is missing is which building department issues the permit \u2014 add it below the first time you call them and it is saved for everyone." }),
+          !juris.verified && juris.precision === "market" && juris.needsContact && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "City and county confirmed; office not yet on file", children: "Ohio and Kentucky both run statewide residential codes, so the code basis above is right for this address. What is missing is which building department issues the permit \u2014 add it below the first time you call them and it is saved for everyone." }),
           !juris.verified && juris.precision !== "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Before field use", children: "Open the official source above, confirm the adopted edition and local amendments, and have the office mark this jurisdiction verified with a date and initials." })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
@@ -79964,10 +80075,31 @@ Authority: ${c.cite}`;
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Office", v: juris.inspector.office || "\u2014" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Phone", v: juris.inspector.phone ? fmtPhone(juris.inspector.phone) : "\u2014" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Address", v: juris.inspector.address || "\u2014" }),
-            juris.inspector.phone && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: telHref(juris.inspector.phone), style: { textDecoration: "none", display: "block", marginTop: 10 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { width: "100%" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Phone, { size: 13 }),
-              " Call the department"
-            ] }) })
+            juris.inspector.note && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+              fontSize: 12.5,
+              color: S.ink,
+              lineHeight: 1.55,
+              marginTop: 9,
+              background: S.soft,
+              borderRadius: 9,
+              padding: "10px 12px"
+            }, children: juris.inspector.note }),
+            juris.inspector.except && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Check this before you apply", tone: "amber", children: juris.inspector.except }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 10 }, children: [
+              juris.inspector.phone && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: telHref(juris.inspector.phone), style: { flex: 1, textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { width: "100%" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Phone, { size: 13 }),
+                " Call"
+              ] }) }),
+              juris.inspector.web && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: juris.inspector.web, target: "_blank", rel: "noreferrer", style: { flex: 1, textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { width: "100%" }, children: [
+                "Website ",
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ExternalLink, { size: 12 })
+              ] }) })
+            ] }),
+            juris.inspector.checked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: [
+              "Looked up ",
+              juris.inspector.checked,
+              " from the department's own site. Numbers and staffing change \u2014 if it is stale, correct it here and it updates for everyone."
+            ] })
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
