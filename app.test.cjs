@@ -68512,7 +68512,8 @@ function repSplitValid(job) {
 }
 function computeCapOut(job) {
   const { materials, labor, other, cogs } = computeFin(job.fin);
-  const contract = job.contract.price || estimateTotal(job.estimate) || job.value || 0;
+  const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : []).filter((c) => c.status === "Approved").reduce((a2, c) => a2 + num(c.amount), 0);
+  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved;
   const gross = contract - cogs;
   const structure = job.fin.structure || "grossProfit";
   const rate = job.fin.commissionRate;
@@ -68596,7 +68597,8 @@ function compareStructures(job) {
 function paymentsSummary(job) {
   const received = job.payments.filter((p) => p.type === "Received").reduce((s, p) => s + p.amt, 0);
   const paidOut = job.payments.filter((p) => p.type !== "Received").reduce((s, p) => s + p.amt, 0);
-  const contract = job.contract.price || estimateTotal(job.estimate) || job.value || 0;
+  const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : []).filter((c) => c.status === "Approved").reduce((a2, c) => a2 + num(c.amount), 0);
+  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved;
   return { received, paidOut, contract, balance: contract - received };
 }
 var EXPORT_ALLOWED = false;
@@ -72278,6 +72280,8 @@ var JOB_TABS = [
 var JOB_SECTIONS = [
   ["overview", "Overview", import_lucide_react.ClipboardList],
   ["claim", "Insurance claim", import_lucide_react.Shield],
+  ["handoff", "Sold & handoff", import_lucide_react.Share2],
+  ["changeorders", "Change orders", import_lucide_react.ScrollText],
   ["checklist", "Inspection checklist", import_lucide_react.CheckCircle2],
   ["ventilation", "Ventilation", import_lucide_react.Wrench],
   ["measure", "Measurements", import_lucide_react.Package],
@@ -72560,6 +72564,21 @@ function JobDetail({
               );
             case "claim":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabClaim, { job, mut, toast: toast2, brand: brand2 });
+            case "handoff":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                TabHandoff,
+                {
+                  job,
+                  mut,
+                  toast: toast2,
+                  isAdmin,
+                  currentUser,
+                  stages,
+                  onMoveStage
+                }
+              );
+            case "changeorders":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChangeOrders, { job, mut, toast: toast2, currentUser });
             case "checklist":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChecklist, { job, mut, toast: toast2 });
             case "ventilation":
@@ -72643,6 +72662,7 @@ function JobDetail({
         };
         const relevant = JOB_SECTIONS.filter(([id]) => {
           if (id === "claim") return job.claimType === "Insurance";
+          if (id === "handoff" || id === "changeorders") return true;
           return allowed.has(id);
         });
         return relevant.map(([id, label, Icon]) => {
@@ -74891,6 +74911,316 @@ function claimMath(job) {
     outstanding,
     flags
   };
+}
+var HANDOFF_CHECKS = [
+  {
+    id: "contract",
+    label: "Signed contract on file",
+    test: (j) => !!(j.contract && j.contract.status === "Signed"),
+    fix: "Contract section \u2014 send for signature or mark it signed."
+  },
+  {
+    id: "price",
+    label: "Contract price set",
+    test: (j) => num(j.contract && j.contract.price) > 0 || num(j.fin && j.fin.contract) > 0,
+    fix: "Contract or Financials \u2014 a job with no price cannot be capped out."
+  },
+  {
+    id: "deposit",
+    label: "Deposit collected or waived",
+    test: (j) => num((j.payments || []).reduce((a, p) => a + num(p.amount), 0)) > 0 || !!j.depositWaived,
+    fix: "Payments section \u2014 record the deposit, or tick waived on the approval."
+  },
+  {
+    id: "measure",
+    label: "Measurements recorded",
+    test: (j) => num(j.measurements && j.measurements.squares) > 0,
+    fix: "Measurements section \u2014 import a report or key the squares."
+  },
+  {
+    id: "materials",
+    label: "Material list built",
+    test: (j) => Array.isArray(j.materials) && j.materials.length > 0,
+    fix: "Materials section \u2014 build the list so production can order."
+  },
+  {
+    id: "claim",
+    label: "Claim approved by the carrier",
+    test: (j) => j.claimType !== "Insurance" || ["scope", "supplement", "scheduled", "invoiced", "closed"].includes((j.claim || {}).stage),
+    fix: "Insurance claim section \u2014 the carrier has not approved a scope yet."
+  }
+];
+function handoffReadiness(job) {
+  const results = HANDOFF_CHECKS.map((c) => ({ ...c, ok: !!c.test(job) }));
+  const failed = results.filter((r) => !r.ok);
+  return { results, failed, ready: failed.length === 0 };
+}
+function buildJobFolder(job, approver) {
+  return {
+    at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " "),
+    by: approver,
+    contractPrice: num(job.contract && job.contract.price) || num(job.fin && job.fin.contract),
+    squares: (job.measurements || {}).squares || "",
+    pitch: (job.measurements || {}).pitch || "",
+    layers: (job.intake || {}).layers || "",
+    materials: (job.materials || []).map((m) => ({ ...m })),
+    scope: (job.estimate && job.estimate.items ? job.estimate.items : []).map((i) => ({ ...i })),
+    claim: job.claimType === "Insurance" ? {
+      carrier: (job.insurance || {}).carrier || "",
+      claimNo: (job.insurance || {}).claim || "",
+      rcv: (job.claim || {}).rcv || "",
+      deductible: (job.claim || {}).deductible || ""
+    } : null,
+    address: job.address,
+    customer: job.name,
+    phone: job.phone || (job.contact || {}).phone || "",
+    notes: (job.notes || []).slice(0, 5).map((n) => n.text)
+  };
+}
+function TabHandoff({ job, mut, toast: toast2, isAdmin, currentUser, stages, onMoveStage }) {
+  const r = handoffReadiness(job);
+  const folder = job.jobFolder || null;
+  const requested = !!job.soldRequestedAt;
+  const [note, setNote] = (0, import_react.useState)("");
+  const requestApproval = () => {
+    mut((j) => ({ ...j, soldRequestedAt: nowStamp(), soldRequestedBy: (currentUser || {}).name || "", soldNote: note.trim() }));
+    toast2("Sent for approval");
+    setNote("");
+  };
+  const approve = () => {
+    const built = buildJobFolder(job, (currentUser || {}).name || "Admin");
+    mut((j) => ({ ...j, jobFolder: built, approvedAt: built.at, approvedBy: built.by, soldRejectedAt: null }));
+    const prod = (stages || []).find((s) => /deposit paid|production/i.test(s.name));
+    if (prod && onMoveStage) onMoveStage(job.id, prod.id);
+    toast2("Approved \u2014 job folder created and moved to production");
+  };
+  const reject = () => {
+    mut((j) => ({ ...j, soldRejectedAt: nowStamp(), soldRejectedBy: (currentUser || {}).name || "", soldRequestedAt: null }));
+    toast2("Sent back to the rep");
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children: folder ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { borderLeft: "4px solid #177245" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Approved" }), children: "Job folder" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 10, lineHeight: 1.5 }, children: [
+      "Approved by ",
+      folder.by,
+      " on ",
+      folder.at,
+      ". This is a snapshot of what was signed off \u2014 later edits to the estimate do not change what production was told to build."
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Customer", v: folder.customer }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Address", v: folder.address }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Contract price", v: money(folder.contractPrice), strong: true }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Squares", v: folder.squares || "\u2014" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Pitch", v: folder.pitch || "\u2014" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Layers", v: folder.layers || "\u2014" }),
+    folder.claim && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: `1px solid ${S.line}`, marginTop: 10, paddingTop: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Carrier", v: folder.claim.carrier || "\u2014" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Claim number", v: folder.claim.claimNo || "\u2014" })
+    ] }),
+    folder.materials.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: `1px solid ${S.line}`, marginTop: 10, paddingTop: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", marginBottom: 6 }, children: "MATERIALS AS APPROVED" }),
+      folder.materials.map((m, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: m.label || m.desc }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub }, children: [
+          m.qty,
+          " ",
+          m.unit
+        ] })
+      ] }, i2))
+    ] }),
+    isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      Btn,
+      {
+        kind: "ghost",
+        small: true,
+        style: { width: "100%", marginTop: 12 },
+        onClick: () => {
+          mut((j) => ({ ...j, jobFolder: null, approvedAt: null, approvedBy: null }));
+          toast2("Approval revoked");
+        },
+        children: "Revoke approval"
+      }
+    )
+  ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.ready ? "green" : "amber", children: [
+        r.results.length - r.failed.length,
+        "/",
+        r.results.length
+      ] }), children: "Ready for production?" }),
+      r.results.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 9, alignItems: "flex-start", padding: "8px 0", borderTop: `1px solid ${S.line}` }, children: [
+        c.ok ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 17, color: "#177245", style: { flexShrink: 0, marginTop: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Circle, { size: 17, color: "#D6D9DE", style: { flexShrink: 0, marginTop: 1 } }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 600, color: c.ok ? S.ink : S.sub }, children: c.label }),
+          !c.ok && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 2, lineHeight: 1.45 }, children: c.fix })
+        ] })
+      ] }, c.id)),
+      !r.ready && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 9, alignItems: "center", padding: "10px 0 2px", fontSize: 13, cursor: "pointer" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: !!job.depositWaived,
+            onChange: (e) => mut((j) => ({ ...j, depositWaived: e.target.checked })),
+            style: { width: 17, height: 17, accentColor: T.accent }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Deposit waived for this job" })
+      ] })
+    ] }),
+    job.soldRejectedAt && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Sent back by the office", tone: "red", children: [
+      job.soldRejectedBy,
+      " returned this on ",
+      job.soldRejectedAt,
+      ". Fix what is outstanding above and send it again."
+    ] }),
+    requested ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "Awaiting approval" }), children: "Sent for approval" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: [
+        job.soldRequestedBy,
+        " sent this on ",
+        job.soldRequestedAt,
+        ".",
+        job.soldNote ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          " Note: \u201C",
+          job.soldNote,
+          "\u201D"
+        ] }) : null
+      ] }),
+      isAdmin ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: reject, children: "Send back" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 1 }, onClick: approve, "data-testid": "approve-job", children: r.ready ? "Approve" : "Approve anyway" })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 10 }, children: "An admin approves from here. You will see the job folder once they do." }),
+      isAdmin && !r.ready && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: "#9A6B00", marginTop: 9, lineHeight: 1.5 }, children: [
+        r.failed.length,
+        " ",
+        r.failed.length === 1 ? "check has" : "checks have",
+        " not passed. Approving anyway is allowed \u2014 it is recorded against your name."
+      ] })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Send for approval" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Once the office approves, the job folder is generated and the job moves into production. Nothing is ordered before that." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Anything the office should know", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "textarea",
+        {
+          style: { ...inputStyle, minHeight: 70, resize: "vertical" },
+          value: note,
+          onChange: (e) => setNote(e.target.value),
+          placeholder: "Homeowner wants the crew to avoid the flower beds on the east side"
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, onClick: requestApproval, "data-testid": "request-approval", children: "Mark sold \u2014 send for approval" })
+    ] })
+  ] }) });
+}
+var CO_STATUS = ["Draft", "Sent", "Approved", "Declined"];
+function changeOrderTotals(job) {
+  const list = Array.isArray(job.changeOrders) ? job.changeOrders : [];
+  const approved = list.filter((c) => c.status === "Approved");
+  const pending = list.filter((c) => c.status === "Sent" || c.status === "Draft");
+  return {
+    list,
+    approvedTotal: approved.reduce((a, c) => a + num(c.amount), 0),
+    pendingTotal: pending.reduce((a, c) => a + num(c.amount), 0),
+    approvedCount: approved.length,
+    pendingCount: pending.length
+  };
+}
+function TabChangeOrders({ job, mut, toast: toast2, currentUser }) {
+  const t = changeOrderTotals(job);
+  const base = num(job.contract && job.contract.price) || num(job.fin && job.fin.contract);
+  const add = () => mut((j) => ({
+    ...j,
+    changeOrders: [
+      ...j.changeOrders || [],
+      {
+        id: uid("co"),
+        desc: "",
+        amount: "",
+        reason: "Customer request",
+        status: "Draft",
+        at: nowStamp(),
+        by: (currentUser || {}).name || ""
+      }
+    ]
+  }));
+  const edit = (id, k, v) => mut((j) => ({
+    ...j,
+    changeOrders: (j.changeOrders || []).map((c) => c.id === id ? { ...c, [k]: v } : c)
+  }));
+  const del = (id) => mut((j) => ({ ...j, changeOrders: (j.changeOrders || []).filter((c) => c.id !== id) }));
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: t.pendingCount > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "amber", children: [
+        t.pendingCount,
+        " pending"
+      ] }) : null, children: "Contract value" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Original contract", v: money(base) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Approved changes", v: `${t.approvedTotal >= 0 ? "+" : ""}${money(t.approvedTotal)}` }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { borderTop: `1px solid ${S.line}`, marginTop: 8, paddingTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Current contract value", v: money(base + t.approvedTotal), strong: true }) }),
+      t.pendingTotal !== 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: [
+        money(t.pendingTotal),
+        " is still pending and is not counted above. Only approved changes move the contract."
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Change orders" }),
+      t.list.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }, children: "Nothing yet. Raise one whenever the scope moves after signing \u2014 rotten decking, an upgrade the homeowner asked for, an access problem nobody priced. Unrecorded changes are where the margin goes." }),
+      t.list.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderBottom: `1px solid ${S.line}`, paddingBottom: 11, marginBottom: 11 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: { ...inputStyle, flex: 1, padding: "9px 11px" },
+              value: c.desc,
+              placeholder: "e.g. Replace 6 sheets of decking",
+              onChange: (e) => edit(c.id, "desc", e.target.value)
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: { ...inputStyle, width: 92, textAlign: "right", padding: "9px 11px" },
+              inputMode: "decimal",
+              value: c.amount,
+              onChange: (e) => edit(c.id, "amount", e.target.value)
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => del(c.id), style: { border: "none", background: "none", cursor: "pointer", lineHeight: 0 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "select",
+          {
+            style: { ...selStyle, marginTop: 7, minHeight: 40 },
+            value: c.reason,
+            onChange: (e) => edit(c.id, "reason", e.target.value),
+            children: ["Customer request", "Hidden condition", "Code requirement", "Carrier supplement", "Access / site issue", "Our error"].map((x) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: x }, x))
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 5, marginTop: 7, flexWrap: "wrap" }, children: CO_STATUS.map((st) => {
+          const on = (c.status || "Draft") === st;
+          const tone = st === "Declined" ? "#B3261E" : st === "Approved" ? "#177245" : T.accent;
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => edit(c.id, "status", st), style: {
+            border: `1.5px solid ${on ? tone : S.line}`,
+            background: on ? st === "Declined" ? "#FDECEA" : st === "Approved" ? "#EAF6EE" : T.accentSoft : "#fff",
+            color: on ? tone : S.sub,
+            borderRadius: 8,
+            padding: "5px 11px",
+            fontSize: 12,
+            fontWeight: 800,
+            cursor: "pointer",
+            fontFamily: "inherit"
+          }, children: st }, st);
+        }) }),
+        c.reason === "Our error" && c.status === "Approved" && num(c.amount) > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Charging the customer for our own error", tone: "amber", children: 'Reason is set to "our error" but this is billing the customer. If it is a goodwill absorb, enter it as a negative amount.' })
+      ] }, c.id)),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { width: "100%" }, onClick: add, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+        " Add change order"
+      ] })
+    ] })
+  ] });
 }
 function TabClaim({ job, mut, toast: toast2, brand: brand2 }) {
   const c = job.claim || {};

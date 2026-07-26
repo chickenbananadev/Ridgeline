@@ -1560,7 +1560,11 @@ function repSplitValid(job) {
 
 function computeCapOut(job) {
   const { materials, labor, other, cogs } = computeFin(job.fin);
-  const contract = job.contract.price || estimateTotal(job.estimate) || job.value || 0;
+  /* Approved change orders move the contract. Leaving them out is the
+     most common way a job reads profitable and is not. */
+  const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : [])
+    .filter((c) => c.status === "Approved").reduce((a2, c) => a2 + num(c.amount), 0);
+  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved;
   const gross = contract - cogs;
   const structure = job.fin.structure || "grossProfit";
   const rate = job.fin.commissionRate;
@@ -1638,7 +1642,9 @@ function compareStructures(job) {
 function paymentsSummary(job) {
   const received = job.payments.filter((p) => p.type === "Received").reduce((s, p) => s + p.amt, 0);
   const paidOut = job.payments.filter((p) => p.type !== "Received").reduce((s, p) => s + p.amt, 0);
-  const contract = job.contract.price || estimateTotal(job.estimate) || job.value || 0;
+  const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : [])
+    .filter((c) => c.status === "Approved").reduce((a2, c) => a2 + num(c.amount), 0);
+  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved;
   return { received, paidOut, contract, balance: contract - received };
 }
 /* Export gate. Reps cannot pull data out — this is what stops a
@@ -4781,6 +4787,8 @@ const JOB_TABS = [
 const JOB_SECTIONS = [
   ["overview", "Overview", ClipboardList],
   ["claim", "Insurance claim", Shield],
+  ["handoff", "Sold & handoff", Share2],
+  ["changeorders", "Change orders", ScrollText],
   ["checklist", "Inspection checklist", CheckCircle2],
   ["ventilation", "Ventilation", Wrench],
   ["measure", "Measurements", Package],
@@ -4967,6 +4975,9 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "overview": return <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand}
                 currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} users={users} isAdmin={isAdmin} />;
               case "claim": return <TabClaim job={job} mut={mut} toast={toast} brand={brand} />;
+              case "handoff": return <TabHandoff job={job} mut={mut} toast={toast} isAdmin={isAdmin}
+                currentUser={currentUser} stages={stages} onMoveStage={onMoveStage} />;
+              case "changeorders": return <TabChangeOrders job={job} mut={mut} toast={toast} currentUser={currentUser} />;
               case "checklist": return <TabChecklist job={job} mut={mut} toast={toast} />;
               case "ventilation": return <TabVentilation job={job} mut={mut} toast={toast} />;
               case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
@@ -4994,6 +5005,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
              only where there is actually a carrier involved. */
           const relevant = JOB_SECTIONS.filter(([id]) => {
             if (id === "claim") return job.claimType === "Insurance";
+            if (id === "handoff" || id === "changeorders") return true;
             return allowed.has(id);
           });
           return relevant.map(([id, label, Icon]) => {
@@ -7214,6 +7226,331 @@ function claimMath(job) {
     depOutstanding, supOutstanding, owedByCarrier,
     claimValue, collected, outstanding, flags,
   };
+}
+
+/* ==================================================================
+   SOLD → APPROVAL → JOB FOLDER
+
+   The front end sells; the back end builds. This is the gate between
+   them. A rep marks a job sold, an admin approves it, and only then
+   does the system generate the production job folder and move the job
+   into the build stages.
+
+   Approval is not ceremony. It is the last point where a bad contract
+   is cheap to fix — before materials are ordered and a crew is booked.
+   The readiness checks below are what an owner actually looks for
+   before letting a job through.
+================================================================== */
+const HANDOFF_CHECKS = [
+  { id: "contract", label: "Signed contract on file",
+    test: (j) => !!(j.contract && j.contract.status === "Signed"),
+    fix: "Contract section — send for signature or mark it signed." },
+  { id: "price", label: "Contract price set",
+    test: (j) => num(j.contract && j.contract.price) > 0 || num(j.fin && j.fin.contract) > 0,
+    fix: "Contract or Financials — a job with no price cannot be capped out." },
+  { id: "deposit", label: "Deposit collected or waived",
+    test: (j) => num((j.payments || []).reduce((a, p) => a + num(p.amount), 0)) > 0 || !!j.depositWaived,
+    fix: "Payments section — record the deposit, or tick waived on the approval." },
+  { id: "measure", label: "Measurements recorded",
+    test: (j) => num(j.measurements && j.measurements.squares) > 0,
+    fix: "Measurements section — import a report or key the squares." },
+  { id: "materials", label: "Material list built",
+    test: (j) => Array.isArray(j.materials) && j.materials.length > 0,
+    fix: "Materials section — build the list so production can order." },
+  { id: "claim", label: "Claim approved by the carrier",
+    test: (j) => j.claimType !== "Insurance" || ["scope", "supplement", "scheduled", "invoiced", "closed"].includes((j.claim || {}).stage),
+    fix: "Insurance claim section — the carrier has not approved a scope yet." },
+];
+
+function handoffReadiness(job) {
+  const results = HANDOFF_CHECKS.map((c) => ({ ...c, ok: !!c.test(job) }));
+  const failed = results.filter((r) => !r.ok);
+  return { results, failed, ready: failed.length === 0 };
+}
+
+/* The folder is a snapshot, not a live view. Production should be
+   working from what was approved, so a later edit to the estimate does
+   not silently change what the crew was told to build. */
+function buildJobFolder(job, approver) {
+  return {
+    at: new Date().toISOString().slice(0, 16).replace("T", " "),
+    by: approver,
+    contractPrice: num(job.contract && job.contract.price) || num(job.fin && job.fin.contract),
+    squares: (job.measurements || {}).squares || "",
+    pitch: (job.measurements || {}).pitch || "",
+    layers: (job.intake || {}).layers || "",
+    materials: (job.materials || []).map((m) => ({ ...m })),
+    scope: (job.estimate && job.estimate.items ? job.estimate.items : []).map((i) => ({ ...i })),
+    claim: job.claimType === "Insurance"
+      ? { carrier: (job.insurance || {}).carrier || "", claimNo: (job.insurance || {}).claim || "",
+          rcv: (job.claim || {}).rcv || "", deductible: (job.claim || {}).deductible || "" }
+      : null,
+    address: job.address, customer: job.name,
+    phone: job.phone || (job.contact || {}).phone || "",
+    notes: (job.notes || []).slice(0, 5).map((n) => n.text),
+  };
+}
+
+function TabHandoff({ job, mut, toast, isAdmin, currentUser, stages, onMoveStage }) {
+  const r = handoffReadiness(job);
+  const folder = job.jobFolder || null;
+  const requested = !!job.soldRequestedAt;
+  const [note, setNote] = useState("");
+
+  const requestApproval = () => {
+    mut((j) => ({ ...j, soldRequestedAt: nowStamp(), soldRequestedBy: (currentUser || {}).name || "", soldNote: note.trim() }));
+    toast("Sent for approval");
+    setNote("");
+  };
+
+  const approve = () => {
+    const built = buildJobFolder(job, (currentUser || {}).name || "Admin");
+    mut((j) => ({ ...j, jobFolder: built, approvedAt: built.at, approvedBy: built.by, soldRejectedAt: null }));
+    /* Move into production once approved — the whole point of the gate
+       is that the stage change and the folder happen together. */
+    const prod = (stages || []).find((s) => /deposit paid|production/i.test(s.name));
+    if (prod && onMoveStage) onMoveStage(job.id, prod.id);
+    toast("Approved — job folder created and moved to production");
+  };
+
+  const reject = () => {
+    mut((j) => ({ ...j, soldRejectedAt: nowStamp(), soldRejectedBy: (currentUser || {}).name || "", soldRequestedAt: null }));
+    toast("Sent back to the rep");
+  };
+
+  return (
+    <>
+      {folder ? (
+        <Card style={{ borderLeft: "4px solid #177245" }}>
+          <CardTitle right={<Chip tone="green">Approved</Chip>}>Job folder</CardTitle>
+          <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
+            Approved by {folder.by} on {folder.at}. This is a snapshot of what
+            was signed off — later edits to the estimate do not change what
+            production was told to build.
+          </div>
+          <KV k="Customer" v={folder.customer} />
+          <KV k="Address" v={folder.address} />
+          <KV k="Contract price" v={money(folder.contractPrice)} strong />
+          <KV k="Squares" v={folder.squares || "—"} />
+          <KV k="Pitch" v={folder.pitch || "—"} />
+          <KV k="Layers" v={folder.layers || "—"} />
+          {folder.claim && (
+            <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 10, paddingTop: 10 }}>
+              <KV k="Carrier" v={folder.claim.carrier || "—"} />
+              <KV k="Claim number" v={folder.claim.claimNo || "—"} />
+            </div>
+          )}
+          {folder.materials.length > 0 && (
+            <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 10, paddingTop: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", marginBottom: 6 }}>
+                MATERIALS AS APPROVED
+              </div>
+              {folder.materials.map((m, i2) => (
+                <div key={i2} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0" }}>
+                  <span>{m.label || m.desc}</span>
+                  <span style={{ color: S.sub }}>{m.qty} {m.unit}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {isAdmin && (
+            <Btn kind="ghost" small style={{ width: "100%", marginTop: 12 }}
+              onClick={() => { mut((j) => ({ ...j, jobFolder: null, approvedAt: null, approvedBy: null })); toast("Approval revoked"); }}>
+              Revoke approval
+            </Btn>
+          )}
+        </Card>
+      ) : (
+        <>
+          <Card>
+            <CardTitle right={<Chip tone={r.ready ? "green" : "amber"}>{r.results.length - r.failed.length}/{r.results.length}</Chip>}>
+              Ready for production?
+            </CardTitle>
+            {r.results.map((c) => (
+              <div key={c.id} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
+                {c.ok ? <CheckCircle2 size={17} color="#177245" style={{ flexShrink: 0, marginTop: 1 }} />
+                      : <Circle size={17} color="#D6D9DE" style={{ flexShrink: 0, marginTop: 1 }} />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: c.ok ? S.ink : S.sub }}>{c.label}</div>
+                  {!c.ok && <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2, lineHeight: 1.45 }}>{c.fix}</div>}
+                </div>
+              </div>
+            ))}
+            {!r.ready && (
+              <label style={{ display: "flex", gap: 9, alignItems: "center", padding: "10px 0 2px", fontSize: 13, cursor: "pointer" }}>
+                <input type="checkbox" checked={!!job.depositWaived}
+                  onChange={(e) => mut((j) => ({ ...j, depositWaived: e.target.checked }))}
+                  style={{ width: 17, height: 17, accentColor: T.accent }} />
+                <span>Deposit waived for this job</span>
+              </label>
+            )}
+          </Card>
+
+          {job.soldRejectedAt && (
+            <Callout label="Sent back by the office" tone="red">
+              {job.soldRejectedBy} returned this on {job.soldRejectedAt}. Fix what
+              is outstanding above and send it again.
+            </Callout>
+          )}
+
+          {requested ? (
+            <Card style={{ marginTop: 12 }}>
+              <CardTitle right={<Chip tone="amber">Awaiting approval</Chip>}>Sent for approval</CardTitle>
+              <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+                {job.soldRequestedBy} sent this on {job.soldRequestedAt}.
+                {job.soldNote ? <> Note: “{job.soldNote}”</> : null}
+              </div>
+              {isAdmin ? (
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <Btn kind="ghost" style={{ flex: 1 }} onClick={reject}>Send back</Btn>
+                  <Btn style={{ flex: 1 }} onClick={approve} data-testid="approve-job">
+                    {r.ready ? "Approve" : "Approve anyway"}
+                  </Btn>
+                </div>
+              ) : (
+                <div style={{ fontSize: 12.5, color: S.sub, marginTop: 10 }}>
+                  An admin approves from here. You will see the job folder once they do.
+                </div>
+              )}
+              {isAdmin && !r.ready && (
+                <div style={{ fontSize: 11.5, color: "#9A6B00", marginTop: 9, lineHeight: 1.5 }}>
+                  {r.failed.length} {r.failed.length === 1 ? "check has" : "checks have"} not passed.
+                  Approving anyway is allowed — it is recorded against your name.
+                </div>
+              )}
+            </Card>
+          ) : (
+            <Card style={{ marginTop: 12 }}>
+              <CardTitle>Send for approval</CardTitle>
+              <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+                Once the office approves, the job folder is generated and the job
+                moves into production. Nothing is ordered before that.
+              </div>
+              <Field label="Anything the office should know">
+                <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical" }} value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Homeowner wants the crew to avoid the flower beds on the east side" />
+              </Field>
+              <Btn style={{ width: "100%" }} onClick={requestApproval} data-testid="request-approval">
+                Mark sold — send for approval
+              </Btn>
+            </Card>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+/* ==================================================================
+   CHANGE ORDERS
+
+   Scope changes after signing are normal and are how margin quietly
+   disappears. A change order is a priced amendment with its own
+   approval, and it feeds the contract total so the cap-out reflects
+   what was actually built rather than what was originally sold.
+================================================================== */
+const CO_STATUS = ["Draft", "Sent", "Approved", "Declined"];
+
+function changeOrderTotals(job) {
+  const list = Array.isArray(job.changeOrders) ? job.changeOrders : [];
+  const approved = list.filter((c) => c.status === "Approved");
+  const pending = list.filter((c) => c.status === "Sent" || c.status === "Draft");
+  return {
+    list,
+    approvedTotal: approved.reduce((a, c) => a + num(c.amount), 0),
+    pendingTotal: pending.reduce((a, c) => a + num(c.amount), 0),
+    approvedCount: approved.length,
+    pendingCount: pending.length,
+  };
+}
+
+function TabChangeOrders({ job, mut, toast, currentUser }) {
+  const t = changeOrderTotals(job);
+  const base = num(job.contract && job.contract.price) || num(job.fin && job.fin.contract);
+  const add = () => mut((j) => ({
+    ...j,
+    changeOrders: [...(j.changeOrders || []),
+      { id: uid("co"), desc: "", amount: "", reason: "Customer request", status: "Draft",
+        at: nowStamp(), by: (currentUser || {}).name || "" }],
+  }));
+  const edit = (id, k, v) => mut((j) => ({
+    ...j, changeOrders: (j.changeOrders || []).map((c) => c.id === id ? { ...c, [k]: v } : c),
+  }));
+  const del = (id) => mut((j) => ({ ...j, changeOrders: (j.changeOrders || []).filter((c) => c.id !== id) }));
+
+  return (
+    <>
+      <Card>
+        <CardTitle right={t.pendingCount > 0 ? <Chip tone="amber">{t.pendingCount} pending</Chip> : null}>
+          Contract value
+        </CardTitle>
+        <KV k="Original contract" v={money(base)} />
+        <KV k="Approved changes" v={`${t.approvedTotal >= 0 ? "+" : ""}${money(t.approvedTotal)}`} />
+        <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 8, paddingTop: 8 }}>
+          <KV k="Current contract value" v={money(base + t.approvedTotal)} strong />
+        </div>
+        {t.pendingTotal !== 0 && (
+          <div style={{ fontSize: 12, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+            {money(t.pendingTotal)} is still pending and is not counted above.
+            Only approved changes move the contract.
+          </div>
+        )}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Change orders</CardTitle>
+        {t.list.length === 0 && (
+          <div style={{ fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
+            Nothing yet. Raise one whenever the scope moves after signing —
+            rotten decking, an upgrade the homeowner asked for, an access
+            problem nobody priced. Unrecorded changes are where the margin goes.
+          </div>
+        )}
+        {t.list.map((c) => (
+          <div key={c.id} style={{ borderBottom: `1px solid ${S.line}`, paddingBottom: 11, marginBottom: 11 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} value={c.desc}
+                placeholder="e.g. Replace 6 sheets of decking" onChange={(e) => edit(c.id, "desc", e.target.value)} />
+              <span style={{ color: S.sub, fontSize: 13 }}>$</span>
+              <input style={{ ...inputStyle, width: 92, textAlign: "right", padding: "9px 11px" }} inputMode="decimal"
+                value={c.amount} onChange={(e) => edit(c.id, "amount", e.target.value)} />
+              <button onClick={() => del(c.id)} style={{ border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}>
+                <Trash2 size={15} color="#B42318" />
+              </button>
+            </div>
+            <select style={{ ...selStyle, marginTop: 7, minHeight: 40 }} value={c.reason}
+              onChange={(e) => edit(c.id, "reason", e.target.value)}>
+              {["Customer request", "Hidden condition", "Code requirement", "Carrier supplement", "Access / site issue", "Our error"].map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
+            <div style={{ display: "flex", gap: 5, marginTop: 7, flexWrap: "wrap" }}>
+              {CO_STATUS.map((st) => {
+                const on = (c.status || "Draft") === st;
+                const tone = st === "Declined" ? "#B3261E" : st === "Approved" ? "#177245" : T.accent;
+                return (
+                  <button key={st} onClick={() => edit(c.id, "status", st)} style={{
+                    border: `1.5px solid ${on ? tone : S.line}`,
+                    background: on ? (st === "Declined" ? "#FDECEA" : st === "Approved" ? "#EAF6EE" : T.accentSoft) : "#fff",
+                    color: on ? tone : S.sub, borderRadius: 8, padding: "5px 11px",
+                    fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+                  }}>{st}</button>
+                );
+              })}
+            </div>
+            {c.reason === "Our error" && c.status === "Approved" && num(c.amount) > 0 && (
+              <Callout label="Charging the customer for our own error" tone="amber">
+                Reason is set to "our error" but this is billing the customer.
+                If it is a goodwill absorb, enter it as a negative amount.
+              </Callout>
+            )}
+          </div>
+        ))}
+        <Btn kind="soft" small style={{ width: "100%" }} onClick={add}><Plus size={13} /> Add change order</Btn>
+      </Card>
+    </>
+  );
 }
 
 function TabClaim({ job, mut, toast, brand }) {
