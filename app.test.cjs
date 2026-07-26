@@ -68986,6 +68986,10 @@ var JURIS_OVERRIDES = {};
 function setJurisOverrides(map) {
   JURIS_OVERRIDES = map || {};
 }
+var LEARNED_JURISDICTIONS = {};
+function setLearnedJurisdictions(map) {
+  LEARNED_JURISDICTIONS = map || {};
+}
 function resolveJurisdiction(zip) {
   const z = String(zip || "").trim();
   if (z.length !== 5) return null;
@@ -69000,6 +69004,17 @@ function resolveJurisdiction(zip) {
       verifiedDetail: { date: ov.at || null, by: ov.by || null },
       precision: "verified"
     } : { ...exact, precision: "verified" };
+  }
+  const learned = LEARNED_JURISDICTIONS[z];
+  if (learned) {
+    return ov ? {
+      ...learned,
+      inspector: { ...learned.inspector, ...ov },
+      needsContact: false,
+      verified: true,
+      verifiedDetail: { date: ov.at || null, by: ov.by || null },
+      precision: "verified"
+    } : { ...learned, precision: learned.needsContact ? "learned" : "market" };
   }
   const mkt = MARKET_JURISDICTIONS[z];
   if (mkt) {
@@ -69081,6 +69096,60 @@ async function geoReverse(lat, lng) {
   } catch {
     return null;
   }
+}
+async function geoLookupZip(zip) {
+  const z = String(zip || "").trim();
+  if (!geoReady() || z.length !== 5) return null;
+  const url = `${GEO_PROVIDER.base}/search?postcode=${encodeURIComponent(z)}&filter=countrycode:${GEO_PROVIDER.countries}&type=postcode&limit=1&format=json&apiKey=${GEO_PROVIDER.apiKey}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const r = (data.results || [])[0];
+    if (!r) return null;
+    const state = r.state_code || "";
+    if (!STATE_DEFAULTS[state]) {
+      return { unsupported: true, state, city: r.city || "", county: r.county || "" };
+    }
+    const rawCounty = r.county || "";
+    const county = rawCounty && !/county$/i.test(rawCounty) ? `${rawCounty} County` : rawCounty;
+    return {
+      zip: z,
+      city: r.city || r.town || r.village || "",
+      county,
+      state,
+      dept: COUNTY_DEPARTMENTS[county] || null
+    };
+  } catch {
+    return null;
+  }
+}
+function jurisdictionFromLookup(hit) {
+  const d = STATE_DEFAULTS[hit.state];
+  const dept = hit.dept;
+  return {
+    zip: hit.zip,
+    city: hit.city,
+    county: hit.county,
+    state: hit.state,
+    codeName: d.codeName,
+    codeEdition: d.codeEdition,
+    adoption: d.adoption,
+    permit: d.permit,
+    inspector: dept ? {
+      office: dept.office,
+      phone: dept.phone,
+      address: dept.address,
+      web: dept.web,
+      note: dept.note,
+      except: dept.except,
+      checked: dept.checked
+    } : { office: "", phone: "", address: "" },
+    needsContact: !dept,
+    verified: false,
+    sources: d.sources,
+    verifiedDetail: { date: null, by: null }
+  };
 }
 function captureLocation() {
   return new Promise((resolve) => {
@@ -79694,12 +79763,16 @@ function LetterTemplates() {
   ] });
 }
 function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2, onSaveDept = () => {
+}, onSaveJurisdiction = () => {
 } }) {
   const [tab, setTab] = (0, import_react.useState)("clients");
   const [zip, setZip] = (0, import_react.useState)("");
   const [tplState, setTplState] = (0, import_react.useState)("OH");
   const [openTpl, setOpenTpl] = (0, import_react.useState)(null);
   const [resourcePage, setResourcePage] = (0, import_react.useState)(null);
+  const [lookingUp, setLookingUp] = (0, import_react.useState)(false);
+  const [lookupResult, setLookupResult] = (0, import_react.useState)(null);
+  const [lookupErr, setLookupErr] = (0, import_react.useState)("");
   const [editDept, setEditDept] = (0, import_react.useState)(false);
   const [deptForm, setDeptForm] = (0, import_react.useState)({ office: "", phone: "", address: "" });
   const [kbQ, setKbQ] = (0, import_react.useState)("");
@@ -79994,17 +80067,81 @@ Authority: ${c.cite}`;
           "input",
           {
             style: inputStyle,
-            placeholder: "Zip code \u2014 try 45240, 41179, 60014",
+            placeholder: "Zip code \u2014 try 45402, 41056, 45103",
             value: zip,
             inputMode: "numeric",
-            onChange: (e) => setZip(e.target.value)
+            onChange: (e) => {
+              setZip(e.target.value);
+              setLookupResult(null);
+              setLookupErr("");
+            }
           }
         )
       ] }),
-      zip.trim().length === 5 && !juris && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: [
-        zip,
-        " is outside Supreme's OH / KY / IL markets, so there's no code guidance on file for it. Add the jurisdiction from the county or municipal source to bring it in."
-      ] }) }),
+      zip.trim().length === 5 && !juris && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        !lookupResult && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14, color: S.ink, lineHeight: 1.55 }, children: [
+            zip.trim(),
+            " is not on file yet."
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginTop: 6 }, children: "Look it up and it is saved for everyone. If it falls in a county already on file, the building department comes with it." }),
+          lookupErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Lookup failed", tone: "amber", children: lookupErr }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            Btn,
+            {
+              style: { width: "100%", marginTop: 11 },
+              disabled: lookingUp,
+              onClick: async () => {
+                setLookingUp(true);
+                setLookupErr("");
+                const hit = await geoLookupZip(zip.trim());
+                setLookingUp(false);
+                if (!hit) {
+                  setLookupErr("Could not reach the lookup service. Check the connection and try again.");
+                  return;
+                }
+                if (hit.unsupported) {
+                  setLookupErr(`${zip.trim()} resolves to ${[hit.city, hit.state].filter(Boolean).join(", ") || "outside our states"}. Code data is only held for Ohio, Kentucky and Illinois, so nothing would be reliable here.`);
+                  return;
+                }
+                setLookupResult(hit);
+              },
+              "data-testid": "lookup-zip",
+              children: lookingUp ? "Looking up\u2026" : "Look up this zip"
+            }
+          )
+        ] }),
+        lookupResult && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: lookupResult.dept ? "green" : "amber", children: lookupResult.dept ? "Department known" : "Office needed" }), children: [lookupResult.city, lookupResult.state].filter(Boolean).join(", ") }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "County", v: lookupResult.county || "\u2014" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Building code", v: STATE_DEFAULTS[lookupResult.state].codeName }),
+          lookupResult.dept ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: `1px solid ${S.line}`, marginTop: 10, paddingTop: 10 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Permits", v: lookupResult.dept.office }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Phone", v: fmtPhone(lookupResult.dept.phone) })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: "That county is already on file, so the department came with the lookup. Nothing left to enter." })
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 10, lineHeight: 1.55 }, children: "New county for us. The code basis above is right \u2014 both states run a statewide residential code \u2014 but nobody has recorded who issues permits here. Save it, then add the office once you have called them." }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => {
+              setLookupResult(null);
+              setLookupErr("");
+            }, children: "Cancel" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              Btn,
+              {
+                style: { flex: 2 },
+                "data-testid": "save-zip",
+                onClick: () => {
+                  onSaveJurisdiction(jurisdictionFromLookup(lookupResult));
+                  setLookupResult(null);
+                },
+                children: "Save to the company"
+              }
+            )
+          ] })
+        ] })
+      ] }),
       juris && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: juris.precision === "verified" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "green", children: [
@@ -84360,6 +84497,7 @@ function SupremeCRM() {
   const [apiSetup, setApiSetup] = (0, import_react.useState)({});
   const [ccAutoCreate, setCcAutoCreate] = (0, import_react.useState)(true);
   const [jurisContacts, setJurisContacts] = (0, import_react.useState)({});
+  const [learnedJuris, setLearnedJuris] = (0, import_react.useState)({});
   const [features, setFeatures] = (0, import_react.useState)({});
   const [security, setSecurity] = (0, import_react.useState)({ anomalyLogout: true });
   const behaviour = (0, import_react.useRef)([]);
@@ -84382,7 +84520,7 @@ function SupremeCRM() {
       setNav("home");
     }
   };
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts];
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
     announcements,
     calls,
@@ -84401,6 +84539,7 @@ function SupremeCRM() {
     features,
     security,
     jurisContacts,
+    learnedJuris,
     version: 1
   });
   const unpackOrg = (d) => {
@@ -84422,6 +84561,10 @@ function SupremeCRM() {
     if (d.jurisContacts) {
       setJurisContacts(d.jurisContacts);
       setJurisOverrides(d.jurisContacts);
+    }
+    if (d.learnedJuris) {
+      setLearnedJuris(d.learnedJuris);
+      setLearnedJurisdictions(d.learnedJuris);
     }
     if (d.security) setSecurity(d.security);
   };
@@ -84932,6 +85075,13 @@ function SupremeCRM() {
           setJurisOverrides(next);
           logAct({ type: "code", text: `Saved the building department for ${zip}: ${dept.office}` });
           toast2("Saved for the whole company");
+        },
+        onSaveJurisdiction: (rec) => {
+          const next = { ...learnedJuris, [rec.zip]: rec };
+          setLearnedJuris(next);
+          setLearnedJurisdictions(next);
+          logAct({ type: "code", text: `Added ${rec.city || rec.zip}, ${rec.county} to the jurisdiction list` });
+          toast2(rec.needsContact ? "Saved \u2014 add the permit office when you have it" : "Saved with its building department");
         }
       }
     ) : nav === "performance" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(

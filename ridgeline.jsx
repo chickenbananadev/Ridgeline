@@ -1835,6 +1835,11 @@ let JURIS_OVERRIDES = {};
 function setJurisOverrides(map) { JURIS_OVERRIDES = map || {}; }
 function getJurisOverrides() { return JURIS_OVERRIDES; }
 
+/* ZIPs looked up on demand and saved, so the database grows with use
+   rather than needing every ZIP in the country shipped up front. */
+let LEARNED_JURISDICTIONS = {};
+function setLearnedJurisdictions(map) { LEARNED_JURISDICTIONS = map || {}; }
+
 function resolveJurisdiction(zip) {
   const z = String(zip || "").trim();
   if (z.length !== 5) return null;
@@ -1849,6 +1854,15 @@ function resolveJurisdiction(zip) {
   /* Markets we work: city and county are known, code basis is the
      state code, and the permitting office is filled in by the office
      the first time someone calls it. */
+  /* ZIPs the app has looked up and saved. Checked after the curated
+     lists so a hand-written record always wins. */
+  const learned = LEARNED_JURISDICTIONS[z];
+  if (learned) {
+    return ov
+      ? { ...learned, inspector: { ...learned.inspector, ...ov }, needsContact: false,
+          verified: true, verifiedDetail: { date: ov.at || null, by: ov.by || null }, precision: "verified" }
+      : { ...learned, precision: learned.needsContact ? "learned" : "market" };
+  }
   const mkt = MARKET_JURISDICTIONS[z];
   if (mkt) {
     if (ov) {
@@ -1922,6 +1936,57 @@ async function geoReverse(lat, lng) {
       zip: r.postcode || "",
     };
   } catch { return null; }
+}
+
+/* Look up a ZIP we have never seen. Geoapify returns the county, which
+   is the piece that matters: departments are keyed by county, so a new
+   ZIP inside a county already on file resolves completely — office,
+   phone, address and all — without anyone typing a thing. A ZIP in a
+   new county resolves to city, county and the correct state code
+   basis, leaving only the permitting office for a human to add. */
+async function geoLookupZip(zip) {
+  const z = String(zip || "").trim();
+  if (!geoReady() || z.length !== 5) return null;
+  const url = `${GEO_PROVIDER.base}/search?postcode=${encodeURIComponent(z)}`
+    + `&filter=countrycode:${GEO_PROVIDER.countries}&type=postcode&limit=1&format=json&apiKey=${GEO_PROVIDER.apiKey}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const r = (data.results || [])[0];
+    if (!r) return null;
+    const state = r.state_code || "";
+    if (!STATE_DEFAULTS[state]) {
+      /* Outside the three states we hold code data for. Honest failure
+         is better than presenting an Ohio code basis for an Indiana
+         address. */
+      return { unsupported: true, state, city: r.city || "", county: r.county || "" };
+    }
+    /* Geoapify returns "Hamilton County" or sometimes "Hamilton"; both
+       are normalised so the department map matches either way. */
+    const rawCounty = r.county || "";
+    const county = rawCounty && !/county$/i.test(rawCounty) ? `${rawCounty} County` : rawCounty;
+    return {
+      zip: z, city: r.city || r.town || r.village || "", county, state,
+      dept: COUNTY_DEPARTMENTS[county] || null,
+    };
+  } catch { return null; }
+}
+
+/* Build a jurisdiction record from a lookup result, ready to save. */
+function jurisdictionFromLookup(hit) {
+  const d = STATE_DEFAULTS[hit.state];
+  const dept = hit.dept;
+  return {
+    zip: hit.zip, city: hit.city, county: hit.county, state: hit.state,
+    codeName: d.codeName, codeEdition: d.codeEdition, adoption: d.adoption, permit: d.permit,
+    inspector: dept
+      ? { office: dept.office, phone: dept.phone, address: dept.address,
+          web: dept.web, note: dept.note, except: dept.except, checked: dept.checked }
+      : { office: "", phone: "", address: "" },
+    needsContact: !dept,
+    verified: false, sources: d.sources, verifiedDetail: { date: null, by: null },
+  };
 }
 
 function captureLocation() {
@@ -11544,12 +11609,15 @@ function LetterTemplates() {
   );
 }
 
-function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {} }) {
+function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {} }) {
   const [tab, setTab] = useState("clients");
   const [zip, setZip] = useState("");
   const [tplState, setTplState] = useState("OH");
   const [openTpl, setOpenTpl] = useState(null);
   const [resourcePage, setResourcePage] = useState(null);
+  const [lookingUp, setLookingUp] = useState(false);
+  const [lookupResult, setLookupResult] = useState(null);
+  const [lookupErr, setLookupErr] = useState("");
   const [editDept, setEditDept] = useState(false);
   const [deptForm, setDeptForm] = useState({ office: "", phone: "", address: "" });
   const [kbQ, setKbQ] = useState("");
@@ -11832,15 +11900,76 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {} })
             <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>
               Enter a job-site zip to pull the adopted code, permit requirements, and building department contact.
             </div>
-            <input style={inputStyle} placeholder="Zip code — try 45240, 41179, 60014" value={zip}
-              inputMode="numeric" onChange={(e) => setZip(e.target.value)} />
+            <input style={inputStyle} placeholder="Zip code — try 45402, 41056, 45103" value={zip}
+              inputMode="numeric" onChange={(e) => { setZip(e.target.value); setLookupResult(null); setLookupErr(""); }} />
           </Card>
           {zip.trim().length === 5 && !juris && (
             <Card style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
-                {zip} is outside Supreme's OH / KY / IL markets, so there's no code guidance on file for it.
-                Add the jurisdiction from the county or municipal source to bring it in.
-              </div>
+              {!lookupResult && (
+                <>
+                  <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.55 }}>
+                    {zip.trim()} is not on file yet.
+                  </div>
+                  <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginTop: 6 }}>
+                    Look it up and it is saved for everyone. If it falls in a county
+                    already on file, the building department comes with it.
+                  </div>
+                  {lookupErr && <Callout label="Lookup failed" tone="amber">{lookupErr}</Callout>}
+                  <Btn style={{ width: "100%", marginTop: 11 }} disabled={lookingUp}
+                    onClick={async () => {
+                      setLookingUp(true); setLookupErr("");
+                      const hit = await geoLookupZip(zip.trim());
+                      setLookingUp(false);
+                      if (!hit) { setLookupErr("Could not reach the lookup service. Check the connection and try again."); return; }
+                      if (hit.unsupported) {
+                        setLookupErr(`${zip.trim()} resolves to ${[hit.city, hit.state].filter(Boolean).join(", ") || "outside our states"}. Code data is only held for Ohio, Kentucky and Illinois, so nothing would be reliable here.`);
+                        return;
+                      }
+                      setLookupResult(hit);
+                    }} data-testid="lookup-zip">
+                    {lookingUp ? "Looking up…" : "Look up this zip"}
+                  </Btn>
+                </>
+              )}
+              {lookupResult && (
+                <>
+                  <CardTitle right={<Chip tone={lookupResult.dept ? "green" : "amber"}>
+                    {lookupResult.dept ? "Department known" : "Office needed"}
+                  </Chip>}>
+                    {[lookupResult.city, lookupResult.state].filter(Boolean).join(", ")}
+                  </CardTitle>
+                  <KV k="County" v={lookupResult.county || "—"} />
+                  <KV k="Building code" v={STATE_DEFAULTS[lookupResult.state].codeName} />
+                  {lookupResult.dept ? (
+                    <>
+                      <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 10, paddingTop: 10 }}>
+                        <KV k="Permits" v={lookupResult.dept.office} />
+                        <KV k="Phone" v={fmtPhone(lookupResult.dept.phone)} />
+                      </div>
+                      <div style={{ fontSize: 12.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
+                        That county is already on file, so the department came with
+                        the lookup. Nothing left to enter.
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 12.5, color: S.sub, marginTop: 10, lineHeight: 1.55 }}>
+                      New county for us. The code basis above is right — both states
+                      run a statewide residential code — but nobody has recorded who
+                      issues permits here. Save it, then add the office once you have
+                      called them.
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                    <Btn kind="ghost" style={{ flex: 1 }} onClick={() => { setLookupResult(null); setLookupErr(""); }}>
+                      Cancel
+                    </Btn>
+                    <Btn style={{ flex: 2 }} data-testid="save-zip"
+                      onClick={() => { onSaveJurisdiction(jurisdictionFromLookup(lookupResult)); setLookupResult(null); }}>
+                      Save to the company
+                    </Btn>
+                  </div>
+                </>
+              )}
             </Card>
           )}
           {juris && (
@@ -16013,6 +16142,9 @@ export default function SupremeCRM() {
      ZIP. Kept in company settings so one person's phone call becomes
      everyone's. */
   const [jurisContacts, setJurisContacts] = useState({});
+  /* ZIPs looked up on demand. The jurisdiction table grows with use
+     rather than needing every ZIP shipped up front. */
+  const [learnedJuris, setLearnedJuris] = useState({});
   const [features, setFeatures] = useState({});
   const [security, setSecurity] = useState({ anomalyLogout: true });
   /* Rolling behaviour window for anomaly detection. A ref, not state:
@@ -16034,11 +16166,11 @@ export default function SupremeCRM() {
   };
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts];
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
     announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates,
     priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate,
-    features, security, jurisContacts, version: 1,
+    features, security, jurisContacts, learnedJuris, version: 1,
   });
   const unpackOrg = (d) => {
     if (d.announcements) setAnnouncements(d.announcements);
@@ -16057,6 +16189,7 @@ export default function SupremeCRM() {
     if (d.ccAutoCreate !== undefined) setCcAutoCreate(d.ccAutoCreate);
     if (d.features) setFeatures(d.features);
     if (d.jurisContacts) { setJurisContacts(d.jurisContacts); setJurisOverrides(d.jurisContacts); }
+    if (d.learnedJuris) { setLearnedJuris(d.learnedJuris); setLearnedJurisdictions(d.learnedJuris); }
     if (d.security) setSecurity(d.security);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
@@ -16433,6 +16566,15 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             setJurisOverrides(next);
             logAct({ type: "code", text: `Saved the building department for ${zip}: ${dept.office}` });
             toast("Saved for the whole company");
+          }}
+          onSaveJurisdiction={(rec) => {
+            const next = { ...learnedJuris, [rec.zip]: rec };
+            setLearnedJuris(next);
+            setLearnedJurisdictions(next);
+            logAct({ type: "code", text: `Added ${rec.city || rec.zip}, ${rec.county} to the jurisdiction list` });
+            toast(rec.needsContact
+              ? "Saved — add the permit office when you have it"
+              : "Saved with its building department");
           }} />
       ) : nav === "performance" ? (
         <Performance jobs={jobs} stages={stages} users={users} onBack={() => setNav("more")}
