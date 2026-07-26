@@ -10129,6 +10129,11 @@ function tracedLengthFt(pts, mPerPx) {
 function AerialTracer({ job, onAddFacet, toast }) {
   const [lat, setLat] = useState(null);
   const [lon, setLon] = useState(null);
+  /* Esri serves zoom 21 only in selected metros. Outside them it returns
+     a grey "Map data not yet available" tile with a 200 status, so the
+     image onError never fires and the map silently looks broken. Start
+     at 20, which is available essentially everywhere in the US and is
+     already 4.5 inches per pixel — plenty to trace a roof. */
   const [zoom, setZoom] = useState(20);
   const [srcId, setSrcId] = useState("esri");
   const [pts, setPts] = useState([]);
@@ -10344,6 +10349,13 @@ function AerialTracer({ job, onAddFacet, toast }) {
             )}
           </div>
 
+          {z >= 21 && (
+            <Btn kind="soft" small style={{ width: "100%", marginTop: 8 }}
+              onClick={() => { setZoom(20); setPts([]); setLoaded(0); setFailed(0); }}>
+              Map looks grey? Step back to Close
+            </Btn>
+          )}
+
           {/* Pan */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 8 }}>
             <Btn kind="ghost" small onClick={() => pan(0, -SIZE / 3)}>↑</Btn>
@@ -10366,11 +10378,24 @@ function AerialTracer({ job, onAddFacet, toast }) {
               {loaded > 0 ? `${loaded} tiles loaded` : failed > 0 ? `${failed} tiles failed` : "loading tiles…"}
             </span>
           </div>
+
+          {/* Grey tiles reading "Map data not yet available" are a 200
+              response, not an error, so nothing above can detect them.
+              At the closest zoom that is the overwhelmingly likely cause,
+              so say so before the user concludes the app is broken. */}
+          {z >= 21 && (
+            <Callout label="Grey tiles at this zoom?" tone="amber">
+              Closest zoom only exists over larger cities. If the map reads
+              "Map data not yet available", tap <b>Close</b> — it covers about
+              195 ft at 4.5 inches per pixel, which is more than enough to
+              trace a roof accurately.
+            </Callout>
+          )}
           {loaded === 0 && failed >= tiles.length && (
             <Callout label="No imagery loaded" tone="red">
-              Every tile failed. Try the other source below. If both fail the
-              network is blocking the imagery host, which a phone on mobile data
-              usually is not — a corporate or guest wifi often is.
+              Every tile failed outright. Try the other source below. If both
+              fail, the network is blocking the imagery host — a corporate or
+              guest wifi often does, mobile data usually does not.
             </Callout>
           )}
 

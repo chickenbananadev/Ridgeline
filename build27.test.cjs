@@ -100,5 +100,20 @@ ok(salesIdx > 0 && measureIdx > salesIdx && measureIdx < prodIdx,
 ok(src.includes('Which property?'), 'the screen can run with or without a job');
 ok(src.includes('Planes traced'), 'traced planes accumulate on the screen');
 
+/* --- zoom coverage: the silent-grey-tile failure --- */
+ok(src.includes("const [zoom, setZoom] = useState(20)"),
+  "the default zoom is 20, which has near-universal US coverage");
+ok(src.includes("grey placeholder with") || src.includes("Map data not yet available"),
+  "the placeholder-tile behaviour is documented in the code");
+ok(src.includes("Grey tiles at this zoom?"), "the user is warned before concluding it is broken");
+ok(src.includes("Step back to Close"), "there is a one-tap escape from a grey map");
+
+/* zoom 20 has to be good enough to trace with, or defaulting there is wrong */
+const mppAt = (lat, z) => (E * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, z);
+const inchesPerPx20 = mppAt(39.29, 20) * 39.37;
+ok(inchesPerPx20 < 5, "zoom 20 is under 5 inches per pixel, got " + inchesPerPx20.toFixed(2));
+const eavePx = 40 / (mppAt(39.29, 20) * 3.28084);
+ok(eavePx > 90, "a 40ft eave spans 100+ px at zoom 20, so corners are tappable, got " + eavePx.toFixed(0));
+
 if (fails) { console.log("\nbuild 27: " + fails + " FAILED"); process.exit(1); }
 console.log("build 27 tests passed");
