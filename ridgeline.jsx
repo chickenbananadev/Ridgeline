@@ -10959,6 +10959,12 @@ function TabReport({ job, brand, juris }) {
           <div style={{ fontSize: 20, fontWeight: 800, margin: "6px 0 2px" }}>{job.name}</div>
           <div style={{ fontSize: 13, opacity: 0.85 }}>{job.address}</div>
           <div style={{ fontSize: 12, opacity: 0.7, marginTop: 10 }}>{brand.company} · {brand.phone}</div>
+          <button onClick={() => openDoc(`Inspection report — ${job.name}`, brand, reportDocHtml(job, brand))}
+            style={{
+              marginTop: 12, border: "1.5px solid rgba(255,255,255,.4)", background: "rgba(255,255,255,.12)",
+              color: "#fff", borderRadius: 10, padding: "9px 14px", fontSize: 13.5, fontWeight: 700,
+              display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer",
+            }}><Printer size={15} /> Print / PDF</button>
         </div>
       </Card>
       <Section n={1} title="Overview & property facts">
