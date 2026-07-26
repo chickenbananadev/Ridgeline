@@ -137,6 +137,35 @@ dispatch must never break because a weather API is unreachable.
 Covered by build27, which asserts this under three conditions: no
 `fetch` at all, `fetch` rejecting, and `fetch` resolving.
 
+## Competitive parity pass vs Trussi.AI (build 28)
+Four features, all deterministic and real — no scaffolds:
+- **Supplement check** (job → Estimate, top card): `supplementFindings(job)`
+  compares checklist + measurements against estimate line-item text and
+  flags unpriced documented conditions with evidence and code cites
+  (IRC R905.1.1/.1.2/.2.8.5). Includes a waste-factor sanity rule
+  (hips+valleys LF per square). Silent on empty estimates. Their
+  version is AI; ours is rules, on purpose — findings must be
+  defensible to an adjuster, and their lead-scoring approach is
+  patented (US 12,131,277), so deterministic-with-reasons is both the
+  legal lane and the better product.
+- **Focus list** (home dashboard, `FocusList`): `focusScore(job)` ranks
+  open jobs by staleness, dollars, manual priority/quality, overdue
+  tasks, signed-but-unscheduled, and estimate-sent-no-answer. HARD
+  RULE: a job with zero visible reasons never surfaces (build28 tests
+  this — value alone can nudge, never surface).
+- **Collections card** (Performance → summary): per-job open balances,
+  won/completed stages only, sorted desc, capped at 8 rows.
+- **QuickBooks CSV export** (Performance → summary, admin-only):
+  customers + invoices in QBO's own import-wizard column layout.
+  Goes through the gated `downloadCsv` like every export. This is the
+  no-API bridge; the real OAuth sync can replace it later without
+  changing what the books receive.
+
+NOT built, with reasons: EagleView/Hover/supplier ordering (need
+partner API agreements), native iOS/Android (different stack),
+dialer (needs Twilio Voice), Google Ads/Analytics (external
+accounts). Revisit only when the prerequisite exists.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.

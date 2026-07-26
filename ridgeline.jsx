@@ -2904,6 +2904,94 @@ function Login({ brand, users, onLogin }) {
 /* ================================================================
    DASHBOARD
    ================================================================ */
+/* ==================================================================
+   Focus list — which open jobs deserve attention right now.
+
+   Deterministic and fully explained, on purpose. A patented black-box
+   score (Trussi holds one) tells a rep WHAT to do; this tells them WHY,
+   which is what earns trust and also what a patent cannot cover. Every
+   factor is visible in the reasons list, so if the ranking is wrong the
+   rep can see exactly which input to fix.
+   ================================================================== */
+function focusScore(job) {
+  if (DEAD_STAGES.includes(job.stageId) || job.stageId === "s10") return null;
+  const reasons = [];
+  let score = 0;
+
+  // Staleness — the dominant factor. Deals die of silence, not "no".
+  const days = num(job.daysInStage);
+  if (days >= 21) { score += 40; reasons.push(`${days} days sitting in this stage`); }
+  else if (days >= 14) { score += 28; reasons.push(`${days} days in stage`); }
+  else if (days >= 7) { score += 14; reasons.push(`${days} days in stage`); }
+
+  // Money on the table, scaled so a big roof outranks a small one at equal staleness.
+  const v = num(job.value || (job.contract && job.contract.price));
+  if (v >= 25000) { score += 18; reasons.push(`${money(v)} at stake`); }
+  else if (v >= 12000) { score += 11; reasons.push(`${money(v)} at stake`); }
+  else if (v > 0) { score += 5; }
+
+  // What the rep already flagged by hand.
+  if (job.priority === "Urgent") { score += 25; reasons.push("marked Urgent"); }
+  else if (job.priority === "High") { score += 14; reasons.push("marked High priority"); }
+  if (num(job.leadQuality) >= 4) { score += 10; reasons.push(`${job.leadQuality}/5 lead quality`); }
+
+  // Overdue tasks are commitments already broken.
+  const t = todayIso();
+  const late = (job.tasks || []).filter((x) => !x.done && x.due && x.due < t).length;
+  if (late > 0) { score += 12 + late * 4; reasons.push(`${late} overdue ${late === 1 ? "task" : "tasks"}`); }
+
+  // Signed but unscheduled: sold work that isn't moving is churn risk.
+  if (WON_STAGES.includes(job.stageId) && !job.schedDate) { score += 15; reasons.push("signed but not scheduled"); }
+
+  // An estimate sent and never signed goes cold fast.
+  const est = job.estimate || {};
+  if (est.status === "Sent" && days >= 5) { score += 12; reasons.push("estimate out with no answer"); }
+
+  /* No reason to show means no row: value alone can nudge a ranking but
+     must never surface a job by itself — an unexplained entry breaks the
+     whole promise that the list justifies itself. */
+  if (score === 0 || reasons.length === 0) return null;
+  return { score, reasons: reasons.slice(0, 3) };
+}
+
+function FocusList({ jobs, onOpenJob }) {
+  const ranked = jobs
+    .map((j) => ({ j, f: focusScore(j) }))
+    .filter((x) => x.f)
+    .sort((a, b) => b.f.score - a.f.score)
+    .slice(0, 5);
+  if (ranked.length === 0) return null;
+  return (
+    <Card style={{ marginTop: 16 }}>
+      <CardTitle right={<Chip tone="amber">{ranked.length}</Chip>}>Needs your attention</CardTitle>
+      <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
+        Ranked by time in stage, dollars at stake, and broken commitments — every reason shown.
+      </div>
+      {ranked.map(({ j, f }, i) => (
+        <button key={j.id} onClick={() => onOpenJob(j.id)} style={{
+          display: "flex", gap: 10, alignItems: "flex-start", width: "100%",
+          border: "none", background: "none", cursor: "pointer", textAlign: "left",
+          padding: "10px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontFamily: "inherit",
+        }}>
+          <span style={{
+            width: 24, height: 24, borderRadius: 999, flexShrink: 0, marginTop: 1,
+            background: i === 0 ? "#FDECEC" : S.soft,
+            color: i === 0 ? "#B42318" : S.sub,
+            display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800,
+          }}>{i + 1}</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{j.name}</div>
+            <div style={{ fontSize: 12, color: S.sub, lineHeight: 1.5, marginTop: 1 }}>
+              {f.reasons.join(" · ")}
+            </div>
+          </div>
+          <ChevronRight size={15} color="#C7CBD1" style={{ flexShrink: 0, marginTop: 4 }} />
+        </button>
+      ))}
+    </Card>
+  );
+}
+
 function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND,
   appointments = [], apptTypes = [], crews = [], setAppointments, setApptTypes, toast, onQueueMessage, onLog, users = [], mutJob, onToggleTask,
   chatMsgs = [], onSendChat }) {
@@ -3311,6 +3399,8 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         )}
       </Sheet>
 
+      <FocusList jobs={jobs} onOpenJob={onOpenJob} />
+
       {/* Team chat — the last few messages and a composer, so a quick
           reply does not cost a trip to another screen. */}
       {onSendChat && (() => {
@@ -3692,6 +3782,81 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
             <KV k="Lost" v={String(stat.lost)} />
             <KV k="Unqualified" v={String(stat.unq)} />
           </Card>
+
+          {/* Collections — WHO owes, not just the total. Aged off the last
+              payment received (or contract signing when nothing has been
+              paid), because that is the date the clock actually started. */}
+          {(() => {
+            const owing = scoped
+              .map((j) => ({ j, p: paymentsSummary(j) }))
+              .filter(({ j, p }) => p.balance > 0.01 && p.contract > 0 && WON_STAGES.concat(["s10"]).includes(j.stageId))
+              .sort((a, b) => b.p.balance - a.p.balance);
+            if (owing.length === 0) return null;
+            return (
+              <Card style={{ marginTop: 12 }}>
+                <CardTitle right={<Chip tone="red">{money(owing.reduce((s2, x) => s2 + x.p.balance, 0))}</Chip>}>
+                  Collections
+                </CardTitle>
+                {owing.slice(0, 8).map(({ j, p }, i) => (
+                  <div key={j.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{j.name}</div>
+                      <div style={{ fontSize: 12, color: S.sub }}>
+                        {money(p.received)} of {money(p.contract)} collected
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: "#B42318", flexShrink: 0 }}>{money(p.balance)}</div>
+                  </div>
+                ))}
+                {owing.length > 8 && (
+                  <div style={{ fontSize: 12.5, color: S.sub, paddingTop: 8 }}>
+                    + {owing.length - 8} more with open balances
+                  </div>
+                )}
+              </Card>
+            );
+          })()}
+
+          {/* QuickBooks — CSV in the exact column layout QuickBooks Online's
+              own import wizard expects. No API, no OAuth, works today; a
+              live two-way sync can replace this later without changing what
+              the books receive. Admin-gated like every export. */}
+          {isAdmin && (
+            <Card style={{ marginTop: 12 }}>
+              <CardTitle>QuickBooks export</CardTitle>
+              <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 10 }}>
+                CSV files QuickBooks Online imports directly (Settings → Import data).
+                Invoices carry one line per estimate item on signed jobs; customers carry
+                billing details. Import customers first so invoices can match them.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => {
+                  const rows = [["Name", "Company", "Email", "Phone", "Billing Address"]];
+                  scoped.filter((j) => WON_STAGES.concat(["s10"]).includes(j.stageId)).forEach((j) => {
+                    rows.push([j.name, "", j.email || "", j.phone || "", j.address || ""]);
+                  });
+                  if (downloadCsv("quickbooks-customers.csv", rows)) toast("Customers CSV exported");
+                }}><Download size={13} /> Customers</Btn>
+                <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => {
+                  const rows = [["InvoiceNo", "Customer", "InvoiceDate", "DueDate", "Item(Product/Service)", "ItemDescription", "ItemQuantity", "ItemRate", "ItemAmount"]];
+                  scoped.filter((j) => WON_STAGES.concat(["s10"]).includes(j.stageId)).forEach((j) => {
+                    const inv = (j.estimate && j.estimate.number) || `RIDG-${j.id}`;
+                    const d = (j.contract && j.contract.signedAt) ? String(j.contract.signedAt).slice(0, 10) : todayIso();
+                    const items = ((j.estimate || {}).items || []);
+                    if (items.length === 0 && (j.contract.price || j.value)) {
+                      rows.push([inv, j.name, d, d, "Roofing services", "Contract price", 1,
+                        (j.contract.price || j.value), (j.contract.price || j.value)]);
+                    }
+                    items.forEach((it) => {
+                      const qty = num(it.qty) || 1, rate = num(it.price);
+                      rows.push([inv, j.name, d, d, "Roofing services", it.desc || "", qty, rate, +(qty * rate).toFixed(2)]);
+                    });
+                  });
+                  if (downloadCsv("quickbooks-invoices.csv", rows)) toast("Invoices CSV exported");
+                }}><Download size={13} /> Invoices</Btn>
+              </div>
+            </Card>
+          )}
           <Card style={{ marginTop: 12 }}>
             <CardTitle>Reviews</CardTitle>
             <KV k="Requests sent" v={String(stat.reviewsSent)} />
@@ -10624,6 +10789,135 @@ function TabMaterials({ job, mut, toast }) {
 }
 
 /* ---------- Estimate builder ---------- */
+/* ==================================================================
+   Supplement check — what the estimate is probably missing.
+
+   Deterministic, not AI: every rule compares something the inspector
+   documented (checklist, measurements) against what the estimate's
+   line items actually say. Each finding names its evidence, so a rep
+   can argue it with an adjuster rather than just trusting a score.
+   Rules only ever fire on documented facts — a finding is a claim you
+   can defend, so no measurement means no finding, never a guess.
+   ================================================================== */
+function supplementFindings(job) {
+  const c = job.checklist || {};
+  const m = job.measurements || {};
+  const items = ((job.estimate || {}).items || []);
+  const text = items.map((i) => String(i.desc || "").toLowerCase()).join(" \n ");
+  const has = (re) => re.test(text);
+  const n = (x) => num(x);
+  const out = [];
+  const add = (sev, title, why) => out.push({ sev, title, why });
+
+  if (items.length === 0) return out; // Nothing to check an empty estimate against.
+
+  // --- Flashings & penetrations ---
+  if (n(m.valleys) > 0 && !has(/ice\s*&?\s*water|i\s*&\s*w|weather\s*watch|storm\s*guard/i))
+    add("HIGH", "Ice & water shield — valleys",
+      `${m.valleys} LF of valley measured, no ice & water line item. Required in open valleys by manufacturer specs and most adopted codes.`);
+  if (n(m.eaves) > 0 && !has(/ice\s*&?\s*water|i\s*&\s*w|weather\s*watch|storm\s*guard/i))
+    add("HIGH", "Ice & water shield — eaves",
+      `${m.eaves} LF of eave measured. IRC R905.1.2 requires an ice barrier at eaves where there is a history of ice damming — that is this market.`);
+  if ((n(m.eaves) + n(m.rakes)) > 0 && !has(/drip\s*edge/i))
+    add("HIGH", "Drip edge",
+      `${n(m.eaves) + n(m.rakes)} LF of eave and rake measured, no drip edge line. IRC R905.2.8.5 requires it at eaves and rakes.`);
+  if ((n(m.penetrations) > 0 || c.pipeBoots === "Yes") && !has(/pipe\s*(boot|flash|jack)|neoprene/i))
+    add(c.pipeBoots === "Yes" ? "HIGH" : "MODERATE", "Pipe boots / flashings",
+      c.pipeBoots === "Yes"
+        ? "Inspection documented cracked pipe boots — an active leak path — and the estimate has no pipe flashing line."
+        : `${m.penetrations} penetrations measured, no pipe flashing line item.`);
+  if (n(m.stepFlash) > 0 && !has(/step\s*flash/i))
+    add("MODERATE", "Step flashing", `${m.stepFlash} LF of step flashing measured but not on the estimate.`);
+  if (n(m.wallFlash) > 0 && !has(/counter\s*flash|apron|wall\s*flash|headwall/i))
+    add("MODERATE", "Wall / counterflashing", `${m.wallFlash} LF of wall flashing measured but not on the estimate.`);
+  if (c.flashingFail === "Yes" && !has(/chimney|counter\s*flash/i))
+    add("MODERATE", "Chimney counterflashing",
+      "Inspection documented failed flashings; nothing on the estimate addresses the chimney or counterflashing.");
+
+  // --- Field of the roof ---
+  if (!has(/underlayment|synthetic|felt/i))
+    add("HIGH", "Underlayment", "No underlayment line item. IRC R905.1.1 requires underlayment beneath asphalt shingles.");
+  if (!has(/starter/i))
+    add("MODERATE", "Starter strip", "No starter course line. Manufacturers void wind warranties without a proper starter at eaves and rakes.");
+  if (n(m.ridges) + n(m.hips) > 0 && !has(/ridge\s*cap|hip\s*(&|and)?\s*ridge|cap\s*shingle/i))
+    add("MODERATE", "Hip & ridge caps", `${n(m.ridges) + n(m.hips)} LF of hip and ridge measured, no cap shingle line.`);
+
+  // --- Conditions that change labor ---
+  const layerCount = parseInt(String(c.layers || ""), 10);
+  if (layerCount >= 2 && !has(/(2|second|extra|additional).{0,12}layer|layers/i))
+    add("HIGH", "Extra tear-off layer",
+      `Inspection documented ${c.layers}. Tear-off is priced per layer — a single-layer tear-off line underbills this roof.`);
+  const pitchNum = parseInt(String(c.pitch || m.pitch || "").split("/")[0], 10);
+  if (pitchNum >= 8 && !has(/steep/i))
+    add("MODERATE", "Steep-slope charge",
+      `${c.pitch || m.pitch} pitch documented. 8/12 and up is steep-slope work — harnessed crews move slower and carriers pay for it.`);
+  if ((c.ventCond === "Poor" || c.ventCond === "Critical") && !has(/vent/i))
+    add("MODERATE", "Ventilation",
+      `Ventilation condition rated ${c.ventCond} on inspection, and the estimate has no ventilation line at all.`);
+  if ((c.atticDecking === "Active Rot / Mold" || c.lightCheck === "Yes") && !has(/deck|osb|plywood|sheathing/i))
+    add("HIGH", "Decking allowance",
+      "Attic inspection shows compromised decking, but no decking replacement line or per-sheet allowance is on the estimate.");
+
+  // --- Waste factor sanity (deterministic version of waste intelligence) ---
+  const sq = n(m.squares);
+  if (sq > 0) {
+    const cutUp = (n(m.hips) + n(m.valleys)) / sq; // LF of hips+valleys per square ≈ complexity
+    const waste = n(m.waste);
+    if (cutUp >= 6 && waste < 15)
+      add("MODERATE", "Waste factor looks low",
+        `${n(m.hips) + n(m.valleys)} LF of hips and valleys on ${sq} squares is a cut-up roof; ${waste || 0}% waste will run short. Cut-up roofs typically carry 15%+.`);
+    else if (cutUp >= 3 && waste < 12)
+      add("LOW", "Waste factor worth a look",
+        `Moderately complex roof at ${waste || 0}% waste. 12–15% is the usual range at this complexity.`);
+  }
+
+  return out;
+}
+
+function SupplementCheck({ job }) {
+  const [open, setOpen] = useState(true);
+  const found = supplementFindings(job);
+  const items = ((job.estimate || {}).items || []);
+  if (items.length === 0) return null; // No estimate yet — nothing to audit.
+  const tone = { HIGH: "red", MODERATE: "amber", LOW: "blue" };
+  return (
+    <Card style={{ marginBottom: 12 }}>
+      <CardTitle right={found.length === 0
+        ? <Chip tone="green">Clear</Chip>
+        : <Chip tone={found.some((f) => f.sev === "HIGH") ? "red" : "amber"}>{found.length}</Chip>}>
+        Supplement check
+      </CardTitle>
+      {found.length === 0 ? (
+        <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.55 }}>
+          Every documented condition and measurement is reflected in a line item. Nothing obviously missing.
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+            The inspection and measurements document conditions this estimate does not price.
+            Each one cites its evidence — that is what makes it supplementable.
+          </div>
+          {(open ? found : found.slice(0, 3)).map((f, i) => (
+            <div key={i} style={{ display: "flex", gap: 10, padding: "9px 0", borderTop: `1px solid ${S.line}` }}>
+              <Chip tone={tone[f.sev]}>{f.sev}</Chip>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{f.title}</div>
+                <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 2 }}>{f.why}</div>
+              </div>
+            </div>
+          ))}
+          {found.length > 3 && (
+            <button onClick={() => setOpen(!open)} style={{
+              border: "none", background: "none", color: T.accent, fontWeight: 600,
+              fontSize: 13, cursor: "pointer", padding: "8px 0 0", fontFamily: "inherit",
+            }}>{open ? "Show fewer" : `Show all ${found.length}`}</button>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
 function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {} }) {
   const est = job.estimate;
   const [sigOpen, setSigOpen] = useState(false);
@@ -10715,6 +11009,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
   };
   return (
     <>
+      <SupplementCheck job={job} />
       <Card>
         <CardTitle right={<Chip tone={locked ? "green" : est.status === "Sent" ? "blue" : "gray"}>{est.status}</Chip>}>
           Estimate {est.number && `· ${est.number}`}
