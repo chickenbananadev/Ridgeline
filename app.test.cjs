@@ -67058,6 +67058,295 @@ var DOC_GROUPS = [
     "Chimney flashing condition."
   ] }
 ];
+var KB_SYSTEMS = [
+  ["asphalt", "Asphalt shingle"],
+  ["metal", "Metal roof"],
+  ["flat", "Flat / low-slope"],
+  ["siding", "Siding"],
+  ["gutter", "Gutters & drainage"],
+  ["general", "General / all systems"]
+];
+var KB_CODES = [
+  /* ---------- Asphalt shingle ---------- */
+  {
+    sys: "asphalt",
+    title: "Minimum slope for asphalt shingles",
+    cite: "IRC R905.2.2",
+    src: "ICC",
+    body: "Asphalt shingles require a slope of 2:12 or greater. Between 2:12 and 4:12 a double underlayment application is mandatory. Below 2:12 shingles cannot be used at all \u2014 the assembly has to change to a low-slope system, which is a full scope change, not a line item.",
+    supplement: "Where a carrier scopes shingles on a slope under 2:12, the scope is not code-compliant and cannot be installed as written."
+  },
+  {
+    sys: "asphalt",
+    title: "Double underlayment on low slopes",
+    cite: "IRC R905.2.7 / R905.2.2",
+    src: "ICC",
+    body: "On slopes from 2:12 up to 4:12, underlayment must be applied in two layers, lapped 19 inches. Carriers routinely scope single-layer felt across the whole roof regardless of slope.",
+    supplement: "Slopes measured at ___:12 require two-ply underlayment per R905.2.2. Requesting the additional layer over ___ squares."
+  },
+  {
+    sys: "asphalt",
+    title: "Ice barrier at eaves",
+    cite: "IRC R905.1.2",
+    src: "ICC",
+    body: "In areas with a history of ice forming along eaves, an ice barrier of two layers of cemented underlayment or a self-adhering polymer-modified bitumen sheet must extend from the lowest edge to at least 24 inches inside the exterior wall line. Ohio, Kentucky and Illinois all sit in jurisdictions where this is commonly required.",
+    supplement: "Ice and water shield is required from the eave to 24 inches inside the exterior wall line. Carrier scope omits it entirely / includes only ___ LF."
+  },
+  {
+    sys: "asphalt",
+    title: "Fastener count and wind rating",
+    cite: "IRC R905.2.6 / manufacturer instructions",
+    src: "ICC",
+    body: "Shingles must be fastened per the manufacturer's published instructions, which govern where they exceed code. Most high-wind warranties require six nails per shingle rather than four, and require nailing in the designated zone. A four-nail scope on a six-nail product voids the wind warranty.",
+    supplement: "The specified product requires 6-nail installation for its wind rating. Carrier scope specifies standard fastening; requesting the enhanced fastening line item."
+  },
+  {
+    sys: "asphalt",
+    title: "Drip edge required",
+    cite: "IRC R905.2.8.5",
+    src: "ICC",
+    body: "Drip edge is required at eaves and rakes. It must extend at least 2 inches onto the roof deck and be fastened at not more than 12 inches on centre. Underlayment goes over the drip edge at eaves and under it at rakes. Omitting drip edge is one of the most common carrier scope gaps.",
+    supplement: "Drip edge is required at all eaves and rakes per R905.2.8.5. Requesting ___ LF at eaves and ___ LF at rakes."
+  },
+  {
+    sys: "asphalt",
+    title: "Valley construction",
+    cite: "IRC R905.2.8.2",
+    src: "ICC",
+    body: "Valley linings must be installed per the manufacturer's instructions before the shingles. Open valleys require a minimum 24-inch-wide lining of corrosion-resistant metal or two plies of mineral-surfaced roll roofing. Closed valleys still require underlayment reinforcement.",
+    supplement: "Valley lining is required per R905.2.8.2. Requesting ___ LF of valley metal / reinforcement."
+  },
+  {
+    sys: "asphalt",
+    title: "Deck condition and re-nailing",
+    cite: "IRC R905.2.1 / R803",
+    src: "ICC",
+    body: "Shingles must be applied to a solidly sheathed deck in sound condition. Deteriorated, delaminated or inadequately fastened decking must be replaced or re-secured \u2014 it is a code requirement, not an upgrade. Many jurisdictions additionally require re-nailing existing decking to current fastening schedules at re-roof.",
+    supplement: "Decking found deteriorated on tear-off, documented with dated photographs. Replacement is required by R905.2.1; this is not betterment."
+  },
+  /* ---------- Metal ---------- */
+  {
+    sys: "metal",
+    title: "Metal roof slope minimums",
+    cite: "IRC R905.10.1.1",
+    src: "ICC",
+    body: "Metal roof panels with lapped, non-soldered seams and no applied lap sealant require a minimum slope of 3:12. With applied lap sealant the minimum is 1/2:12. Standing seam systems are permitted at 1/4:12. Scoping a lapped panel onto a slope below its minimum is not installable as written.",
+    supplement: "Panel type specified requires a minimum slope of ___:12; measured slope is ___:12. The assembly specified cannot be installed to code."
+  },
+  {
+    sys: "metal",
+    title: "Metal underlayment requirements",
+    cite: "IRC R905.10.3",
+    src: "ICC",
+    body: "Metal roof panels require underlayment per the manufacturer and the code. High-temperature underlayment is required under most standing seam and under any panel over a heated space where the manufacturer specifies it \u2014 standard synthetic underlayment degrades under the heat metal transfers.",
+    supplement: "Manufacturer specifies high-temperature underlayment for this panel. Standard underlayment in the carrier scope would void the material warranty."
+  },
+  {
+    sys: "metal",
+    title: "Dissimilar metal separation",
+    cite: "IRC R905.10.1 / manufacturer",
+    src: "ICC",
+    body: "Metal roofing in contact with dissimilar metals causes galvanic corrosion. Aluminium against copper, or steel fasteners in aluminium panels, fail early. Flashings, fasteners and drip edge must all be compatible with the panel material.",
+    supplement: "Existing flashings are dissimilar to the specified panel. Compatible flashing is required to avoid galvanic corrosion and to keep the material warranty intact."
+  },
+  {
+    sys: "metal",
+    title: "Panel clip and fastener spacing",
+    cite: "Manufacturer instructions",
+    src: "ICC",
+    body: "Standing seam clip spacing is set by the manufacturer's wind uplift testing for the building's exposure category and height. A generic per-square labour line does not account for the closer clip spacing required in high-wind zones and at perimeters and corners, where uplift is highest.",
+    supplement: "Perimeter and corner zones require reduced clip spacing per the manufacturer's uplift tables. Requesting the additional clips and labour."
+  },
+  /* ---------- Flat / low slope ---------- */
+  {
+    sys: "flat",
+    title: "Low-slope roof coverings",
+    cite: "IRC R905.9 / R905.11-13",
+    src: "ICC",
+    body: "Below 2:12 the assembly must be a low-slope system: built-up, modified bitumen, thermoset (EPDM), thermoplastic (TPO/PVC) or sprayed polyurethane foam. Each has its own installation section. Slope must still be a minimum of 1/4:12 for drainage unless the roof is specifically designed and drained as a dead-level assembly.",
+    supplement: "Measured slope is below 2:12. A low-slope assembly is required; the carrier scope specifies steep-slope materials that cannot be installed here."
+  },
+  {
+    sys: "flat",
+    title: "EPDM \u2014 seam and termination requirements",
+    cite: "IRC R905.12 / manufacturer",
+    src: "ICC",
+    body: "EPDM membrane seams must be cleaned and primed before seam tape or adhesive. Field seams, flashings and terminations all have specified minimum widths. Terminations at walls and curbs require a termination bar and sealant. Ballasted, mechanically attached and fully adhered systems each carry different requirements and different labour.",
+    supplement: "EPDM terminations require termination bar and sealant at all vertical surfaces per R905.12 and the manufacturer's details. Carrier scope omits termination detail at ___ LF."
+  },
+  {
+    sys: "flat",
+    title: "TPO \u2014 welding and membrane thickness",
+    cite: "IRC R905.13 / manufacturer",
+    src: "ICC",
+    body: "TPO seams are heat-welded, not taped, and welds must be probed and tested. Membrane thickness matters: 45 mil, 60 mil and 80 mil are different products with different warranties, and a carrier scoping 45 mil where 60 mil was in place is scoping a downgrade. Cover board is required over most insulation types.",
+    supplement: "Existing membrane is ___ mil TPO; carrier scope specifies ___ mil. Like kind and quality requires matching the existing thickness and warranty term."
+  },
+  {
+    sys: "flat",
+    title: "Positive drainage and ponding",
+    cite: "IRC R905.9.1 / IBC 1507",
+    src: "ICC",
+    body: "Low-slope roofs must be designed to drain. Water standing more than 48 hours after rainfall is ponding, and it is a defect. Where existing structure produces ponding, tapered insulation or a cricket is required to achieve positive drainage \u2014 this is a code requirement at re-roof, not an optional upgrade.",
+    supplement: "Ponding documented at ___ locations. Tapered insulation is required to establish positive drainage per R905.9.1."
+  },
+  {
+    sys: "flat",
+    title: "Insulation and cover board",
+    cite: "IRC R905.11-13 / IECC",
+    src: "ICC",
+    body: "Most single-ply assemblies require a cover board over the insulation to protect the membrane and achieve the tested assembly. Where insulation is wet it must be replaced \u2014 a membrane over wet insulation traps moisture and fails. Energy code may also require the replacement insulation to meet current R-value where more than 50 percent of the roof is being replaced.",
+    supplement: "Insulation moisture-tested wet at ___ locations. Replacement is required; leaving it in place would void the membrane warranty and trap moisture in the assembly."
+  },
+  {
+    sys: "flat",
+    title: "Parapet and coping flashing",
+    cite: "IRC R905.9 / manufacturer",
+    src: "ICC",
+    body: "Parapet walls require base flashing carried up the wall to a minimum height (typically 8 inches above the finished roof) and a counterflashing or coping cap above it. Coping joints require cover plates. This is frequently omitted from carrier scopes that price only the field membrane.",
+    supplement: "Parapet base flashing and coping are required. Carrier scope prices field membrane only; requesting ___ LF of base flashing and coping."
+  },
+  /* ---------- Siding ---------- */
+  {
+    sys: "siding",
+    title: "Water-resistive barrier required",
+    cite: "IRC R703.2",
+    src: "ICC",
+    body: "A water-resistive barrier is required behind exterior wall covering \u2014 minimum one layer of No. 15 asphalt felt or approved equivalent, applied horizontally with upper layers lapping lower by at least 2 inches. Removing siding exposes the barrier; if it is damaged or absent it must be installed. Carriers frequently scope siding replacement without the barrier.",
+    supplement: "Water-resistive barrier is required behind the wall covering per R703.2. Existing barrier is damaged/absent over ___ SF."
+  },
+  {
+    sys: "siding",
+    title: "Flashing at openings and penetrations",
+    cite: "IRC R703.4",
+    src: "ICC",
+    body: "Approved corrosion-resistant flashing is required at the top and sides of exterior window and door openings, at the intersection of chimneys with the wall, under and at the ends of masonry copings and sills, continuously above projecting trim, at wall and roof intersections, and at built-in gutters. Each of these is a separate line item and each is routinely missed.",
+    supplement: "Flashing is required at all openings and wall/roof intersections per R703.4. Requesting flashing at ___ openings and ___ LF of wall/roof intersection."
+  },
+  {
+    sys: "siding",
+    title: "Vinyl siding wind and fastening",
+    cite: "IRC R703.11 / ASTM D3679",
+    src: "ICC",
+    body: "Vinyl siding must be installed over sheathing or a sheathing substitute, fastened per the manufacturer with fasteners penetrating a minimum of 1-1/4 inches into framing, and hung loosely so panels can move \u2014 nailing tight causes buckling. Wind pressure rating must match the design pressure for the site.",
+    supplement: "Specified panel wind rating is below the design pressure for this site. Requesting a panel meeting the required rating."
+  },
+  {
+    sys: "siding",
+    title: "Matching and discontinued profiles",
+    cite: "OAC 3901-1-54(I) \u2014 Ohio",
+    src: "OAC3901",
+    body: "Where replacing damaged siding leaves a mismatch, the carrier owes replacement of items in the area so the result is reasonably comparable in appearance. Vinyl profiles and colours are discontinued constantly; a partial repair that cannot match is the strongest matching argument you will make.",
+    supplement: "Existing profile is discontinued and no reasonably comparable match is available. Requesting full elevation / full wrap replacement under the matching provision."
+  },
+  {
+    sys: "siding",
+    title: "Housewrap seams and integration",
+    cite: "IRC R703.2 / manufacturer",
+    src: "ICC",
+    body: "Housewrap seams must be lapped and taped per the manufacturer, and must be integrated with window flashing in the correct sequence \u2014 wrap under head flashing, over sill pan. Reversed sequence directs water into the wall and is a defect even when every component is present.",
+    supplement: "Existing barrier is not integrated with opening flashing in the required sequence. Correct installation requires re-flashing ___ openings."
+  },
+  /* ---------- Gutters ---------- */
+  {
+    sys: "gutter",
+    title: "Gutter sizing and discharge",
+    cite: "IRC R801.3 / IPC 1106",
+    src: "ICC",
+    body: "Roof drainage must be discharged away from the foundation. Gutter and downspout sizing is driven by roof area and local rainfall intensity \u2014 a 5-inch K-style gutter serves a smaller area than a 6-inch, and undersized gutters overflow regardless of condition. Discharge must be at least 5 feet from the foundation or to an approved point.",
+    supplement: "Roof area served requires ___-inch gutter and ___ downspouts to handle design rainfall. Existing/scoped size is undersized for the area."
+  },
+  {
+    sys: "gutter",
+    title: "Gutter apron and drip edge interaction",
+    cite: "IRC R905.2.8.5 / manufacturer",
+    src: "ICC",
+    body: "Where gutters are present, gutter apron directs water off the deck into the gutter rather than behind it. Standard drip edge over a gutter frequently allows water to run behind the gutter and rot the fascia. Replacing a roof over existing gutters without addressing this repeats the failure.",
+    supplement: "Gutter apron is required to direct discharge into the gutter. Requesting ___ LF of gutter apron at eaves."
+  },
+  /* ---------- General ---------- */
+  {
+    sys: "general",
+    title: "Attic ventilation ratio",
+    cite: "IRC R806.2",
+    src: "ICC",
+    body: "Net free ventilating area must be at least 1/150 of the ventilated attic area. The 1/300 reduction is permitted only where a Class I or II vapour retarder is installed on the warm side, or where 40 to 50 percent of the required area is in the upper portion with the balance at the eaves. Most older housing stock does not qualify, so 1/150 governs.",
+    supplement: "Ventilated attic area is ___ SF, requiring ___ square inches of net free area at 1/150. Existing system provides ___. The carrier owes the compliant system at re-roof; reinstalling a non-compliant system would violate code."
+  },
+  {
+    sys: "general",
+    title: "Ordinance and law coverage",
+    cite: "Policy endorsement",
+    src: "OAC3901",
+    body: "Ordinance and Law coverage pays for code-required upgrades that the existing building did not have \u2014 ice barrier where none existed, ventilation upgrades, decking re-nailing, tapered insulation for drainage. It is usually a separate limit, often 10 to 25 percent of the dwelling limit. Where a carrier calls a code requirement betterment, O&L is the answer.",
+    supplement: "Item is required by current code and was not present in the pre-loss condition. Requesting it under the Ordinance and Law endorsement rather than as betterment."
+  },
+  {
+    sys: "general",
+    title: "Matching \u2014 like kind and quality",
+    cite: "OAC 3901-1-54(I)",
+    src: "OAC3901",
+    body: "Where replacement of damaged material leaves a mismatch, the carrier owes replacement of items in the area so the result is like kind and quality with reasonably comparable appearance. This is the lever behind full-slope and full-roof arguments where a shingle line is discontinued or the field is heavily weathered. A carrier limiting matching must give the insured a written explanation of the policy provision relied on.",
+    supplement: "Specified product is discontinued / no reasonably comparable match exists. Requesting full ___ replacement under the matching provision, and requesting the carrier's written explanation if declined."
+  },
+  {
+    sys: "general",
+    title: "Carrier claim-handling deadlines",
+    cite: "OAC 3901-1-54",
+    src: "OAC3901",
+    body: "The carrier must acknowledge a claim within 15 days, complete its investigation within 21 days, and decide within a reasonable time thereafter. Missed deadlines are documentable and belong in any escalation letter or Department of Insurance complaint.",
+    supplement: "Claim reported ___; carrier acknowledgement/decision outstanding as of ___, exceeding the timeframe in OAC 3901-1-54."
+  },
+  {
+    sys: "general",
+    title: "Steep and high charges",
+    cite: "Industry standard pricing",
+    src: "ICC",
+    body: "Slopes of 7:12 and above, and roofs two storeys or more, carry additional labour for safety, staging and reduced productivity. These are standard pricing modifiers, not upgrades, and they apply to tear-off as well as installation. Carrier scopes frequently apply them to install only, or omit them entirely.",
+    supplement: "Roof is ___:12 at ___ storeys. Steep and high charges apply to both removal and installation; carrier scope applies them to ___ only."
+  }
+];
+var KB_TERMS = [
+  ["ACV", "Actual cash value", "Replacement cost less depreciation. On an ACV policy the depreciation is never paid \u2014 that gap is the homeowner's, and it is far better found at signing than at cap-out."],
+  ["RCV", "Replacement cost value", "The full cost to replace with like kind and quality, without deduction for depreciation. Paid in two parts: ACV first, then recoverable depreciation once the work is completed and invoiced."],
+  ["Recoverable depreciation", "", "The withheld portion an RCV policy releases after the work is done and invoiced. Chasing it is the single most common piece of unclaimed money on a roofing job."],
+  ["Non-recoverable depreciation", "", "Depreciation the policy will never pay, usually because the policy is ACV or the item has exceeded its useful life. The homeowner covers it or the job absorbs it."],
+  ["Deductible", "", "The insured's share, payable by the homeowner. Absorbing, rebating or 'eating' it is insurance fraud exposure for everyone involved, including the homeowner, and is prosecuted."],
+  ["Supplement", "", "A request for additional scope or payment after the original estimate, supported by documentation. Photos, measurements and code citations are what get supplements approved."],
+  ["Scope", "", "The carrier's itemised estimate of the work owed. It is a starting position, not a final number, and should be checked line by line against what the job actually requires."],
+  ["Xactimate", "", "The estimating platform most carriers use. Line items have standard codes; matching your supplement to their line structure makes approval materially faster."],
+  ["O&L / Ordinance and Law", "", "Coverage for code-required upgrades the pre-loss building did not have. Usually a separate percentage limit. The correct answer when a carrier calls a code requirement betterment."],
+  ["Betterment", "", "A carrier's term for an improvement over pre-loss condition, which they generally do not owe. Code requirements are not betterment \u2014 they are Ordinance and Law."],
+  ["Matching", "", "The obligation to produce a reasonably comparable appearance when a partial repair would leave a mismatch. The basis of most full-slope and full-roof arguments."],
+  ["Mortgagee clause", "", "Names the lender on the claim cheque. Requires endorsement and often a lender inspection before funds release \u2014 the most common reason a paid claim still has not funded."],
+  ["Public adjuster", "", "Licensed to negotiate coverage and settlement on the insured's behalf. In Ohio this is ORC Chapter 3951, and a contractor cannot act as the public adjuster on the same loss."],
+  ["Appraisal clause", "", "A policy provision for resolving disputes over the amount of loss, not over coverage. Each side appoints an appraiser, and the two select an umpire. Slower than negotiation but binding on amount."],
+  ["Date of loss", "", "The date the damage occurred, not the date it was noticed or reported. Carriers use it to test policy period, deadlines and whether the storm event matches."],
+  ["Proof of loss", "", "A sworn statement of the claim amount, sometimes demanded by the carrier with a deadline. Missing the deadline can prejudice the claim; treat any request for one as urgent."],
+  ["Squares", "", "100 square feet of roof area. Every roofing quantity and most carrier line items are priced per square."],
+  ["Net free area (NFA)", "", "The actual open ventilating area of a vent, in square inches, after subtracting louvres and mesh. Not the same as the physical opening \u2014 always use the published NFA."],
+  ["Ice barrier", "", "Self-adhering membrane at eaves, required from the edge to 24 inches inside the exterior wall line where ice damming is a known problem. Commonly missing from carrier scopes."],
+  ["Drip edge", "", "Metal flanging at eaves and rakes, required by IRC R905.2.8.5. Among the most commonly omitted items in a carrier scope."],
+  ["Gutter apron", "", "Wider eave flashing that directs water into the gutter rather than behind it. Different from standard drip edge and priced separately."],
+  ["Starter course", "", "The first course at the eave, with adhesive to resist wind uplift. Cutting shingles to make starter is not equivalent and voids most wind warranties."],
+  ["Ridge cap", "", "Purpose-made caps for the ridge. Cut three-tab used as ridge cap on an architectural roof is a warranty problem and a visible quality problem."],
+  ["Test square", "", "A marked area, typically 10 by 10 feet, where hail impacts are counted to establish damage density. The standard method for demonstrating a slope is damaged rather than spot-repairable."],
+  ["Mat fracture", "", "The fibreglass mat beneath the granules broken by impact. The evidence that a hail hit is functional damage rather than cosmetic granule loss."],
+  ["Granule loss", "", "Displacement of the surfacing granules. On its own it can be weathering; with mat fracture beneath it, it is hail damage."],
+  ["Cosmetic damage waiver", "", "An endorsement excluding damage that does not affect function \u2014 common on metal roofs. Read the dec page before promising a metal claim will pay."],
+  ["EPDM", "Ethylene propylene diene monomer", "Black or white rubber single-ply membrane for low-slope roofs. Seams are taped or adhered, and terminations require a termination bar."],
+  ["TPO", "Thermoplastic polyolefin", "White single-ply membrane for low-slope roofs. Seams are heat-welded and tested. Thickness (45, 60, 80 mil) determines the warranty and must be matched."],
+  ["Modified bitumen", "", "Asphalt-based low-slope membrane in rolls, torch-, cold- or self-adhered. Common on smaller commercial and on residential flat sections."],
+  ["Cover board", "", "A rigid board between insulation and membrane, required in most single-ply assemblies for the tested wind and fire rating."],
+  ["Tapered insulation", "", "Insulation cut to create slope on a dead-level deck to achieve positive drainage. Required where ponding exists, and a substantial line item."],
+  ["Ponding", "", "Water standing more than 48 hours after rain. A defect, and the trigger for tapered insulation at re-roof."],
+  ["Standing seam", "", "Metal roof system with raised, concealed-fastener seams. Panels are clipped, allowing thermal movement. Clip spacing tightens at perimeters and corners."],
+  ["Galvanic corrosion", "", "Accelerated corrosion where dissimilar metals contact. Governs fastener, flashing and drip edge selection on any metal roof."],
+  ["WRB", "Water-resistive barrier", "The layer behind siding that sheds water reaching the wall cavity. Required by IRC R703.2 and frequently omitted from siding scopes."],
+  ["Housewrap", "", "A common WRB product. Seams must be lapped and taped, and integrated with opening flashing in the correct sequence or it directs water into the wall."],
+  ["J-channel", "", "Vinyl siding trim receiving panel ends at openings and terminations. Requires correct flashing behind it; J-channel alone is not flashing."],
+  ["Design pressure", "", "The wind pressure a component must resist for its site and exposure. Siding and roofing products carry ratings that must meet or exceed it."]
+];
 var SUPPLEMENT_TRIGGERS = [
   ["Drip edge \u2014 full perimeter", "RCO R905.2.8.5 (verify subsection)"],
   ["Ice barrier", "RCO R905.1.2"],
@@ -68451,6 +68740,18 @@ var fmtStamp = (iso) => {
 };
 var money = (n) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 var pct1 = (n) => `${n.toFixed(2)}%`;
+function fmtPhone(v) {
+  const d = String(v || "").replace(/\D/g, "");
+  if (d.length === 10) return `1(${d.slice(0, 3)})${d.slice(3, 6)}-${d.slice(6)}`;
+  if (d.length === 11 && d[0] === "1") return `1(${d.slice(1, 4)})${d.slice(4, 7)}-${d.slice(7)}`;
+  return String(v || "");
+}
+var telHref = (v) => `tel:${String(v || "").replace(/\D/g, "")}`;
+var lineTotal = (qty, price) => num(qty) * num(price);
+var qtyFmt = (n) => {
+  const v = num(n);
+  return Number.isInteger(v) ? String(v) : v.toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 var num = (v) => {
   const n = parseFloat(v);
   return isNaN(n) ? 0 : n;
@@ -68512,7 +68813,7 @@ function repSplitValid(job) {
 }
 function computeCapOut(job) {
   const { materials, labor, other, cogs } = computeFin(job.fin);
-  const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : []).filter((c) => c.status === "Approved").reduce((a2, c) => a2 + num(c.amount), 0);
+  const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : []).filter((c) => c.status === "Approved").reduce((a2, c) => a2 + coTotal(c), 0);
   const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved;
   const gross = contract - cogs;
   const structure = job.fin.structure || "grossProfit";
@@ -68597,7 +68898,7 @@ function compareStructures(job) {
 function paymentsSummary(job) {
   const received = job.payments.filter((p) => p.type === "Received").reduce((s, p) => s + p.amt, 0);
   const paidOut = job.payments.filter((p) => p.type !== "Received").reduce((s, p) => s + p.amt, 0);
-  const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : []).filter((c) => c.status === "Approved").reduce((a2, c) => a2 + num(c.amount), 0);
+  const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : []).filter((c) => c.status === "Approved").reduce((a2, c) => a2 + coTotal(c), 0);
   const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved;
   return { received, paidOut, contract, balance: contract - received };
 }
@@ -71199,7 +71500,7 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject, currentUser, onDelete
             contact.phone && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Phone, { size: 13 }),
               " ",
-              contact.phone
+              fmtPhone(contact.phone)
             ] }),
             contact.email && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Mail, { size: 13 }),
@@ -71479,7 +71780,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: j.name }),
             " \u2014 ",
             j.address,
-            j.contact?.phone || j.phone ? ` \xB7 ${j.contact?.phone || j.phone}` : ""
+            j.contact?.phone || j.phone ? ` \xB7 ${fmtPhone(j.contact?.phone || j.phone)}` : ""
           ] }, j.id)),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, marginTop: 8 }, children: [
             "If this really is a second project at the same address, choose",
@@ -72643,7 +72944,7 @@ function JobDetail({
                 }
               );
             case "changeorders":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChangeOrders, { job, mut, toast: toast2, currentUser });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChangeOrders, { job, mut, toast: toast2, currentUser, brand: brand2 });
             case "checklist":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChecklist, { job, mut, toast: toast2 });
             case "ventilation":
@@ -73116,7 +73417,7 @@ function TabOverview({ job, juris, mut, toast: toast2, reviewSettings, brand: br
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Contact" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Phone", v: job.phone }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Phone", v: fmtPhone(job.phone) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Email", v: job.email }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Lead source", v: job.leadSource }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "SMS consent", v: job.consent.sms.granted ? `Yes \u2014 ${job.consent.sms.at} (${job.consent.sms.source})` : "Not granted" }),
@@ -73869,7 +74170,7 @@ function PortalContactCard({ token, jobId, customer, accent }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 8 }, children: "Until it is confirmed we will keep using the details below." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: `1px solid ${S.line}`, marginTop: 10, paddingTop: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Name", v: customer.name || "\u2014" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Phone", v: customer.phone || "\u2014" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Phone", v: customer.phone ? fmtPhone(customer.phone) : "\u2014" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Email", v: customer.email || "\u2014" })
       ] })
     ] }) : editing ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
@@ -73896,7 +74197,7 @@ function PortalContactCard({ token, jobId, customer, accent }) {
       ] })
     ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Name", v: customer.name || "\u2014" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Phone", v: customer.phone || "\u2014" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Phone", v: customer.phone ? fmtPhone(customer.phone) : "\u2014" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Email", v: customer.email || "\u2014" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Project address", v: customer.address || "\u2014" }),
       customer.editable !== false && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { width: "100%", marginTop: 10 }, onClick: () => setEditing(true), children: "Something wrong? Request a change" })
@@ -73964,12 +74265,12 @@ function PublicPortal({ token }) {
               r.phone && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
                 "a",
                 {
-                  href: `tel:${String(r.phone).replace(/\D/g, "")}`,
+                  href: telHref(r.phone),
                   style: { display: "flex", alignItems: "center", gap: 9, color: prim, fontWeight: 700, fontSize: 14, textDecoration: "none" },
                   children: [
                     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Phone, { size: 15 }),
                     " ",
-                    r.phone
+                    fmtPhone(r.phone)
                   ]
                 }
               ),
@@ -74091,7 +74392,7 @@ function PublicPortal({ token }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14, lineHeight: 1.6 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: d.company }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { color: S.sub }, children: d.slogan }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `tel:${String(d.phone || "").replace(/\D/g, "")}`, style: { color: prim, fontWeight: 700 }, children: d.phone }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: telHref(d.phone), style: { color: prim, fontWeight: 700 }, children: d.phone }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `mailto:${d.email}`, style: { color: prim }, children: d.email }) })
           ] })
         ] })
@@ -74512,7 +74813,7 @@ function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast: toast2, 
               (c.trades || []).length ? ` \xB7 ${(c.trades || []).slice(0, 2).join(", ")}` : ""
             ] })
           ] }),
-          c.phone && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `tel:${String(c.phone).replace(/\D/g, "")}`, "aria-label": `Call ${c.name}`, style: {
+          c.phone && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: telHref(c.phone), "aria-label": `Call ${c.name}`, style: {
             width: 34,
             height: 34,
             borderRadius: 999,
@@ -75269,41 +75570,112 @@ function TabHandoff({ job, mut, toast: toast2, isAdmin, currentUser, stages, onM
   ] }) });
 }
 var CO_STATUS = ["Draft", "Sent", "Approved", "Declined"];
+function coTotal(co) {
+  const lines = Array.isArray(co.lines) ? co.lines : [];
+  if (!lines.length) return num(co.amount);
+  return lines.reduce((a, l) => a + lineTotal(l.qty, l.price), 0);
+}
 function changeOrderTotals(job) {
   const list = Array.isArray(job.changeOrders) ? job.changeOrders : [];
   const approved = list.filter((c) => c.status === "Approved");
   const pending = list.filter((c) => c.status === "Sent" || c.status === "Draft");
   return {
     list,
-    approvedTotal: approved.reduce((a, c) => a + num(c.amount), 0),
-    pendingTotal: pending.reduce((a, c) => a + num(c.amount), 0),
+    approvedTotal: approved.reduce((a, c) => a + coTotal(c), 0),
+    pendingTotal: pending.reduce((a, c) => a + coTotal(c), 0),
     approvedCount: approved.length,
     pendingCount: pending.length
   };
 }
-function TabChangeOrders({ job, mut, toast: toast2, currentUser }) {
+function TabChangeOrders({ job, mut, toast: toast2, currentUser, brand: brand2 }) {
   const t = changeOrderTotals(job);
   const base = num(job.contract && job.contract.price) || num(job.fin && job.fin.contract);
-  const add = () => mut((j) => ({
-    ...j,
-    changeOrders: [
-      ...j.changeOrders || [],
-      {
-        id: uid("co"),
-        desc: "",
-        amount: "",
-        reason: "Customer request",
-        status: "Draft",
-        at: nowStamp(),
-        by: (currentUser || {}).name || ""
-      }
-    ]
-  }));
-  const edit = (id, k, v) => mut((j) => ({
+  const [openId, setOpenId] = (0, import_react.useState)(null);
+  const add = () => {
+    const id = uid("co");
+    mut((j) => ({
+      ...j,
+      changeOrders: [
+        ...j.changeOrders || [],
+        {
+          id,
+          title: "",
+          reason: "Customer request",
+          status: "Draft",
+          at: nowStamp(),
+          by: (currentUser || {}).name || "",
+          lines: [{ id: uid("col"), desc: "", qty: "1", unit: "ea", price: "" }]
+        }
+      ]
+    }));
+    setOpenId(id);
+  };
+  const editCo = (id, k, v) => mut((j) => ({
     ...j,
     changeOrders: (j.changeOrders || []).map((c) => c.id === id ? { ...c, [k]: v } : c)
   }));
-  const del = (id) => mut((j) => ({ ...j, changeOrders: (j.changeOrders || []).filter((c) => c.id !== id) }));
+  const delCo = (id) => mut((j) => ({ ...j, changeOrders: (j.changeOrders || []).filter((c) => c.id !== id) }));
+  const editLine = (coId, lineId, k, v) => mut((j) => ({
+    ...j,
+    changeOrders: (j.changeOrders || []).map((c) => c.id !== coId ? c : {
+      ...c,
+      lines: (c.lines || []).map((l) => l.id === lineId ? { ...l, [k]: v } : l)
+    })
+  }));
+  const addLine = (coId) => mut((j) => ({
+    ...j,
+    changeOrders: (j.changeOrders || []).map((c) => c.id !== coId ? c : {
+      ...c,
+      lines: [...c.lines || [], { id: uid("col"), desc: "", qty: "1", unit: "ea", price: "" }]
+    })
+  }));
+  const delLine = (coId, lineId) => mut((j) => ({
+    ...j,
+    changeOrders: (j.changeOrders || []).map((c) => c.id !== coId ? c : {
+      ...c,
+      lines: (c.lines || []).filter((l) => l.id !== lineId)
+    })
+  }));
+  const sendForSigning = (co) => {
+    const total = coTotal(co);
+    const html = `
+      <h2 style="margin-top:0">Change order</h2>
+      <div class="muted">${esc(job.name)} &middot; ${esc(job.address)}</div>
+      <div class="muted">Raised ${esc(co.at || "")} by ${esc(co.by || "")}</div>
+      <h2>${esc(co.title || "Scope change")}</h2>
+      <div class="muted" style="margin-bottom:8px">Reason: ${esc(co.reason || "")}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr>
+          <th style="text-align:left;border-bottom:1px solid #ddd;padding:6px 4px">Description</th>
+          <th style="text-align:right;border-bottom:1px solid #ddd;padding:6px 4px">Qty</th>
+          <th style="text-align:right;border-bottom:1px solid #ddd;padding:6px 4px">Unit price</th>
+          <th style="text-align:right;border-bottom:1px solid #ddd;padding:6px 4px">Total</th>
+        </tr></thead>
+        <tbody>
+          ${(co.lines || []).map((l) => `<tr>
+            <td style="padding:6px 4px;border-bottom:1px solid #f0f0f0">${esc(l.desc || "")}</td>
+            <td style="padding:6px 4px;text-align:right;border-bottom:1px solid #f0f0f0">${esc(qtyFmt(l.qty))} ${esc(l.unit || "")}</td>
+            <td style="padding:6px 4px;text-align:right;border-bottom:1px solid #f0f0f0">${money(num(l.price))}</td>
+            <td style="padding:6px 4px;text-align:right;border-bottom:1px solid #f0f0f0">${money(lineTotal(l.qty, l.price))}</td>
+          </tr>`).join("")}
+        </tbody>
+      </table>
+      <div class="tot grand" style="margin-top:12px"><span>Change order total</span><span>${money(total)}</span></div>
+      <div class="tot"><span>Original contract</span><span>${money(base)}</span></div>
+      <div class="tot grand"><span>Revised contract</span><span>${money(base + t.approvedTotal + (co.status === "Approved" ? 0 : total))}</span></div>
+      <p style="font-size:12.5px;line-height:1.6;margin-top:14px">
+        By signing below the homeowner authorises the work described above and
+        agrees to the revised contract amount. This change order forms part of
+        the original agreement; all other terms are unchanged.
+      </p>
+      <div class="sig">
+        <div><div class="sigline"></div><div class="siglbl">Homeowner signature / date</div></div>
+        <div><div class="sigline"></div><div class="siglbl">Company representative / date</div></div>
+      </div>`;
+    openDoc(`Change order - ${job.name}`, brand2, html, toast2);
+    if (co.status === "Draft") editCo(co.id, "status", "Sent");
+    editCo(co.id, "sentAt", nowStamp());
+  };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: t.pendingCount > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "amber", children: [
@@ -75311,65 +75683,153 @@ function TabChangeOrders({ job, mut, toast: toast2, currentUser }) {
         " pending"
       ] }) : null, children: "Contract value" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Original contract", v: money(base) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Approved changes", v: `${t.approvedTotal >= 0 ? "+" : ""}${money(t.approvedTotal)}` }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Approved changes", v: `${t.approvedTotal >= 0 ? "+" : "-"}${money(Math.abs(t.approvedTotal))}` }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { borderTop: `1px solid ${S.line}`, marginTop: 8, paddingTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Current contract value", v: money(base + t.approvedTotal), strong: true }) }),
       t.pendingTotal !== 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: [
         money(t.pendingTotal),
-        " is still pending and is not counted above. Only approved changes move the contract."
+        " is out for signature and is not counted above. Only approved changes move the contract."
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Change orders" }),
-      t.list.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }, children: "Nothing yet. Raise one whenever the scope moves after signing \u2014 rotten decking, an upgrade the homeowner asked for, an access problem nobody priced. Unrecorded changes are where the margin goes." }),
-      t.list.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderBottom: `1px solid ${S.line}`, paddingBottom: 11, marginBottom: 11 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "input",
-            {
-              style: { ...inputStyle, flex: 1, padding: "9px 11px" },
-              value: c.desc,
-              placeholder: "e.g. Replace 6 sheets of decking",
-              onChange: (e) => edit(c.id, "desc", e.target.value)
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "input",
-            {
-              style: { ...inputStyle, width: 92, textAlign: "right", padding: "9px 11px" },
-              inputMode: "decimal",
-              value: c.amount,
-              onChange: (e) => edit(c.id, "amount", e.target.value)
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => del(c.id), style: { border: "none", background: "none", cursor: "pointer", lineHeight: 0 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "select",
-          {
-            style: { ...selStyle, marginTop: 7, minHeight: 40 },
-            value: c.reason,
-            onChange: (e) => edit(c.id, "reason", e.target.value),
-            children: ["Customer request", "Hidden condition", "Code requirement", "Carrier supplement", "Access / site issue", "Our error"].map((x) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: x }, x))
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 5, marginTop: 7, flexWrap: "wrap" }, children: CO_STATUS.map((st) => {
-          const on = (c.status || "Draft") === st;
-          const tone = st === "Declined" ? "#B3261E" : st === "Approved" ? "#177245" : T.accent;
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => edit(c.id, "status", st), style: {
-            border: `1.5px solid ${on ? tone : S.line}`,
-            background: on ? st === "Declined" ? "#FDECEA" : st === "Approved" ? "#EAF6EE" : T.accentSoft : "#fff",
-            color: on ? tone : S.sub,
-            borderRadius: 8,
-            padding: "5px 11px",
-            fontSize: 12,
-            fontWeight: 800,
+      t.list.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }, children: "Nothing yet. Raise one whenever the scope moves after signing: rotten decking, an upgrade the homeowner asked for, an access problem nobody priced. Unrecorded changes are where the margin goes." }),
+      t.list.map((c) => {
+        const total = coTotal(c);
+        const open = openId === c.id;
+        const tone = c.status === "Declined" ? "red" : c.status === "Approved" ? "green" : c.status === "Sent" ? "amber" : "gray";
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 11, marginBottom: 10, overflow: "hidden" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setOpenId(open ? null : c.id), style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            width: "100%",
+            textAlign: "left",
+            border: "none",
+            background: open ? "#fff" : S.bg,
+            padding: "12px 13px",
             cursor: "pointer",
             fontFamily: "inherit"
-          }, children: st }, st);
-        }) }),
-        c.reason === "Our error" && c.status === "Approved" && num(c.amount) > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Charging the customer for our own error", tone: "amber", children: 'Reason is set to "our error" but this is billing the customer. If it is a goodwill absorb, enter it as a negative amount.' })
-      ] }, c.id)),
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 14, fontWeight: 700, color: S.ink }, children: c.title || "Untitled change" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11.5, color: S.sub }, children: [
+                (c.lines || []).length,
+                " ",
+                (c.lines || []).length === 1 ? "line" : "lines",
+                " \xB7 ",
+                c.reason,
+                c.sentAt ? ` \xB7 sent ${c.sentAt}` : ""
+              ] })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { textAlign: "right", flexShrink: 0 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 15, fontWeight: 800, color: total < 0 ? "#177245" : S.ink }, children: money(total) }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone, children: c.status })
+            ] })
+          ] }),
+          open && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "0 13px 13px", borderTop: `1px solid ${S.line}` }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Title", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: inputStyle,
+                value: c.title || "",
+                placeholder: "e.g. Decking replacement",
+                onChange: (e) => editCo(c.id, "title", e.target.value)
+              }
+            ) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Reason", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: c.reason, onChange: (e) => editCo(c.id, "reason", e.target.value), children: ["Customer request", "Hidden condition", "Code requirement", "Carrier supplement", "Access / site issue", "Our error"].map((x) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: x }, x)) }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", margin: "4px 0 7px" }, children: "LINES" }),
+            (c.lines || []).map((l) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.bg, borderRadius: 10, padding: 10, marginBottom: 8 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 7, alignItems: "center" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    style: { ...inputStyle, flex: 1, padding: "8px 10px" },
+                    value: l.desc,
+                    placeholder: "Replace decking",
+                    onChange: (e) => editLine(c.id, l.id, "desc", e.target.value)
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => delLine(c.id, l.id), style: { border: "none", background: "none", cursor: "pointer", lineHeight: 0 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14, color: "#B42318" }) })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 7, alignItems: "center", marginTop: 7 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    style: { ...inputStyle, width: 62, textAlign: "right", padding: "8px 8px" },
+                    inputMode: "decimal",
+                    value: l.qty,
+                    onChange: (e) => editLine(c.id, l.id, "qty", e.target.value)
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "select",
+                  {
+                    style: { ...selStyle, width: 78, padding: "8px 6px" },
+                    value: l.unit || "ea",
+                    onChange: (e) => editLine(c.id, l.id, "unit", e.target.value),
+                    children: ["ea", "sq", "LF", "SF", "hr", "day", "sheet", "bundle"].map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: u }, u))
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.sub }, children: "\xD7" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.sub }, children: "$" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    style: { ...inputStyle, flex: 1, textAlign: "right", padding: "8px 10px" },
+                    inputMode: "decimal",
+                    value: l.price,
+                    placeholder: "0.00",
+                    onChange: (e) => editLine(c.id, l.id, "price", e.target.value)
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { textAlign: "right", fontSize: 13, fontWeight: 700, color: S.ink, marginTop: 6 }, children: money(lineTotal(l.qty, l.price)) })
+            ] }, l.id)),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { width: "100%" }, onClick: () => addLine(c.id), children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+              " Add line"
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}` }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: "Change order total" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 19, fontWeight: 800, color: total < 0 ? "#177245" : S.ink }, children: money(total) })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 5, marginTop: 11, flexWrap: "wrap" }, children: CO_STATUS.map((st) => {
+              const on = (c.status || "Draft") === st;
+              const col = st === "Declined" ? "#B3261E" : st === "Approved" ? "#177245" : T.accent;
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => editCo(c.id, "status", st), style: {
+                border: `1.5px solid ${on ? col : S.line}`,
+                background: on ? st === "Declined" ? "#FDECEA" : st === "Approved" ? "#EAF6EE" : T.accentSoft : "#fff",
+                color: on ? col : S.sub,
+                borderRadius: 8,
+                padding: "5px 11px",
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: "pointer",
+                fontFamily: "inherit"
+              }, children: st }, st);
+            }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 11 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => delCo(c.id), children: "Delete" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                Btn,
+                {
+                  small: true,
+                  style: { flex: 2 },
+                  disabled: !(c.lines || []).length,
+                  onClick: () => sendForSigning(c),
+                  "data-testid": "send-co",
+                  children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 13 }),
+                    " ",
+                    c.sentAt ? "Resend for signing" : "Send for signing"
+                  ]
+                }
+              )
+            ] }),
+            c.reason === "Our error" && c.status === "Approved" && total > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Charging the customer for our own error", tone: "amber", children: 'Reason is set to "our error" but this bills the customer. If it is a goodwill absorb, enter the lines as negatives.' })
+          ] })
+        ] }, c.id);
+      }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { width: "100%" }, onClick: add, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
         " Add change order"
@@ -75492,7 +75952,7 @@ function TabClaim({ job, mut, toast: toast2, brand: brand2 }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Adjuster email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: ins.adjusterEmail || "", onChange: (e) => setIns("adjusterEmail")(e.target.value) }) })
       ] }),
       (ins.adjusterPhone || ins.adjusterEmail) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 2 }, children: [
-        ins.adjusterPhone && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `tel:${String(ins.adjusterPhone).replace(/\D/g, "")}`, style: { flex: 1, textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { width: "100%" }, children: [
+        ins.adjusterPhone && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: telHref(ins.adjusterPhone), style: { flex: 1, textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { width: "100%" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Phone, { size: 13 }),
           " Call adjuster"
         ] }) }),
@@ -78028,7 +78488,7 @@ function TabWorkOrder({ job, mut, toast: toast2, brand: brand2, crews, templates
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 10, lineHeight: 1.5 }, children: "Everything the crew needs and nothing they don't. Pricing never appears on this document." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Customer", v: job.name }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Address", v: job.address }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Customer phone", v: job.phone }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Customer phone", v: fmtPhone(job.phone) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Scheduled", v: job.schedDate || "Not scheduled" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Squares", v: m.squares || "\u2014" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Pitch", v: m.pitch || "\u2014" }),
@@ -78855,9 +79315,32 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2 }) {
   const [tplState, setTplState] = (0, import_react.useState)("OH");
   const [openTpl, setOpenTpl] = (0, import_react.useState)(null);
   const [resourcePage, setResourcePage] = (0, import_react.useState)(null);
+  const [kbQ, setKbQ] = (0, import_react.useState)("");
+  const [kbSys, setKbSys] = (0, import_react.useState)("all");
+  const [openKb, setOpenKb] = (0, import_react.useState)(null);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
+  const kbHits = (() => {
+    const q = kbQ.trim().toLowerCase();
+    if (!q) return null;
+    const out = [];
+    KB_CODES.forEach((c, i2) => {
+      if (kbSys !== "all" && c.sys !== kbSys) return;
+      const hay = `${c.title} ${c.cite} ${c.body} ${c.supplement || ""}`.toLowerCase();
+      if (hay.includes(q)) out.push({ kind: "code", key: `c${i2}`, item: c });
+    });
+    KB_TERMS.forEach(([term, expand, def], i2) => {
+      if (kbSys !== "all") return;
+      const hay = `${term} ${expand} ${def}`.toLowerCase();
+      if (hay.includes(q)) out.push({ kind: "term", key: `t${i2}`, item: { term, expand, def } });
+    });
+    SUPPLEMENT_TRIGGERS.forEach(([item, cite], i2) => {
+      if (kbSys !== "all") return;
+      if (`${item} ${cite}`.toLowerCase().includes(q)) out.push({ kind: "trigger", key: `g${i2}`, item: { item, cite } });
+    });
+    return out;
+  })();
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Insurance", onBack }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginTop: 14, overflowX: "auto" }, children: tabs.map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setTab(id), style: {
@@ -78871,6 +79354,161 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2 }) {
       background: tab === id ? T.primary : "#fff",
       color: tab === id ? "#fff" : S.ink
     }, children: label }, id)) }),
+    tab === "search" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: inputStyle,
+          value: kbQ,
+          onChange: (e) => setKbQ(e.target.value),
+          placeholder: "drip edge, ponding, ACV, TPO thickness, matching\u2026",
+          autoFocus: true
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, overflowX: "auto", margin: "10px 0 4px", paddingBottom: 2 }, children: [["all", "Everything"], ...KB_SYSTEMS].map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setKbSys(id), style: {
+        border: `1.5px solid ${kbSys === id ? T.accent : S.line}`,
+        background: kbSys === id ? T.accentSoft : "#fff",
+        color: kbSys === id ? T.accent : S.ink,
+        borderRadius: 999,
+        padding: "6px 12px",
+        fontSize: 12.5,
+        fontWeight: 700,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        fontFamily: "inherit"
+      }, children: label }, id)) }),
+      !kbQ.trim() && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55 }, children: [
+          "Search code requirements, insurance terms and supplement triggers together. Try a material (",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "TPO" }),
+          ", ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "EPDM" }),
+          ",",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: " vinyl" }),
+          "), a component (",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "drip edge" }),
+          ", ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "valley" }),
+          ",",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: " parapet" }),
+          "), or a term you have heard an adjuster use (",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "betterment" }),
+          ", ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "matching" }),
+          ", ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "O&L" }),
+          ")."
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: [
+          KB_CODES.length,
+          " code entries \xB7 ",
+          KB_TERMS.length,
+          " terms \xB7",
+          " ",
+          SUPPLEMENT_TRIGGERS.length,
+          " triggers"
+        ] })
+      ] }),
+      kbHits && kbHits.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 10 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.5 }, children: [
+        "Nothing matches \u201C",
+        kbQ.trim(),
+        "\u201D. Try a shorter word \u2014 the search matches on substrings, so \u201Cvent\u201D finds ventilation and \u201Cflash\u201D finds every flashing entry."
+      ] }) }),
+      (kbHits || []).map((h) => {
+        const open = openKb === h.key;
+        if (h.kind === "term") {
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 10 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "baseline" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: h.item.term }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Term" })
+            ] }),
+            h.item.expand && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 2 }, children: h.item.expand }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, marginTop: 7, lineHeight: 1.55 }, children: h.item.def })
+          ] }, h.key);
+        }
+        if (h.kind === "trigger") {
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 10 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "baseline" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14.5, fontWeight: 700, color: S.ink }, children: h.item.item }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "Trigger" })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 5 }, children: h.item.cite })
+          ] }, h.key);
+        }
+        const c = h.item;
+        const sysLabel = (KB_SYSTEMS.find(([id]) => id === c.sys) || ["", c.sys])[1];
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 10 }, pad: 0, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setOpenKb(open ? null : h.key), style: {
+            width: "100%",
+            textAlign: "left",
+            border: "none",
+            background: "none",
+            cursor: "pointer",
+            padding: 15,
+            fontFamily: "inherit"
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14.5, fontWeight: 700, color: S.ink }, children: c.title }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: sysLabel })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: T.accent, fontWeight: 700, marginTop: 4 }, children: c.cite }),
+            !open && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+              fontSize: 12.5,
+              color: S.sub,
+              marginTop: 5,
+              lineHeight: 1.5,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical"
+            }, children: c.body })
+          ] }),
+          open && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "0 15px 15px" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.6 }, children: c.body }),
+            c.supplement && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 800, letterSpacing: ".05em", color: S.sub, margin: "12px 0 5px" }, children: "SUPPLEMENT WORDING" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: S.soft, borderRadius: 9, padding: "10px 12px", fontSize: 13, color: S.ink, lineHeight: 1.55 }, children: c.supplement }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                Btn,
+                {
+                  kind: "soft",
+                  small: true,
+                  style: { width: "100%", marginTop: 9 },
+                  onClick: () => {
+                    const t = `${c.supplement}
+
+Authority: ${c.cite}`;
+                    if (navigator.clipboard) navigator.clipboard.writeText(t);
+                    toast2("Supplement wording copied");
+                  },
+                  children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Copy, { size: 13 }),
+                    " Copy wording"
+                  ]
+                }
+              )
+            ] }),
+            SOURCES[c.src] && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: SOURCES[c.src].url, target: "_blank", rel: "noreferrer", style: {
+              display: "flex",
+              gap: 6,
+              alignItems: "center",
+              marginTop: 11,
+              color: T.accent,
+              fontSize: 12.5,
+              fontWeight: 700,
+              textDecoration: "none"
+            }, children: [
+              "Verify in ",
+              SOURCES[c.src].name,
+              " ",
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ExternalLink, { size: 13 })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: "Editions differ by jurisdiction. Check this against the text in force where the job is before sending it to a carrier." })
+          ] })
+        ] }, h.key);
+      })
+    ] }),
     tab === "clients" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
       insJobs.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 16, style: { marginBottom: 10, cursor: "pointer" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { onClick: () => onOpenJob(j.id), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between" }, children: [
@@ -78997,7 +79635,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2 }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Building department" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Office", v: juris.inspector.office }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Phone", v: juris.inspector.phone }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Phone", v: fmtPhone(juris.inspector.phone) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Address", v: juris.inspector.address })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
