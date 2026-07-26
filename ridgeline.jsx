@@ -1558,6 +1558,157 @@ const STATE_DEFAULTS = {
     sources: ["MUNICODE", "ICC"],
   },
 };
+/* ------------------------------------------------------------------
+   MARKET COVERAGE — Dayton OH south through the river counties to
+   Maysville KY, plus the northern Kentucky corridor.
+
+   What is factual here: the ZIP-to-city-to-county mapping, and which
+   code framework governs. Ohio operates a statewide Residential Code
+   (OAC 4101:8); local departments enforce it and cannot materially
+   amend it for one-to-three-family dwellings, which is why the code
+   basis is identical across every Ohio entry and only the permitting
+   office differs. Kentucky likewise runs a statewide residential code
+   through DHBC.
+
+   What is deliberately blank: inspector office names, phone numbers
+   and addresses. Those change, and a fabricated number that sends a
+   rep to a dead line — or worse, a wrong department on a permit — is
+   more damaging than an honest gap. Each record carries
+   `needsContact: true` until the office fills it in from the Code
+   lookup screen, and the app says so rather than implying it knows.
+------------------------------------------------------------------- */
+const OH_COUNTY_ZIPS = {
+  "Montgomery County": {
+    "45402": "Dayton", "45403": "Dayton", "45404": "Dayton", "45405": "Dayton",
+    "45406": "Dayton", "45409": "Oakwood", "45410": "Dayton", "45414": "Dayton",
+    "45415": "Dayton", "45416": "Dayton", "45417": "Dayton", "45418": "Dayton",
+    "45419": "Kettering", "45420": "Kettering", "45424": "Huber Heights",
+    "45426": "Trotwood", "45427": "Dayton", "45428": "Dayton", "45429": "Kettering",
+    "45431": "Riverside", "45432": "Riverside", "45439": "Moraine",
+    "45440": "Kettering", "45342": "Miamisburg", "45449": "West Carrollton",
+    "45309": "Brookville", "45322": "Englewood", "45327": "Germantown",
+    "45345": "New Lebanon", "45377": "Vandalia", "45315": "Clayton",
+    "45322b": "Union", "45459": "Washington Township", "45458": "Centerville",
+  },
+  "Greene County": {
+    "45385": "Xenia", "45430": "Beavercreek", "45434": "Beavercreek",
+    "45324": "Fairborn", "45387": "Yellow Springs", "45314": "Cedarville",
+    "45335": "Jamestown", "45370": "Spring Valley", "45368": "South Charleston",
+  },
+  "Warren County": {
+    "45036": "Lebanon", "45040": "Mason", "45066": "Springboro",
+    "45005": "Franklin", "45068": "Waynesville", "45152": "Morrow",
+    "45039": "Maineville", "45065": "South Lebanon", "45034": "Kings Mills",
+  },
+  "Butler County": {
+    "45011": "Hamilton", "45013": "Hamilton", "45015": "Hamilton",
+    "45042": "Middletown", "45044": "Middletown", "45014": "Fairfield",
+    "45056": "Oxford", "45069": "West Chester", "45067": "Trenton",
+    "45050": "Monroe", "45003": "College Corner",
+  },
+  "Hamilton County": {
+    "45202": "Cincinnati", "45204": "Cincinnati", "45205": "Cincinnati",
+    "45206": "Cincinnati", "45207": "Cincinnati", "45208": "Cincinnati",
+    "45209": "Cincinnati", "45211": "Cincinnati", "45212": "Norwood",
+    "45213": "Cincinnati", "45214": "Cincinnati", "45215": "Cincinnati",
+    "45216": "Cincinnati", "45217": "Cincinnati", "45218": "Cincinnati",
+    "45219": "Cincinnati", "45220": "Cincinnati", "45223": "Cincinnati",
+    "45224": "Cincinnati", "45225": "Cincinnati", "45226": "Cincinnati",
+    "45227": "Cincinnati", "45230": "Anderson Township", "45231": "Cincinnati",
+    "45232": "Cincinnati", "45233": "Delhi Township", "45236": "Cincinnati",
+    "45237": "Cincinnati", "45238": "Green Township", "45239": "Cincinnati",
+    "45240": "Forest Park", "45241": "Sharonville", "45242": "Blue Ash",
+    "45243": "Madeira", "45244": "Cincinnati", "45245": "Cincinnati",
+    "45246": "Springdale", "45247": "Cincinnati", "45248": "Cincinnati",
+    "45249": "Cincinnati", "45251": "Cincinnati", "45252": "Cincinnati",
+    "45255": "Cincinnati", "45030": "Harrison", "45002": "Cleves",
+  },
+  "Clermont County": {
+    "45103": "Batavia", "45150": "Milford", "45102": "Amelia",
+    "45106": "Bethel", "45157": "New Richmond", "45122": "Goshen",
+    "45140": "Loveland", "45176": "Williamsburg", "45112": "Chilo",
+    "45120": "Felicity", "45153": "Moscow", "45156": "Neville",
+  },
+  "Brown County": {
+    "45121": "Georgetown", "45154": "Mount Orab", "45167": "Ripley",
+    "45101": "Aberdeen", "45171": "Sardinia", "45118": "Fayetteville",
+    "45130": "Hamersville", "45119": "Feesburg", "45132": "Higginsport",
+  },
+  "Clinton County": {
+    "45177": "Wilmington", "45107": "Blanchester", "45169": "Sabina",
+    "45113": "Clarksville", "45148": "Martinsville",
+  },
+  "Highland County": {
+    "45133": "Hillsboro", "45123": "Greenfield", "45135": "Leesburg",
+    "45144": "Manchester", "45142": "Lynchburg", "45154b": "Mowrystown",
+  },
+  "Adams County": {
+    "45693": "West Union", "45660": "Peebles", "45679": "Seaman",
+    "45697": "Winchester", "45616": "Blue Creek",
+  },
+  "Preble County": {
+    "45320": "Eaton", "45311": "Camden", "45347": "New Paris",
+    "45381": "West Alexandria", "45303": "Ansonia",
+  },
+  "Miami County": {
+    "45373": "Troy", "45356": "Piqua", "45371": "Tipp City",
+    "45318": "Covington", "45337": "Laura", "45359": "Pleasant Hill",
+  },
+};
+
+const KY_COUNTY_ZIPS = {
+  "Mason County": { "41056": "Maysville", "41055": "Mayslick", "41096": "Washington" },
+  "Lewis County": { "41179": "Vanceburg", "41189": "Tollesboro", "41142": "Garrison" },
+  "Bracken County": { "41004": "Brooksville", "41002": "Augusta", "41044": "Foster" },
+  "Robertson County": { "41064": "Mount Olivet" },
+  "Fleming County": { "41041": "Flemingsburg", "41065": "Muses Mills" },
+  "Pendleton County": { "41040": "Falmouth", "41006": "Butler" },
+  "Campbell County": {
+    "41071": "Newport", "41075": "Fort Thomas", "41073": "Bellevue",
+    "41074": "Dayton", "41076": "Cold Spring", "41001": "Alexandria",
+    "41007": "California", "41059": "Melbourne",
+  },
+  "Kenton County": {
+    "41011": "Covington", "41014": "Covington", "41015": "Latonia",
+    "41016": "Covington", "41017": "Fort Mitchell", "41018": "Erlanger",
+    "41051": "Independence", "41042b": "Taylor Mill",
+  },
+  "Boone County": {
+    "41042": "Florence", "41005": "Burlington", "41091": "Union",
+    "41048": "Hebron", "41094": "Walton",
+  },
+  "Grant County": { "41097": "Williamstown", "41030": "Crittenden" },
+};
+
+/* Flatten the county maps into jurisdiction records. Built once at
+   module load rather than stored as literals, so adding a ZIP is a
+   one-line change and the code basis can never drift between entries
+   in the same state. */
+function buildMarketJurisdictions() {
+  const out = {};
+  const add = (zip, city, county, state) => {
+    /* Keys ending in a letter are disambiguators for towns sharing a
+       ZIP with another entry; strip them for the real key. */
+    const z = zip.replace(/[a-z]$/, "");
+    if (out[z]) return;
+    const d = STATE_DEFAULTS[state];
+    out[z] = {
+      zip: z, city, county, state,
+      codeName: d.codeName, codeEdition: d.codeEdition,
+      adoption: d.adoption, permit: d.permit,
+      inspector: { office: "", phone: "", address: "" },
+      needsContact: true,
+      verified: false, sources: d.sources, verifiedDetail: { date: null, by: null },
+    };
+  };
+  Object.entries(OH_COUNTY_ZIPS).forEach(([county, zips]) =>
+    Object.entries(zips).forEach(([z, city]) => add(z, city, county, "OH")));
+  Object.entries(KY_COUNTY_ZIPS).forEach(([county, zips]) =>
+    Object.entries(zips).forEach(([z, city]) => add(z, city, county, "KY")));
+  return out;
+}
+const MARKET_JURISDICTIONS = buildMarketJurisdictions();
+
 function stateForZip(zip) {
   const p = parseInt(String(zip).slice(0, 3), 10);
   if (isNaN(p)) return null;
@@ -1565,11 +1716,36 @@ function stateForZip(zip) {
   return hit ? hit.state : null;
 }
 /* Returns { ...record, precision } — "verified" | "state" | null */
+/* Office-verified inspector contacts, saved from the Code lookup
+   screen. Held at module scope so every caller sees the same data
+   without threading it through a dozen components; the app hydrates it
+   from company settings on load. */
+let JURIS_OVERRIDES = {};
+function setJurisOverrides(map) { JURIS_OVERRIDES = map || {}; }
+function getJurisOverrides() { return JURIS_OVERRIDES; }
+
 function resolveJurisdiction(zip) {
   const z = String(zip || "").trim();
   if (z.length !== 5) return null;
+  const ov = JURIS_OVERRIDES[z];
   const exact = JURISDICTIONS[z];
-  if (exact) return { ...exact, precision: "verified" };
+  if (exact) {
+    return ov
+      ? { ...exact, inspector: { ...exact.inspector, ...ov }, needsContact: false,
+          verified: true, verifiedDetail: { date: ov.at || null, by: ov.by || null }, precision: "verified" }
+      : { ...exact, precision: "verified" };
+  }
+  /* Markets we work: city and county are known, code basis is the
+     state code, and the permitting office is filled in by the office
+     the first time someone calls it. */
+  const mkt = MARKET_JURISDICTIONS[z];
+  if (mkt) {
+    if (ov) {
+      return { ...mkt, inspector: { ...mkt.inspector, ...ov }, needsContact: false,
+        verified: true, verifiedDetail: { date: ov.at || null, by: ov.by || null }, precision: "verified" };
+    }
+    return { ...mkt, precision: "market" };
+  }
   const st = stateForZip(z);
   if (!st) return null;
   const d = STATE_DEFAULTS[st];
@@ -11257,12 +11433,14 @@ function LetterTemplates() {
   );
 }
 
-function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
+function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {} }) {
   const [tab, setTab] = useState("clients");
   const [zip, setZip] = useState("");
   const [tplState, setTplState] = useState("OH");
   const [openTpl, setOpenTpl] = useState(null);
   const [resourcePage, setResourcePage] = useState(null);
+  const [editDept, setEditDept] = useState(false);
+  const [deptForm, setDeptForm] = useState({ office: "", phone: "", address: "" });
   const [kbQ, setKbQ] = useState("");
   const [kbSys, setKbSys] = useState("all");
   const [openKb, setOpenKb] = useState(null);
@@ -11559,7 +11737,9 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
               <Card style={{ marginTop: 12 }}>
                 <CardTitle right={juris.precision === "verified"
                   ? <Chip tone="green">Verified {juris.verifiedDetail?.date}</Chip>
-                  : <Chip tone="amber">State-level — verify locally</Chip>}>
+                  : juris.precision === "market"
+                    ? <Chip tone="blue">In our market</Chip>
+                    : <Chip tone="amber">State-level — verify locally</Chip>}>
                   {juris.city ? `${juris.city}, ${juris.state}` : `${juris.state} — zip ${juris.zip}`}
                 </CardTitle>
                 {juris.county && <KV k="County" v={juris.county} />}
@@ -11572,7 +11752,15 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
                     {juris.sources.map((sid) => <SourceLink key={sid} srcId={sid} />)}
                   </div>
                 )}
-                {!juris.verified && (
+                {!juris.verified && juris.precision === "market" && (
+                  <Callout label="City and county confirmed; office not yet on file">
+                    Ohio and Kentucky both run statewide residential codes, so the
+                    code basis above is right for this address. What is missing is
+                    which building department issues the permit — add it below the
+                    first time you call them and it is saved for everyone.
+                  </Callout>
+                )}
+                {!juris.verified && juris.precision !== "market" && (
                   <Callout label="Before field use">
                     Open the official source above, confirm the adopted edition and local amendments, and have the
                     office mark this jurisdiction verified with a date and initials.
@@ -11580,10 +11768,56 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast }) {
                 )}
               </Card>
               <Card style={{ marginTop: 12 }}>
-                <CardTitle>Building department</CardTitle>
-                <KV k="Office" v={juris.inspector.office} />
-                <KV k="Phone" v={fmtPhone(juris.inspector.phone)} />
-                <KV k="Address" v={juris.inspector.address} />
+                <CardTitle right={juris.needsContact && !editDept
+                  ? <Btn small kind="soft" onClick={() => { setEditDept(true); setDeptForm({ office: juris.inspector.office || "", phone: juris.inspector.phone || "", address: juris.inspector.address || "" }); }}>Add</Btn>
+                  : !editDept
+                    ? <Btn small kind="ghost" onClick={() => { setEditDept(true); setDeptForm({ office: juris.inspector.office || "", phone: juris.inspector.phone || "", address: juris.inspector.address || "" }); }}>Edit</Btn>
+                    : null}>
+                  Building department
+                </CardTitle>
+                {editDept ? (
+                  <>
+                    <Field label="Office">
+                      <input style={inputStyle} value={deptForm.office}
+                        onChange={(e) => setDeptForm({ ...deptForm, office: e.target.value })}
+                        placeholder="e.g. Montgomery County Building Regulations" />
+                    </Field>
+                    <Field label="Phone">
+                      <input style={inputStyle} type="tel" value={deptForm.phone}
+                        onChange={(e) => setDeptForm({ ...deptForm, phone: e.target.value })} />
+                    </Field>
+                    <Field label="Address">
+                      <input style={inputStyle} value={deptForm.address}
+                        onChange={(e) => setDeptForm({ ...deptForm, address: e.target.value })} />
+                    </Field>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setEditDept(false)}>Cancel</Btn>
+                      <Btn style={{ flex: 1 }} disabled={!deptForm.office.trim()}
+                        onClick={() => { onSaveDept(juris.zip, deptForm); setEditDept(false); }}>Save</Btn>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
+                      Saved against this ZIP for the whole company, so nobody has
+                      to look it up twice.
+                    </div>
+                  </>
+                ) : juris.needsContact ? (
+                  <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
+                    Not on file yet. Rather than print a number that might be
+                    wrong, this stays blank until someone confirms it — a dead
+                    line on a permit call costs more than an empty field.
+                  </div>
+                ) : (
+                  <>
+                    <KV k="Office" v={juris.inspector.office || "—"} />
+                    <KV k="Phone" v={juris.inspector.phone ? fmtPhone(juris.inspector.phone) : "—"} />
+                    <KV k="Address" v={juris.inspector.address || "—"} />
+                    {juris.inspector.phone && (
+                      <a href={telHref(juris.inspector.phone)} style={{ textDecoration: "none", display: "block", marginTop: 10 }}>
+                        <Btn kind="soft" small style={{ width: "100%" }}><Phone size={13} /> Call the department</Btn>
+                      </a>
+                    )}
+                  </>
+                )}
               </Card>
               <Card style={{ marginTop: 12 }}>
                 <CardTitle>Key roofing provisions — {juris.state}</CardTitle>
@@ -15639,6 +15873,10 @@ export default function SupremeCRM() {
      a lead is created (using whichever seat's token is connected). */
   const [ccAutoCreate, setCcAutoCreate] = useState(true);
   /* Company-wide feature switches and security posture, admin-controlled. */
+  /* Building-department contacts the office has confirmed, keyed by
+     ZIP. Kept in company settings so one person's phone call becomes
+     everyone's. */
+  const [jurisContacts, setJurisContacts] = useState({});
   const [features, setFeatures] = useState({});
   const [security, setSecurity] = useState({ anomalyLogout: true });
   /* Rolling behaviour window for anomaly detection. A ref, not state:
@@ -15660,11 +15898,11 @@ export default function SupremeCRM() {
   };
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security];
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts];
   const orgPack = () => ({
     announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates,
     priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate,
-    features, security, version: 1,
+    features, security, jurisContacts, version: 1,
   });
   const unpackOrg = (d) => {
     if (d.announcements) setAnnouncements(d.announcements);
@@ -15682,6 +15920,7 @@ export default function SupremeCRM() {
     if (d.apiSetup) setApiSetup(d.apiSetup);
     if (d.ccAutoCreate !== undefined) setCcAutoCreate(d.ccAutoCreate);
     if (d.features) setFeatures(d.features);
+    if (d.jurisContacts) { setJurisContacts(d.jurisContacts); setJurisOverrides(d.jurisContacts); }
     if (d.security) setSecurity(d.security);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
@@ -16051,7 +16290,14 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "more" ? (
         <MoreMenu brand={brand} onNav={(id) => (id === "password" ? setChangePwOpen(true) : setNav(id))} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
       ) : nav === "insurance" ? (
-        <InsuranceHub jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} toast={toast} />
+        <InsuranceHub jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} toast={toast}
+          onSaveDept={(zip, dept) => {
+            const next = { ...jurisContacts, [zip]: { ...dept, at: todayIso(), by: userName } };
+            setJurisContacts(next);
+            setJurisOverrides(next);
+            logAct({ type: "code", text: `Saved the building department for ${zip}: ${dept.office}` });
+            toast("Saved for the whole company");
+          }} />
       ) : nav === "performance" ? (
         <Performance jobs={jobs} stages={stages} users={users} onBack={() => setNav("more")}
           isAdmin={isAdmin} currentUser={liveUser} toast={toast} />

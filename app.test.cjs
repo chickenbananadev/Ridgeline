@@ -68620,17 +68620,290 @@ var STATE_DEFAULTS = {
     sources: ["MUNICODE", "ICC"]
   }
 };
+var OH_COUNTY_ZIPS = {
+  "Montgomery County": {
+    "45402": "Dayton",
+    "45403": "Dayton",
+    "45404": "Dayton",
+    "45405": "Dayton",
+    "45406": "Dayton",
+    "45409": "Oakwood",
+    "45410": "Dayton",
+    "45414": "Dayton",
+    "45415": "Dayton",
+    "45416": "Dayton",
+    "45417": "Dayton",
+    "45418": "Dayton",
+    "45419": "Kettering",
+    "45420": "Kettering",
+    "45424": "Huber Heights",
+    "45426": "Trotwood",
+    "45427": "Dayton",
+    "45428": "Dayton",
+    "45429": "Kettering",
+    "45431": "Riverside",
+    "45432": "Riverside",
+    "45439": "Moraine",
+    "45440": "Kettering",
+    "45342": "Miamisburg",
+    "45449": "West Carrollton",
+    "45309": "Brookville",
+    "45322": "Englewood",
+    "45327": "Germantown",
+    "45345": "New Lebanon",
+    "45377": "Vandalia",
+    "45315": "Clayton",
+    "45322b": "Union",
+    "45459": "Washington Township",
+    "45458": "Centerville"
+  },
+  "Greene County": {
+    "45385": "Xenia",
+    "45430": "Beavercreek",
+    "45434": "Beavercreek",
+    "45324": "Fairborn",
+    "45387": "Yellow Springs",
+    "45314": "Cedarville",
+    "45335": "Jamestown",
+    "45370": "Spring Valley",
+    "45368": "South Charleston"
+  },
+  "Warren County": {
+    "45036": "Lebanon",
+    "45040": "Mason",
+    "45066": "Springboro",
+    "45005": "Franklin",
+    "45068": "Waynesville",
+    "45152": "Morrow",
+    "45039": "Maineville",
+    "45065": "South Lebanon",
+    "45034": "Kings Mills"
+  },
+  "Butler County": {
+    "45011": "Hamilton",
+    "45013": "Hamilton",
+    "45015": "Hamilton",
+    "45042": "Middletown",
+    "45044": "Middletown",
+    "45014": "Fairfield",
+    "45056": "Oxford",
+    "45069": "West Chester",
+    "45067": "Trenton",
+    "45050": "Monroe",
+    "45003": "College Corner"
+  },
+  "Hamilton County": {
+    "45202": "Cincinnati",
+    "45204": "Cincinnati",
+    "45205": "Cincinnati",
+    "45206": "Cincinnati",
+    "45207": "Cincinnati",
+    "45208": "Cincinnati",
+    "45209": "Cincinnati",
+    "45211": "Cincinnati",
+    "45212": "Norwood",
+    "45213": "Cincinnati",
+    "45214": "Cincinnati",
+    "45215": "Cincinnati",
+    "45216": "Cincinnati",
+    "45217": "Cincinnati",
+    "45218": "Cincinnati",
+    "45219": "Cincinnati",
+    "45220": "Cincinnati",
+    "45223": "Cincinnati",
+    "45224": "Cincinnati",
+    "45225": "Cincinnati",
+    "45226": "Cincinnati",
+    "45227": "Cincinnati",
+    "45230": "Anderson Township",
+    "45231": "Cincinnati",
+    "45232": "Cincinnati",
+    "45233": "Delhi Township",
+    "45236": "Cincinnati",
+    "45237": "Cincinnati",
+    "45238": "Green Township",
+    "45239": "Cincinnati",
+    "45240": "Forest Park",
+    "45241": "Sharonville",
+    "45242": "Blue Ash",
+    "45243": "Madeira",
+    "45244": "Cincinnati",
+    "45245": "Cincinnati",
+    "45246": "Springdale",
+    "45247": "Cincinnati",
+    "45248": "Cincinnati",
+    "45249": "Cincinnati",
+    "45251": "Cincinnati",
+    "45252": "Cincinnati",
+    "45255": "Cincinnati",
+    "45030": "Harrison",
+    "45002": "Cleves"
+  },
+  "Clermont County": {
+    "45103": "Batavia",
+    "45150": "Milford",
+    "45102": "Amelia",
+    "45106": "Bethel",
+    "45157": "New Richmond",
+    "45122": "Goshen",
+    "45140": "Loveland",
+    "45176": "Williamsburg",
+    "45112": "Chilo",
+    "45120": "Felicity",
+    "45153": "Moscow",
+    "45156": "Neville"
+  },
+  "Brown County": {
+    "45121": "Georgetown",
+    "45154": "Mount Orab",
+    "45167": "Ripley",
+    "45101": "Aberdeen",
+    "45171": "Sardinia",
+    "45118": "Fayetteville",
+    "45130": "Hamersville",
+    "45119": "Feesburg",
+    "45132": "Higginsport"
+  },
+  "Clinton County": {
+    "45177": "Wilmington",
+    "45107": "Blanchester",
+    "45169": "Sabina",
+    "45113": "Clarksville",
+    "45148": "Martinsville"
+  },
+  "Highland County": {
+    "45133": "Hillsboro",
+    "45123": "Greenfield",
+    "45135": "Leesburg",
+    "45144": "Manchester",
+    "45142": "Lynchburg",
+    "45154b": "Mowrystown"
+  },
+  "Adams County": {
+    "45693": "West Union",
+    "45660": "Peebles",
+    "45679": "Seaman",
+    "45697": "Winchester",
+    "45616": "Blue Creek"
+  },
+  "Preble County": {
+    "45320": "Eaton",
+    "45311": "Camden",
+    "45347": "New Paris",
+    "45381": "West Alexandria",
+    "45303": "Ansonia"
+  },
+  "Miami County": {
+    "45373": "Troy",
+    "45356": "Piqua",
+    "45371": "Tipp City",
+    "45318": "Covington",
+    "45337": "Laura",
+    "45359": "Pleasant Hill"
+  }
+};
+var KY_COUNTY_ZIPS = {
+  "Mason County": { "41056": "Maysville", "41055": "Mayslick", "41096": "Washington" },
+  "Lewis County": { "41179": "Vanceburg", "41189": "Tollesboro", "41142": "Garrison" },
+  "Bracken County": { "41004": "Brooksville", "41002": "Augusta", "41044": "Foster" },
+  "Robertson County": { "41064": "Mount Olivet" },
+  "Fleming County": { "41041": "Flemingsburg", "41065": "Muses Mills" },
+  "Pendleton County": { "41040": "Falmouth", "41006": "Butler" },
+  "Campbell County": {
+    "41071": "Newport",
+    "41075": "Fort Thomas",
+    "41073": "Bellevue",
+    "41074": "Dayton",
+    "41076": "Cold Spring",
+    "41001": "Alexandria",
+    "41007": "California",
+    "41059": "Melbourne"
+  },
+  "Kenton County": {
+    "41011": "Covington",
+    "41014": "Covington",
+    "41015": "Latonia",
+    "41016": "Covington",
+    "41017": "Fort Mitchell",
+    "41018": "Erlanger",
+    "41051": "Independence",
+    "41042b": "Taylor Mill"
+  },
+  "Boone County": {
+    "41042": "Florence",
+    "41005": "Burlington",
+    "41091": "Union",
+    "41048": "Hebron",
+    "41094": "Walton"
+  },
+  "Grant County": { "41097": "Williamstown", "41030": "Crittenden" }
+};
+function buildMarketJurisdictions() {
+  const out = {};
+  const add = (zip, city, county, state) => {
+    const z = zip.replace(/[a-z]$/, "");
+    if (out[z]) return;
+    const d = STATE_DEFAULTS[state];
+    out[z] = {
+      zip: z,
+      city,
+      county,
+      state,
+      codeName: d.codeName,
+      codeEdition: d.codeEdition,
+      adoption: d.adoption,
+      permit: d.permit,
+      inspector: { office: "", phone: "", address: "" },
+      needsContact: true,
+      verified: false,
+      sources: d.sources,
+      verifiedDetail: { date: null, by: null }
+    };
+  };
+  Object.entries(OH_COUNTY_ZIPS).forEach(([county, zips]) => Object.entries(zips).forEach(([z, city]) => add(z, city, county, "OH")));
+  Object.entries(KY_COUNTY_ZIPS).forEach(([county, zips]) => Object.entries(zips).forEach(([z, city]) => add(z, city, county, "KY")));
+  return out;
+}
+var MARKET_JURISDICTIONS = buildMarketJurisdictions();
 function stateForZip(zip) {
   const p = parseInt(String(zip).slice(0, 3), 10);
   if (isNaN(p)) return null;
   const hit = ZIP_PREFIX_STATE.find((r) => p >= r.lo && p <= r.hi);
   return hit ? hit.state : null;
 }
+var JURIS_OVERRIDES = {};
+function setJurisOverrides(map) {
+  JURIS_OVERRIDES = map || {};
+}
 function resolveJurisdiction(zip) {
   const z = String(zip || "").trim();
   if (z.length !== 5) return null;
+  const ov = JURIS_OVERRIDES[z];
   const exact = JURISDICTIONS[z];
-  if (exact) return { ...exact, precision: "verified" };
+  if (exact) {
+    return ov ? {
+      ...exact,
+      inspector: { ...exact.inspector, ...ov },
+      needsContact: false,
+      verified: true,
+      verifiedDetail: { date: ov.at || null, by: ov.by || null },
+      precision: "verified"
+    } : { ...exact, precision: "verified" };
+  }
+  const mkt = MARKET_JURISDICTIONS[z];
+  if (mkt) {
+    if (ov) {
+      return {
+        ...mkt,
+        inspector: { ...mkt.inspector, ...ov },
+        needsContact: false,
+        verified: true,
+        verifiedDetail: { date: ov.at || null, by: ov.by || null },
+        precision: "verified"
+      };
+    }
+    return { ...mkt, precision: "market" };
+  }
   const st = stateForZip(z);
   if (!st) return null;
   const d = STATE_DEFAULTS[st];
@@ -79309,12 +79582,15 @@ function LetterTemplates() {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Before sending", children: "Replace every bracketed field \u2014 an unfilled placeholder in front of an adjuster costs credibility on the whole letter. Attach the photos, measurements, and manufacturer bulletin you reference. Keep a copy in the job's Files tab." })
   ] });
 }
-function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2 }) {
+function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2, onSaveDept = () => {
+} }) {
   const [tab, setTab] = (0, import_react.useState)("clients");
   const [zip, setZip] = (0, import_react.useState)("");
   const [tplState, setTplState] = (0, import_react.useState)("OH");
   const [openTpl, setOpenTpl] = (0, import_react.useState)(null);
   const [resourcePage, setResourcePage] = (0, import_react.useState)(null);
+  const [editDept, setEditDept] = (0, import_react.useState)(false);
+  const [deptForm, setDeptForm] = (0, import_react.useState)({ office: "", phone: "", address: "" });
   const [kbQ, setKbQ] = (0, import_react.useState)("");
   const [kbSys, setKbSys] = (0, import_react.useState)("all");
   const [openKb, setOpenKb] = (0, import_react.useState)(null);
@@ -79623,20 +79899,76 @@ Authority: ${c.cite}`;
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: juris.precision === "verified" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "green", children: [
             "Verified ",
             juris.verifiedDetail?.date
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "State-level \u2014 verify locally" }), children: juris.city ? `${juris.city}, ${juris.state}` : `${juris.state} \u2014 zip ${juris.zip}` }),
+          ] }) : juris.precision === "market" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "In our market" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "State-level \u2014 verify locally" }), children: juris.city ? `${juris.city}, ${juris.state}` : `${juris.state} \u2014 zip ${juris.zip}` }),
           juris.county && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "County", v: juris.county }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Building code", v: juris.codeName }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Edition", v: juris.codeEdition }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Adoption", v: juris.adoption }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Permits", v: juris.permit }),
           juris.sources && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8 }, children: juris.sources.map((sid) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SourceLink, { srcId: sid }, sid)) }),
-          !juris.verified && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Before field use", children: "Open the official source above, confirm the adopted edition and local amendments, and have the office mark this jurisdiction verified with a date and initials." })
+          !juris.verified && juris.precision === "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "City and county confirmed; office not yet on file", children: "Ohio and Kentucky both run statewide residential codes, so the code basis above is right for this address. What is missing is which building department issues the permit \u2014 add it below the first time you call them and it is saved for everyone." }),
+          !juris.verified && juris.precision !== "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Before field use", children: "Open the official source above, confirm the adopted edition and local amendments, and have the office mark this jurisdiction verified with a date and initials." })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Building department" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Office", v: juris.inspector.office }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Phone", v: fmtPhone(juris.inspector.phone) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Address", v: juris.inspector.address })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: juris.needsContact && !editDept ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "soft", onClick: () => {
+            setEditDept(true);
+            setDeptForm({ office: juris.inspector.office || "", phone: juris.inspector.phone || "", address: juris.inspector.address || "" });
+          }, children: "Add" }) : !editDept ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => {
+            setEditDept(true);
+            setDeptForm({ office: juris.inspector.office || "", phone: juris.inspector.phone || "", address: juris.inspector.address || "" });
+          }, children: "Edit" }) : null, children: "Building department" }),
+          editDept ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Office", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: inputStyle,
+                value: deptForm.office,
+                onChange: (e) => setDeptForm({ ...deptForm, office: e.target.value }),
+                placeholder: "e.g. Montgomery County Building Regulations"
+              }
+            ) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: inputStyle,
+                type: "tel",
+                value: deptForm.phone,
+                onChange: (e) => setDeptForm({ ...deptForm, phone: e.target.value })
+              }
+            ) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Address", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: inputStyle,
+                value: deptForm.address,
+                onChange: (e) => setDeptForm({ ...deptForm, address: e.target.value })
+              }
+            ) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => setEditDept(false), children: "Cancel" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                Btn,
+                {
+                  style: { flex: 1 },
+                  disabled: !deptForm.office.trim(),
+                  onClick: () => {
+                    onSaveDept(juris.zip, deptForm);
+                    setEditDept(false);
+                  },
+                  children: "Save"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: "Saved against this ZIP for the whole company, so nobody has to look it up twice." })
+          ] }) : juris.needsContact ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55 }, children: "Not on file yet. Rather than print a number that might be wrong, this stays blank until someone confirms it \u2014 a dead line on a permit call costs more than an empty field." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Office", v: juris.inspector.office || "\u2014" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Phone", v: juris.inspector.phone ? fmtPhone(juris.inspector.phone) : "\u2014" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Address", v: juris.inspector.address || "\u2014" }),
+            juris.inspector.phone && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: telHref(juris.inspector.phone), style: { textDecoration: "none", display: "block", marginTop: 10 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { width: "100%" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Phone, { size: 13 }),
+              " Call the department"
+            ] }) })
+          ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { children: [
@@ -83895,6 +84227,7 @@ function SupremeCRM() {
   });
   const [apiSetup, setApiSetup] = (0, import_react.useState)({});
   const [ccAutoCreate, setCcAutoCreate] = (0, import_react.useState)(true);
+  const [jurisContacts, setJurisContacts] = (0, import_react.useState)({});
   const [features, setFeatures] = (0, import_react.useState)({});
   const [security, setSecurity] = (0, import_react.useState)({ anomalyLogout: true });
   const behaviour = (0, import_react.useRef)([]);
@@ -83917,7 +84250,7 @@ function SupremeCRM() {
       setNav("home");
     }
   };
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security];
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts];
   const orgPack = () => ({
     announcements,
     calls,
@@ -83935,6 +84268,7 @@ function SupremeCRM() {
     ccAutoCreate,
     features,
     security,
+    jurisContacts,
     version: 1
   });
   const unpackOrg = (d) => {
@@ -83953,6 +84287,10 @@ function SupremeCRM() {
     if (d.apiSetup) setApiSetup(d.apiSetup);
     if (d.ccAutoCreate !== void 0) setCcAutoCreate(d.ccAutoCreate);
     if (d.features) setFeatures(d.features);
+    if (d.jurisContacts) {
+      setJurisContacts(d.jurisContacts);
+      setJurisOverrides(d.jurisContacts);
+    }
     if (d.security) setSecurity(d.security);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
@@ -84449,7 +84787,22 @@ function SupremeCRM() {
         }
       }
       setCurrentUser(null);
-    }, currentUser: liveUser }) : nav === "insurance" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InsuranceHub, { jobs, onBack: () => setNav("more"), onOpenJob: openJobScreen, toast: toast2 }) : nav === "performance" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    }, currentUser: liveUser }) : nav === "insurance" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      InsuranceHub,
+      {
+        jobs,
+        onBack: () => setNav("more"),
+        onOpenJob: openJobScreen,
+        toast: toast2,
+        onSaveDept: (zip, dept) => {
+          const next = { ...jurisContacts, [zip]: { ...dept, at: todayIso(), by: userName } };
+          setJurisContacts(next);
+          setJurisOverrides(next);
+          logAct({ type: "code", text: `Saved the building department for ${zip}: ${dept.office}` });
+          toast2("Saved for the whole company");
+        }
+      }
+    ) : nav === "performance" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       Performance,
       {
         jobs,
