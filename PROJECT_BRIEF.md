@@ -52,7 +52,10 @@ browser-dashboard steps or SQL/code he pastes into a web editor.
 `supabase/migrations/` — 002 core persistence, 003 public branding,
 004 client portal, 005 auto-profile trigger (role needs `::user_role`
 cast), 006 portal messages, 007 operations calendar fields,
-008 portal quote requests.
+008 portal quote requests, 009 portal contact updates,
+010 per-seat integration tokens, 011 chat reactions, 012 chat edit
+(superseded), 013 chat hard delete, 014 signatures,
+**015 multi-tenancy**.
 **002–005 are run and verified. 006, 007, 008 must run in that order —
 confirm each with Jacob before assuming.**
 
@@ -87,6 +90,31 @@ document sharing with Internal/Shared control, customer quote-change
 and future-work requests with a team review queue, and queued customer
 updates on stage moves gated by SMS/email consent. Test suites:
 `npm run test:smoke` / `test:features` / `test:build2` / `test:build3`.
+
+## Multi-tenancy & sign-up (build 26)
+`PRODUCT` (top of ridgeline.jsx) holds the product name, seat price,
+and trial length. **Renaming the product is a one-line change there** —
+the repo, Vercel project, and Supabase project keep the name Ridgeline
+regardless; those are infrastructure, not branding.
+
+Migration **015 adds real tenant isolation.** Before it, every RLS
+policy was `using (true)` — any signed-in user could read every row in
+the database. 015 adds `tenant_id` to all 12 tables, a `stamp_tenant`
+insert trigger (so app queries did not have to change), and rewrites
+every policy to scope by `current_tenant_id()`. Supreme is backfilled
+into a fixed tenant UUID marked `internal` so it is never billed.
+
+Sign-up: `create_tenant(org_name)` RPC runs as security definer,
+because a brand-new user has no tenant and so passes no policy.
+`my_tenant()` returns trial days left and a `locked` flag.
+7-day trial, no card. $49.99/seat after.
+
+**OUTSTANDING SECURITY ISSUE — client portal is enumerable.**
+`portal_public_read` is `to anon ... using (revoked = false)`, so
+anyone with the anon key (public, in the browser bundle) can dump
+every portal row: customer names, addresses, job details. Fix is to
+move portal reads behind a security-definer function that requires
+the token. Not yet done. Blocking for outside tenants.
 
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests

@@ -14,6 +14,21 @@ import {
    BRANDING — single source of company identity. Everything company-
    specific (login, documents, portal, review sends) reads from here.
    ================================================================ */
+/* ------------------------------------------------------------------
+   PRODUCT — the name of the software itself, which is NOT the same
+   thing as `brand`. `brand` is the customer's company (what prints on
+   their contracts). PRODUCT is what they bought. Keeping it in one
+   constant means renaming the product is a one-line change, not a
+   search-and-replace across 18,000 lines.
+------------------------------------------------------------------- */
+const PRODUCT = {
+  name: "Ridgeline",
+  tagline: "Roofing, start to paid.",
+  seatPrice: 49.99,
+  trialDays: 7,
+  supportEmail: "support@supremebuildinggroup.com",
+};
+
 const DEFAULT_BRAND = {
   company: "Supreme Building Group",
   short: "SBG",
@@ -2622,6 +2637,12 @@ function SignaturePad({ open, onClose, title, onApply }) {
    ================================================================ */
 function Login({ brand, users, onLogin }) {
   const [mode, setMode] = useState("login");
+  /* Sign-up fields. Kept separate from the sign-in fields so a
+     half-typed company name does not leak into a login attempt. */
+  const [suName, setSuName] = useState("");
+  const [suCompany, setSuCompany] = useState("");
+  const [suPw2, setSuPw2] = useState("");
+  const [suDone, setSuDone] = useState(false);
   const [email, setEmail] = useState(() => {
     try { return window.localStorage.getItem("ridgeline.email") || ""; } catch { return ""; }
   });
@@ -2749,12 +2770,98 @@ function Login({ brand, users, onLogin }) {
               display: "block", margin: "16px auto 0", border: "none", background: "none",
               color: T.accent, fontWeight: 600, fontSize: 14, cursor: "pointer",
             }}>Forgot password?</button>
+            {live && (
+              <div style={{ textAlign: "center", marginTop: 22, paddingTop: 18, borderTop: `1px solid ${S.line}` }}>
+                <div style={{ fontSize: 13.5, color: S.sub, marginBottom: 8 }}>
+                  New company? Try {PRODUCT.name} free for {PRODUCT.trialDays} days — no card.
+                </div>
+                <button onClick={() => { setErr(""); setMode("signup"); }} style={{
+                  border: `1.5px solid ${T.accent}`, background: "#fff", color: T.accent,
+                  fontWeight: 700, fontSize: 14, cursor: "pointer", borderRadius: 10,
+                  padding: "10px 18px",
+                }}>Create an account</button>
+              </div>
+            )}
             {!live && (
               <div style={{ textAlign: "center", fontSize: 12, color: S.sub, marginTop: 18, lineHeight: 1.5 }}>
                 No backend connected — sign in opens the demo account picker.
               </div>
             )}
           </>
+        )}
+
+        {mode === "signup" && (
+          suDone ? (
+            <>
+              <Callout label="Check your email">
+                We sent a confirmation link to {email}. Open it on this phone and you will land
+                straight in {PRODUCT.name} with your {PRODUCT.trialDays}-day trial running.
+              </Callout>
+              <Btn kind="ghost" style={{ width: "100%", marginTop: 14 }}
+                onClick={() => { setSuDone(false); setMode("login"); }}>Back to sign in</Btn>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 19, fontWeight: 800, color: S.ink, marginBottom: 4 }}>
+                Start your {PRODUCT.trialDays}-day trial
+              </div>
+              <div style={{ fontSize: 13.5, color: S.sub, marginBottom: 18, lineHeight: 1.5 }}>
+                No card required. After the trial it is ${PRODUCT.seatPrice.toFixed(2)} per seat
+                per month, and you choose whether to continue.
+              </div>
+              <Field label="Your name">
+                <input style={inputStyle} value={suName} autoComplete="name"
+                  onChange={(e) => setSuName(e.target.value)} placeholder="Jacob Henderson" />
+              </Field>
+              <Field label="Company name">
+                <input style={inputStyle} value={suCompany} autoComplete="organization"
+                  onChange={(e) => setSuCompany(e.target.value)} placeholder="Supreme Building Group" />
+              </Field>
+              <Field label="Work email">
+                <input style={inputStyle} type="email" value={email} autoComplete="username"
+                  autoCapitalize="none" autoCorrect="off"
+                  onChange={(e) => setEmail(e.target.value)} placeholder="you@yourcompany.com" />
+              </Field>
+              <Field label="Password">
+                <input style={inputStyle} type="password" value={pw} autoComplete="new-password"
+                  onChange={(e) => setPw(e.target.value)} placeholder="At least 8 characters" />
+              </Field>
+              <Field label="Confirm password">
+                <input style={inputStyle} type="password" value={suPw2} autoComplete="new-password"
+                  onChange={(e) => setSuPw2(e.target.value)} placeholder="Type it again" />
+              </Field>
+              {err && <Callout label="Could not create the account" tone="red">{err}</Callout>}
+              <Btn
+                disabled={busy || !suName.trim() || !suCompany.trim() || !email.trim() || pw.length < 8 || pw !== suPw2}
+                style={{ width: "100%", marginTop: 4 }}
+                onClick={async () => {
+                  setErr(""); setBusy(true);
+                  try {
+                    const a = AUTH();
+                    if (!a || !a.signUpOwner) throw new Error("Sign-up is not available on this build.");
+                    const r = await a.signUpOwner({
+                      name: suName.trim(), email: email.trim(),
+                      password: pw, company: suCompany.trim(),
+                    });
+                    if (r && r.confirmEmail) setSuDone(true);
+                  } catch (e2) {
+                    setErr((e2 && e2.message) || "Something went wrong. Try again.");
+                  } finally { setBusy(false); }
+                }}>
+                {busy ? "Creating your company…" : "Start free trial"}
+              </Btn>
+              {pw && pw.length < 8 && (
+                <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8 }}>Password needs at least 8 characters.</div>
+              )}
+              {suPw2 && pw !== suPw2 && (
+                <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 8 }}>Passwords do not match.</div>
+              )}
+              <button onClick={() => { setErr(""); setMode("login"); }} style={{
+                display: "block", margin: "16px auto 0", border: "none", background: "none",
+                color: T.accent, fontWeight: 600, fontSize: 14, cursor: "pointer",
+              }}>Already have an account? Sign in</button>
+            </>
+          )
         )}
 
         {mode === "forgot" && (
@@ -16648,6 +16755,414 @@ function SetupKeys({ apiSetup, setApiSetup, currentUser, onBack, toast }) {
   );
 }
 
+/* ==================================================================
+   Help desk — every screen in the app, explained.
+
+   Written as data rather than JSX so it is searchable: the search box
+   matches title, summary, and body across every article at once,
+   which is how someone actually looks for help ("where do I change
+   commission?") rather than browsing a tree.
+   ================================================================== */
+const HELP_ARTICLES = [
+  // ---------- Getting started ----------
+  {
+    id: "start-first-day", cat: "Getting started", title: "Your first day",
+    summary: "The five-minute setup before you touch a real job.",
+    body: [
+      ["p", "Four things make everything else work. Do them in this order."],
+      ["ol", [
+        "More → Company branding. Your name, logo, and colors. These print on every estimate, contract, and invoice, so get them right once.",
+        "More → Team & seats. Add your people. Each gets an email invite with a sign-in link.",
+        "More → Price list. Your materials and costs. Estimates pull from here, so an empty price list means typing prices by hand forever.",
+        "More → Lead sources. The list reps pick from when logging where a job came from. This is what the revenue-by-source report runs on.",
+      ]],
+      ["tip", "Coming from another CRM? More → Import jobs takes a CSV export and brings your whole pipeline in at once."],
+    ],
+  },
+  {
+    id: "start-roles", cat: "Getting started", title: "Roles and what each one sees",
+    summary: "Admin, manager, rep, crew — and why it matters.",
+    body: [
+      ["p", "Roles are enforced in the database, not just hidden in the app. A rep cannot reach another rep's numbers by guessing a link."],
+      ["kv", [
+        ["Admin", "Everything. Commission structures, company splits, seats, branding, exports, the audit log."],
+        ["Production manager", "All jobs and financials, but cannot change commission structures or add seats."],
+        ["Sales rep", "Their own jobs and their own payout figures. Never sees company splits or what the company made."],
+        ["Crew / field", "Work orders, photos, and tasks. No pricing, no financials, at all."],
+      ]],
+      ["warn", "Change someone to crew and their financial access is cut off immediately, including on jobs they already worked."],
+    ],
+  },
+  {
+    id: "start-phone", cat: "Getting started", title: "Putting it on your phone",
+    summary: "Add to Home Screen so it opens like an app.",
+    body: [
+      ["p", "There is no App Store download. It runs in the browser, and adding it to your home screen makes it open full-screen with no address bar."],
+      ["ol", [
+        "Open the site in Safari (iPhone) or Chrome (Android).",
+        "Tap the share button — the square with the arrow.",
+        "Choose Add to Home Screen.",
+        "Name it and tap Add.",
+      ]],
+      ["tip", "Do this on every rep's phone during onboarding. Adoption goes up when it looks like an app instead of a bookmark."],
+    ],
+  },
+  // ---------- Jobs & pipeline ----------
+  {
+    id: "jobs-pipeline", cat: "Jobs & pipeline", title: "How the pipeline works",
+    summary: "Twelve stages, board and list views, and what moves a job.",
+    body: [
+      ["p", "Every job sits in exactly one stage. The board shows stages as columns; tap a card to open the job, or use the view toggle at the top right to switch to a list when you want to scan quickly."],
+      ["p", "Cards carry signals so you can triage without opening anything: how long since anyone touched it, how long it has been sitting in its current stage, priority, and lead quality."],
+      ["tip", "A card that has been in one stage a long time is the point of the indicator. Sort by it on a slow morning and work the top of the list."],
+    ],
+  },
+  {
+    id: "jobs-new-lead", cat: "Jobs & pipeline", title: "Adding a new lead",
+    summary: "The blue + button, and why the questions are worth answering.",
+    body: [
+      ["p", "The blue + in the middle of the bottom bar opens guided intake from anywhere in the app."],
+      ["p", "Answers here prefill the inspection checklist, so a rep who fills this in properly at the kitchen table has half the inspection done before climbing a ladder. Lead source is required because the revenue-by-source report is only as good as what gets entered."],
+      ["warn", "If the address already exists you will see a duplicate warning. Read it before continuing — it usually means a repeat customer, and linking to the existing contact keeps their history together."],
+    ],
+  },
+  {
+    id: "jobs-sections", cat: "Jobs & pipeline", title: "Inside a job",
+    summary: "What each collapsible section is for.",
+    body: [
+      ["p", "A job opens as a stack of collapsible sections rather than tabs. Several can be open at once, and it scans faster on a phone than a sideways tab strip."],
+      ["kv", [
+        ["Overview", "Contact details, tags, notes, activity history, priority and lead quality."],
+        ["Inspection checklist", "The field survey. Completing it unlocks the Report."],
+        ["Ventilation", "Net-free-area sizing, plus wording you can drop into a supplement."],
+        ["Measurements", "Squares, pitch, and facets that estimates calculate from."],
+        ["Estimate", "Line items priced off your price list, with margin controls."],
+        ["Contract", "Turns an accepted estimate into a signable agreement."],
+        ["Report", "The inspection report. Print / PDF gives you an adjuster-ready document."],
+        ["Financials", "Job costing and commission. Hidden entirely from crew."],
+        ["Portal", "The homeowner's live view of their project."],
+      ]],
+    ],
+  },
+  {
+    id: "jobs-notes", cat: "Jobs & pipeline", title: "Notes and the audit trail",
+    summary: "Notes can be edited — but never quietly.",
+    body: [
+      ["p", "Anyone can edit or delete their own notes. Every edit and deletion is written to an immutable audit trail that admins and managers can see."],
+      ["p", "This is deliberate. Reps need to fix a typo without asking permission, and owners need to know a note was not rewritten after a dispute."],
+    ],
+  },
+  // ---------- Estimating & documents ----------
+  {
+    id: "est-building", cat: "Estimating & documents", title: "Building an estimate",
+    summary: "Price list, margin, and templates.",
+    body: [
+      ["p", "Open a job → Estimate → add line items. Items pull cost from your price list, so keeping that current is what makes estimating fast."],
+      ["p", "Margin controls sit at the bottom. Change the margin and every line reprices; you are setting the target, not editing each row."],
+      ["tip", "Repeat the same scope often? Save it as a template and the next estimate is three taps."],
+    ],
+  },
+  {
+    id: "est-documents", cat: "Estimating & documents", title: "Printing and PDFs",
+    summary: "Every document, and how to save one.",
+    body: [
+      ["p", "Estimates, contracts, invoices, work orders, material orders, inspection reports, measurement reports, change orders, and cap-out worksheets all have a Print / PDF button."],
+      ["p", "It opens the finished document in a new tab and hands it to your phone's print dialog. On iPhone, choose Print, then pinch outward on the preview to get a PDF you can save or email."],
+      ["warn", "Nothing opens? Your browser is blocking pop-ups for the site. Allow them once and it works from then on."],
+    ],
+  },
+  {
+    id: "est-signatures", cat: "Estimating & documents", title: "Getting a signature",
+    summary: "Signing on the phone, in person or remotely.",
+    body: [
+      ["p", "Open a job → Signatures. The customer signs with a finger on your phone, or you send the contract to their portal and they sign on their own device."],
+      ["p", "Signed documents are stored against the job with a timestamp, so what was agreed and when is never a question later."],
+    ],
+  },
+  // ---------- Money ----------
+  {
+    id: "money-commission", cat: "Money", title: "Commission structures",
+    summary: "Four models, and how multi-rep jobs split.",
+    body: [
+      ["p", "Admins pick the structure in More → Admin controls. Reps never see the structure — only what they are owed."],
+      ["kv", [
+        ["Net profit", "A percentage of what is left after all job costs."],
+        ["Gross profit", "A percentage of contract minus material and labor."],
+        ["10/50/50", "A draw at signing, then halves at milestones."],
+        ["Gross contract", "A flat percentage of the contract price."],
+      ]],
+      ["p", "When two reps share a job, the commission is calculated once on the job and then split between them. The company's cost is the same whether one rep or three worked it."],
+      ["warn", "Changing a structure does not retroactively rewrite closed jobs. Jobs keep the structure in effect when they were sold."],
+    ],
+  },
+  {
+    id: "money-capout", cat: "Money", title: "Cap-out worksheets",
+    summary: "What the job actually made after everything.",
+    body: [
+      ["p", "Open a job → Financials → cap out. It reconciles contract value against material, labor, and every other cost logged on the job, and prints as a worksheet."],
+      ["tip", "Run it before paying a crew, not after. The purchase-order receiving records are what make the material number real rather than an estimate."],
+    ],
+  },
+  {
+    id: "money-payments", cat: "Money", title: "Invoices and payments",
+    summary: "Billing and recording what came in.",
+    body: [
+      ["p", "Contracts with a deposit mode generate a deposit invoice automatically. Everything else is created from the job's Invoice section."],
+      ["p", "Payments are recorded against the job, so the balance owed is always current on the card and in the portal."],
+    ],
+  },
+  // ---------- Production ----------
+  {
+    id: "prod-dispatch", cat: "Production", title: "Dispatch board",
+    summary: "Who is on which roof, day by day.",
+    body: [
+      ["p", "More → Dispatch board shows a crew-by-day grid for the week. Assign a crew to a day and the work order follows."],
+      ["tip", "Crews only see their own work orders, photos, and tasks. Assigning a job is how a crew gets access to it."],
+    ],
+  },
+  {
+    id: "prod-pos", cat: "Production", title: "Purchase orders",
+    summary: "Ordering, receiving, reconciling.",
+    body: [
+      ["p", "More → Purchase orders. Build an order against a vendor, send it, then receive line by line as material lands."],
+      ["p", "Line-level receiving is what makes job costing accurate — a partially delivered order shows as partial, not complete."],
+    ],
+  },
+  {
+    id: "prod-warranty", cat: "Production", title: "Warranties",
+    summary: "Labor and manufacturer terms, per roof.",
+    body: [
+      ["p", "Each job records its own labor warranty and manufacturer terms. More → Warranties is the company-wide searchable view."],
+      ["tip", "Search by address when a homeowner calls three years later. It is faster than finding the job first."],
+    ],
+  },
+  // ---------- Customers ----------
+  {
+    id: "cust-portal", cat: "Customers", title: "The client portal",
+    summary: "What the homeowner sees, and what they do not.",
+    body: [
+      ["p", "Every job can publish a portal link. The homeowner sees a seven-step project tracker, documents you have marked Shared, and a message thread to your team."],
+      ["p", "It republishes automatically when the job changes, so there is nothing to remember to update."],
+      ["warn", "Documents default to Internal. A document is only visible to the homeowner once you explicitly mark it Shared."],
+    ],
+  },
+  {
+    id: "cust-messaging", cat: "Customers", title: "Texting and emailing customers",
+    summary: "Consent, and where messages are logged.",
+    body: [
+      ["p", "Texts and emails send from inside the job so every message is logged against it. Nothing sends to a customer who has not given consent — the app blocks it rather than asking you to remember."],
+      ["p", "Stage changes can queue an automatic customer update. Those respect the same consent flags."],
+    ],
+  },
+  {
+    id: "cust-reviews", cat: "Customers", title: "Review requests",
+    summary: "Asking at the right moment, automatically.",
+    body: [
+      ["p", "More → Review automation sends a Google review request after completion. Set the delay so it lands after the final walkthrough, not before."],
+    ],
+  },
+  // ---------- Team ----------
+  {
+    id: "team-seats", cat: "Team", title: "Adding and removing people",
+    summary: "Invites, roles, and what happens on removal.",
+    body: [
+      ["p", "More → Team & seats → add. They get an email with a sign-in link. Pick their role carefully — it decides what they can see the moment they sign in."],
+      ["warn", "Removing someone revokes access immediately but keeps their history. Their notes, activity, and closed jobs stay exactly where they are."],
+    ],
+  },
+  {
+    id: "team-chat", cat: "Team", title: "Team chat",
+    summary: "Mentions, job tags, and the unread badge.",
+    body: [
+      ["p", "Chat lives under Inbox. Type @ and a name to notify someone; they get a badge until they read it. Tag a job in a message and it links straight to it."],
+      ["p", "Messages can be edited and deleted. Edited messages are marked as edited."],
+    ],
+  },
+  // ---------- Troubleshooting ----------
+  {
+    id: "tr-broken", cat: "Troubleshooting", title: "Something is not working",
+    summary: "Start here before calling anyone.",
+    body: [
+      ["ol", [
+        "More → System check. It tests the database connection, every table, and whether writes are permitted, and it names what is broken.",
+        "Pull down to refresh the page. Most one-off oddities are a stale tab.",
+        "Sign out and back in if the system check reports a permission problem.",
+      ]],
+      ["p", "If the system check is clean and it still misbehaves, note exactly what you tapped and what appeared on screen. That is more useful than an error code."],
+    ],
+  },
+  {
+    id: "tr-blank", cat: "Troubleshooting", title: "The screen went blank",
+    summary: "What a white screen means.",
+    body: [
+      ["p", "A blank white screen is the app crashing rather than a connection problem. Refreshing gets you back in — nothing you saved is lost."],
+      ["p", "Report what you did immediately before it happened. That sequence is what makes it fixable."],
+    ],
+  },
+  {
+    id: "tr-login", cat: "Troubleshooting", title: "Cannot sign in",
+    summary: "Password resets and invite links.",
+    body: [
+      ["ol", [
+        "Use Forgot password on the sign-in screen. The link is emailed and expires — request a fresh one rather than reusing an old email.",
+        "Open the link on the phone you want to sign in on. Opening it on a computer and typing the password elsewhere will not carry the session.",
+        "Check spam. Invites and resets land there more often than anyone expects.",
+      ]],
+    ],
+  },
+  {
+    id: "tr-photos", cat: "Troubleshooting", title: "Photos will not upload",
+    summary: "Size limits and what to do.",
+    body: [
+      ["p", "Very large photos can fail. If one will not attach, take it at a normal resolution rather than the highest your phone offers."],
+      ["tip", "Photo storage is being moved to dedicated file storage. Until that lands, keep photo sets to what you actually need for the claim."],
+    ],
+  },
+  // ---------- Billing ----------
+  {
+    id: "bill-trial", cat: "Billing", title: "Your trial and subscription",
+    summary: "What happens after the free period.",
+    body: [
+      ["p", "New companies start with a free trial. No card is required to begin, and nothing is charged until you choose to continue."],
+      ["p", "After that it is billed per seat, per month. Adding a person adds a seat; removing them frees it at the next billing date."],
+      ["warn", "If a subscription lapses the account goes read-only. Your data is never deleted — you can still see everything, you just cannot add to it until billing is current."],
+    ],
+  },
+];
+
+const HELP_CATS = ["Getting started", "Jobs & pipeline", "Estimating & documents", "Money",
+  "Production", "Customers", "Team", "Troubleshooting", "Billing"];
+
+function HelpBody({ body }) {
+  return (
+    <>
+      {body.map((blk, i) => {
+        const [kind, val] = blk;
+        if (kind === "p") return <div key={i} style={{ fontSize: 14.5, color: S.ink, lineHeight: 1.65, marginBottom: 12 }}>{val}</div>;
+        if (kind === "ol") return (
+          <ol key={i} style={{ margin: "0 0 12px", paddingLeft: 20 }}>
+            {val.map((li, j) => (
+              <li key={j} style={{ fontSize: 14.5, color: S.ink, lineHeight: 1.6, marginBottom: 7 }}>{li}</li>
+            ))}
+          </ol>
+        );
+        if (kind === "kv") return (
+          <div key={i} style={{ marginBottom: 12 }}>
+            {val.map(([k, v], j) => (
+              <div key={j} style={{ padding: "9px 0", borderBottom: `1px solid ${S.line}` }}>
+                <div style={{ fontSize: 13.5, fontWeight: 800, color: S.ink }}>{k}</div>
+                <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginTop: 2 }}>{v}</div>
+              </div>
+            ))}
+          </div>
+        );
+        if (kind === "tip") return <Callout key={i} label="Tip">{val}</Callout>;
+        if (kind === "warn") return <Callout key={i} label="Worth knowing" tone="red">{val}</Callout>;
+        return null;
+      })}
+    </>
+  );
+}
+
+function HelpDesk({ onBack, brand }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(null);
+  const needle = q.trim().toLowerCase();
+
+  const flat = (a) => (a.title + " " + a.summary + " " + a.cat + " " +
+    a.body.map(([k, v]) => k === "kv" ? v.map((x) => x.join(" ")).join(" ")
+      : Array.isArray(v) ? v.join(" ") : v).join(" ")).toLowerCase();
+
+  const hits = needle ? HELP_ARTICLES.filter((a) => flat(a).includes(needle)) : null;
+  const art = open ? HELP_ARTICLES.find((a) => a.id === open) : null;
+
+  if (art) {
+    return (
+      <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+        <button onClick={() => setOpen(null)} style={{
+          border: "none", background: "none", color: T.accent, fontWeight: 600,
+          fontSize: 14, cursor: "pointer", padding: 0, marginBottom: 14,
+          display: "flex", alignItems: "center", gap: 5,
+        }}><ChevronLeft size={17} /> All articles</button>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 1, color: T.accent, marginBottom: 5 }}>
+          {art.cat.toUpperCase()}
+        </div>
+        <div style={{ fontSize: 23, fontWeight: 800, color: S.ink, marginBottom: 16, lineHeight: 1.25 }}>{art.title}</div>
+        <Card><HelpBody body={art.body} /></Card>
+        <div style={{ fontSize: 13, color: S.sub, textAlign: "center", marginTop: 20, lineHeight: 1.6 }}>
+          Still stuck? Email {PRODUCT.supportEmail}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <button onClick={onBack} style={{
+        border: "none", background: "none", color: T.accent, fontWeight: 600,
+        fontSize: 14, cursor: "pointer", padding: 0, marginBottom: 14,
+        display: "flex", alignItems: "center", gap: 5,
+      }}><ChevronLeft size={17} /> More</button>
+      <div style={{ fontSize: 24, fontWeight: 800, color: S.ink, marginBottom: 4 }}>Help & guides</div>
+      <div style={{ fontSize: 13.5, color: S.sub, marginBottom: 16 }}>
+        {HELP_ARTICLES.length} articles covering every screen in the app.
+      </div>
+      <input data-testid="help-search" style={{ ...inputStyle, marginBottom: 16 }}
+        placeholder="Search — try 'commission' or 'cannot sign in'"
+        value={q} onChange={(e) => setQ(e.target.value)} />
+
+      {hits ? (
+        hits.length === 0 ? (
+          <Card>
+            <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.6 }}>
+              Nothing matched "{q}". Try a shorter word, or email {PRODUCT.supportEmail} and we will write the article.
+            </div>
+          </Card>
+        ) : (
+          <Card>
+            <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>
+              {hits.length} {hits.length === 1 ? "article" : "articles"}
+            </div>
+            {hits.map((a) => (
+              <button key={a.id} onClick={() => { setOpen(a.id); setQ(""); }} style={{
+                display: "block", width: "100%", textAlign: "left", border: "none",
+                background: "none", cursor: "pointer", padding: "11px 0",
+                borderBottom: `1px solid ${S.line}`,
+              }}>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{a.title}</div>
+                <div style={{ fontSize: 13, color: S.sub, marginTop: 2 }}>{a.summary}</div>
+              </button>
+            ))}
+          </Card>
+        )
+      ) : (
+        HELP_CATS.map((cat) => {
+          const items = HELP_ARTICLES.filter((a) => a.cat === cat);
+          if (items.length === 0) return null;
+          return (
+            <Card key={cat} style={{ marginBottom: 12 }}>
+              <CardTitle>{cat}</CardTitle>
+              {items.map((a) => (
+                <button key={a.id} onClick={() => setOpen(a.id)} style={{
+                  display: "flex", width: "100%", textAlign: "left", border: "none",
+                  background: "none", cursor: "pointer", padding: "11px 0",
+                  borderBottom: `1px solid ${S.line}`, alignItems: "center", gap: 10,
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{a.title}</div>
+                    <div style={{ fontSize: 13, color: S.sub, marginTop: 2 }}>{a.summary}</div>
+                  </div>
+                  <ChevronRight size={16} color="#C7CBD1" style={{ flexShrink: 0 }} />
+                </button>
+              ))}
+            </Card>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
 function MoreMenu({ onNav, onLogout, brand, currentUser }) {
   const groups = [
     ["Sales", [
@@ -16676,6 +17191,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
       ["templates", ScrollText, "Message templates", "Email and text, customer and crew"],
     ]],
     ["Setup", [
+      ["help", BookOpen, "Help & guides", "How every part of the app works"],
       ["branding", Settings, "Company branding", "Name, logo, colors, what prints on documents"],
       ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam"],
       ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
@@ -17868,6 +18384,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "team" ? (
         <TeamManager users={users} setUsers={setUsers} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} brand={brand} />
+      ) : nav === "help" ? (
+        <HelpDesk onBack={() => setNav("more")} brand={brand} />
       ) : nav === "branding" ? (
         <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} brandErr={brandErr} />
       ) : null}

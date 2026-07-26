@@ -67,6 +67,36 @@ if (url && anon) {
       const { error } = await supabase.from("profiles").update(patch).eq("id", id);
       if (error) throw error;
     },
+    /* Sign-up: create the auth user, then create their company via
+       the create_tenant RPC. Two steps because a brand-new user has
+       no tenant yet and so passes none of the RLS policies — the RPC
+       runs as definer to bridge that gap. */
+    async signUpOwner({ name, email, password, company }) {
+      const { data, error } = await supabase.auth.signUp({
+        email, password,
+        options: { data: { name, role: "admin", title: "Owner" } },
+      });
+      if (error) throw error;
+      /* Email confirmation on = no session yet. The company gets
+         created on first sign-in instead; report which happened so
+         the UI can say the right thing. */
+      if (!data.session) return { confirmEmail: true };
+      const { error: rpcErr } = await supabase.rpc("create_tenant", { org_name: company });
+      if (rpcErr) throw rpcErr;
+      return { confirmEmail: false };
+    },
+    /* Called after sign-in. No-op when the user already has a company,
+       so it is safe to run on every session start. */
+    async ensureTenant(company) {
+      const { data, error } = await supabase.rpc("create_tenant", { org_name: company });
+      if (error) return null;
+      return data;
+    },
+    async myTenant() {
+      const { data, error } = await supabase.rpc("my_tenant");
+      if (error) return null;
+      return Array.isArray(data) ? data[0] || null : data;
+    },
     async inviteSeat(payload) {
       const { data, error } = await supabase.functions.invoke("invite-user", { body: payload });
       if (error) throw error;
