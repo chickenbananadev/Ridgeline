@@ -10140,6 +10140,7 @@ function AerialTracer({ job, onAddFacet, toast }) {
   const [found, setFound] = useState("");
   const [manual, setManual] = useState("");
   const [failed, setFailed] = useState(0);
+  const [loaded, setLoaded] = useState(0);
   const wrapRef = useRef(null);
 
   const SIZE = 512;
@@ -10284,7 +10285,7 @@ function AerialTracer({ job, onAddFacet, toast }) {
           {/* Zoom and imagery source */}
           <div style={{ display: "flex", gap: 7, marginBottom: 9 }}>
             {[19, 20, 21].map((zz) => (
-              <button key={zz} onClick={() => { setZoom(zz); setPts([]); }} style={{
+              <button key={zz} onClick={() => { setZoom(zz); setPts([]); setLoaded(0); setFailed(0); }} style={{
                 flex: 1, border: `1.5px solid ${zoom === zz ? T.accent : S.line}`,
                 background: zoom === zz ? T.accentSoft : "#fff", color: zoom === zz ? T.accent : S.ink,
                 borderRadius: 999, padding: "7px 4px", fontSize: 12, fontWeight: 700,
@@ -10304,6 +10305,7 @@ function AerialTracer({ job, onAddFacet, toast }) {
               {tiles.map((t) => (
                 <img key={t.key} src={source.url(t.z, t.x, t.y)} alt=""
                   onError={() => setFailed((n) => n + 1)}
+                  onLoad={() => setLoaded((n) => n + 1)}
                   style={{
                     position: "absolute",
                     left: `${(t.left / SIZE) * 100}%`, top: `${(t.top / SIZE) * 100}%`,
@@ -10359,7 +10361,18 @@ function AerialTracer({ job, onAddFacet, toast }) {
 
           <div style={{ fontSize: 11, color: S.sub, marginTop: 8, textAlign: "center" }}>
             About {spanFt} ft across · {(mPerPx * 39.37).toFixed(1)} in per pixel
+            {" · "}
+            <span style={{ color: loaded > 0 ? "#177245" : failed > 0 ? "#B3261E" : S.sub, fontWeight: 700 }}>
+              {loaded > 0 ? `${loaded} tiles loaded` : failed > 0 ? `${failed} tiles failed` : "loading tiles…"}
+            </span>
           </div>
+          {loaded === 0 && failed >= tiles.length && (
+            <Callout label="No imagery loaded" tone="red">
+              Every tile failed. Try the other source below. If both fail the
+              network is blocking the imagery host, which a phone on mobile data
+              usually is not — a corporate or guest wifi often is.
+            </Callout>
+          )}
 
           {pts.length >= 3 && (
             <div style={{ marginTop: 12, background: S.soft, borderRadius: 11, padding: "12px 13px" }}>
@@ -10416,6 +10429,96 @@ function AerialTracer({ job, onAddFacet, toast }) {
         </>
       )}
     </Card>
+  );
+}
+
+/* A top-level roof measuring screen.
+
+   The tracer already existed inside a job's Roof takeoff section, but
+   that is three levels down — open a job, find a collapsed accordion,
+   expand it — and it was effectively invisible. Measuring a roof is a
+   thing people want to do on its own, sometimes before a job exists at
+   all, so it gets its own screen on the menu. Traced planes accumulate
+   here and can be pushed onto a job afterwards. */
+function RoofMeasure({ jobs, onBack, toast, onOpenJob, mutJob }) {
+  const [planes, setPlanes] = useState([]);
+  const [jobId, setJobId] = useState("");
+
+  /* A throwaway job shape so the tracer can be reused unchanged. */
+  const target = jobs.find((j) => j.id === jobId);
+  const pseudoJob = target || { address: "", city: "", state: "", zip: "" };
+
+  const totalPlan = planes.reduce((a, p) => a + p.planArea, 0);
+  const totalRoof = planes.reduce((a, p) => a + p.planArea * slopeFactor(p.pitch), 0);
+  const squares = totalRoof / 100;
+
+  return (
+    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Measure a roof" onBack={onBack} />
+
+      <Card style={{ marginTop: 14 }}>
+        <CardTitle>Which property?</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 10 }}>
+          Pick a job to use its address, or leave this blank and type any
+          address into the search below.
+        </div>
+        <select style={selStyle} value={jobId} onChange={(e) => { setJobId(e.target.value); setPlanes([]); }}>
+          <option value="">No job — I'll type an address</option>
+          {jobs.map((j) => <option key={j.id} value={j.id}>{j.name} — {j.address}</option>)}
+        </select>
+      </Card>
+
+      <AerialTracer
+        job={pseudoJob}
+        toast={toast}
+        onAddFacet={(f) => setPlanes((p) => [...p, { ...f, planArea: f.planArea, pitch: f.pitch }])} />
+
+      {planes.length > 0 && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={<Chip tone="green">{squares.toFixed(2)} sq</Chip>}>
+            Planes traced
+          </CardTitle>
+          {planes.map((p, i) => (
+            <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: S.ink }}>Plane {i + 1}</div>
+                <div style={{ fontSize: 11.5, color: S.sub }}>
+                  {p.planArea.toFixed(0)} sf plan · {p.pitch}/12 · {(p.planArea * slopeFactor(p.pitch)).toFixed(0)} sf roof
+                </div>
+              </div>
+              <button onClick={() => setPlanes((arr) => arr.filter((x) => x.id !== p.id))}
+                style={{ border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}>
+                <Trash2 size={15} color="#B42318" />
+              </button>
+            </div>
+          ))}
+          <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 8, paddingTop: 10 }}>
+            <KV k="Footprint" v={`${totalPlan.toFixed(0)} sq ft`} />
+            <KV k="Roof area" v={`${totalRoof.toFixed(0)} sq ft`} />
+            <KV k="Squares" v={squares.toFixed(2)} strong />
+          </div>
+          {target && (
+            <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => {
+              mutJob(target.id, (j) => {
+                const cur = j.takeoff || { facets: [], wasteBand: "moderate", exposure: "arch" };
+                const keep = (cur.facets || []).filter((x) => x.length || x.width || x.planArea);
+                return { ...j, takeoff: { ...cur, facets: [...keep, ...planes] } };
+              });
+              toast(`${planes.length} ${planes.length === 1 ? "plane" : "planes"} sent to ${target.name}`);
+              onOpenJob(target.id, "takeoff");
+            }}>
+              Send to {target.name}
+            </Btn>
+          )}
+          {!target && (
+            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
+              Pick a job above to send these planes into its takeoff, where
+              waste, materials and the linear measurements get worked out.
+            </div>
+          )}
+        </Card>
+      )}
+    </div>
   );
 }
 
@@ -17133,6 +17236,7 @@ function SetupKeys({ apiSetup, setApiSetup, currentUser, onBack, toast }) {
 function MoreMenu({ onNav, onLogout, brand, currentUser }) {
   const groups = [
     ["Sales", [
+      ["roofmeasure", Layers, "Measure a roof", "Trace it on aerial imagery and get squares"],
       ["activity", ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", Phone, "Calls & attribution", "Log calls, see which sources make money"],
       ["performance", PieChart, "Performance", "Rep scoreboard & funnel"],
@@ -18331,6 +18435,9 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "crews" ? (
         <CrewManager crews={crews} setCrews={setCrews} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} />
+      ) : nav === "roofmeasure" ? (
+        <RoofMeasure jobs={jobs} onBack={() => setNav("more")} toast={toast}
+          onOpenJob={openJobScreen} mutJob={mutJob} />
       ) : nav === "claims" ? (
         <ClaimsDashboard jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
       ) : nav === "crewpay" ? (

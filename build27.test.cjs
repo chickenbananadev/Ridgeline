@@ -89,5 +89,16 @@ ok(!src.includes("ImageServer/exportImage"), "the fragile per-state exportImage 
 ok(!src.includes("const AERIAL_SOURCES"), "the superseded source map is gone");
 ok(!src.includes("function aerialRequest"), "the superseded request builder is gone");
 
+/* --- reachable without hunting --- */
+ok(src.includes('function RoofMeasure'), 'a standalone measuring screen exists');
+ok(src.includes('nav === "roofmeasure"'), 'it has its own route');
+const salesIdx = src.indexOf('["Sales", [');
+const measureIdx = src.indexOf('"roofmeasure", Layers');
+const prodIdx = src.indexOf('["Production", [');
+ok(salesIdx > 0 && measureIdx > salesIdx && measureIdx < prodIdx,
+  'the menu entry sits in Sales, which is open by default');
+ok(src.includes('Which property?'), 'the screen can run with or without a job');
+ok(src.includes('Planes traced'), 'traced planes accumulate on the screen');
+
 if (fails) { console.log("\nbuild 27: " + fails + " FAILED"); process.exit(1); }
 console.log("build 27 tests passed");
