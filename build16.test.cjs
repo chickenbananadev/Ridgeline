@@ -48,9 +48,9 @@ ok(src.includes("sendOn: kindOf === \"reminder\" ? dayBefore(appt.date) : null")
   "reminders carry the date they should go out");
 ok(src.includes("No messaging consent on file"), "missing consent is explained, not silently ignored");
 ok(src.includes("TCPA"), "the legal reason for consent is stated");
-ok(src.includes("a homeowner will not open a portal to be reminded")
-  || src.includes("not open a portal to be reminded"),
+ok(src.includes("homeowner will not open a") && src.includes("portal to be reminded"),
   "the portal-versus-push distinction is explained in the UI");
+ok(src.includes("Wording follows the appointment type"), "the UI says wording varies by type");
 ok(src.includes('if (!editingId && notifyNow && jb)'),
   "editing an appointment does not re-send the original confirmation");
 

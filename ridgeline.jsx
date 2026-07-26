@@ -3239,6 +3239,63 @@ function categoryForAppointment(type) {
   if (/production|install|final walk|crew/.test(value)) return "production";
   return "sales";
 }
+/* What a customer actually needs to hear differs by appointment type.
+   A generic "your appointment is booked" wastes the one message that
+   reliably gets read: an adjuster meeting needs them present, an
+   install needs the driveway clear, a delivery needs nobody home at
+   all. Matched on the type text so custom types a company adds still
+   land in the right bucket.
+
+   `remind` is the sensible default for whether a day-before nudge is
+   worth sending — a material delivery does not need one, an install
+   does. The user can always override it. */
+const APPT_MESSAGES = [
+  {
+    match: /adjuster|inspection with|carrier/i, remind: true,
+    confirm: (c) => `your adjuster meeting is set for ${c.when} at ${c.address}. Please plan to be home — we'll walk the roof with the adjuster and point out the damage together.`,
+    remindText: (c) => `a reminder that the adjuster meets us ${c.when} at ${c.address}. Please be home if you can, and have your claim number handy.`,
+  },
+  {
+    match: /inspect|estimate|assessment|measure/i, remind: true,
+    confirm: (c) => `your roof inspection is booked for ${c.when} at ${c.address}. You don't need to be home, but we'll knock first and we'll call you with what we find.`,
+    remindText: (c) => `a reminder that we're inspecting your roof ${c.when}. No need to be home — we'll follow up with photos and findings.`,
+  },
+  {
+    match: /install|production|tear.?off|roof day/i, remind: true,
+    confirm: (c) => `your installation is scheduled for ${c.when} at ${c.address}. Crews usually start around 7am. Please move vehicles off the driveway the night before, and expect noise for most of the day.`,
+    remindText: (c) => `your roof goes on tomorrow. Please move vehicles off the driveway tonight, take down anything fragile hanging on interior walls, and keep pets inside — crews start early.`,
+  },
+  {
+    match: /deliver|material|drop|dump|trailer/i, remind: false,
+    confirm: (c) => `your materials are being delivered ${c.when} at ${c.address}. You don't need to be home. The load will be placed on the driveway or in the yard unless you'd prefer somewhere specific — just reply and let us know.`,
+    remindText: (c) => `a reminder that materials arrive ${c.when}. Nothing needed from you.`,
+  },
+  {
+    match: /final|walk.?through|punch|completion/i, remind: true,
+    confirm: (c) => `your final walkthrough is set for ${c.when} at ${c.address}. We'll go over the finished work together and answer anything outstanding.`,
+    remindText: (c) => `a reminder of your final walkthrough ${c.when}. It helps if you're home so we can go over the work together.`,
+  },
+  {
+    match: /repair|service|warranty|callback|leak/i, remind: true,
+    confirm: (c) => `your service visit is scheduled for ${c.when} at ${c.address}. If the issue is inside, please plan to be home so we can see it.`,
+    remindText: (c) => `a reminder of your service visit ${c.when}. If we need to get inside, please plan to be home.`,
+  },
+  {
+    match: /sign|contract|paperwork/i, remind: true,
+    confirm: (c) => `we're meeting ${c.when} at ${c.address} to go through your paperwork. Please have your insurance documents handy if you have them.`,
+    remindText: (c) => `a reminder that we're meeting ${c.when} to go through your paperwork.`,
+  },
+];
+const APPT_MESSAGE_FALLBACK = {
+  remind: true,
+  confirm: (c) => `your ${c.type} is booked for ${c.when} at ${c.address}. Reply here if that time no longer works.`,
+  remindText: (c) => `a reminder of your ${c.type} ${c.when} at ${c.address}. Reply here with any questions.`,
+};
+function apptMessageFor(type) {
+  const t = String(type || "");
+  return APPT_MESSAGES.find((m) => m.match.test(t)) || APPT_MESSAGE_FALLBACK;
+}
+
 function timeMinutes(value) {
   if (!value || !value.includes(":")) return null;
   const [hours, minutes] = value.split(":").map(Number);
@@ -3277,6 +3334,18 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
      only offers it when consent is actually on file. */
   const [notifyNow, setNotifyNow] = useState(true);
   const [notifyDayBefore, setNotifyDayBefore] = useState(true);
+  /* The day-before default follows the appointment type — a material
+     delivery does not need a reminder, an install does. Only moves the
+     default while the sheet is open on a new appointment, so it never
+     overrides a deliberate choice mid-edit. */
+  const typeRemindRef = useRef(null);
+  useEffect(() => {
+    const want = apptMessageFor(f.type).remind;
+    if (typeRemindRef.current !== f.type) {
+      typeRemindRef.current = f.type;
+      setNotifyDayBefore(want);
+    }
+  }, [f.type]);
 
   const y = month.getFullYear(), m = month.getMonth();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
@@ -3364,9 +3433,9 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     const when = `${appt.date}${appt.time ? ` at ${fmtClock(appt.time)}` : ""}`;
     const first = String(j.name || "").split(" ")[0];
     const type = String(appt.type || "appointment").toLowerCase();
-    const body = kindOf === "confirm"
-      ? `Hi ${first}, your ${type} is booked for ${when} at ${j.address}. Reply here if that time no longer works.`
-      : `Hi ${first}, a reminder that your ${type} is ${when} at ${j.address}. Reply here with any questions.`;
+    const tpl = apptMessageFor(appt.type);
+    const ctx = { when, address: j.address, type };
+    const body = `Hi ${first}, ${kindOf === "confirm" ? tpl.confirm(ctx) : tpl.remindText(ctx)}`;
     onQueueMessage(j.id, {
       kind: channel, audience: "Customer", to: channel === "sms" ? (j.phone || j.name) : (j.email || j.name),
       subject: channel === "email" ? `${kindOf === "confirm" ? "Confirmed" : "Reminder"}: ${type} — ${when}` : "",
@@ -3631,10 +3700,32 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
                       style={{ width: 17, height: 17, accentColor: T.accent }} />
                     <span>Reminder the day before{f.date ? ` (${dayBefore(f.date)})` : ""}</span>
                   </label>
+                  {(notifyNow || notifyDayBefore) && (() => {
+                    /* Preview the real wording. The message differs by
+                       appointment type, and a rep should see what the
+                       customer will actually read before it queues. */
+                    const tpl = apptMessageFor(f.type);
+                    const ctx = {
+                      when: `${f.date || "the scheduled date"}${f.time ? ` at ${fmtClock(f.time)}` : ""}`,
+                      address: jb.address, type: String(f.type || "appointment").toLowerCase(),
+                    };
+                    const first = String(jb.name || "").split(" ")[0];
+                    return (
+                      <div style={{ background: "#fff", border: `1px solid ${S.line}`, borderRadius: 9, padding: "9px 11px", marginTop: 8 }}>
+                        <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".05em", color: S.sub, marginBottom: 4 }}>
+                          {notifyNow ? "THEY WILL RECEIVE" : "DAY BEFORE"}
+                        </div>
+                        <div style={{ fontSize: 12.5, color: S.ink, lineHeight: 1.5 }}>
+                          Hi {first}, {notifyNow ? tpl.confirm(ctx) : tpl.remindText(ctx)}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div style={{ fontSize: 11.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }}>
-                    Queued in the Inbox and sent once texting or email is
-                    connected. The portal shows the appointment too, but a
-                    homeowner will not open a portal to be reminded.
+                    Wording follows the appointment type. Queued in the Inbox
+                    and sent once texting or email is connected — the portal
+                    shows the appointment too, but a homeowner will not open a
+                    portal to be reminded.
                   </div>
                 </>
               ) : (
@@ -10758,6 +10849,69 @@ function Toggle({ on, onClick }) {
   );
 }
 
+/* ==================================================================
+   REVIEW REQUESTS
+
+   Modelled on how NiceJob and Birdeye actually work: a multi-touch
+   sequence rather than one message, sentiment captured before the ask,
+   and every customer tracked through the funnel.
+
+   One deliberate departure. Those tools became known for "review
+   gating" — asking how it went, then routing only the happy customers
+   to Google and diverting the unhappy ones to a private form. Google
+   prohibits it outright and the FTC treats it as a deceptive practice;
+   both vendors have had to walk it back. So this asks for sentiment
+   because it is genuinely useful — an unhappy customer should hear
+   from a human before anything else happens — but the public review
+   link is offered to everyone. What sentiment changes is the timing
+   and who gets told, never whether the customer is allowed to review.
+================================================================== */
+const REVIEW_STEPS = [
+  { id: "ask", delay: 1, channel: "sms",
+    label: "Day 1 — how did we go?",
+    body: (c) => `Hi ${c.first}, ${c.company} here. Now your roof is finished, how did we do? Reply 1-5 (5 is great) — it takes a second and it genuinely helps us.` },
+  { id: "request", delay: 2, channel: "sms",
+    label: "Day 3 — the ask",
+    body: (c) => `Thanks ${c.first}. If you have a moment, a short review makes a real difference to a local business: ${c.link}` },
+  { id: "nudge", delay: 4, channel: "email",
+    label: "Day 7 — gentle nudge",
+    body: (c) => `Hi ${c.first}, no pressure at all — if you never got round to it, the link is here and it takes about a minute: ${c.link}. And if something wasn't right, reply to this and it comes straight to us.` },
+  { id: "final", delay: 7, channel: "email",
+    label: "Day 14 — last touch",
+    body: (c) => `Hi ${c.first}, last note from us on this. If you were happy with the work: ${c.link}. If you weren't, we would genuinely rather hear it directly — just reply.` },
+];
+const REVIEW_PLATFORMS = [
+  ["google", "Google", "The one that moves the needle locally"],
+  ["facebook", "Facebook", "Useful for social proof"],
+  ["bbb", "BBB", "Matters to older and insurance-minded customers"],
+];
+
+/* Where each completed job sits in the funnel. */
+function reviewState(job) {
+  const r = job.review || {};
+  if (r.posted) return { key: "posted", label: "Posted", tone: "green" };
+  if (r.rating && Number(r.rating) <= 3) return { key: "recover", label: "Needs a call", tone: "red" };
+  if (r.rating) return { key: "rated", label: `Rated ${r.rating}★`, tone: "amber" };
+  if (r.clicked) return { key: "clicked", label: "Opened link", tone: "amber" };
+  if (r.sent) return { key: "sent", label: "Requested", tone: "gray" };
+  return { key: "ready", label: "Not asked", tone: "blue" };
+}
+
+/* The step that is due next for a job, given when the sequence started. */
+function nextReviewStep(job, settings) {
+  const r = job.review || {};
+  if (r.posted) return null;
+  if (!(settings && settings.enabled !== false)) return null;
+  const done = Array.isArray(r.steps) ? r.steps : [];
+  const start = r.requestedAt || r.sentAt || null;
+  const step = REVIEW_STEPS.find((st) => !done.includes(st.id));
+  if (!step) return null;
+  if (!start) return { step, due: todayIso() };
+  const d = new Date(start + "T12:00:00");
+  d.setDate(d.getDate() + step.delay);
+  return { step, due: isoLocal(d) };
+}
+
 function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFromReviews, mut, toast }) {
   /* Requests manager state: per-job rating capture + internal feedback. */
   const [rating, setRating] = useState({});      // jobId -> 1..5
@@ -10778,14 +10932,98 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
       <SubHeader title="Review automation" onBack={onBack} />
       <Card style={{ marginTop: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
+          <div style={{ flex: 1, paddingRight: 12 }}>
             <div style={{ fontSize: 15, fontWeight: 700 }}>Automatic review requests</div>
-            <div style={{ fontSize: 13, color: S.sub, marginTop: 3 }}>
-              When a job moves to Job completed, send the Google review link.
+            <div style={{ fontSize: 13, color: S.sub, marginTop: 3, lineHeight: 1.5 }}>
+              A four-touch sequence starting the day after a job completes,
+              stopping the moment they review.
             </div>
           </div>
           <Toggle on={settings.enabled} onClick={() => set("enabled")(!settings.enabled)} />
         </div>
+      </Card>
+
+      {/* Funnel — the question the old screen never answered. */}
+      {(() => {
+        const buckets = { ready: 0, sent: 0, clicked: 0, rated: 0, recover: 0, posted: 0 };
+        completed.forEach((j) => { buckets[reviewState(j).key] += 1; });
+        const askedCount = completed.length - buckets.ready;
+        const rate = askedCount > 0 ? Math.round((buckets.posted / askedCount) * 100) : 0;
+        return (
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle right={<Chip tone={rate >= 30 ? "green" : "gray"}>{rate}% conversion</Chip>}>Funnel</CardTitle>
+            <div style={{ display: "flex", gap: 7 }}>
+              {[["Not asked", buckets.ready, T.accent], ["Asked", buckets.sent + buckets.clicked, "#92600A"],
+                ["Rated", buckets.rated, "#7C3AED"], ["Posted", buckets.posted, "#177245"]].map(([label, n, col]) => (
+                <div key={label} style={{ flex: 1, background: S.soft, borderRadius: 10, padding: "10px 0", textAlign: "center" }}>
+                  <div style={{ fontSize: 19, fontWeight: 800, color: n ? col : "#C7CBD1" }}>{n}</div>
+                  <div style={{ fontSize: 10.5, color: S.sub, marginTop: 1 }}>{label}</div>
+                </div>
+              ))}
+            </div>
+            {buckets.recover > 0 && (
+              <Callout label={`${buckets.recover} ${buckets.recover === 1 ? "customer needs" : "customers need"} a call`} tone="red">
+                They rated three or below. Ring them before anything else goes
+                out — the sequence pauses for them automatically.
+              </Callout>
+            )}
+            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
+              Conversion counts posted reviews against customers actually asked,
+              not against every completed job.
+            </div>
+          </Card>
+        );
+      })()}
+
+      {/* The sequence itself */}
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>The sequence</CardTitle>
+        {REVIEW_STEPS.map((st, i2) => (
+          <div key={st.id} style={{ display: "flex", gap: 10, padding: "9px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }}>
+            <span style={{
+              minWidth: 30, height: 30, borderRadius: 8, background: T.accentSoft, color: T.accent,
+              display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800, flexShrink: 0,
+            }}>{i2 + 1}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{st.label}</span>
+                <Chip tone="gray">{st.channel === "sms" ? "Text" : "Email"}</Chip>
+              </div>
+              <div style={{ fontSize: 12, color: S.sub, marginTop: 3, lineHeight: 1.5 }}>
+                {st.body({ first: "Sarah", company: brand.name || "Supreme Building Group", link: "[review link]" })}
+              </div>
+            </div>
+          </div>
+        ))}
+        <div style={{ fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
+          The sequence stops as soon as someone reviews, and pauses entirely
+          for anyone who rates three or below so a human can call first.
+        </div>
+      </Card>
+
+      {/* Where reviews are sent */}
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Where reviews go</CardTitle>
+        <Field label="Google review link" hint="Google Business Profile → Ask for reviews → copy the short link.">
+          <input style={inputStyle} value={brand.googleReviewLink || ""}
+            onChange={(e) => setBrandFromReviews && setBrandFromReviews({ ...brand, googleReviewLink: e.target.value })} />
+        </Field>
+        <Field label="Facebook reviews link">
+          <input style={inputStyle} value={settings.facebookLink || ""} onChange={(e) => set("facebookLink")(e.target.value)}
+            placeholder="https://facebook.com/yourpage/reviews" />
+        </Field>
+        <Field label="BBB profile link">
+          <input style={inputStyle} value={settings.bbbLink || ""} onChange={(e) => set("bbbLink")(e.target.value)} />
+        </Field>
+        <Callout label="A word on review gating" tone="amber">
+          NiceJob and Birdeye became known for asking how it went and then
+          only sending happy customers to Google. Google prohibits that
+          outright and the FTC treats it as deceptive — both vendors have had
+          to walk it back. So the rating here changes <b>timing</b> and who
+          gets a phone call, never whether someone is allowed to review. It is
+          also simply better business: a fixed complaint often becomes the
+          most convincing review you own.
+        </Callout>
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="blue">{completed.length} completed</Chip>}>Review requests</CardTitle>

@@ -70394,6 +70394,59 @@ function categoryForAppointment(type) {
   if (/production|install|final walk|crew/.test(value)) return "production";
   return "sales";
 }
+var APPT_MESSAGES = [
+  {
+    match: /adjuster|inspection with|carrier/i,
+    remind: true,
+    confirm: (c) => `your adjuster meeting is set for ${c.when} at ${c.address}. Please plan to be home \u2014 we'll walk the roof with the adjuster and point out the damage together.`,
+    remindText: (c) => `a reminder that the adjuster meets us ${c.when} at ${c.address}. Please be home if you can, and have your claim number handy.`
+  },
+  {
+    match: /inspect|estimate|assessment|measure/i,
+    remind: true,
+    confirm: (c) => `your roof inspection is booked for ${c.when} at ${c.address}. You don't need to be home, but we'll knock first and we'll call you with what we find.`,
+    remindText: (c) => `a reminder that we're inspecting your roof ${c.when}. No need to be home \u2014 we'll follow up with photos and findings.`
+  },
+  {
+    match: /install|production|tear.?off|roof day/i,
+    remind: true,
+    confirm: (c) => `your installation is scheduled for ${c.when} at ${c.address}. Crews usually start around 7am. Please move vehicles off the driveway the night before, and expect noise for most of the day.`,
+    remindText: (c) => `your roof goes on tomorrow. Please move vehicles off the driveway tonight, take down anything fragile hanging on interior walls, and keep pets inside \u2014 crews start early.`
+  },
+  {
+    match: /deliver|material|drop|dump|trailer/i,
+    remind: false,
+    confirm: (c) => `your materials are being delivered ${c.when} at ${c.address}. You don't need to be home. The load will be placed on the driveway or in the yard unless you'd prefer somewhere specific \u2014 just reply and let us know.`,
+    remindText: (c) => `a reminder that materials arrive ${c.when}. Nothing needed from you.`
+  },
+  {
+    match: /final|walk.?through|punch|completion/i,
+    remind: true,
+    confirm: (c) => `your final walkthrough is set for ${c.when} at ${c.address}. We'll go over the finished work together and answer anything outstanding.`,
+    remindText: (c) => `a reminder of your final walkthrough ${c.when}. It helps if you're home so we can go over the work together.`
+  },
+  {
+    match: /repair|service|warranty|callback|leak/i,
+    remind: true,
+    confirm: (c) => `your service visit is scheduled for ${c.when} at ${c.address}. If the issue is inside, please plan to be home so we can see it.`,
+    remindText: (c) => `a reminder of your service visit ${c.when}. If we need to get inside, please plan to be home.`
+  },
+  {
+    match: /sign|contract|paperwork/i,
+    remind: true,
+    confirm: (c) => `we're meeting ${c.when} at ${c.address} to go through your paperwork. Please have your insurance documents handy if you have them.`,
+    remindText: (c) => `a reminder that we're meeting ${c.when} to go through your paperwork.`
+  }
+];
+var APPT_MESSAGE_FALLBACK = {
+  remind: true,
+  confirm: (c) => `your ${c.type} is booked for ${c.when} at ${c.address}. Reply here if that time no longer works.`,
+  remindText: (c) => `a reminder of your ${c.type} ${c.when} at ${c.address}. Reply here with any questions.`
+};
+function apptMessageFor(type) {
+  const t = String(type || "");
+  return APPT_MESSAGES.find((m) => m.match.test(t)) || APPT_MESSAGE_FALLBACK;
+}
 function timeMinutes(value) {
   if (!value || !value.includes(":")) return null;
   const [hours, minutes] = value.split(":").map(Number);
@@ -70437,6 +70490,14 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   const [newType, setNewType] = (0, import_react.useState)("");
   const [notifyNow, setNotifyNow] = (0, import_react.useState)(true);
   const [notifyDayBefore, setNotifyDayBefore] = (0, import_react.useState)(true);
+  const typeRemindRef = (0, import_react.useRef)(null);
+  (0, import_react.useEffect)(() => {
+    const want = apptMessageFor(f.type).remind;
+    if (typeRemindRef.current !== f.type) {
+      typeRemindRef.current = f.type;
+      setNotifyDayBefore(want);
+    }
+  }, [f.type]);
   const y = month.getFullYear(), m = month.getMonth();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const firstDow = new Date(y, m, 1).getDay();
@@ -70511,7 +70572,9 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     const when = `${appt.date}${appt.time ? ` at ${fmtClock(appt.time)}` : ""}`;
     const first = String(j.name || "").split(" ")[0];
     const type = String(appt.type || "appointment").toLowerCase();
-    const body = kindOf === "confirm" ? `Hi ${first}, your ${type} is booked for ${when} at ${j.address}. Reply here if that time no longer works.` : `Hi ${first}, a reminder that your ${type} is ${when} at ${j.address}. Reply here with any questions.`;
+    const tpl = apptMessageFor(appt.type);
+    const ctx = { when, address: j.address, type };
+    const body = `Hi ${first}, ${kindOf === "confirm" ? tpl.confirm(ctx) : tpl.remindText(ctx)}`;
     onQueueMessage(j.id, {
       kind: channel,
       audience: "Customer",
@@ -70863,7 +70926,25 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
                   f.date ? ` (${dayBefore(f.date)})` : ""
                 ] })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }, children: "Queued in the Inbox and sent once texting or email is connected. The portal shows the appointment too, but a homeowner will not open a portal to be reminded." })
+              (notifyNow || notifyDayBefore) && (() => {
+                const tpl = apptMessageFor(f.type);
+                const ctx = {
+                  when: `${f.date || "the scheduled date"}${f.time ? ` at ${fmtClock(f.time)}` : ""}`,
+                  address: jb.address,
+                  type: String(f.type || "appointment").toLowerCase()
+                };
+                const first = String(jb.name || "").split(" ")[0];
+                return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: "#fff", border: `1px solid ${S.line}`, borderRadius: 9, padding: "9px 11px", marginTop: 8 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, fontWeight: 800, letterSpacing: ".05em", color: S.sub, marginBottom: 4 }, children: notifyNow ? "THEY WILL RECEIVE" : "DAY BEFORE" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.ink, lineHeight: 1.5 }, children: [
+                    "Hi ",
+                    first,
+                    ", ",
+                    notifyNow ? tpl.confirm(ctx) : tpl.remindText(ctx)
+                  ] })
+                ] });
+              })(),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }, children: "Wording follows the appointment type. Queued in the Inbox and sent once texting or email is connected \u2014 the portal shows the appointment too, but a homeowner will not open a portal to be reminded." })
             ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.ink, lineHeight: 1.5 }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "No messaging consent on file" }),
               " for ",
@@ -78678,6 +78759,45 @@ function Toggle({ on, onClick }) {
     flexShrink: 0
   }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" } }) });
 }
+var REVIEW_STEPS = [
+  {
+    id: "ask",
+    delay: 1,
+    channel: "sms",
+    label: "Day 1 \u2014 how did we go?",
+    body: (c) => `Hi ${c.first}, ${c.company} here. Now your roof is finished, how did we do? Reply 1-5 (5 is great) \u2014 it takes a second and it genuinely helps us.`
+  },
+  {
+    id: "request",
+    delay: 2,
+    channel: "sms",
+    label: "Day 3 \u2014 the ask",
+    body: (c) => `Thanks ${c.first}. If you have a moment, a short review makes a real difference to a local business: ${c.link}`
+  },
+  {
+    id: "nudge",
+    delay: 4,
+    channel: "email",
+    label: "Day 7 \u2014 gentle nudge",
+    body: (c) => `Hi ${c.first}, no pressure at all \u2014 if you never got round to it, the link is here and it takes about a minute: ${c.link}. And if something wasn't right, reply to this and it comes straight to us.`
+  },
+  {
+    id: "final",
+    delay: 7,
+    channel: "email",
+    label: "Day 14 \u2014 last touch",
+    body: (c) => `Hi ${c.first}, last note from us on this. If you were happy with the work: ${c.link}. If you weren't, we would genuinely rather hear it directly \u2014 just reply.`
+  }
+];
+function reviewState(job) {
+  const r = job.review || {};
+  if (r.posted) return { key: "posted", label: "Posted", tone: "green" };
+  if (r.rating && Number(r.rating) <= 3) return { key: "recover", label: "Needs a call", tone: "red" };
+  if (r.rating) return { key: "rated", label: `Rated ${r.rating}\u2605`, tone: "amber" };
+  if (r.clicked) return { key: "clicked", label: "Opened link", tone: "amber" };
+  if (r.sent) return { key: "sent", label: "Requested", tone: "gray" };
+  return { key: "ready", label: "Not asked", tone: "blue" };
+}
 function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, setBrandFromReviews, mut, toast: toast2 }) {
   const [rating, setRating] = (0, import_react.useState)({});
   const [fbOpen, setFbOpen] = (0, import_react.useState)(null);
@@ -78696,12 +78816,88 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Review automation", onBack }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, paddingRight: 12 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700 }, children: "Automatic review requests" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 3 }, children: "When a job moves to Job completed, send the Google review link." })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 3, lineHeight: 1.5 }, children: "A four-touch sequence starting the day after a job completes, stopping the moment they review." })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Toggle, { on: settings.enabled, onClick: () => set("enabled")(!settings.enabled) })
     ] }) }),
+    (() => {
+      const buckets = { ready: 0, sent: 0, clicked: 0, rated: 0, recover: 0, posted: 0 };
+      completed.forEach((j) => {
+        buckets[reviewState(j).key] += 1;
+      });
+      const askedCount = completed.length - buckets.ready;
+      const rate = askedCount > 0 ? Math.round(buckets.posted / askedCount * 100) : 0;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: rate >= 30 ? "green" : "gray", children: [
+          rate,
+          "% conversion"
+        ] }), children: "Funnel" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7 }, children: [
+          ["Not asked", buckets.ready, T.accent],
+          ["Asked", buckets.sent + buckets.clicked, "#92600A"],
+          ["Rated", buckets.rated, "#7C3AED"],
+          ["Posted", buckets.posted, "#177245"]
+        ].map(([label, n, col]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, background: S.soft, borderRadius: 10, padding: "10px 0", textAlign: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 19, fontWeight: 800, color: n ? col : "#C7CBD1" }, children: n }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, marginTop: 1 }, children: label })
+        ] }, label)) }),
+        buckets.recover > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: `${buckets.recover} ${buckets.recover === 1 ? "customer needs" : "customers need"} a call`, tone: "red", children: "They rated three or below. Ring them before anything else goes out \u2014 the sequence pauses for them automatically." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "Conversion counts posted reviews against customers actually asked, not against every completed job." })
+      ] });
+    })(),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "The sequence" }),
+      REVIEW_STEPS.map((st, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, padding: "9px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+          minWidth: 30,
+          height: 30,
+          borderRadius: 8,
+          background: T.accentSoft,
+          color: T.accent,
+          display: "grid",
+          placeItems: "center",
+          fontSize: 12,
+          fontWeight: 800,
+          flexShrink: 0
+        }, children: i2 + 1 }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 7, alignItems: "center" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: st.label }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: st.channel === "sms" ? "Text" : "Email" })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 3, lineHeight: 1.5 }, children: st.body({ first: "Sarah", company: brand2.name || "Supreme Building Group", link: "[review link]" }) })
+        ] })
+      ] }, st.id)),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "The sequence stops as soon as someone reviews, and pauses entirely for anyone who rates three or below so a human can call first." })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Where reviews go" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Google review link", hint: "Google Business Profile \u2192 Ask for reviews \u2192 copy the short link.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: inputStyle,
+          value: brand2.googleReviewLink || "",
+          onChange: (e) => setBrandFromReviews && setBrandFromReviews({ ...brand2, googleReviewLink: e.target.value })
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Facebook reviews link", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: inputStyle,
+          value: settings.facebookLink || "",
+          onChange: (e) => set("facebookLink")(e.target.value),
+          placeholder: "https://facebook.com/yourpage/reviews"
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "BBB profile link", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: settings.bbbLink || "", onChange: (e) => set("bbbLink")(e.target.value) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "A word on review gating", tone: "amber", children: [
+        "NiceJob and Birdeye became known for asking how it went and then only sending happy customers to Google. Google prohibits that outright and the FTC treats it as deceptive \u2014 both vendors have had to walk it back. So the rating here changes ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "timing" }),
+        " and who gets a phone call, never whether someone is allowed to review. It is also simply better business: a fixed complaint often becomes the most convincing review you own."
+      ] })
+    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
         completed.length,
