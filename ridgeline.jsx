@@ -3218,6 +3218,13 @@ function isoLocal(d) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 }
 function todayIso() { return isoLocal(new Date()); }
+/* The day before a date, in local terms — used to schedule reminders. */
+function dayBefore(iso) {
+  if (!iso) return null;
+  const d = new Date(iso + "T12:00:00");
+  d.setDate(d.getDate() - 1);
+  return isoLocal(d);
+}
 
 function fmtClock(t) {
   if (!t || !String(t).includes(":")) return t || "";
@@ -3266,6 +3273,10 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     setAdding(true);
   };
   const [newType, setNewType] = useState("");
+  /* Notification intent for this appointment. Defaults on, but the UI
+     only offers it when consent is actually on file. */
+  const [notifyNow, setNotifyNow] = useState(true);
+  const [notifyDayBefore, setNotifyDayBefore] = useState(true);
 
   const y = month.getFullYear(), m = month.getMonth();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
@@ -3308,6 +3319,11 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   const save = () => {
     const jb = jobs.find((x) => x.id === f.jobId);
     if (hardConflicts.length) { toast("Resolve the scheduling conflict before saving"); return; }
+    /* Notify on the way out, so the customer hears about the appointment
+       that was actually saved rather than a draft that changed. */
+    let notified = null;
+    if (!editingId && notifyNow && jb) notified = queueFor(jb, f, "confirm", true);
+    if (notifyDayBefore && jb) queueFor(jb, f, "reminder", true);
     const payload = {
       ...f, assignedTo: resolvedAssignedTo, durationMin: Number(f.durationMin) || 60,
       category: categoryForAppointment(f.type), status: f.status || "Scheduled",
@@ -3319,7 +3335,9 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     } else {
       setAppointments([...appointments, { ...payload, id: uid("ap") }]);
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `scheduled ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
-      toast("Appointment added");
+      toast(notified
+        ? `Appointment added — ${notified === "sms" ? "text" : "email"} queued for the customer`
+        : "Appointment added");
     }
     setAdding(false); setEditingId(null);
     setF({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "", assignedTo: "", durationMin: 60, status: "Scheduled" });
@@ -3327,20 +3345,43 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   /* Queue a reminder on the customer's job thread. It sends for real once
      Gmail/SMS integrations are live; until then it sits in the thread as
      queued, visible in the Inbox. */
-  const queueReminder = () => {
-    const j = jobs.find((x) => x.id === f.jobId);
-    if (!j) return;
-    const channel = j.consent.sms.granted ? "sms" : j.consent.email.granted ? "email" : null;
-    if (!channel) { toast("No consent on file — can't message this customer"); return; }
-    const when = `${f.date}${f.time ? ` at ${f.time}` : ""}`;
-    const body = `Hi ${j.name.split(" ")[0]}, this is a reminder of your ${f.type.toLowerCase()} with our team on ${when} at ${j.address}. Reply here with any questions.`;
+  /* Which channel a customer has actually agreed to. Consent is not a
+     formality — texting without it is a TCPA problem, so an appointment
+     is never allowed to notify around a missing flag. */
+  const consentChannel = (j) => {
+    if (!j || !j.consent) return null;
+    if (j.consent.sms && j.consent.sms.granted) return "sms";
+    if (j.consent.email && j.consent.email.granted) return "email";
+    return null;
+  };
+
+  /* One queue path for both the confirmation sent at scheduling time and
+     the day-before reminder. `kindOf` only changes the wording. */
+  const queueFor = (j, appt, kindOf, quiet) => {
+    if (!j) return false;
+    const channel = consentChannel(j);
+    if (!channel) { if (!quiet) toast("No consent on file — can't message this customer"); return false; }
+    const when = `${appt.date}${appt.time ? ` at ${fmtClock(appt.time)}` : ""}`;
+    const first = String(j.name || "").split(" ")[0];
+    const type = String(appt.type || "appointment").toLowerCase();
+    const body = kindOf === "confirm"
+      ? `Hi ${first}, your ${type} is booked for ${when} at ${j.address}. Reply here if that time no longer works.`
+      : `Hi ${first}, a reminder that your ${type} is ${when} at ${j.address}. Reply here with any questions.`;
     onQueueMessage(j.id, {
       kind: channel, audience: "Customer", to: channel === "sms" ? (j.phone || j.name) : (j.email || j.name),
-      subject: channel === "email" ? `Upcoming ${f.type.toLowerCase()} — ${when}` : "",
+      subject: channel === "email" ? `${kindOf === "confirm" ? "Confirmed" : "Reminder"}: ${type} — ${when}` : "",
       body, status: "Queued", at: new Date().toISOString().slice(0, 16).replace("T", " "),
+      sendOn: kindOf === "reminder" ? dayBefore(appt.date) : null,
     });
-    onLog({ kind: "message", jobId: j.id, jobName: j.name, text: `queued ${channel === "sms" ? "a text" : "an email"} reminder to ${j.name} for the ${f.type.toLowerCase()} on ${f.date}` });
-    toast(`${channel === "sms" ? "Text" : "Email"} reminder queued — see it in the Inbox`);
+    onLog({ kind: "message", jobId: j.id, jobName: j.name,
+      text: `queued ${channel === "sms" ? "a text" : "an email"} ${kindOf === "confirm" ? "confirmation" : "reminder"} to ${j.name} for the ${type} on ${appt.date}` });
+    return channel;
+  };
+
+  const queueReminder = () => {
+    const j = jobs.find((x) => x.id === f.jobId);
+    const ch = queueFor(j, f, "reminder");
+    if (ch) toast(`${ch === "sms" ? "Text" : "Email"} reminder queued — see it in the Inbox`);
   };
   const addType = () => {
     const v = newType.trim();
@@ -3562,6 +3603,52 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
             <Btn style={{ flex: 1 }} disabled={!f.jobId || !f.date || hardConflicts.length > 0} onClick={save}>{editingId ? "Save changes" : "Add to calendar"}</Btn>
           </div>
         }>
+        {(() => {
+          const jb = jobs.find((x) => x.id === f.jobId);
+          const ch = consentChannel(jb);
+          if (!jb) return null;
+          return (
+            <div style={{
+              border: `1px solid ${ch ? S.line : "#F0D9A8"}`, background: ch ? S.bg : "#FFF6E5",
+              borderRadius: 11, padding: "11px 13px", marginBottom: 14,
+            }}>
+              {ch ? (
+                <>
+                  <div style={{ fontSize: 12.5, fontWeight: 800, color: S.ink, marginBottom: 7 }}>
+                    Notify {String(jb.name || "").split(" ")[0]} by {ch === "sms" ? "text" : "email"}
+                  </div>
+                  <label style={{ display: "flex", gap: 9, alignItems: "center", padding: "4px 0", fontSize: 13.5, cursor: "pointer" }}>
+                    <input type="checkbox" checked={notifyNow} disabled={!!editingId}
+                      onChange={(e) => setNotifyNow(e.target.checked)}
+                      style={{ width: 17, height: 17, accentColor: T.accent }} />
+                    <span style={{ color: editingId ? S.sub : S.ink }}>
+                      Confirmation now{editingId ? " (already sent)" : ""}
+                    </span>
+                  </label>
+                  <label style={{ display: "flex", gap: 9, alignItems: "center", padding: "4px 0", fontSize: 13.5, cursor: "pointer" }}>
+                    <input type="checkbox" checked={notifyDayBefore}
+                      onChange={(e) => setNotifyDayBefore(e.target.checked)}
+                      style={{ width: 17, height: 17, accentColor: T.accent }} />
+                    <span>Reminder the day before{f.date ? ` (${dayBefore(f.date)})` : ""}</span>
+                  </label>
+                  <div style={{ fontSize: 11.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }}>
+                    Queued in the Inbox and sent once texting or email is
+                    connected. The portal shows the appointment too, but a
+                    homeowner will not open a portal to be reminded.
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 12.5, color: S.ink, lineHeight: 1.5 }}>
+                  <b>No messaging consent on file</b> for {jb.name}, so nothing
+                  will be sent. Consent is captured on the lead form — texting
+                  without it is a TCPA problem, not just a preference. The
+                  appointment will still show on their portal.
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         <Field label="Customer / job *">
           <select style={selStyle} value={f.jobId} onChange={(e) => setF({ ...f, jobId: e.target.value })}>
             <option value="">Select…</option>

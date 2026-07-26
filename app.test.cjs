@@ -70375,6 +70375,12 @@ function isoLocal(d) {
 function todayIso() {
   return isoLocal(/* @__PURE__ */ new Date());
 }
+function dayBefore(iso) {
+  if (!iso) return null;
+  const d = /* @__PURE__ */ new Date(iso + "T12:00:00");
+  d.setDate(d.getDate() - 1);
+  return isoLocal(d);
+}
 function fmtClock(t) {
   if (!t || !String(t).includes(":")) return t || "";
   const [h, m] = String(t).split(":").map(Number);
@@ -70429,6 +70435,8 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     setAdding(true);
   };
   const [newType, setNewType] = (0, import_react.useState)("");
+  const [notifyNow, setNotifyNow] = (0, import_react.useState)(true);
+  const [notifyDayBefore, setNotifyDayBefore] = (0, import_react.useState)(true);
   const y = month.getFullYear(), m = month.getMonth();
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const firstDow = new Date(y, m, 1).getDay();
@@ -70464,6 +70472,9 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       toast2("Resolve the scheduling conflict before saving");
       return;
     }
+    let notified = null;
+    if (!editingId && notifyNow && jb) notified = queueFor(jb, f, "confirm", true);
+    if (notifyDayBefore && jb) queueFor(jb, f, "reminder", true);
     const payload = {
       ...f,
       assignedTo: resolvedAssignedTo,
@@ -70478,33 +70489,51 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     } else {
       setAppointments([...appointments, { ...payload, id: uid("ap") }]);
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `scheduled ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
-      toast2("Appointment added");
+      toast2(notified ? `Appointment added \u2014 ${notified === "sms" ? "text" : "email"} queued for the customer` : "Appointment added");
     }
     setAdding(false);
     setEditingId(null);
     setF({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "", assignedTo: "", durationMin: 60, status: "Scheduled" });
   };
-  const queueReminder = () => {
-    const j = jobs.find((x) => x.id === f.jobId);
-    if (!j) return;
-    const channel = j.consent.sms.granted ? "sms" : j.consent.email.granted ? "email" : null;
+  const consentChannel = (j) => {
+    if (!j || !j.consent) return null;
+    if (j.consent.sms && j.consent.sms.granted) return "sms";
+    if (j.consent.email && j.consent.email.granted) return "email";
+    return null;
+  };
+  const queueFor = (j, appt, kindOf, quiet) => {
+    if (!j) return false;
+    const channel = consentChannel(j);
     if (!channel) {
-      toast2("No consent on file \u2014 can't message this customer");
-      return;
+      if (!quiet) toast2("No consent on file \u2014 can't message this customer");
+      return false;
     }
-    const when = `${f.date}${f.time ? ` at ${f.time}` : ""}`;
-    const body = `Hi ${j.name.split(" ")[0]}, this is a reminder of your ${f.type.toLowerCase()} with our team on ${when} at ${j.address}. Reply here with any questions.`;
+    const when = `${appt.date}${appt.time ? ` at ${fmtClock(appt.time)}` : ""}`;
+    const first = String(j.name || "").split(" ")[0];
+    const type = String(appt.type || "appointment").toLowerCase();
+    const body = kindOf === "confirm" ? `Hi ${first}, your ${type} is booked for ${when} at ${j.address}. Reply here if that time no longer works.` : `Hi ${first}, a reminder that your ${type} is ${when} at ${j.address}. Reply here with any questions.`;
     onQueueMessage(j.id, {
       kind: channel,
       audience: "Customer",
       to: channel === "sms" ? j.phone || j.name : j.email || j.name,
-      subject: channel === "email" ? `Upcoming ${f.type.toLowerCase()} \u2014 ${when}` : "",
+      subject: channel === "email" ? `${kindOf === "confirm" ? "Confirmed" : "Reminder"}: ${type} \u2014 ${when}` : "",
       body,
       status: "Queued",
-      at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ")
+      at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " "),
+      sendOn: kindOf === "reminder" ? dayBefore(appt.date) : null
     });
-    onLog({ kind: "message", jobId: j.id, jobName: j.name, text: `queued ${channel === "sms" ? "a text" : "an email"} reminder to ${j.name} for the ${f.type.toLowerCase()} on ${f.date}` });
-    toast2(`${channel === "sms" ? "Text" : "Email"} reminder queued \u2014 see it in the Inbox`);
+    onLog({
+      kind: "message",
+      jobId: j.id,
+      jobName: j.name,
+      text: `queued ${channel === "sms" ? "a text" : "an email"} ${kindOf === "confirm" ? "confirmation" : "reminder"} to ${j.name} for the ${type} on ${appt.date}`
+    });
+    return channel;
+  };
+  const queueReminder = () => {
+    const j = jobs.find((x) => x.id === f.jobId);
+    const ch = queueFor(j, f, "reminder");
+    if (ch) toast2(`${ch === "sms" ? "Text" : "Email"} reminder queued \u2014 see it in the Inbox`);
   };
   const addType = () => {
     const v = newType.trim();
@@ -70786,6 +70815,62 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 1 }, disabled: !f.jobId || !f.date || hardConflicts.length > 0, onClick: save, children: editingId ? "Save changes" : "Add to calendar" })
         ] }),
         children: [
+          (() => {
+            const jb = jobs.find((x) => x.id === f.jobId);
+            const ch = consentChannel(jb);
+            if (!jb) return null;
+            return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+              border: `1px solid ${ch ? S.line : "#F0D9A8"}`,
+              background: ch ? S.bg : "#FFF6E5",
+              borderRadius: 11,
+              padding: "11px 13px",
+              marginBottom: 14
+            }, children: ch ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, fontWeight: 800, color: S.ink, marginBottom: 7 }, children: [
+                "Notify ",
+                String(jb.name || "").split(" ")[0],
+                " by ",
+                ch === "sms" ? "text" : "email"
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 9, alignItems: "center", padding: "4px 0", fontSize: 13.5, cursor: "pointer" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    type: "checkbox",
+                    checked: notifyNow,
+                    disabled: !!editingId,
+                    onChange: (e) => setNotifyNow(e.target.checked),
+                    style: { width: 17, height: 17, accentColor: T.accent }
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: editingId ? S.sub : S.ink }, children: [
+                  "Confirmation now",
+                  editingId ? " (already sent)" : ""
+                ] })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 9, alignItems: "center", padding: "4px 0", fontSize: 13.5, cursor: "pointer" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    type: "checkbox",
+                    checked: notifyDayBefore,
+                    onChange: (e) => setNotifyDayBefore(e.target.checked),
+                    style: { width: 17, height: 17, accentColor: T.accent }
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+                  "Reminder the day before",
+                  f.date ? ` (${dayBefore(f.date)})` : ""
+                ] })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }, children: "Queued in the Inbox and sent once texting or email is connected. The portal shows the appointment too, but a homeowner will not open a portal to be reminded." })
+            ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.ink, lineHeight: 1.5 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "No messaging consent on file" }),
+              " for ",
+              jb.name,
+              ", so nothing will be sent. Consent is captured on the lead form \u2014 texting without it is a TCPA problem, not just a preference. The appointment will still show on their portal."
+            ] }) });
+          })(),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Customer / job *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: f.jobId, onChange: (e) => setF({ ...f, jobId: e.target.value }), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Select\u2026" }),
             jobs.filter((j) => !DEAD_STAGES.includes(j.stageId)).map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: j.id, children: [
