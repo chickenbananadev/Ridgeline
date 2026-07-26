@@ -10126,89 +10126,185 @@ function tracedLengthFt(pts, mPerPx) {
   return polygonPerimeterPx(pts) * mPerPx * M_TO_FT;
 }
 
+/* ==================================================================
+   TRACING PRECISION
+
+   Imagery resolution was never the limit. At zoom 20 a map pixel is
+   4.5 inches, but on a 360px phone screen showing a 512px map that is
+   6.5 inches per SCREEN pixel, and a finger is accurate to maybe eight
+   of them. That is four feet of error on every corner, which is why
+   tracing felt like guesswork.
+
+   Three things fix it, and none of them need better imagery:
+
+   - Magnification. Scaling the same tiles 4x takes tap error from four
+     feet to about one. The pixels do not get sharper, but the target
+     gets bigger, and that is what finger precision actually depends on.
+   - Snapping. Roof facets are overwhelmingly rectangular. Constraining
+     each new edge to square or 45 degrees off the previous one removes
+     the remaining error entirely on those shapes.
+   - Draggable points. Place roughly, then nudge. Nobody hits a corner
+     exactly on the first tap, and forcing them to undo and retry is
+     what makes a tool feel cheap.
+================================================================== */
+
+/* Snap a candidate point to a nearby existing vertex. Distances are in
+   map pixels; the caller converts the screen tolerance. */
+function snapToVertex(pt, vertices, tolPx) {
+  let best = null, bestD = tolPx;
+  for (const v of vertices) {
+    const d = Math.hypot(v.x - pt.x, v.y - pt.y);
+    if (d < bestD) { bestD = d; best = v; }
+  }
+  return best ? { x: best.x, y: best.y, snapped: "vertex" } : null;
+}
+
+/* Constrain a segment to the nearest of a set of angles, measured from
+   `refAngle`. Keeps the segment's length and rotates it onto the
+   constraint, which is what makes a traced rectangle come out square
+   rather than merely close. */
+function snapToAngle(from, to, refAngle, stepsDeg, tolDeg) {
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1) return null;
+  const ang = Math.atan2(dy, dx);
+  let best = null, bestDiff = (tolDeg * Math.PI) / 180;
+  for (const step of stepsDeg) {
+    const target = refAngle + (step * Math.PI) / 180;
+    /* Compare on the unit circle so 359 and 1 degree are close. */
+    let diff = Math.abs(Math.atan2(Math.sin(ang - target), Math.cos(ang - target)));
+    if (diff < bestDiff) { bestDiff = diff; best = target; }
+  }
+  if (best == null) return null;
+  return {
+    x: from.x + Math.cos(best) * len,
+    y: from.y + Math.sin(best) * len,
+    snapped: "angle",
+  };
+}
+
+/* The full placement rule, in the order that matters: an explicit
+   vertex beats a computed angle, because closing a polygon exactly on
+   its first point is worth more than keeping an edge square. */
+function placePoint(raw, pts, otherVertices, tolPx, tolDeg, squareOn) {
+  const all = [...pts, ...otherVertices];
+  const v = snapToVertex(raw, all, tolPx);
+  if (v) return v;
+  if (!squareOn || pts.length === 0) return { ...raw, snapped: null };
+  const from = pts[pts.length - 1];
+  /* Reference angle: the previous edge if there is one, otherwise
+     horizontal. Constraining relative to the last edge is what keeps a
+     rotated building square to itself rather than to the screen. */
+  const ref = pts.length >= 2
+    ? Math.atan2(from.y - pts[pts.length - 2].y, from.x - pts[pts.length - 2].x)
+    : 0;
+  const a = snapToAngle(from, raw, ref, [0, 45, 90, 135, 180, 225, 270, 315], tolDeg);
+  return a || { ...raw, snapped: null };
+}
+
 function AerialTracer({ job, onAddFacet, toast }) {
   const [lat, setLat] = useState(null);
   const [lon, setLon] = useState(null);
-  /* Esri serves zoom 21 only in selected metros. Outside them it returns
-     a grey "Map data not yet available" tile with a 200 status, so the
-     image onError never fires and the map silently looks broken. Start
-     at 20, which is available essentially everywhere in the US and is
-     already 4.5 inches per pixel — plenty to trace a roof. */
   const [zoom, setZoom] = useState(20);
+  const [mag, setMag] = useState(2);          // on-screen magnification
+  const [off, setOff] = useState({ x: 0, y: 0 }); // pan, in map pixels
   const [srcId, setSrcId] = useState("esri");
   const [pts, setPts] = useState([]);
   const [pitch, setPitch] = useState(6);
+  const [square, setSquare] = useState(true);
+  const [dragIdx, setDragIdx] = useState(null);
   const [status, setStatus] = useState("idle");
   const [err, setErr] = useState("");
   const [tried, setTried] = useState([]);
   const [via, setVia] = useState("");
   const [found, setFound] = useState("");
   const [manual, setManual] = useState("");
-  const [failed, setFailed] = useState(0);
   const [loaded, setLoaded] = useState(0);
+  const [failed, setFailed] = useState(0);
+  const [lastSnap, setLastSnap] = useState(null);
   const wrapRef = useRef(null);
 
   const SIZE = 512;
   const source = TILE_SOURCES.find((s) => s.id === srcId) || TILE_SOURCES[0];
   const z = Math.min(zoom, source.maxZoom);
   const ready = lat != null && lon != null;
-  const tiles = ready ? tileGrid(lon, lat, z, SIZE) : [];
+  /* Tiles cover a wider area than the viewport so panning within the
+     magnified view does not run off the edge of what has loaded. */
+  const tiles = ready ? tileGrid(lon, lat, z, SIZE * 2) : [];
   const mPerPx = ready ? metresPerPixel(lat, z) : 0;
+  const view = SIZE / mag;                    // map pixels visible
 
   const jobQuery = [job.address, job.city, job.state, job.zip].filter(Boolean).join(", ");
 
-  /* Look up whatever text is given. Coordinates pasted straight from a
-     phone's map app skip the lookup entirely. */
   const locate = async (queryText) => {
     const q = (queryText || "").trim() || jobQuery;
-    setStatus("locating"); setErr(""); setTried([]); setFailed(0);
-
+    setStatus("locating"); setErr(""); setTried([]); setLoaded(0); setFailed(0);
     const coords = parseLatLon(q);
     if (coords) {
-      setLat(coords.lat); setLon(coords.lon); setPts([]);
+      setLat(coords.lat); setLon(coords.lon); setPts([]); setOff({ x: 0, y: 0 });
       setVia("coordinates"); setFound(`${coords.lat.toFixed(5)}, ${coords.lon.toFixed(5)}`);
-      setStatus("ready");
-      return;
+      setStatus("ready"); return;
     }
-
     const hit = await geocodeAddress(q);
     if (hit.failed) {
-      setStatus("idle");
-      setErr(hit.reason);
-      setTried(hit.tried || []);
-      setManual((m) => m || q);
-      return;
+      setStatus("idle"); setErr(hit.reason); setTried(hit.tried || []);
+      setManual((m) => m || q); return;
     }
-    setLat(hit.lat); setLon(hit.lon); setPts([]);
-    setVia(hit.via); setFound(hit.label);
-    setStatus("ready");
+    setLat(hit.lat); setLon(hit.lon); setPts([]); setOff({ x: 0, y: 0 });
+    setVia(hit.via); setFound(hit.label); setStatus("ready");
   };
 
-  /* Nudge the centre when the roof sits off to one side. */
-  const pan = (dxPx, dyPx) => {
-    if (!ready) return;
-    const c = lonLatToPixel(lon, lat, z);
-    const nx = c.x + dxPx, ny = c.y + dyPx;
-    const worldSize = TILE * Math.pow(2, z);
-    const newLon = (nx / worldSize) * 360 - 180;
-    const n = Math.PI - (2 * Math.PI * ny) / worldSize;
-    const newLat = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-    setLon(newLon); setLat(newLat); setPts([]);
-  };
-
-  const addPoint = (e) => {
-    if (!ready) return;
+  /* Screen coords -> map pixel coords, accounting for magnification and pan. */
+  const toMap = (e) => {
     const rect = wrapRef.current.getBoundingClientRect();
     const t = e.touches ? e.touches[0] : e;
-    const x = ((t.clientX - rect.left) / rect.width) * SIZE;
-    const y = ((t.clientY - rect.top) / rect.height) * SIZE;
-    setPts((p) => [...p, { x, y }]);
+    const fx = (t.clientX - rect.left) / rect.width;
+    const fy = (t.clientY - rect.top) / rect.height;
+    return {
+      x: off.x + (SIZE - view) / 2 + fx * view,
+      y: off.y + (SIZE - view) / 2 + fy * view,
+    };
   };
+
+  const tapTolPx = 14 / mag;   // 14 screen px of snap tolerance, in map px
+
+  const addPoint = (e) => {
+    if (!ready || dragIdx != null) return;
+    const raw = toMap(e);
+    const p = placePoint(raw, pts, [], tapTolPx, 12, square);
+    setLastSnap(p.snapped);
+    setPts((arr) => [...arr, { x: p.x, y: p.y }]);
+  };
+
+  /* Drag an existing point. Placing roughly then nudging is how anyone
+     actually hits a corner; making them undo and retry is what makes a
+     tool feel cheap. */
+  const grab = (i) => (e) => { e.stopPropagation(); setDragIdx(i); };
+  const dragMove = (e) => {
+    if (dragIdx == null) return;
+    e.preventDefault();
+    const raw = toMap(e);
+    const others = pts.filter((_, i) => i !== dragIdx);
+    const v = snapToVertex(raw, others, tapTolPx);
+    const p = v || raw;
+    setPts((arr) => arr.map((q, i) => (i === dragIdx ? { x: p.x, y: p.y } : q)));
+  };
+  const drop = () => setDragIdx(null);
+
+  const pan = (dx, dy) => setOff((o) => ({ x: o.x + dx * view * 0.3, y: o.y + dy * view * 0.3 }));
 
   const areaSf = tracedAreaSqFt(pts, mPerPx);
   const perimFt = tracedLengthFt(pts, mPerPx);
   const roofSf = areaSf * slopeFactor(pitch);
-  const spanFt = Math.round(mPerPx * SIZE * 3.28084);
+  const viewFt = Math.round(mPerPx * view * 3.28084);
+  const inPerScreenPx = (mPerPx * 39.37) / mag;
+
+  /* Length of each placed edge, so a rep can sanity-check against a
+     dimension they already know. */
+  const edgeLen = (i) => {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    return Math.hypot(b.x - a.x, b.y - a.y) * mPerPx * 3.280839895;
+  };
 
   return (
     <Card style={{ marginTop: 12 }}>
@@ -10217,11 +10313,15 @@ function AerialTracer({ job, onAddFacet, toast }) {
       {status === "idle" && (
         <>
           <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 11 }}>
-            Find the roof on aerial imagery, tap round one plane, set its pitch.
-            The plan area comes off the image and the slope factor turns it into
-            roof area.
+            Find the roof, tap round one plane, set its pitch. Edges snap
+            square automatically and every point can be dragged.
           </div>
-          {jobQuery ? (
+          {!jobQuery && (
+            <Callout label="No address on this job" tone="amber">
+              Add the address on the Overview section, or type one below.
+            </Callout>
+          )}
+          {jobQuery && (
             <>
               <Btn style={{ width: "100%" }} onClick={() => locate()} data-testid="locate-roof">
                 <MapPin size={14} /> Find this roof
@@ -10230,19 +10330,9 @@ function AerialTracer({ job, onAddFacet, toast }) {
                 Searching for {jobQuery}
               </div>
             </>
-          ) : (
-            <Callout label="No address on this job" tone="amber">
-              Add the address on the Overview section, or type one below.
-            </Callout>
           )}
-
-          {/* Always available, not just after a failure. If the job
-              address is wrong or the roof is round the back, typing the
-              right thing is faster than fixing the record first. */}
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${S.line}` }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: S.ink, marginBottom: 6 }}>
-              Or search manually
-            </div>
+          <div style={{ marginTop: jobQuery ? 12 : 0, paddingTop: jobQuery ? 12 : 0, borderTop: jobQuery ? `1px solid ${S.line}` : "none" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: S.ink, marginBottom: 6 }}>Or search manually</div>
             <input style={inputStyle} value={manual} onChange={(e) => setManual(e.target.value)}
               placeholder="Address, or paste 39.2896, -84.5230"
               onKeyDown={(e) => { if (e.key === "Enter" && manual.trim()) locate(manual); }} />
@@ -10287,8 +10377,11 @@ function AerialTracer({ job, onAddFacet, toast }) {
             </Btn>
           </div>
 
-          {/* Zoom and imagery source */}
+          {/* Tile zoom picks the imagery; magnification below decides how
+              big it renders. Two different levers, and conflating them is
+              what made the closest tile zoom look broken. */}
           <div style={{ display: "flex", gap: 7, marginBottom: 9 }}>
+            <span style={{ fontSize: 11.5, color: S.sub, alignSelf: "center", fontWeight: 700 }}>TILES</span>
             {[19, 20, 21].map((zz) => (
               <button key={zz} onClick={() => { setZoom(zz); setPts([]); setLoaded(0); setFailed(0); }} style={{
                 flex: 1, border: `1.5px solid ${zoom === zz ? T.accent : S.line}`,
@@ -10299,99 +10392,141 @@ function AerialTracer({ job, onAddFacet, toast }) {
             ))}
           </div>
 
-          {/* The map */}
-          <div ref={wrapRef} onClick={addPoint}
+          {/* Magnification — the single biggest precision win. */}
+          <div style={{ display: "flex", gap: 7, marginBottom: 9 }}>
+            <span style={{ fontSize: 11.5, color: S.sub, alignSelf: "center", fontWeight: 700 }}>ZOOM</span>
+            {[1, 2, 4].map((mm) => (
+              <button key={mm} onClick={() => { setMag(mm); setOff({ x: 0, y: 0 }); }} style={{
+                flex: 1, border: `1.5px solid ${mag === mm ? T.accent : S.line}`,
+                background: mag === mm ? T.accentSoft : "#fff", color: mag === mm ? T.accent : S.ink,
+                borderRadius: 999, padding: "7px 4px", fontSize: 12.5, fontWeight: 800,
+                cursor: "pointer", fontFamily: "inherit",
+              }}>{mm}×</button>
+            ))}
+          </div>
+
+          <div ref={wrapRef}
+            onClick={addPoint}
+            onMouseMove={dragMove} onMouseUp={drop} onMouseLeave={drop}
+            onTouchMove={dragMove} onTouchEnd={drop}
             style={{
               position: "relative", width: "100%", aspectRatio: "1 / 1",
               borderRadius: 11, overflow: "hidden", border: `1px solid ${S.line}`,
-              background: "#33383D", cursor: "crosshair", touchAction: "manipulation",
+              background: "#33383D", cursor: "crosshair", touchAction: "none",
             }}>
-            <div style={{ position: "absolute", inset: 0 }}>
+            {/* Tiles and overlay share one transform, so the trace stays
+                locked to the imagery at every magnification. */}
+            <div style={{
+              position: "absolute", inset: 0,
+              transform: `scale(${mag}) translate(${-off.x - (SIZE - view) / 2}px, ${-off.y - (SIZE - view) / 2}px)`,
+              transformOrigin: "0 0",
+              width: SIZE, height: SIZE,
+            }}>
               {tiles.map((t) => (
                 <img key={t.key} src={source.url(t.z, t.x, t.y)} alt=""
                   onError={() => setFailed((n) => n + 1)}
                   onLoad={() => setLoaded((n) => n + 1)}
+                  draggable={false}
                   style={{
-                    position: "absolute",
-                    left: `${(t.left / SIZE) * 100}%`, top: `${(t.top / SIZE) * 100}%`,
-                    width: `${(TILE / SIZE) * 100}%`, height: `${(TILE / SIZE) * 100}%`,
-                    display: "block",
+                    position: "absolute", left: t.left - SIZE / 2, top: t.top - SIZE / 2,
+                    width: TILE, height: TILE, display: "block", userSelect: "none",
                   }} />
               ))}
+              <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE}
+                style={{ position: "absolute", inset: 0, overflow: "visible" }}>
+                {pts.length > 1 && (
+                  <polygon points={pts.map((p) => `${p.x},${p.y}`).join(" ")}
+                    fill="rgba(27,109,224,.22)" stroke="#1B6DE0"
+                    strokeWidth={2 / mag} vectorEffect="non-scaling-stroke" />
+                )}
+                {pts.map((p, i) => (
+                  <circle key={i} cx={p.x} cy={p.y} r={7 / mag}
+                    fill={dragIdx === i ? "#1B6DE0" : "#fff"} stroke="#1B6DE0"
+                    strokeWidth={2.5 / mag}
+                    onMouseDown={grab(i)} onTouchStart={grab(i)}
+                    style={{ cursor: "grab", pointerEvents: "all" }} />
+                ))}
+              </svg>
             </div>
 
-            {/* Centre crosshair, so it is obvious where the address landed */}
             {pts.length === 0 && (
-              <svg viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
-                <circle cx={SIZE / 2} cy={SIZE / 2} r="12" fill="none" stroke="#fff" strokeWidth="2" opacity="0.9" />
-                <circle cx={SIZE / 2} cy={SIZE / 2} r="2.5" fill="#fff" />
+              <svg viewBox="0 0 100 100" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
+                <circle cx="50" cy="50" r="2.5" fill="none" stroke="#fff" strokeWidth="0.5" opacity="0.9" />
+                <circle cx="50" cy="50" r="0.6" fill="#fff" />
               </svg>
             )}
-
-            {/* The trace */}
-            <svg viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
-              {pts.length > 1 && (
-                <polygon points={pts.map((p) => `${p.x},${p.y}`).join(" ")}
-                  fill="rgba(27,109,224,.28)" stroke="#1B6DE0" strokeWidth="2.5" />
-              )}
-              {pts.map((p, i) => (
-                <circle key={i} cx={p.x} cy={p.y} r="6" fill="#fff" stroke="#1B6DE0" strokeWidth="2.5" />
-              ))}
-            </svg>
 
             {pts.length === 0 && (
               <div style={{
                 position: "absolute", left: 0, right: 0, bottom: 0, padding: "8px 11px",
                 background: "rgba(16,24,40,.75)", color: "#fff", fontSize: 11.5, lineHeight: 1.4,
               }}>
-                Tap each corner of ONE roof plane. Add each plane separately.
+                Tap each corner of ONE roof plane. Drag any point to adjust it.
               </div>
+            )}
+            {lastSnap && pts.length > 0 && (
+              <div style={{
+                position: "absolute", right: 8, top: 8, background: "rgba(23,114,69,.92)",
+                color: "#fff", fontSize: 10.5, fontWeight: 800, borderRadius: 999, padding: "4px 10px",
+              }}>{lastSnap === "vertex" ? "snapped to corner" : "squared"}</div>
             )}
           </div>
 
-          {z >= 21 && (
-            <Btn kind="soft" small style={{ width: "100%", marginTop: 8 }}
-              onClick={() => { setZoom(20); setPts([]); setLoaded(0); setFailed(0); }}>
-              Map looks grey? Step back to Close
-            </Btn>
-          )}
-
-          {/* Pan */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 8 }}>
-            <Btn kind="ghost" small onClick={() => pan(0, -SIZE / 3)}>↑</Btn>
-            <Btn kind="ghost" small onClick={() => pan(0, SIZE / 3)}>↓</Btn>
-            <Btn kind="ghost" small onClick={() => pan(-SIZE / 3, 0)}>←</Btn>
-            <Btn kind="ghost" small onClick={() => pan(SIZE / 3, 0)}>→</Btn>
+            <Btn kind="ghost" small onClick={() => pan(0, -1)}>↑</Btn>
+            <Btn kind="ghost" small onClick={() => pan(0, 1)}>↓</Btn>
+            <Btn kind="ghost" small onClick={() => pan(-1, 0)}>←</Btn>
+            <Btn kind="ghost" small onClick={() => pan(1, 0)}>→</Btn>
           </div>
 
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <label style={{ display: "flex", gap: 9, alignItems: "center", marginTop: 10, fontSize: 13, cursor: "pointer" }}>
+            <input type="checkbox" checked={square} onChange={(e) => setSquare(e.target.checked)}
+              style={{ width: 18, height: 18, accentColor: T.accent }} />
+            <span>Snap edges square — keeps corners at 90° or 45°</span>
+          </label>
+
+          <div style={{ display: "flex", gap: 8, marginTop: 9 }}>
             <Btn kind="ghost" small style={{ flex: 1 }} disabled={!pts.length}
-              onClick={() => setPts((p) => p.slice(0, -1))}>Undo point</Btn>
+              onClick={() => { setPts((p) => p.slice(0, -1)); setLastSnap(null); }}>Undo point</Btn>
             <Btn kind="ghost" small style={{ flex: 1 }} disabled={!pts.length}
-              onClick={() => setPts([])}>Clear</Btn>
+              onClick={() => { setPts([]); setLastSnap(null); }}>Clear</Btn>
           </div>
 
           <div style={{ fontSize: 11, color: S.sub, marginTop: 8, textAlign: "center" }}>
-            About {spanFt} ft across · {(mPerPx * 39.37).toFixed(1)} in per pixel
+            {viewFt} ft across · {inPerScreenPx.toFixed(1)} in per screen pixel
             {" · "}
             <span style={{ color: loaded > 0 ? "#177245" : failed > 0 ? "#B3261E" : S.sub, fontWeight: 700 }}>
-              {loaded > 0 ? `${loaded} tiles loaded` : failed > 0 ? `${failed} tiles failed` : "loading tiles…"}
+              {loaded > 0 ? `${loaded} tiles` : failed > 0 ? `${failed} failed` : "loading…"}
             </span>
           </div>
 
-          {/* Grey tiles reading "Map data not yet available" are a 200
-              response, not an error, so nothing above can detect them.
-              At the closest zoom that is the overwhelmingly likely cause,
-              so say so before the user concludes the app is broken. */}
+          {/* Esri publishes zoom 21 only over larger cities. Elsewhere it
+              returns a grey "Map data not yet available" placeholder with a
+              200 status, so onError never fires and nothing can detect it
+              from here. Say so rather than let someone conclude the tool is
+              broken. */}
           {z >= 21 && (
-            <Callout label="Grey tiles at this zoom?" tone="amber">
-              Closest zoom only exists over larger cities. If the map reads
-              "Map data not yet available", tap <b>Close</b> — it covers about
-              195 ft at 4.5 inches per pixel, which is more than enough to
-              trace a roof accurately.
+            <>
+              <Callout label="Grey tiles at this zoom?" tone="amber">
+                The tile zoom above 20 only exists over larger cities. If the
+                map reads "Map data not yet available", step the tile zoom back
+                — magnification below gets you the same precision without
+                needing sharper imagery.
+              </Callout>
+              <Btn kind="soft" small style={{ width: "100%", marginTop: 8 }}
+                onClick={() => { setZoom(20); setPts([]); setLoaded(0); setFailed(0); }}>
+                Map looks grey? Step back to Close
+              </Btn>
+            </>
+          )}
+          {failed > 2 && loaded > 0 && (
+            <Callout label="Some tiles did not load" tone="amber">
+              Part of the view is missing. Try the other imagery source below,
+              or step the tile zoom back one — coverage is patchier the closer
+              you go.
             </Callout>
           )}
-          {loaded === 0 && failed >= tiles.length && (
+          {loaded === 0 && failed >= tiles.length && tiles.length > 0 && (
             <Callout label="No imagery loaded" tone="red">
               Every tile failed outright. Try the other source below. If both
               fail, the network is blocking the imagery host — a corporate or
@@ -10403,6 +10538,13 @@ function AerialTracer({ job, onAddFacet, toast }) {
             <div style={{ marginTop: 12, background: S.soft, borderRadius: 11, padding: "12px 13px" }}>
               <KV k="Plan area traced" v={`${areaSf.toLocaleString(undefined, { maximumFractionDigits: 0 })} sq ft`} />
               <KV k="Perimeter" v={`${perimFt.toLocaleString(undefined, { maximumFractionDigits: 0 })} ft`} />
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, margin: "8px 0 4px" }}>
+                {pts.map((_, i) => (
+                  <span key={i} style={{ fontSize: 10.5, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 6, padding: "3px 7px", color: S.sub }}>
+                    {edgeLen(i).toFixed(1)}′
+                  </span>
+                ))}
+              </div>
               <div style={{ margin: "10px 0 8px" }}>
                 <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 6 }}>
                   Pitch of this plane — no overhead image can tell you this, measure it on site
@@ -10421,7 +10563,7 @@ function AerialTracer({ job, onAddFacet, toast }) {
                     length: side.toFixed(2), width: side.toFixed(2), pitch,
                     planArea: areaSf, traced: true,
                   });
-                  setPts([]);
+                  setPts([]); setLastSnap(null);
                   toast("Plane added to the takeoff");
                 }}>
                 <Plus size={14} /> Add as a facet
@@ -10431,7 +10573,7 @@ function AerialTracer({ job, onAddFacet, toast }) {
 
           <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
             {TILE_SOURCES.map((s2) => (
-              <button key={s2.id} onClick={() => { setSrcId(s2.id); setFailed(0); }} style={{
+              <button key={s2.id} onClick={() => { setSrcId(s2.id); setLoaded(0); setFailed(0); }} style={{
                 flex: 1, border: `1px solid ${srcId === s2.id ? T.accent : S.line}`,
                 background: srcId === s2.id ? T.accentSoft : "#fff",
                 color: srcId === s2.id ? T.accent : S.sub,
@@ -10440,16 +10582,12 @@ function AerialTracer({ job, onAddFacet, toast }) {
               }}>{s2.name}</button>
             ))}
           </div>
-          {failed > 2 && (
-            <Callout label="Some tiles did not load" tone="amber">
-              Try the other imagery source above, or zoom out one step — the
-              closest zoom is not available everywhere.
-            </Callout>
-          )}
 
           <div style={{ fontSize: 11, color: S.sub, marginTop: 10, lineHeight: 1.55 }}>
-            Scale comes from the tile zoom and this latitude, so it already
-            accounts for map projection stretch. Imagery: {source.credit}.
+            Magnifying does not sharpen the imagery, it makes the target bigger
+            — which is what finger accuracy actually depends on. At 4× a tap is
+            worth about a foot, and square snapping removes the rest on any
+            rectangular facet. Imagery: {source.credit}.
           </div>
         </>
       )}
