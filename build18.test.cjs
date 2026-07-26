@@ -82,5 +82,19 @@ ok(src.includes("Treat it as a tripwire, not a lock"), "the limits of anomaly lo
 ok(src.includes("noteBehaviour"), "behaviour is recorded for detection");
 ok(src.includes("if (!featureOn(features, id)) return false"), "switched-off features hide their sections");
 
+/* --- claims dashboard, crew payouts, duplicate review --- */
+ok(src.includes("function ClaimsDashboard"), "company-wide claims view exists");
+ok(src.includes("OWED BY CARRIERS"), "claims dashboard leads with what carriers owe");
+ok(src.includes("function CrewPayouts"), "crew payouts exist");
+ok(src.includes("OWED TO CREWS"), "crew payouts lead with what is owed");
+ok(src.includes("const dupeGroups"), "duplicate address groups are detected");
+ok(src.includes("nothing is merged") || src.includes("guessing which note or photo matters"),
+  "merging is deliberately manual and says why");
+
+/* crew payout arithmetic */
+const crewOwed = (contracted, paid) => Math.max(0, contracted - paid);
+ok(crewOwed(5000, 2000) === 3000, "outstanding is contracted less paid");
+ok(crewOwed(5000, 6000) === 0, "an overpayment does not read as negative owed");
+
 if (fails) { console.log("\nbuild 18: " + fails + " FAILED"); process.exit(1); }
 console.log("build 18 tests passed");

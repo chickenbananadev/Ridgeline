@@ -3874,6 +3874,19 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject, currentUser, onDelete
      that names what disappears, because this is not undoable. */
   const [confirm, setConfirm] = useState(null);
   const [typed, setTyped] = useState("");
+  /* Duplicate creation is blocked at the lead form, but pairs already in
+     the data need reviewing. Grouped by the same address fingerprint the
+     lead form uses, so both agree on what counts as the same place. */
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const dupeGroups = (() => {
+    const byFp = {};
+    (jobs || []).forEach((j) => {
+      const fp = addrFingerprint([j.property?.street || j.address, j.property?.city, j.property?.zip || j.zip].filter(Boolean).join(" "));
+      if (!fp || fp.length < 7) return;
+      (byFp[fp] = byFp[fp] || []).push(j);
+    });
+    return Object.values(byFp).filter((g) => g.length > 1);
+  })();
   const doDelete = () => {
     if (!confirm) return;
     onDeleteJobs(confirm.ids, confirm.label);
@@ -3891,6 +3904,56 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject, currentUser, onDelete
       <div style={{ marginTop: 14 }}>
         <input style={inputStyle} placeholder="Search name, address, phone, email" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
+      {dupeGroups.length > 0 && (
+        <button onClick={() => setMergeOpen(true)} style={{
+          display: "block", width: "100%", textAlign: "left", marginTop: 10,
+          border: "1px solid #F0D9A8", background: "#FFF6E5", borderRadius: 10,
+          padding: "10px 12px", cursor: "pointer", fontSize: 12.5, color: S.ink, fontFamily: "inherit",
+        }}>
+          <strong>{dupeGroups.length}</strong> {dupeGroups.length === 1 ? "address has" : "addresses have"} more than one record — review
+        </button>
+      )}
+
+      <Sheet open={mergeOpen} onClose={() => setMergeOpen(false)} title="Duplicate addresses">
+        {dupeGroups.length === 0 ? (
+          <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.5 }}>
+            None found. New leads are blocked at creation, so this stays clean
+            unless records predate that check.
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 12 }}>
+              Same address, more than one record. Open each and move anything
+              worth keeping across before deleting — nothing is merged
+              automatically, because guessing which note or photo matters is how
+              real work gets lost.
+            </div>
+            {dupeGroups.map((group, gi) => (
+              <div key={gi} style={{ border: `1px solid ${S.line}`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: S.ink, marginBottom: 5 }}>{group[0].address}</div>
+                {group.map((j) => (
+                  <div key={j.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "7px 0", borderTop: `1px solid ${S.line}` }}>
+                    <button onClick={() => { setMergeOpen(false); onOpenJob(j.id); }} style={{
+                      flex: 1, textAlign: "left", border: "none", background: "none", cursor: "pointer", fontFamily: "inherit", padding: 0,
+                    }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: S.ink }}>{j.name}</div>
+                      <div style={{ fontSize: 11.5, color: S.sub }}>
+                        {(j.notes || []).length} notes · {(j.photos || []).length} photos · {(j.files || []).length} files
+                      </div>
+                    </button>
+                    {isAdmin && (
+                      <Btn kind="ghost" small onClick={() => {
+                        setMergeOpen(false); setTyped("");
+                        setConfirm({ kind: "job", ids: [j.id], label: `${j.name} — ${j.address}` });
+                      }}>Delete</Btn>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </>
+        )}
+      </Sheet>
       <div style={{ marginTop: 12 }}>
         {list.map((contact) => {
           const properties = new Set(contact.jobs.map(propertyKey)).size;
@@ -13824,6 +13887,206 @@ function detectAnomaly(events, now) {
   return null;
 }
 
+/* ==================================================================
+   CLAIMS DASHBOARD — every open claim, company-wide.
+
+   The per-job claim section answers "where is this one". This answers
+   "what is the carrier sitting on across the whole book", which is the
+   number that actually gets chased.
+================================================================== */
+function ClaimsDashboard({ jobs, onBack, onOpenJob }) {
+  const [stage, setStage] = useState("all");
+  const claims = jobs.filter((j) => j.claimType === "Insurance" && (j.claim || j.insurance));
+  const rows = claims.map((j) => ({ j, m: claimMath(j), st: (j.claim || {}).stage || "filed" }));
+  const shown = stage === "all" ? rows : rows.filter((r) => r.st === stage);
+
+  const owed = rows.reduce((a, r) => a + r.m.owedByCarrier, 0);
+  const dep = rows.reduce((a, r) => a + r.m.depOutstanding, 0);
+  const sup = rows.reduce((a, r) => a + r.m.supOutstanding, 0);
+  const acv = rows.reduce((a, r) => a + r.m.acvReceived, 0);
+  const deduct = rows.reduce((a, r) => a + Math.max(0, r.m.deductible - r.m.deductibleCollected), 0);
+  const unwaived = rows.filter((r) => r.m.deductible - r.m.deductibleCollected > 0).length;
+
+  return (
+    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Claims" onBack={onBack} />
+
+      <Card style={{ marginTop: 14, borderLeft: `4px solid ${owed > 0 ? "#E8B931" : S.line}` }}>
+        <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }}>OWED BY CARRIERS</div>
+        <div style={{ fontSize: 34, fontWeight: 800, color: owed > 0 ? "#9A6B00" : S.ink, marginTop: 4, lineHeight: 1.1 }}>
+          {money(owed)}
+        </div>
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }}>
+          Across <b>{rows.length}</b> {rows.length === 1 ? "claim" : "claims"}. Depreciation
+          releases on invoice; supplements release when the carrier approves them.
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 12, borderTop: `1px solid ${S.line}`, paddingTop: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }}>DEPRECIATION</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: S.ink, marginTop: 2 }}>{money(dep)}</div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }}>SUPPLEMENTS</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color: S.ink, marginTop: 2 }}>{money(sup)}</div>
+          </div>
+        </div>
+      </Card>
+
+      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+        <Card style={{ flex: 1 }} pad={14}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }}>ACV RELEASED</div>
+          <div style={{ fontSize: 19, fontWeight: 800, color: S.ink, marginTop: 3 }}>{money(acv)}</div>
+          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2 }}>already collected</div>
+        </Card>
+        <Card style={{ flex: 1 }} pad={14}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }}>DEDUCTIBLES DUE</div>
+          <div style={{ fontSize: 19, fontWeight: 800, color: deduct > 0 ? "#B3261E" : S.ink, marginTop: 3 }}>{money(deduct)}</div>
+          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2 }}>{unwaived} uncollected</div>
+        </Card>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", margin: "14px 0 4px", paddingBottom: 2 }}>
+        {[["all", "All"], ...CLAIM_STAGES.map(([id, label]) => [id, label])].map(([id, label]) => {
+          const n = id === "all" ? rows.length : rows.filter((r) => r.st === id).length;
+          return (
+            <button key={id} onClick={() => setStage(id)} style={{
+              border: `1.5px solid ${stage === id ? T.accent : S.line}`,
+              background: stage === id ? T.accentSoft : "#fff", color: stage === id ? T.accent : S.ink,
+              borderRadius: 999, padding: "7px 12px", fontSize: 12.5, fontWeight: 700,
+              cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit",
+            }}>{label} {n > 0 ? `· ${n}` : ""}</button>
+          );
+        })}
+      </div>
+
+      {shown.length === 0 && (
+        <Card pad={18}><div style={{ fontSize: 13.5, color: S.sub }}>No claims in this stage.</div></Card>
+      )}
+      {shown.map(({ j, m, st }) => {
+        const label = (CLAIM_STAGES.find(([id]) => id === st) || [st, st])[1];
+        return (
+          <Card key={j.id} style={{ marginTop: 10 }} pad={0}>
+            <button onClick={() => onOpenJob(j.id, "claim")} style={{
+              width: "100%", textAlign: "left", border: "none", background: "none",
+              cursor: "pointer", padding: 15, fontFamily: "inherit",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{j.name}</div>
+                  <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>{j.address}</div>
+                  <div style={{ fontSize: 12, color: S.sub, marginTop: 3 }}>
+                    {(j.insurance || {}).carrier || "No carrier"}{(j.insurance || {}).claim ? ` · ${(j.insurance || {}).claim}` : ""}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <Chip tone={st === "closed" ? "green" : "blue"}>{label}</Chip>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: m.owedByCarrier > 0 ? "#9A6B00" : S.sub, marginTop: 6 }}>
+                    {money(m.owedByCarrier)}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: S.sub }}>owed</div>
+                </div>
+              </div>
+              {m.flags.length > 0 && (
+                <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 9, paddingTop: 9, borderTop: `1px solid ${S.line}` }}>
+                  <AlertTriangle size={13} color="#9A6B00" style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: 11.5, color: S.sub }}>
+                    {m.flags.length} {m.flags.length === 1 ? "item needs" : "items need"} attention
+                  </span>
+                </div>
+              )}
+            </button>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ==================================================================
+   CREW PAYOUTS
+
+   Cap-out covers what the rep earns. This covers what the crew is
+   owed: contracted amount per job, what has been paid, what is still
+   outstanding — the other half of labour cost.
+================================================================== */
+function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
+  const [crewId, setCrewId] = useState("all");
+  if (!isAdmin) {
+    return (
+      <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+        <SubHeader title="Crew payouts" onBack={onBack} />
+        <Card style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 14, color: S.sub }}>This screen is restricted to admins.</div>
+        </Card>
+      </div>
+    );
+  }
+  /* A crew's labour on a job is whatever labour lines name them, or the
+     whole labour bucket when the job is assigned to them and nothing is
+     itemised. Payments out are the non-Received payment rows. */
+  const rows = (crews || []).map((c) => {
+    const mine = jobs.filter((j) => j.crewId === c.id);
+    const contracted = mine.reduce((a, j) => {
+      const lines = ((j.fin || {}).labor || []);
+      const named = lines.filter((l) => String(l.by || "").toLowerCase().includes(String(c.name || "").toLowerCase()));
+      return a + (named.length ? named : lines).reduce((x, l) => x + num(l.amt), 0);
+    }, 0);
+    const paid = mine.reduce((a, j) => a + (j.payments || [])
+      .filter((p) => p.type !== "Received" && String(p.to || "").toLowerCase().includes(String(c.name || "").toLowerCase()))
+      .reduce((x, p) => x + num(p.amt), 0), 0);
+    return { crew: c, jobs: mine, contracted, paid, outstanding: Math.max(0, contracted - paid) };
+  });
+  const shown = crewId === "all" ? rows : rows.filter((r) => r.crew.id === crewId);
+  const totalOut = rows.reduce((a, r) => a + r.outstanding, 0);
+
+  return (
+    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Crew payouts" onBack={onBack} />
+      <Card style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }}>OWED TO CREWS</div>
+        <div style={{ fontSize: 30, fontWeight: 800, color: totalOut > 0 ? "#9A6B00" : S.ink, marginTop: 4 }}>
+          {money(totalOut)}
+        </div>
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }}>
+          Contracted labour less what has been paid out. Labour lines naming a
+          crew count to that crew; otherwise the job's whole labour bucket does.
+        </div>
+      </Card>
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", margin: "14px 0 4px" }}>
+        {[["all", "All crews"], ...(crews || []).map((c) => [c.id, c.name])].map(([id, label]) => (
+          <button key={id} onClick={() => setCrewId(id)} style={{
+            border: `1.5px solid ${crewId === id ? T.accent : S.line}`,
+            background: crewId === id ? T.accentSoft : "#fff", color: crewId === id ? T.accent : S.ink,
+            borderRadius: 999, padding: "7px 12px", fontSize: 12.5, fontWeight: 700,
+            cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit",
+          }}>{label}</button>
+        ))}
+      </div>
+      {shown.map((r) => (
+        <Card key={r.crew.id} style={{ marginTop: 10 }}>
+          <CardTitle right={<span style={{ fontWeight: 800, color: r.outstanding > 0 ? "#9A6B00" : S.sub }}>{money(r.outstanding)}</span>}>
+            {r.crew.name}
+          </CardTitle>
+          <KV k="Contracted" v={money(r.contracted)} />
+          <KV k="Paid" v={money(r.paid)} />
+          <KV k="Outstanding" v={money(r.outstanding)} strong />
+          {r.jobs.length === 0 && <div style={{ fontSize: 12.5, color: S.sub, marginTop: 6 }}>No jobs assigned.</div>}
+          {r.jobs.slice(0, 6).map((j) => (
+            <button key={j.id} onClick={() => onOpenJob(j.id)} style={{
+              display: "flex", justifyContent: "space-between", width: "100%", textAlign: "left",
+              border: "none", background: "none", cursor: "pointer", padding: "7px 0",
+              borderTop: `1px solid ${S.line}`, fontFamily: "inherit",
+            }}>
+              <span style={{ fontSize: 13, color: S.ink }}>{j.name}</span>
+              <span style={{ fontSize: 12, color: S.sub }}>{j.schedDate || "unscheduled"}</span>
+            </button>
+          ))}
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 function AdminControls({ features, setFeatures, activity, users, currentUser, onBack, toast, security, setSecurity }) {
   const admin = !!(currentUser && currentUser.role === "admin");
   const [tab, setTab] = useState("features");
@@ -14080,6 +14343,8 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
       ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam"],
       ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
       ["password", Lock, "Change my password", "Update your sign-in password"],
+      ["claims", Shield, "Claims", "Every open claim and what carriers owe"],
+      currentUser && currentUser.role === "admin" && ["crewpay", HardHat, "Crew payouts", "What each crew is owed and has been paid"],
       currentUser && currentUser.role === "admin" && ["admin", Shield, "Admin controls", "Feature switches, security and the audit log"],
       currentUser && currentUser.role === "admin" && ["setupkeys", Lock, "Setup & keys", "API keys and services still to connect"],
       ["syscheck", AlertTriangle, "System check", "Test the database connection and setup"],
@@ -15222,6 +15487,11 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "crews" ? (
         <CrewManager crews={crews} setCrews={setCrews} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} />
+      ) : nav === "claims" ? (
+        <ClaimsDashboard jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
+      ) : nav === "crewpay" ? (
+        <CrewPayouts jobs={jobs} crews={crews} onBack={() => setNav("more")}
+          onOpenJob={openJobScreen} isAdmin={isAdmin} />
       ) : nav === "admin" ? (
         <AdminControls features={features} setFeatures={setFeatures} activity={activity}
           users={users} currentUser={liveUser} onBack={() => setNav("more")} toast={toast}

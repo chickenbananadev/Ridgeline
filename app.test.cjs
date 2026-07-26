@@ -71104,6 +71104,16 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject, currentUser, onDelete
   const isAdmin = !!(currentUser && currentUser.role === "admin");
   const [confirm, setConfirm] = (0, import_react.useState)(null);
   const [typed, setTyped] = (0, import_react.useState)("");
+  const [mergeOpen, setMergeOpen] = (0, import_react.useState)(false);
+  const dupeGroups = (() => {
+    const byFp = {};
+    (jobs || []).forEach((j) => {
+      const fp = addrFingerprint([j.property?.street || j.address, j.property?.city, j.property?.zip || j.zip].filter(Boolean).join(" "));
+      if (!fp || fp.length < 7) return;
+      (byFp[fp] = byFp[fp] || []).push(j);
+    });
+    return Object.values(byFp).filter((g) => g.length > 1);
+  })();
   const doDelete = () => {
     if (!confirm) return;
     onDeleteJobs(confirm.ids, confirm.label);
@@ -71117,6 +71127,60 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject, currentUser, onDelete
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Contacts", onBack }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, placeholder: "Search name, address, phone, email", value: q, onChange: (e) => setQ(e.target.value) }) }),
+    dupeGroups.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setMergeOpen(true), style: {
+      display: "block",
+      width: "100%",
+      textAlign: "left",
+      marginTop: 10,
+      border: "1px solid #F0D9A8",
+      background: "#FFF6E5",
+      borderRadius: 10,
+      padding: "10px 12px",
+      cursor: "pointer",
+      fontSize: 12.5,
+      color: S.ink,
+      fontFamily: "inherit"
+    }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: dupeGroups.length }),
+      " ",
+      dupeGroups.length === 1 ? "address has" : "addresses have",
+      " more than one record \u2014 review"
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: mergeOpen, onClose: () => setMergeOpen(false), title: "Duplicate addresses", children: dupeGroups.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.5 }, children: "None found. New leads are blocked at creation, so this stays clean unless records predate that check." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 12 }, children: "Same address, more than one record. Open each and move anything worth keeping across before deleting \u2014 nothing is merged automatically, because guessing which note or photo matters is how real work gets lost." }),
+      dupeGroups.map((group, gi) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 10, padding: 12, marginBottom: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 800, color: S.ink, marginBottom: 5 }, children: group[0].address }),
+        group.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", padding: "7px 0", borderTop: `1px solid ${S.line}` }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
+            setMergeOpen(false);
+            onOpenJob(j.id);
+          }, style: {
+            flex: 1,
+            textAlign: "left",
+            border: "none",
+            background: "none",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            padding: 0
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 600, color: S.ink }, children: j.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub }, children: [
+              (j.notes || []).length,
+              " notes \xB7 ",
+              (j.photos || []).length,
+              " photos \xB7 ",
+              (j.files || []).length,
+              " files"
+            ] })
+          ] }),
+          isAdmin && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => {
+            setMergeOpen(false);
+            setTyped("");
+            setConfirm({ kind: "job", ids: [j.id], label: `${j.name} \u2014 ${j.address}` });
+          }, children: "Delete" })
+        ] }, j.id))
+      ] }, gi))
+    ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12 }, children: [
       list.map((contact) => {
         const properties = new Set(contact.jobs.map(propertyKey)).size;
@@ -82036,6 +82100,177 @@ function detectAnomaly(events, now) {
   }
   return null;
 }
+function ClaimsDashboard({ jobs, onBack, onOpenJob }) {
+  const [stage, setStage] = (0, import_react.useState)("all");
+  const claims = jobs.filter((j) => j.claimType === "Insurance" && (j.claim || j.insurance));
+  const rows = claims.map((j) => ({ j, m: claimMath(j), st: (j.claim || {}).stage || "filed" }));
+  const shown = stage === "all" ? rows : rows.filter((r) => r.st === stage);
+  const owed = rows.reduce((a, r) => a + r.m.owedByCarrier, 0);
+  const dep = rows.reduce((a, r) => a + r.m.depOutstanding, 0);
+  const sup = rows.reduce((a, r) => a + r.m.supOutstanding, 0);
+  const acv = rows.reduce((a, r) => a + r.m.acvReceived, 0);
+  const deduct = rows.reduce((a, r) => a + Math.max(0, r.m.deductible - r.m.deductibleCollected), 0);
+  const unwaived = rows.filter((r) => r.m.deductible - r.m.deductibleCollected > 0).length;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Claims", onBack }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14, borderLeft: `4px solid ${owed > 0 ? "#E8B931" : S.line}` }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }, children: "OWED BY CARRIERS" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 34, fontWeight: 800, color: owed > 0 ? "#9A6B00" : S.ink, marginTop: 4, lineHeight: 1.1 }, children: money(owed) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }, children: [
+        "Across ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: rows.length }),
+        " ",
+        rows.length === 1 ? "claim" : "claims",
+        ". Depreciation releases on invoice; supplements release when the carrier approves them."
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 12, borderTop: `1px solid ${S.line}`, paddingTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }, children: "DEPRECIATION" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, color: S.ink, marginTop: 2 }, children: money(dep) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }, children: "SUPPLEMENTS" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, color: S.ink, marginTop: 2 }, children: money(sup) })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { flex: 1 }, pad: 14, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }, children: "ACV RELEASED" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 19, fontWeight: 800, color: S.ink, marginTop: 3 }, children: money(acv) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 2 }, children: "already collected" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { flex: 1 }, pad: 14, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }, children: "DEDUCTIBLES DUE" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 19, fontWeight: 800, color: deduct > 0 ? "#B3261E" : S.ink, marginTop: 3 }, children: money(deduct) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 2 }, children: [
+          unwaived,
+          " uncollected"
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, overflowX: "auto", margin: "14px 0 4px", paddingBottom: 2 }, children: [["all", "All"], ...CLAIM_STAGES.map(([id, label]) => [id, label])].map(([id, label]) => {
+      const n = id === "all" ? rows.length : rows.filter((r) => r.st === id).length;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setStage(id), style: {
+        border: `1.5px solid ${stage === id ? T.accent : S.line}`,
+        background: stage === id ? T.accentSoft : "#fff",
+        color: stage === id ? T.accent : S.ink,
+        borderRadius: 999,
+        padding: "7px 12px",
+        fontSize: 12.5,
+        fontWeight: 700,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        fontFamily: "inherit"
+      }, children: [
+        label,
+        " ",
+        n > 0 ? `\xB7 ${n}` : ""
+      ] }, id);
+    }) }),
+    shown.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 18, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "No claims in this stage." }) }),
+    shown.map(({ j, m, st }) => {
+      const label = (CLAIM_STAGES.find(([id]) => id === st) || [st, st])[1];
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 10 }, pad: 0, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id, "claim"), style: {
+        width: "100%",
+        textAlign: "left",
+        border: "none",
+        background: "none",
+        cursor: "pointer",
+        padding: 15,
+        fontFamily: "inherit"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700, color: S.ink }, children: j.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 2 }, children: j.address }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 3 }, children: [
+              (j.insurance || {}).carrier || "No carrier",
+              (j.insurance || {}).claim ? ` \xB7 ${(j.insurance || {}).claim}` : ""
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "right", flexShrink: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: st === "closed" ? "green" : "blue", children: label }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 16, fontWeight: 800, color: m.owedByCarrier > 0 ? "#9A6B00" : S.sub, marginTop: 6 }, children: money(m.owedByCarrier) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub }, children: "owed" })
+          ] })
+        ] }),
+        m.flags.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center", marginTop: 9, paddingTop: 9, borderTop: `1px solid ${S.line}` }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.AlertTriangle, { size: 13, color: "#9A6B00", style: { flexShrink: 0 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11.5, color: S.sub }, children: [
+            m.flags.length,
+            " ",
+            m.flags.length === 1 ? "item needs" : "items need",
+            " attention"
+          ] })
+        ] })
+      ] }) }, j.id);
+    })
+  ] });
+}
+function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
+  const [crewId, setCrewId] = (0, import_react.useState)("all");
+  if (!isAdmin) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Crew payouts", onBack }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 16 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub }, children: "This screen is restricted to admins." }) })
+    ] });
+  }
+  const rows = (crews || []).map((c) => {
+    const mine = jobs.filter((j) => j.crewId === c.id);
+    const contracted = mine.reduce((a, j) => {
+      const lines = (j.fin || {}).labor || [];
+      const named = lines.filter((l) => String(l.by || "").toLowerCase().includes(String(c.name || "").toLowerCase()));
+      return a + (named.length ? named : lines).reduce((x, l) => x + num(l.amt), 0);
+    }, 0);
+    const paid = mine.reduce((a, j) => a + (j.payments || []).filter((p) => p.type !== "Received" && String(p.to || "").toLowerCase().includes(String(c.name || "").toLowerCase())).reduce((x, p) => x + num(p.amt), 0), 0);
+    return { crew: c, jobs: mine, contracted, paid, outstanding: Math.max(0, contracted - paid) };
+  });
+  const shown = crewId === "all" ? rows : rows.filter((r) => r.crew.id === crewId);
+  const totalOut = rows.reduce((a, r) => a + r.outstanding, 0);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Crew payouts", onBack }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }, children: "OWED TO CREWS" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 30, fontWeight: 800, color: totalOut > 0 ? "#9A6B00" : S.ink, marginTop: 4 }, children: money(totalOut) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }, children: "Contracted labour less what has been paid out. Labour lines naming a crew count to that crew; otherwise the job's whole labour bucket does." })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, overflowX: "auto", margin: "14px 0 4px" }, children: [["all", "All crews"], ...(crews || []).map((c) => [c.id, c.name])].map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setCrewId(id), style: {
+      border: `1.5px solid ${crewId === id ? T.accent : S.line}`,
+      background: crewId === id ? T.accentSoft : "#fff",
+      color: crewId === id ? T.accent : S.ink,
+      borderRadius: 999,
+      padding: "7px 12px",
+      fontSize: 12.5,
+      fontWeight: 700,
+      cursor: "pointer",
+      whiteSpace: "nowrap",
+      fontFamily: "inherit"
+    }, children: label }, id)) }),
+    shown.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800, color: r.outstanding > 0 ? "#9A6B00" : S.sub }, children: money(r.outstanding) }), children: r.crew.name }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Contracted", v: money(r.contracted) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Paid", v: money(r.paid) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Outstanding", v: money(r.outstanding), strong: true }),
+      r.jobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 6 }, children: "No jobs assigned." }),
+      r.jobs.slice(0, 6).map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: {
+        display: "flex",
+        justifyContent: "space-between",
+        width: "100%",
+        textAlign: "left",
+        border: "none",
+        background: "none",
+        cursor: "pointer",
+        padding: "7px 0",
+        borderTop: `1px solid ${S.line}`,
+        fontFamily: "inherit"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.ink }, children: j.name }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub }, children: j.schedDate || "unscheduled" })
+      ] }, j.id))
+    ] }, r.crew.id))
+  ] });
+}
 function AdminControls({ features, setFeatures, activity, users, currentUser, onBack, toast: toast2, security, setSecurity }) {
   const admin = !!(currentUser && currentUser.role === "admin");
   const [tab, setTab] = (0, import_react.useState)("features");
@@ -82286,6 +82521,8 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
       ["integrations", import_lucide_react.Share2, "Integrations", "Gmail, texting, CompanyCam"],
       ["import", import_lucide_react.Upload, "Import jobs", "Bring a pipeline in from CSV"],
       ["password", import_lucide_react.Lock, "Change my password", "Update your sign-in password"],
+      ["claims", import_lucide_react.Shield, "Claims", "Every open claim and what carriers owe"],
+      currentUser && currentUser.role === "admin" && ["crewpay", import_lucide_react.HardHat, "Crew payouts", "What each crew is owed and has been paid"],
       currentUser && currentUser.role === "admin" && ["admin", import_lucide_react.Shield, "Admin controls", "Feature switches, security and the audit log"],
       currentUser && currentUser.role === "admin" && ["setupkeys", import_lucide_react.Lock, "Setup & keys", "API keys and services still to connect"],
       ["syscheck", import_lucide_react.AlertTriangle, "System check", "Test the database connection and setup"]
@@ -83671,6 +83908,15 @@ function SupremeCRM() {
         jobs,
         onBack: () => setNav("more"),
         toast: toast2
+      }
+    ) : nav === "claims" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimsDashboard, { jobs, onBack: () => setNav("more"), onOpenJob: openJobScreen }) : nav === "crewpay" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      CrewPayouts,
+      {
+        jobs,
+        crews,
+        onBack: () => setNav("more"),
+        onOpenJob: openJobScreen,
+        isAdmin
       }
     ) : nav === "admin" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       AdminControls,
