@@ -65,21 +65,21 @@ ok(tapErrFt(4) < 1.2, "at 4x it is around a foot, got " + tapErrFt(4).toFixed(2)
 ok(tapErrFt(4) < tapErrFt(1) / 3.5, "4x is roughly a fourfold improvement");
 
 /* --- wired up --- */
-ok(src.includes("function snapToVertex"), "vertex snapping exists");
-ok(src.includes("function snapToAngle"), "angle snapping exists");
-ok(src.includes("function placePoint"), "placement combines both");
-ok(src.includes("const v = snapToVertex(raw, all, tolPx);\n  if (v) return v;"),
-  "a vertex snap takes precedence over an angle snap");
-ok(src.includes("const [mag, setMag] = useState(2)"), "magnification defaults to 2x");
-ok(src.includes("[1, 2, 4].map"), "1x, 2x and 4x are offered");
-ok(src.includes("const grab ="), "points can be grabbed");
-ok(src.includes("const dragMove ="), "and dragged");
-ok(src.includes("Drag any point to adjust it"), "dragging is discoverable");
-ok(src.includes("Snap edges square"), "snapping can be turned off");
-ok(src.includes("const edgeLen ="), "edge lengths are shown for sanity-checking");
-ok(src.includes('vectorEffect="non-scaling-stroke"'), "the outline stays readable when magnified");
-ok(src.includes("tapTolPx = 14 / mag"), "snap tolerance is in screen terms, not map terms");
-ok(src.includes("makes the target bigger"), "the reasoning is stated to the user");
+ok(src.includes("snappable: true"), "vertex snapping is enabled");
+ok(src.includes("allowSelfIntersection: false"), "self-intersecting shapes are refused");
+ok(src.includes("map.pm.addControls"), "the drawing toolbar is present");
+ok(src.includes("drawPolygon: true") && src.includes("drawRectangle: true"),
+  "both polygon and rectangle tools are offered");
+ok(src.includes("maxZoom: 22"), "the map over-zooms past native imagery, replacing hand-rolled magnification");
+ok(src.includes("zoomControl: true"), "zoom is continuous via Leaflet rather than three fixed steps");
+ok(src.includes("editMode: true"), "Geoman edit mode makes vertices draggable");
+ok(src.includes("dragMode: true"), "whole shapes can be dragged");
+ok(src.includes("drag any corner to adjust"), "dragging is discoverable");
+ok(src.includes("snappable: true"), "snapping is on by default");
+ok(src.includes("edges.push(turfLength("), "edge lengths are measured for sanity-checking");
+ok(src.includes("templineStyle"), "the drawing outline is styled to stay readable");
+ok(src.includes("snapDistance: 20"), "snap tolerance is in pixels, so it holds at every zoom");
+ok(src.includes("no map-stretch correction to get wrong"), "the accuracy claim is explained");
 
 if (fails) { console.log("\nbuild 29: " + fails + " FAILED"); process.exit(1); }
 console.log("build 29 tests passed");

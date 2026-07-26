@@ -1,4 +1,12 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+/* Map stack. Leaflet handles tiles, touch and zoom; Geoman handles
+   drawing, vertex editing and snapping; Turf computes geodesic area.
+   All three are open source and free, and every one of them replaces
+   something that was hand-rolled here and buggy. */
+import L from "leaflet";
+import "@geoman-io/leaflet-geoman-free";
+import turfArea from "@turf/area";
+import turfLength from "@turf/length";
 import {
   Home, Briefcase, Plus, MessageCircle, Menu, Search, SlidersHorizontal,
   ChevronDown, ChevronRight, ChevronLeft, ChevronUp, X, Check, GripVertical, Camera,
@@ -10202,46 +10210,54 @@ function placePoint(raw, pts, otherVertices, tolPx, tolDeg, squareOn) {
   return a || { ...raw, snapped: null };
 }
 
+/* ==================================================================
+   AERIAL TRACING — on Leaflet, not hand-rolled
+
+   The previous version was a map library I wrote by hand: tile grid,
+   pan, magnification, snapping, vertex dragging. Every one of those is
+   a solved problem, and mine had bugs I kept chasing instead of
+   building the roofing part.
+
+   This uses the standard open-source stack:
+     Leaflet          — tiles, native pinch-zoom, pan, touch handling
+     Leaflet-Geoman   — polygon drawing, vertex editing, snapping
+     Turf             — geodesic area
+
+   Two things this buys beyond bug count. Pinch-zoom is real, so
+   precision is limited by the imagery rather than by how many discrete
+   zoom buttons I remembered to add. And Turf computes area on the
+   ellipsoid rather than on a projected plane, so the Web Mercator
+   correction I was applying by hand is no longer something that can be
+   got wrong.
+================================================================== */
 function AerialTracer({ job, onAddFacet, toast }) {
   const [lat, setLat] = useState(null);
   const [lon, setLon] = useState(null);
-  const [zoom, setZoom] = useState(20);
-  const [mag, setMag] = useState(2);          // on-screen magnification
-  const [off, setOff] = useState({ x: 0, y: 0 }); // pan, in map pixels
-  const [srcId, setSrcId] = useState("esri");
-  const [pts, setPts] = useState([]);
-  const [pitch, setPitch] = useState(6);
-  const [square, setSquare] = useState(true);
-  const [dragIdx, setDragIdx] = useState(null);
   const [status, setStatus] = useState("idle");
   const [err, setErr] = useState("");
   const [tried, setTried] = useState([]);
   const [via, setVia] = useState("");
   const [found, setFound] = useState("");
   const [manual, setManual] = useState("");
-  const [loaded, setLoaded] = useState(0);
-  const [failed, setFailed] = useState(0);
-  const [lastSnap, setLastSnap] = useState(null);
-  const wrapRef = useRef(null);
+  const [pitch, setPitch] = useState(6);
+  const [shape, setShape] = useState(null);   // { areaSf, perimFt, edges }
+  const [srcId, setSrcId] = useState("esri");
+  const [ready, setReady] = useState(false);
 
-  const SIZE = 512;
-  const source = TILE_SOURCES.find((s) => s.id === srcId) || TILE_SOURCES[0];
-  const z = Math.min(zoom, source.maxZoom);
-  const ready = lat != null && lon != null;
-  /* Tiles cover a wider area than the viewport so panning within the
-     magnified view does not run off the edge of what has loaded. */
-  const tiles = ready ? tileGrid(lon, lat, z, SIZE * 2) : [];
-  const mPerPx = ready ? metresPerPixel(lat, z) : 0;
-  const view = SIZE / mag;                    // map pixels visible
+  const hostRef = useRef(null);
+  const mapRef = useRef(null);
+  const layerRef = useRef(null);
+  const tileRef = useRef(null);
 
   const jobQuery = [job.address, job.city, job.state, job.zip].filter(Boolean).join(", ");
+  const source = TILE_SOURCES.find((s) => s.id === srcId) || TILE_SOURCES[0];
 
   const locate = async (queryText) => {
     const q = (queryText || "").trim() || jobQuery;
-    setStatus("locating"); setErr(""); setTried([]); setLoaded(0); setFailed(0);
+    setStatus("locating"); setErr(""); setTried([]);
     const coords = parseLatLon(q);
     if (coords) {
-      setLat(coords.lat); setLon(coords.lon); setPts([]); setOff({ x: 0, y: 0 });
+      setLat(coords.lat); setLon(coords.lon);
       setVia("coordinates"); setFound(`${coords.lat.toFixed(5)}, ${coords.lon.toFixed(5)}`);
       setStatus("ready"); return;
     }
@@ -10250,61 +10266,107 @@ function AerialTracer({ job, onAddFacet, toast }) {
       setStatus("idle"); setErr(hit.reason); setTried(hit.tried || []);
       setManual((m) => m || q); return;
     }
-    setLat(hit.lat); setLon(hit.lon); setPts([]); setOff({ x: 0, y: 0 });
+    setLat(hit.lat); setLon(hit.lon);
     setVia(hit.via); setFound(hit.label); setStatus("ready");
   };
 
-  /* Screen coords -> map pixel coords, accounting for magnification and pan. */
-  const toMap = (e) => {
-    const rect = wrapRef.current.getBoundingClientRect();
-    const t = e.touches ? e.touches[0] : e;
-    const fx = (t.clientX - rect.left) / rect.width;
-    const fy = (t.clientY - rect.top) / rect.height;
-    return {
-      x: off.x + (SIZE - view) / 2 + fx * view,
-      y: off.y + (SIZE - view) / 2 + fy * view,
+  /* Measure whatever polygon is currently drawn. Turf works on GeoJSON
+     lat/lon, so this is geodesic — no projection correction to forget. */
+  const measure = (layer) => {
+    if (!layer) { setShape(null); return; }
+    try {
+      const gj = layer.toGeoJSON();
+      const m2 = turfArea(gj);
+      const ring = (gj.geometry.coordinates || [])[0] || [];
+      const edges = [];
+      for (let i = 0; i < ring.length - 1; i++) {
+        const line = { type: "Feature", geometry: { type: "LineString", coordinates: [ring[i], ring[i + 1]] } };
+        edges.push(turfLength(line, { units: "feet" }));
+      }
+      setShape({
+        areaSf: m2 * 10.7639104167,
+        perimFt: edges.reduce((a, e) => a + e, 0),
+        edges,
+      });
+    } catch (e) { setShape(null); }
+  };
+
+  /* Build the map once coordinates exist, and tear it down cleanly.
+     Leaflet holds DOM and listeners, so skipping remove() leaks a map
+     every time the section is reopened. */
+  useEffect(() => {
+    if (lat == null || lon == null || !hostRef.current) return;
+    if (mapRef.current) {
+      mapRef.current.setView([lat, lon], 20);
+      return;
+    }
+    const map = L.map(hostRef.current, {
+      center: [lat, lon], zoom: 20, maxZoom: 22,
+      zoomControl: true, attributionControl: true,
+      /* Roof tracing is a fingertip task; inertia throws the view. */
+      inertia: false,
+    });
+    mapRef.current = map;
+
+    tileRef.current = L.tileLayer(
+      source.url(0, 0, 0).replace("/0/0/0", "/{z}/{y}/{x}"),
+      { maxNativeZoom: source.maxZoom, maxZoom: 22, attribution: source.credit }
+    ).addTo(map);
+
+    const drawn = new L.FeatureGroup().addTo(map);
+    layerRef.current = drawn;
+
+    /* Geoman handles drawing, vertex editing and snapping. snapDistance
+       is in pixels, so it behaves the same at every zoom. */
+    map.pm.setGlobalOptions({
+      snappable: true, snapDistance: 20,
+      allowSelfIntersection: false,
+      templineStyle: { color: "#1B6DE0", weight: 3 },
+      hintlineStyle: { color: "#1B6DE0", dashArray: "6,6", weight: 2 },
+      pathOptions: { color: "#1B6DE0", fillColor: "#1B6DE0", fillOpacity: 0.25, weight: 3 },
+    });
+    map.pm.addControls({
+      position: "topright",
+      drawMarker: false, drawCircleMarker: false, drawPolyline: false,
+      drawCircle: false, drawText: false, cutPolygon: false, rotateMode: false,
+      drawRectangle: true, drawPolygon: true,
+      editMode: true, dragMode: true, removalMode: true,
+    });
+
+    map.on("pm:create", (e) => {
+      /* One facet at a time — clearing the previous shape is what makes
+         "add as a facet" unambiguous. */
+      drawn.clearLayers();
+      drawn.addLayer(e.layer);
+      measure(e.layer);
+      e.layer.on("pm:edit", () => measure(e.layer));
+      e.layer.on("pm:dragend", () => measure(e.layer));
+    });
+    map.on("pm:remove", () => setShape(null));
+
+    setReady(true);
+    return () => {
+      try { map.remove(); } catch (e2) { /* already gone */ }
+      mapRef.current = null; layerRef.current = null; tileRef.current = null;
     };
+  }, [lat, lon]); // eslint-disable-line
+
+  /* Swap imagery without rebuilding the map or losing the drawing. */
+  useEffect(() => {
+    if (!mapRef.current || !tileRef.current) return;
+    mapRef.current.removeLayer(tileRef.current);
+    tileRef.current = L.tileLayer(
+      source.url(0, 0, 0).replace("/0/0/0", "/{z}/{y}/{x}"),
+      { maxNativeZoom: source.maxZoom, maxZoom: 22, attribution: source.credit }
+    ).addTo(mapRef.current);
+  }, [srcId]); // eslint-disable-line
+
+  const clearShape = () => {
+    if (layerRef.current) layerRef.current.clearLayers();
+    setShape(null);
   };
 
-  const tapTolPx = 14 / mag;   // 14 screen px of snap tolerance, in map px
-
-  const addPoint = (e) => {
-    if (!ready || dragIdx != null) return;
-    const raw = toMap(e);
-    const p = placePoint(raw, pts, [], tapTolPx, 12, square);
-    setLastSnap(p.snapped);
-    setPts((arr) => [...arr, { x: p.x, y: p.y }]);
-  };
-
-  /* Drag an existing point. Placing roughly then nudging is how anyone
-     actually hits a corner; making them undo and retry is what makes a
-     tool feel cheap. */
-  const grab = (i) => (e) => { e.stopPropagation(); setDragIdx(i); };
-  const dragMove = (e) => {
-    if (dragIdx == null) return;
-    e.preventDefault();
-    const raw = toMap(e);
-    const others = pts.filter((_, i) => i !== dragIdx);
-    const v = snapToVertex(raw, others, tapTolPx);
-    const p = v || raw;
-    setPts((arr) => arr.map((q, i) => (i === dragIdx ? { x: p.x, y: p.y } : q)));
-  };
-  const drop = () => setDragIdx(null);
-
-  const pan = (dx, dy) => setOff((o) => ({ x: o.x + dx * view * 0.3, y: o.y + dy * view * 0.3 }));
-
-  const areaSf = tracedAreaSqFt(pts, mPerPx);
-  const perimFt = tracedLengthFt(pts, mPerPx);
-  const roofSf = areaSf * slopeFactor(pitch);
-  const viewFt = Math.round(mPerPx * view * 3.28084);
-  const inPerScreenPx = (mPerPx * 39.37) / mag;
-
-  /* Length of each placed edge, so a rep can sanity-check against a
-     dimension they already know. */
-  const edgeLen = (i) => {
-    const a = pts[i], b = pts[(i + 1) % pts.length];
-    return Math.hypot(b.x - a.x, b.y - a.y) * mPerPx * 3.280839895;
-  };
+  const roofSf = shape ? shape.areaSf * slopeFactor(pitch) : 0;
 
   return (
     <Card style={{ marginTop: 12 }}>
@@ -10313,8 +10375,8 @@ function AerialTracer({ job, onAddFacet, toast }) {
       {status === "idle" && (
         <>
           <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 11 }}>
-            Find the roof, tap round one plane, set its pitch. Edges snap
-            square automatically and every point can be dragged.
+            Find the roof, then draw round one plane. Pinch to zoom in as far
+            as you need, drag any corner to adjust, and set the pitch.
           </div>
           {!jobQuery && (
             <Callout label="No address on this job" tone="amber">
@@ -10331,7 +10393,7 @@ function AerialTracer({ job, onAddFacet, toast }) {
               </div>
             </>
           )}
-          <div style={{ marginTop: jobQuery ? 12 : 0, paddingTop: jobQuery ? 12 : 0, borderTop: jobQuery ? `1px solid ${S.line}` : "none" }}>
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${S.line}` }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: S.ink, marginBottom: 6 }}>Or search manually</div>
             <input style={inputStyle} value={manual} onChange={(e) => setManual(e.target.value)}
               placeholder="Address, or paste 39.2896, -84.5230"
@@ -10363,7 +10425,7 @@ function AerialTracer({ job, onAddFacet, toast }) {
         </Callout>
       )}
 
-      {ready && (
+      {lat != null && (
         <>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 9 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -10372,176 +10434,32 @@ function AerialTracer({ job, onAddFacet, toast }) {
               </div>
               <div style={{ fontSize: 10.5, color: S.sub }}>via {via}</div>
             </div>
-            <Btn kind="ghost" small onClick={() => { setStatus("idle"); setPts([]); setManual(found || jobQuery); }}>
+            <Btn kind="ghost" small onClick={() => { setStatus("idle"); clearShape(); setManual(found || jobQuery); }}>
               Search again
             </Btn>
           </div>
 
-          {/* Tile zoom picks the imagery; magnification below decides how
-              big it renders. Two different levers, and conflating them is
-              what made the closest tile zoom look broken. */}
-          <div style={{ display: "flex", gap: 7, marginBottom: 9 }}>
-            <span style={{ fontSize: 11.5, color: S.sub, alignSelf: "center", fontWeight: 700 }}>TILES</span>
-            {[19, 20, 21].map((zz) => (
-              <button key={zz} onClick={() => { setZoom(zz); setPts([]); setLoaded(0); setFailed(0); }} style={{
-                flex: 1, border: `1.5px solid ${zoom === zz ? T.accent : S.line}`,
-                background: zoom === zz ? T.accentSoft : "#fff", color: zoom === zz ? T.accent : S.ink,
-                borderRadius: 999, padding: "7px 4px", fontSize: 12, fontWeight: 700,
-                cursor: "pointer", fontFamily: "inherit",
-              }}>{zz === 19 ? "Wide" : zz === 20 ? "Close" : "Closest"}</button>
-            ))}
-          </div>
-
-          {/* Magnification — the single biggest precision win. */}
-          <div style={{ display: "flex", gap: 7, marginBottom: 9 }}>
-            <span style={{ fontSize: 11.5, color: S.sub, alignSelf: "center", fontWeight: 700 }}>ZOOM</span>
-            {[1, 2, 4].map((mm) => (
-              <button key={mm} onClick={() => { setMag(mm); setOff({ x: 0, y: 0 }); }} style={{
-                flex: 1, border: `1.5px solid ${mag === mm ? T.accent : S.line}`,
-                background: mag === mm ? T.accentSoft : "#fff", color: mag === mm ? T.accent : S.ink,
-                borderRadius: 999, padding: "7px 4px", fontSize: 12.5, fontWeight: 800,
-                cursor: "pointer", fontFamily: "inherit",
-              }}>{mm}×</button>
-            ))}
-          </div>
-
-          <div ref={wrapRef}
-            onClick={addPoint}
-            onMouseMove={dragMove} onMouseUp={drop} onMouseLeave={drop}
-            onTouchMove={dragMove} onTouchEnd={drop}
+          <div ref={hostRef} data-testid="leaflet-map"
             style={{
-              position: "relative", width: "100%", aspectRatio: "1 / 1",
-              borderRadius: 11, overflow: "hidden", border: `1px solid ${S.line}`,
-              background: "#33383D", cursor: "crosshair", touchAction: "none",
-            }}>
-            {/* Tiles and overlay share one transform, so the trace stays
-                locked to the imagery at every magnification. */}
-            <div style={{
-              position: "absolute", inset: 0,
-              transform: `scale(${mag}) translate(${-off.x - (SIZE - view) / 2}px, ${-off.y - (SIZE - view) / 2}px)`,
-              transformOrigin: "0 0",
-              width: SIZE, height: SIZE,
-            }}>
-              {tiles.map((t) => (
-                <img key={t.key} src={source.url(t.z, t.x, t.y)} alt=""
-                  onError={() => setFailed((n) => n + 1)}
-                  onLoad={() => setLoaded((n) => n + 1)}
-                  draggable={false}
-                  style={{
-                    position: "absolute", left: t.left - SIZE / 2, top: t.top - SIZE / 2,
-                    width: TILE, height: TILE, display: "block", userSelect: "none",
-                  }} />
-              ))}
-              <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE}
-                style={{ position: "absolute", inset: 0, overflow: "visible" }}>
-                {pts.length > 1 && (
-                  <polygon points={pts.map((p) => `${p.x},${p.y}`).join(" ")}
-                    fill="rgba(27,109,224,.22)" stroke="#1B6DE0"
-                    strokeWidth={2 / mag} vectorEffect="non-scaling-stroke" />
-                )}
-                {pts.map((p, i) => (
-                  <circle key={i} cx={p.x} cy={p.y} r={7 / mag}
-                    fill={dragIdx === i ? "#1B6DE0" : "#fff"} stroke="#1B6DE0"
-                    strokeWidth={2.5 / mag}
-                    onMouseDown={grab(i)} onTouchStart={grab(i)}
-                    style={{ cursor: "grab", pointerEvents: "all" }} />
-                ))}
-              </svg>
-            </div>
+              width: "100%", aspectRatio: "1 / 1", borderRadius: 11,
+              overflow: "hidden", border: `1px solid ${S.line}`, background: "#33383D",
+            }} />
 
-            {pts.length === 0 && (
-              <svg viewBox="0 0 100 100" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
-                <circle cx="50" cy="50" r="2.5" fill="none" stroke="#fff" strokeWidth="0.5" opacity="0.9" />
-                <circle cx="50" cy="50" r="0.6" fill="#fff" />
-              </svg>
-            )}
-
-            {pts.length === 0 && (
-              <div style={{
-                position: "absolute", left: 0, right: 0, bottom: 0, padding: "8px 11px",
-                background: "rgba(16,24,40,.75)", color: "#fff", fontSize: 11.5, lineHeight: 1.4,
-              }}>
-                Tap each corner of ONE roof plane. Drag any point to adjust it.
-              </div>
-            )}
-            {lastSnap && pts.length > 0 && (
-              <div style={{
-                position: "absolute", right: 8, top: 8, background: "rgba(23,114,69,.92)",
-                color: "#fff", fontSize: 10.5, fontWeight: 800, borderRadius: 999, padding: "4px 10px",
-              }}>{lastSnap === "vertex" ? "snapped to corner" : "squared"}</div>
-            )}
+          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+            Tap the <b>polygon</b> or <b>rectangle</b> tool at the top right of
+            the map, then tap each corner. Corners snap to each other, so
+            adjoining facets share exact points. Pinch to zoom past the imagery
+            limit if you need a bigger target.
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 8 }}>
-            <Btn kind="ghost" small onClick={() => pan(0, -1)}>↑</Btn>
-            <Btn kind="ghost" small onClick={() => pan(0, 1)}>↓</Btn>
-            <Btn kind="ghost" small onClick={() => pan(-1, 0)}>←</Btn>
-            <Btn kind="ghost" small onClick={() => pan(1, 0)}>→</Btn>
-          </div>
-
-          <label style={{ display: "flex", gap: 9, alignItems: "center", marginTop: 10, fontSize: 13, cursor: "pointer" }}>
-            <input type="checkbox" checked={square} onChange={(e) => setSquare(e.target.checked)}
-              style={{ width: 18, height: 18, accentColor: T.accent }} />
-            <span>Snap edges square — keeps corners at 90° or 45°</span>
-          </label>
-
-          <div style={{ display: "flex", gap: 8, marginTop: 9 }}>
-            <Btn kind="ghost" small style={{ flex: 1 }} disabled={!pts.length}
-              onClick={() => { setPts((p) => p.slice(0, -1)); setLastSnap(null); }}>Undo point</Btn>
-            <Btn kind="ghost" small style={{ flex: 1 }} disabled={!pts.length}
-              onClick={() => { setPts([]); setLastSnap(null); }}>Clear</Btn>
-          </div>
-
-          <div style={{ fontSize: 11, color: S.sub, marginTop: 8, textAlign: "center" }}>
-            {viewFt} ft across · {inPerScreenPx.toFixed(1)} in per screen pixel
-            {" · "}
-            <span style={{ color: loaded > 0 ? "#177245" : failed > 0 ? "#B3261E" : S.sub, fontWeight: 700 }}>
-              {loaded > 0 ? `${loaded} tiles` : failed > 0 ? `${failed} failed` : "loading…"}
-            </span>
-          </div>
-
-          {/* Esri publishes zoom 21 only over larger cities. Elsewhere it
-              returns a grey "Map data not yet available" placeholder with a
-              200 status, so onError never fires and nothing can detect it
-              from here. Say so rather than let someone conclude the tool is
-              broken. */}
-          {z >= 21 && (
-            <>
-              <Callout label="Grey tiles at this zoom?" tone="amber">
-                The tile zoom above 20 only exists over larger cities. If the
-                map reads "Map data not yet available", step the tile zoom back
-                — magnification below gets you the same precision without
-                needing sharper imagery.
-              </Callout>
-              <Btn kind="soft" small style={{ width: "100%", marginTop: 8 }}
-                onClick={() => { setZoom(20); setPts([]); setLoaded(0); setFailed(0); }}>
-                Map looks grey? Step back to Close
-              </Btn>
-            </>
-          )}
-          {failed > 2 && loaded > 0 && (
-            <Callout label="Some tiles did not load" tone="amber">
-              Part of the view is missing. Try the other imagery source below,
-              or step the tile zoom back one — coverage is patchier the closer
-              you go.
-            </Callout>
-          )}
-          {loaded === 0 && failed >= tiles.length && tiles.length > 0 && (
-            <Callout label="No imagery loaded" tone="red">
-              Every tile failed outright. Try the other source below. If both
-              fail, the network is blocking the imagery host — a corporate or
-              guest wifi often does, mobile data usually does not.
-            </Callout>
-          )}
-
-          {pts.length >= 3 && (
+          {shape && (
             <div style={{ marginTop: 12, background: S.soft, borderRadius: 11, padding: "12px 13px" }}>
-              <KV k="Plan area traced" v={`${areaSf.toLocaleString(undefined, { maximumFractionDigits: 0 })} sq ft`} />
-              <KV k="Perimeter" v={`${perimFt.toLocaleString(undefined, { maximumFractionDigits: 0 })} ft`} />
+              <KV k="Plan area traced" v={`${shape.areaSf.toLocaleString(undefined, { maximumFractionDigits: 0 })} sq ft`} />
+              <KV k="Perimeter" v={`${shape.perimFt.toLocaleString(undefined, { maximumFractionDigits: 0 })} ft`} />
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5, margin: "8px 0 4px" }}>
-                {pts.map((_, i) => (
+                {shape.edges.map((e, i) => (
                   <span key={i} style={{ fontSize: 10.5, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 6, padding: "3px 7px", color: S.sub }}>
-                    {edgeLen(i).toFixed(1)}′
+                    {e.toFixed(1)}′
                   </span>
                 ))}
               </div>
@@ -10554,26 +10472,29 @@ function AerialTracer({ job, onAddFacet, toast }) {
                 </select>
               </div>
               <KV k="Roof area of this plane" v={`${roofSf.toLocaleString(undefined, { maximumFractionDigits: 0 })} sq ft`} strong />
-              <Btn style={{ width: "100%", marginTop: 11 }} data-testid="add-traced-facet"
-                onClick={() => {
-                  const side = Math.sqrt(areaSf);
-                  onAddFacet({
-                    id: uid("fct"),
-                    name: `Traced plane ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
-                    length: side.toFixed(2), width: side.toFixed(2), pitch,
-                    planArea: areaSf, traced: true,
-                  });
-                  setPts([]); setLastSnap(null);
-                  toast("Plane added to the takeoff");
-                }}>
-                <Plus size={14} /> Add as a facet
-              </Btn>
+              <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
+                <Btn kind="ghost" style={{ flex: 1 }} onClick={clearShape}>Clear</Btn>
+                <Btn style={{ flex: 2 }} data-testid="add-traced-facet"
+                  onClick={() => {
+                    const side = Math.sqrt(shape.areaSf);
+                    onAddFacet({
+                      id: uid("fct"),
+                      name: `Traced plane ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
+                      length: side.toFixed(2), width: side.toFixed(2), pitch,
+                      planArea: shape.areaSf, traced: true,
+                    });
+                    clearShape();
+                    toast("Plane added to the takeoff");
+                  }}>
+                  <Plus size={14} /> Add as a facet
+                </Btn>
+              </div>
             </div>
           )}
 
           <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
             {TILE_SOURCES.map((s2) => (
-              <button key={s2.id} onClick={() => { setSrcId(s2.id); setLoaded(0); setFailed(0); }} style={{
+              <button key={s2.id} onClick={() => setSrcId(s2.id)} style={{
                 flex: 1, border: `1px solid ${srcId === s2.id ? T.accent : S.line}`,
                 background: srcId === s2.id ? T.accentSoft : "#fff",
                 color: srcId === s2.id ? T.accent : S.sub,
@@ -10584,10 +10505,9 @@ function AerialTracer({ job, onAddFacet, toast }) {
           </div>
 
           <div style={{ fontSize: 11, color: S.sub, marginTop: 10, lineHeight: 1.55 }}>
-            Magnifying does not sharpen the imagery, it makes the target bigger
-            — which is what finger accuracy actually depends on. At 4× a tap is
-            worth about a foot, and square snapping removes the rest on any
-            rectangular facet. Imagery: {source.credit}.
+            Area is computed on the ellipsoid by Turf, not on a flat projection,
+            so there is no map-stretch correction to get wrong. Imagery:{" "}
+            {source.credit}.
           </div>
         </>
       )}

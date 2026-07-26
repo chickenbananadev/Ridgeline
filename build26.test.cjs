@@ -65,22 +65,22 @@ ok(src.includes("World_Imagery"), "Esri World Imagery endpoint present");
 ok(src.includes("nationalmap.gov"), "USGS fallback endpoint present");
 ok(src.includes("no API key"), "the licence position is recorded");
 ok(src.includes("battle-tested"), "the choice of a standard tile scheme is explained");
-ok(src.includes("function tileGrid"), "tiles are laid out for the viewport");
-ok(src.includes("EARTH_CIRC"), "Web Mercator resolution constant is used");
+ok(src.includes("import L from \"leaflet\""), "Leaflet lays out the tiles");
+ok(src.includes("import turfArea"), "area comes from Turf, geodesically");
 ok(src.includes("30cm or better"), "imagery resolution is stated");
 
 /* --- the maths is in the code, not just the test --- */
 ok(src.includes("function polygonAreaPx"), "shoelace is implemented");
-ok(src.includes("function lonLatToPixel"), "the projection helper exists");
-ok(src.includes("Math.cos((lat * Math.PI) / 180)) / Math.pow(2, z)"), "latitude is in the resolution formula");
-ok(src.includes("function metresPerPixel"), "metres per pixel is a single shared helper");
+ok(src.includes("map.pm.setGlobalOptions"), "Geoman is configured");
+ok(src.includes("turfArea(gj)"), "area is computed from GeoJSON, so latitude cannot be forgotten");
+ok(src.includes("units: \"feet\""), "edge lengths come back in feet directly");
 ok(src.includes("function AerialTracer"), "the tracer component exists");
 ok(src.includes('data-testid="add-traced-facet"'), "a traced plane can be added to the takeoff");
 ok(src.includes("no overhead image can tell you this"), "the pitch limitation is stated at the point of entry");
 
 /* --- graceful failure: a government server going down must not break the page --- */
-ok(src.includes("onError={() => setFailed"), "a failed tile is counted");
-ok(src.includes("Some tiles did not load"), "and explained rather than left blank");
+ok(src.includes("L.tileLayer("), "tiles are loaded by Leaflet");
+ok(src.includes("maxNativeZoom: source.maxZoom"), "Leaflet is told where real imagery stops");
 ok(src.includes("TILE_SOURCES.map"), "a second imagery source can be selected");
 
 /* --- traced area survives the trip into the takeoff exactly --- */
@@ -111,7 +111,7 @@ ok(close(perFacet, 775 * slopeFactor(6) + 129.17 * slopeFactor(10), 0.01),
   "each facet uses its own slope factor");
 
 ok(src.includes("f.planArea != null"), "the engine prefers a measured plan area");
-ok(src.includes("planArea: areaSf, traced: true"), "the tracer stores the exact area");
+ok(src.includes("planArea: shape.areaSf, traced: true"), "the tracer stores the exact measured area");
 ok(src.includes("clears ? { ...f, [k]: v, planArea: null, traced: false }"),
   "editing a traced facet's dimensions drops the stored area so the edit takes effect");
 

@@ -76,15 +76,15 @@ ok(wrong > traced * 1.6, "ignoring latitude would inflate the area by over 60 pe
 ok(src.includes("const TILE_SOURCES"), "tile sources defined");
 ok(src.includes("server.arcgisonline.com/arcgis/rest/services/World_Imagery"), "Esri World Imagery is wired");
 ok(src.includes("basemap.nationalmap.gov"), "USGS is offered as a fallback source");
-ok(src.includes("function lonLatToPixel"), "projection helper exists");
-ok(src.includes("function metresPerPixel"), "resolution helper exists");
-ok(src.includes("function tileGrid"), "the grid builder exists");
+ok(src.includes("L.map("), "Leaflet owns the projection");
+ok(src.includes("turfLength("), "lengths come from Turf");
+ok(src.includes("L.tileLayer"), "Leaflet builds the tile grid");
 ok(src.includes("no API key"), "the licensing position is recorded");
-ok(src.includes("const pan ="), "the view can be nudged when the roof sits off-centre");
+ok(src.includes("zoomControl: true"), "Leaflet provides zoom controls");
 ok(src.includes('data-testid="locate-roof"'), "the locate control is reachable");
 ok(src.includes('data-testid="add-traced-facet"'), "a traced plane can be added");
 ok(src.includes("no overhead image can tell you this"), "the pitch limit is stated at the point of entry");
-ok(src.includes("Some tiles did not load"), "missing tiles are explained and a fallback offered");
+ok(src.includes("TILE_SOURCES.map"), "a fallback imagery source is offered");
 ok(!src.includes("ImageServer/exportImage"), "the fragile per-state exportImage endpoints are gone");
 ok(!src.includes("const AERIAL_SOURCES"), "the superseded source map is gone");
 ok(!src.includes("function aerialRequest"), "the superseded request builder is gone");
@@ -101,12 +101,10 @@ ok(src.includes('Which property?'), 'the screen can run with or without a job');
 ok(src.includes('Planes traced'), 'traced planes accumulate on the screen');
 
 /* --- zoom coverage: the silent-grey-tile failure --- */
-ok(src.includes("const [zoom, setZoom] = useState(20)"),
-  "the default zoom is 20, which has near-universal US coverage");
-ok(src.includes("grey placeholder with") || src.includes("Map data not yet available"),
-  "the placeholder-tile behaviour is documented in the code");
-ok(src.includes("Grey tiles at this zoom?"), "the user is warned before concluding it is broken");
-ok(src.includes("Step back to Close"), "there is a one-tap escape from a grey map");
+ok(src.includes("zoom: 20, maxZoom: 22"), "the map opens at zoom 20 and allows over-zoom past it");
+ok(src.includes("maxNativeZoom"), "over-zoom is handled by Leaflet rather than by fetching missing tiles");
+ok(src.includes("Pinch to zoom past the imagery"), "over-zooming past the imagery limit is explained");
+ok(src.includes("maxZoom: 22"), "the map can zoom past native imagery for a bigger target");
 
 /* zoom 20 has to be good enough to trace with, or defaulting there is wrong */
 const mppAt = (lat, z) => (E * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, z);

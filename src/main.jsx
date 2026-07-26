@@ -1,6 +1,8 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
+import "leaflet/dist/leaflet.css";
+import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import App from "../ridgeline.jsx";
 
 /* Env is read here, in a real module, and handed to the app on window.

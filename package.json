@@ -36,10 +36,15 @@
     "test:build26": "node build26.test.cjs",
     "test:build27": "node build27.test.cjs",
     "test:build28": "node build28.test.cjs",
-    "test:build29": "node build29.test.cjs"
+    "test:build29": "node build29.test.cjs",
+    "bundle:test": "npx esbuild ridgeline.jsx --loader:.jsx=jsx --jsx=automatic --bundle --external:react --external:react-dom --external:lucide-react --alias:leaflet=./test-stubs/leaflet.cjs --alias:@geoman-io/leaflet-geoman-free=./test-stubs/geoman.cjs --format=cjs --outfile=app.test.cjs"
   },
   "dependencies": {
+    "@geoman-io/leaflet-geoman-free": "^2.18.3",
     "@supabase/supabase-js": "^2.45.0",
+    "@turf/area": "^7.2.0",
+    "@turf/length": "^7.2.0",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.383.0",
     "pdfjs-dist": "^3.11.174",
     "react": "^18.3.1",
