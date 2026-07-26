@@ -117,5 +117,17 @@ ok(src.includes("planArea: areaSf, traced: true"), "the tracer stores the exact 
 ok(src.includes("clears ? { ...f, [k]: v, planArea: null, traced: false }"),
   "editing a traced facet's dimensions drops the stored area so the edit takes effect");
 
+/* --- the two bugs that made the tracer look inert --- */
+ok(src.includes("setLon(Number(h.lng))"),
+  "the tracer reads lng, the field geoAutocomplete actually returns");
+ok(!src.includes("setLon(h.lon)"), "the wrong field name is gone");
+ok(src.includes("job.zip ? stateForZip(job.zip)"),
+  "state resolves from the zip rather than a regex on the address");
+
+/* --- discoverability --- */
+ok(src.includes("Open roof takeoff"), "Measurements points at the tracer");
+ok(src.includes("const HINTS = {"), "collapsed sections carry a hint");
+ok(src.includes('takeoff: "Trace on aerial imagery"'), "the takeoff hint names tracing");
+
 if (fails) { console.log("\nbuild 26: " + fails + " FAILED"); process.exit(1); }
 console.log("build 26 tests passed");

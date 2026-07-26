@@ -5586,7 +5586,8 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "signatures": return <TabSignatures job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />;
               case "checklist": return <TabChecklist job={job} mut={mut} toast={toast} />;
               case "ventilation": return <TabVentilation job={job} mut={mut} toast={toast} />;
-              case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
+              case "measure": return <TabMeasure job={job} mut={mut} toast={toast}
+                onGoTakeoff={() => setOpen((o) => ({ ...o, takeoff: true }))} />;
               case "takeoff": return <TabTakeoff job={job} mut={mut} toast={toast} brand={brand} />;
               case "materials": return <TabMaterials job={job} mut={mut} toast={toast} />;
               case "estimate": return <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
@@ -5616,6 +5617,14 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
             if (id === "handoff" || id === "changeorders" || id === "signatures" || id === "takeoff") return true;
             return allowed.has(id);
           });
+          /* A few sections carry a hint in the header, because a
+             collapsed accordion hides the one thing someone is hunting
+             for. */
+          const HINTS = {
+            takeoff: "Trace on aerial imagery",
+            claim: "Carrier money and supplements",
+            signatures: "Sign and countersign",
+          };
           return relevant.map(([id, label, Icon]) => {
             const isOpen = !!open[id];
             return (
@@ -5629,7 +5638,12 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
                   textAlign: "left", padding: "14px 15px", fontFamily: "inherit",
                 }}>
                   <Icon size={17} color={T.accent} />
-                  <span style={{ flex: 1, fontSize: 15.5, fontWeight: 800, color: S.ink }}>{label}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 15.5, fontWeight: 800, color: S.ink }}>{label}</span>
+                    {HINTS[id] && !isOpen && (
+                      <span style={{ display: "block", fontSize: 11.5, color: S.sub, marginTop: 1 }}>{HINTS[id]}</span>
+                    )}
+                  </span>
                   {isOpen ? <ChevronUp size={17} color={S.sub} /> : <ChevronDown size={17} color={S.sub} />}
                 </button>
                 {isOpen && (
@@ -10015,21 +10029,33 @@ function AerialTracer({ job, onAddFacet, toast }) {
   const [usedFallback, setUsedFallback] = useState(false);
   const wrapRef = useRef(null);
 
-  const state = (job.state || (job.address || "").match(/\b(OH|KY|IL)\b/)?.[1] || "").toUpperCase();
+  /* Resolve the state from the job, then the zip, then the address text.
+     The zip is the reliable one — an address string often omits the
+     state entirely. */
+  const state = String(
+    job.state
+    || (job.zip ? stateForZip(job.zip) : "")
+    || ((job.address || "").match(/\b(OH|KY|IL)\b/) || [])[1]
+    || ""
+  ).toUpperCase();
   const source = AERIAL_SOURCES[state] || null;
   const PX = 640;
   const req = lat != null && lon != null ? aerialRequest(lat, lon, span, PX, state) : null;
 
   const locate = async () => {
     setStatus("locating"); setErr(""); setImgFailed(false); setUsedFallback(false);
-    const hits = await geoAutocomplete(job.address);
+    /* Geoapify returns lon as `lng` through this helper. Reading `lon`
+       silently produced undefined, which left the window unbuilt and
+       made the button look inert. */
+    const query = [job.address, job.zip].filter(Boolean).join(" ");
+    const hits = await geoAutocomplete(query);
     const h = (hits || [])[0];
-    if (!h || h.lat == null) {
+    if (!h || h.lat == null || h.lng == null) {
       setStatus("idle");
-      setErr("Could not place that address. Check it on the Overview section.");
+      setErr("Could not place that address. Check the address and zip on the Overview section.");
       return;
     }
-    setLat(h.lat); setLon(h.lon); setPts([]); setStatus("ready");
+    setLat(Number(h.lat)); setLon(Number(h.lng)); setPts([]); setStatus("ready");
   };
 
   const addPoint = (e) => {
@@ -10050,9 +10076,10 @@ function AerialTracer({ job, onAddFacet, toast }) {
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Trace from aerial</CardTitle>
         <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
-          Free public-domain aerial imagery is available for Ohio and Kentucky
-          jobs. This job's state is not set, or is outside those two — set the
-          state on the job and it will appear here.
+          Free public-domain aerial imagery is available for Ohio and Kentucky.
+          {state
+            ? ` This job resolves to ${state}, which does not publish open imagery — measure on site or order an aerial report.`
+            : " This job has no state or zip on record, so there is nothing to look up. Add the zip on the Overview section."}
         </div>
       </Card>
     );
@@ -10526,7 +10553,7 @@ function TabTakeoff({ job, mut, toast, brand }) {
   );
 }
 
-function TabMeasure({ job, mut, toast }) {
+function TabMeasure({ job, mut, toast, onGoTakeoff }) {
   const m = job.measurements;
   const set = (k) => (e) => mut((j) => ({ ...j, measurements: { ...j.measurements, [k]: e.target.value } }));
   const rows = [
@@ -10558,6 +10585,20 @@ function TabMeasure({ job, mut, toast }) {
       </Card>
       <MeasureImport toast={toast}
         onApply={(vals) => mut((j) => ({ ...j, measurements: { ...j.measurements, ...vals } }))} />
+
+      {/* The tracer lives in Roof takeoff, but this is where people come
+          looking to measure something, so say so here. */}
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Measure it yourself</CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
+          No report to import? The <b>Roof takeoff</b> section below traces the
+          roof on free state aerial imagery and works out squares, waste and
+          every linear quantity from it.
+        </div>
+        <Btn kind="soft" style={{ width: "100%", marginTop: 11 }} onClick={() => onGoTakeoff && onGoTakeoff()}>
+          <Layers size={14} /> Open roof takeoff
+        </Btn>
+      </Card>
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
         <Btn kind="ghost" style={{ flex: 1 }} onClick={() => toast("Attach the measurement PDF under Files")}>
           <Upload size={15} /> Upload report
