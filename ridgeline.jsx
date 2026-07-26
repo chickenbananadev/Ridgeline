@@ -1239,6 +1239,7 @@ const PORTAL_SECTIONS = [
   ["invoice", "Invoice & balance"],
   ["documents", "Documents"],
   ["photos", "Project photos"],
+  ["sign", "Documents to sign"],
   ["requests", "Quotes & future projects"],
   ["messages", "Messages"],
   ["yourinfo", "Your contact details"],
@@ -1260,14 +1261,14 @@ const DEFAULT_PORTAL_SETTINGS = {
   /* Every section is switchable, not just the document ones. A company
      that does not want a tracker or a messaging thread in front of its
      customers can turn them off. */
-  tracker: true, updates: true, messages: true, yourinfo: true, contact: true, requests: true,
+  tracker: true, updates: true, messages: true, yourinfo: true, contact: true, requests: true, sign: true,
 };
 /* Section id -> settings key. Most match by name; the ones that predate
    the registry keep their original keys so saved jobs are unaffected. */
 const PORTAL_SECTION_KEY = {
   tracker: "tracker", rep: "showRep", updates: "updates", estimate: "estimate",
   contract: "contract", invoice: "invoice", documents: "documents", photos: "photos",
-  requests: "requests", messages: "messages", yourinfo: "yourinfo", contact: "contact",
+  requests: "requests", messages: "messages", yourinfo: "yourinfo", contact: "contact", sign: "sign",
 };
 function portalSectionOn(portal, sid) {
   const key = PORTAL_SECTION_KEY[sid];
@@ -5392,6 +5393,7 @@ const JOB_SECTIONS = [
   ["claim", "Insurance claim", Shield],
   ["handoff", "Sold & handoff", Share2],
   ["changeorders", "Change orders", ScrollText],
+  ["signatures", "Signatures", PenLine],
   ["checklist", "Inspection checklist", CheckCircle2],
   ["ventilation", "Ventilation", Wrench],
   ["measure", "Measurements", Package],
@@ -5581,6 +5583,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "handoff": return <TabHandoff job={job} mut={mut} toast={toast} isAdmin={isAdmin}
                 currentUser={currentUser} stages={stages} onMoveStage={onMoveStage} />;
               case "changeorders": return <TabChangeOrders job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />;
+              case "signatures": return <TabSignatures job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />;
               case "checklist": return <TabChecklist job={job} mut={mut} toast={toast} />;
               case "ventilation": return <TabVentilation job={job} mut={mut} toast={toast} />;
               case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
@@ -5609,7 +5612,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           const relevant = JOB_SECTIONS.filter(([id]) => {
             if (!featureOn(features, id)) return false;
             if (id === "claim") return job.claimType === "Insurance";
-            if (id === "handoff" || id === "changeorders") return true;
+            if (id === "handoff" || id === "changeorders" || id === "signatures") return true;
             return allowed.has(id);
           });
           return relevant.map(([id, label, Icon]) => {
@@ -6669,6 +6672,55 @@ function buildPortalSnapshot(job, brand, token) {
         phone: job.repOverride?.phone || job.assigneeContact?.phone || "",
         title: job.repOverride?.title || job.assigneeContact?.title || "",
       } : null,
+      /* Anything awaiting the homeowner's signature, with the exact
+         content they will see so the hash binds to it. */
+      signDocs: (() => {
+        const out = [];
+        const est = job.estimate;
+        if (est && (est.items || []).length && portal.estimate) {
+          out.push({
+            type: "estimate", id: est.number || "est", title: `Estimate ${est.number || ""}`.trim(),
+            subtitle: est.date || "",
+            lines: (est.items || []).map((it) => ({
+              label: `${it.desc} — ${it.qty} ${it.unit}`,
+              value: money(num(it.qty) * num(it.price)),
+            })),
+            total: estimateTotal(est),
+            terms: "Accepting this estimate authorises the work described above at the price shown. It is not a contract until countersigned by us.",
+            snapshot: { number: est.number, date: est.date, items: est.items, total: estimateTotal(est) },
+          });
+        }
+        const con = job.contract;
+        if (con && con.price && con.status !== "Signed" && portal.contract) {
+          out.push({
+            type: "contract", id: con.number || "con", title: `Contract ${con.number || ""}`.trim(),
+            subtitle: job.address,
+            lines: [
+              { label: "Property", value: job.address },
+              { label: "Scope", value: (job.intake?.workRequested || []).join(", ") || "Roof replacement" },
+              { label: "Contract price", value: money(num(con.price)) },
+            ],
+            total: num(con.price),
+            terms: "By signing you enter into a binding agreement for the work described, at the price shown. You may cancel within three business days under Ohio Revised Code Chapter 1345 without penalty.",
+            snapshot: { number: con.number, price: con.price, address: job.address },
+          });
+        }
+        (job.changeOrders || []).filter((c) => c.status === "Sent").forEach((c) => {
+          const lines = (c.lines || []);
+          out.push({
+            type: "change_order", id: c.id, title: c.title || "Change order",
+            subtitle: c.reason,
+            lines: lines.map((l) => ({
+              label: `${l.desc} — ${qtyFmt(l.qty)} ${l.unit || ""}`.trim(),
+              value: money(lineTotal(l.qty, l.price)),
+            })),
+            total: coTotal(c),
+            terms: "This change order amends your original agreement. All other terms remain unchanged.",
+            snapshot: { id: c.id, title: c.title, lines, total: coTotal(c) },
+          });
+        });
+        return out;
+      })(),
       customer: {
         name: job.contact?.name || job.name || "",
         phone: job.contact?.phone || job.phone || "",
@@ -6698,6 +6750,384 @@ function buildPortalSnapshot(job, brand, token) {
    team approves it from the job's Portal tab. A customer correcting a
    typo should not be able to silently repoint the number we dispatch
    and bill against. */
+/* ==================================================================
+   ELECTRONIC SIGNATURES
+
+   What makes one hold up under ESIGN and UETA is not the picture of a
+   name. It is three things: the signer clearly intended to sign, they
+   agreed to transact electronically, and the signature is tied to the
+   exact document they saw. This captures all three, and records the
+   time and IP on the server rather than trusting the browser — a
+   client-supplied IP can be edited in the console, so it would be
+   decoration rather than evidence.
+================================================================== */
+
+/* A stable fingerprint of what was signed. Not cryptographic — it is a
+   change detector, so a later "that is not what I agreed to" can be
+   answered by comparing hashes. Kept dependency-free and deterministic
+   on purpose. */
+function stableStringify(v) {
+  /* Key order must not affect the hash, and nesting must be included.
+     JSON.stringify with a replacer array silently drops nested keys
+     that are not in the list, which would let a line-item change slip
+     through with the same hash — exactly the case this exists to
+     catch. */
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(stableStringify).join(",") + "]";
+  return "{" + Object.keys(v).sort()
+    .map((k) => JSON.stringify(k) + ":" + stableStringify(v[k]))
+    .join(",") + "}";
+}
+function docHash(obj) {
+  const str = stableStringify(obj === undefined ? null : obj);
+  let h1 = 0x811c9dc5, h2 = 0x01000193;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
+    h2 = Math.imul(h2 + c, 0x85ebca6b) >>> 0;
+  }
+  return (h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0")).toUpperCase();
+}
+
+const SIGNATURE_FONTS = [
+  ["'Brush Script MT', 'Segoe Script', cursive", "Script"],
+  ["'Snell Roundhand', 'Apple Chancery', cursive", "Formal"],
+  ["Georgia, 'Times New Roman', serif", "Classic"],
+];
+
+/* Named distinctly from the older SignaturePad sheet above, which is a
+   modal used for work-order sign-off. This one is an inline field. */
+function SignatureField({ label = "Sign here", value, onChange, accent = "#1B6DE0" }) {
+  const [mode, setMode] = useState("draw");
+  const [typed, setTyped] = useState("");
+  const [font, setFont] = useState(SIGNATURE_FONTS[0][0]);
+  const canvasRef = useRef(null);
+  const drawing = useRef(false);
+  const hasInk = useRef(false);
+
+  /* Canvas is sized to its rendered box and scaled for device pixel
+     ratio, otherwise a signature drawn on a phone comes out blurry and
+     offset from the finger. */
+  useEffect(() => {
+    if (mode !== "draw") return;
+    const c = canvasRef.current;
+    if (!c) return;
+    const rect = c.getBoundingClientRect();
+    const dpr = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
+    c.width = Math.max(1, Math.round(rect.width * dpr));
+    c.height = Math.max(1, Math.round(rect.height * dpr));
+    const ctx = c.getContext("2d");
+    ctx.scale(dpr, dpr);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#101828";
+  }, [mode]);
+
+  const pos = (e) => {
+    const c = canvasRef.current;
+    const rect = c.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX - rect.left, y: t.clientY - rect.top };
+  };
+  const start = (e) => {
+    e.preventDefault();
+    const ctx = canvasRef.current.getContext("2d");
+    const p = pos(e);
+    ctx.beginPath(); ctx.moveTo(p.x, p.y);
+    drawing.current = true;
+  };
+  const move = (e) => {
+    if (!drawing.current) return;
+    e.preventDefault();
+    const ctx = canvasRef.current.getContext("2d");
+    const p = pos(e);
+    ctx.lineTo(p.x, p.y); ctx.stroke();
+    hasInk.current = true;
+  };
+  const end = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    if (hasInk.current && canvasRef.current) {
+      onChange({ type: "draw", data: canvasRef.current.toDataURL("image/png") });
+    }
+  };
+  const clear = () => {
+    const c = canvasRef.current;
+    if (c) {
+      const ctx = c.getContext("2d");
+      ctx.clearRect(0, 0, c.width, c.height);
+    }
+    hasInk.current = false;
+    setTyped("");
+    onChange(null);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 9 }}>
+        {[["draw", "Draw"], ["type", "Type"]].map(([id, lbl]) => (
+          <button key={id} onClick={() => { clear(); setMode(id); }} style={{
+            flex: 1, border: `1.5px solid ${mode === id ? accent : "#E3E6EA"}`,
+            background: mode === id ? "#EAF1FD" : "#fff", color: mode === id ? accent : "#101828",
+            borderRadius: 999, padding: "8px 12px", fontSize: 13, fontWeight: 800,
+            cursor: "pointer", fontFamily: "inherit",
+          }}>{lbl}</button>
+        ))}
+      </div>
+
+      {mode === "draw" ? (
+        <div style={{ position: "relative" }}>
+          <canvas ref={canvasRef}
+            onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
+            onTouchStart={start} onTouchMove={move} onTouchEnd={end}
+            style={{
+              width: "100%", height: 150, border: "1.5px dashed #C7CBD1", borderRadius: 11,
+              background: "#fff", touchAction: "none", display: "block", cursor: "crosshair",
+            }} />
+          {!value && (
+            <div style={{
+              position: "absolute", inset: 0, display: "grid", placeItems: "center",
+              pointerEvents: "none", color: "#C7CBD1", fontSize: 13,
+            }}>{label}</div>
+          )}
+        </div>
+      ) : (
+        <div>
+          <input
+            style={{
+              width: "100%", boxSizing: "border-box", padding: "14px 13px", fontSize: 26,
+              border: "1.5px dashed #C7CBD1", borderRadius: 11, background: "#fff",
+              color: "#101828", outline: "none", fontFamily: font, textAlign: "center",
+            }}
+            value={typed} placeholder="Type your full name"
+            onChange={(e) => {
+              const v = e.target.value;
+              setTyped(v);
+              onChange(v.trim() ? { type: "type", data: v.trim(), font } : null);
+            }} />
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            {SIGNATURE_FONTS.map(([f, name]) => (
+              <button key={name} onClick={() => {
+                setFont(f);
+                if (typed.trim()) onChange({ type: "type", data: typed.trim(), font: f });
+              }} style={{
+                flex: 1, border: `1px solid ${font === f ? accent : "#E3E6EA"}`,
+                background: font === f ? "#EAF1FD" : "#fff", borderRadius: 8,
+                padding: "7px 4px", fontSize: 15, fontFamily: f, cursor: "pointer",
+                color: "#101828",
+              }}>{name}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 11.5, color: "#667085", marginTop: 8, lineHeight: 1.5 }}>
+            A typed name is a legally valid electronic signature under the
+            ESIGN Act, the same as a drawn one, provided you intend it as
+            your signature.
+          </div>
+        </div>
+      )}
+
+      <button onClick={clear} style={{
+        border: "none", background: "none", color: "#667085", fontSize: 12.5,
+        cursor: "pointer", padding: "8px 0 0", fontFamily: "inherit",
+      }}>Clear</button>
+    </div>
+  );
+}
+
+/* Render a stored signature back out, in either form. */
+function SignatureMark({ sig, height = 54 }) {
+  if (!sig) return null;
+  if (sig.signature_type === "draw" || sig.type === "draw") {
+    return <img src={sig.signature_data || sig.data} alt="Signature"
+      style={{ height, display: "block", maxWidth: "100%", objectFit: "contain" }} />;
+  }
+  return (
+    <div style={{
+      fontFamily: sig.font || SIGNATURE_FONTS[0][0], fontSize: height * 0.55,
+      color: "#101828", lineHeight: 1.2, padding: "4px 0",
+    }}>{sig.signature_data || sig.data}</div>
+  );
+}
+
+/* The consent and intent block. Wording matters here: ESIGN requires
+   the signer to affirmatively agree to transact electronically, and
+   intent has to be demonstrable rather than assumed from a click. */
+function SignConsent({ checked, onChange, what, accent = "#1B6DE0" }) {
+  return (
+    <label style={{
+      display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer",
+      background: "#F7F8FA", borderRadius: 10, padding: "11px 13px",
+    }}>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)}
+        style={{ width: 18, height: 18, accentColor: accent, marginTop: 1, flexShrink: 0 }} />
+      <span style={{ fontSize: 12.5, color: "#101828", lineHeight: 1.55 }}>
+        I agree to sign {what} electronically, and I intend my electronic
+        signature below to have the same legal effect as a handwritten one.
+        I understand a copy will be kept with the date, time and network
+        address of this signature.
+      </span>
+    </label>
+  );
+}
+
+/* Documents awaiting the homeowner's signature, and the ones already
+   signed. The signature row is written by the portal itself so the
+   server stamps the time and IP; nothing about the timestamp comes
+   from the customer's device. */
+function PortalSignCenter({ token, jobId, customer, docs, accent, brand }) {
+  const [openDoc, setOpenDoc] = useState(null);
+  const [sig, setSig] = useState(null);
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [signed, setSigned] = useState([]);
+
+  useEffect(() => {
+    const db = DB();
+    if (!db || !token) return;
+    let alive = true;
+    db.from("crm_signatures").select("*").eq("portal_token", token)
+      .is("voided_at", null).order("signed_at", { ascending: false })
+      .then(({ data }) => { if (alive) setSigned(data || []); });
+    return () => { alive = false; };
+  }, [token]);
+
+  const isSigned = (d) => signed.some((s) => s.doc_type === d.type && String(s.doc_id) === String(d.id) && s.signer_role === "customer");
+
+  const submit = async () => {
+    if (!openDoc || !sig || !consent) return;
+    const db = DB();
+    if (!db) { setErr("No connection. Please try again in a moment."); return; }
+    setBusy(true); setErr("");
+    const row = {
+      id: uid("sig"),
+      job_id: jobId,
+      doc_type: openDoc.type,
+      doc_id: String(openDoc.id || ""),
+      doc_title: openDoc.title,
+      doc_hash: docHash(openDoc.snapshot),
+      doc_snapshot: openDoc.snapshot,
+      signer_role: "customer",
+      signer_name: customer.name || "Customer",
+      signer_email: customer.email || null,
+      signature_type: sig.type,
+      signature_data: sig.type === "type" ? sig.data : sig.data,
+      consent: true,
+      intent_text: `Signed ${openDoc.title} electronically with intent to be bound.`,
+      portal_token: token,
+      /* signed_at, signer_ip and user_agent are deliberately omitted —
+         the database fills them from the real request. */
+    };
+    const { error } = await db.from("crm_signatures").insert(row);
+    setBusy(false);
+    if (error) { setErr("That did not save. Please try again, or call us and we will sort it out."); return; }
+    setSigned((prev) => [{ ...row, signed_at: new Date().toISOString() }, ...prev]);
+    setOpenDoc(null); setSig(null); setConsent(false);
+  };
+
+  const pending = (docs || []).filter((d) => !isSigned(d));
+  const done = (docs || []).filter((d) => isSigned(d));
+  if (!docs || !docs.length) return null;
+
+  return (
+    <Card>
+      <CardTitle right={pending.length ? <Chip tone="amber">{pending.length} to sign</Chip> : <Chip tone="green">All signed</Chip>}>
+        Documents to sign
+      </CardTitle>
+
+      {pending.length === 0 && (
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+          Nothing needs your signature right now.
+        </div>
+      )}
+
+      {pending.map((d) => (
+        <div key={`${d.type}-${d.id}`} style={{ display: "flex", gap: 10, alignItems: "center", padding: "11px 0", borderTop: `1px solid ${S.line}` }}>
+          <FileText size={18} color={accent} style={{ flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{d.title}</div>
+            {d.subtitle && <div style={{ fontSize: 12, color: S.sub, marginTop: 1 }}>{d.subtitle}</div>}
+          </div>
+          <Btn small style={{ background: accent, borderColor: accent }}
+            onClick={() => { setOpenDoc(d); setSig(null); setConsent(false); setErr(""); }}>
+            Review &amp; sign
+          </Btn>
+        </div>
+      ))}
+
+      {done.map((d) => {
+        const s = signed.find((x) => x.doc_type === d.type && String(x.doc_id) === String(d.id) && x.signer_role === "customer");
+        return (
+          <div key={`done-${d.type}-${d.id}`} style={{ padding: "11px 0", borderTop: `1px solid ${S.line}` }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <CheckCircle2 size={18} color="#177245" style={{ flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{d.title}</div>
+                <div style={{ fontSize: 11.5, color: S.sub, marginTop: 1 }}>
+                  Signed {s && s.signed_at ? String(s.signed_at).slice(0, 10) : ""}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      <Sheet open={!!openDoc} onClose={() => setOpenDoc(null)} title={openDoc ? openDoc.title : "Sign"} wide
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setOpenDoc(null)}>Cancel</Btn>
+            <Btn style={{ flex: 2, background: accent, borderColor: accent }}
+              disabled={!sig || !consent || busy} onClick={submit} data-testid="portal-sign">
+              {busy ? "Signing…" : "Sign document"}
+            </Btn>
+          </div>
+        }>
+        {openDoc && (
+          <div>
+            {/* What they are agreeing to, in full, above the signature. */}
+            <div style={{ border: `1px solid ${S.line}`, borderRadius: 11, padding: 14, marginBottom: 14, background: "#fff" }}>
+              {(openDoc.lines || []).map((l, i2) => (
+                <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5, padding: "6px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }}>
+                  <span style={{ color: S.ink }}>{l.label}</span>
+                  <span style={{ color: S.ink, fontWeight: 600, whiteSpace: "nowrap" }}>{l.value}</span>
+                </div>
+              ))}
+              {openDoc.total != null && (
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: `2px solid ${S.line}` }}>
+                  <span style={{ fontSize: 14.5, fontWeight: 800, color: S.ink }}>Total</span>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: S.ink }}>{money(openDoc.total)}</span>
+                </div>
+              )}
+            </div>
+            {openDoc.terms && (
+              <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.6, marginBottom: 14 }}>{openDoc.terms}</div>
+            )}
+
+            <div style={{ fontSize: 13, fontWeight: 700, color: S.ink, marginBottom: 8 }}>Your signature</div>
+            <SignatureField value={sig} onChange={setSig} accent={accent}
+              label={`Sign as ${customer.name || "the homeowner"}`} />
+
+            <div style={{ marginTop: 14 }}>
+              <SignConsent checked={consent} onChange={setConsent} accent={accent}
+                what={openDoc.type === "change_order" ? "this change order" : `this ${openDoc.type.replace("_", " ")}`} />
+            </div>
+
+            {err && <Callout label="Could not sign" tone="red">{err}</Callout>}
+
+            <div style={{ fontSize: 11, color: S.sub, marginTop: 12, lineHeight: 1.55 }}>
+              The date, time and network address of your signature are recorded
+              by our system when you sign, not by your device, so the record
+              cannot be altered afterwards. Document reference{" "}
+              <b>{docHash(openDoc.snapshot)}</b>.
+            </div>
+          </div>
+        )}
+      </Sheet>
+    </Card>
+  );
+}
+
 function PortalContactCard({ token, jobId, customer, accent }) {
   const [editing, setEditing] = useState(false);
   const [f, setF] = useState({ name: customer.name || "", phone: customer.phone || "", email: customer.email || "" });
@@ -6963,6 +7393,11 @@ function PublicPortal({ token }) {
               <CardTitle>Messages</CardTitle>
               <PortalThread token={token} meRole="customer" meName={d.name} accent={prim} />
             </Card>
+          );
+
+          if (sid === "sign") return wrap(
+            <PortalSignCenter token={token} jobId={d.jobId || null} customer={d.customer || {}}
+              docs={d.signDocs || []} accent={prim} brand={d} />
           );
 
           if (sid === "yourinfo") return wrap(
@@ -8443,6 +8878,173 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand }) {
         })}
         <Btn kind="soft" small style={{ width: "100%" }} onClick={add}><Plus size={13} /> Add change order</Btn>
       </Card>
+    </>
+  );
+}
+
+/* Company-side signing and the signature record for a job. Both sides
+   land in the same table, so a fully executed document is simply two
+   rows against the same doc_hash. */
+function TabSignatures({ job, mut, toast, currentUser, brand }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [signing, setSigning] = useState(null);
+  const [sig, setSig] = useState(null);
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const load = () => {
+    const db = DB();
+    if (!db) { setLoading(false); return; }
+    db.from("crm_signatures").select("*").eq("job_id", job.id)
+      .order("signed_at", { ascending: false })
+      .then(({ data }) => { setRows(data || []); setLoading(false); },
+            () => setLoading(false));
+  };
+  useEffect(load, [job.id]); // eslint-disable-line
+
+  /* A document is fully executed when both sides have signed the same
+     hash. Comparing hashes rather than ids means a document edited
+     after the customer signed shows as unexecuted, which is correct. */
+  const customerSigs = rows.filter((r) => r.signer_role === "customer" && !r.voided_at);
+  const companySigs = rows.filter((r) => r.signer_role === "company" && !r.voided_at);
+  const awaitingUs = customerSigs.filter((c) => !companySigs.some((k) => k.doc_hash === c.doc_hash));
+
+  const countersign = async () => {
+    if (!signing || !sig || !consent) return;
+    const db = DB();
+    if (!db) { setErr("No connection."); return; }
+    setBusy(true); setErr("");
+    const row = {
+      id: uid("sig"), job_id: job.id,
+      doc_type: signing.doc_type, doc_id: signing.doc_id, doc_title: signing.doc_title,
+      doc_hash: signing.doc_hash, doc_snapshot: signing.doc_snapshot,
+      signer_role: "company", signer_name: (currentUser || {}).name || "Company",
+      signer_email: (currentUser || {}).email || null,
+      signature_type: sig.type, signature_data: sig.data,
+      consent: true,
+      intent_text: `Countersigned ${signing.doc_title} on behalf of ${brand?.name || "the company"}.`,
+      portal_token: signing.portal_token || null,
+    };
+    const { error } = await db.from("crm_signatures").insert(row);
+    setBusy(false);
+    if (error) { setErr("Could not save the countersignature. Check migration 014 has run."); return; }
+    /* Contracts flip to Signed once both sides are on the same hash. */
+    if (signing.doc_type === "contract") {
+      mut((j) => ({ ...j, contract: { ...(j.contract || {}), status: "Signed", signedAt: todayIso() } }));
+    }
+    toast("Countersigned");
+    setSigning(null); setSig(null); setConsent(false);
+    load();
+  };
+
+  const voidSig = async (r) => {
+    const db = DB();
+    if (!db) return;
+    await db.from("crm_signatures")
+      .update({ voided_at: new Date().toISOString(), voided_by: (currentUser || {}).name || "" })
+      .eq("id", r.id);
+    toast("Signature voided — the record is kept");
+    load();
+  };
+
+  return (
+    <>
+      {awaitingUs.length > 0 && (
+        <Card style={{ borderLeft: "4px solid #E8B931" }}>
+          <CardTitle right={<Chip tone="amber">{awaitingUs.length}</Chip>}>Waiting on our signature</CardTitle>
+          {awaitingUs.map((r) => (
+            <div key={r.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 0", borderTop: `1px solid ${S.line}` }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{r.doc_title}</div>
+                <div style={{ fontSize: 11.5, color: S.sub }}>
+                  {r.signer_name} signed {String(r.signed_at || "").slice(0, 10)}
+                </div>
+              </div>
+              <Btn small onClick={() => { setSigning(r); setSig(null); setConsent(false); setErr(""); }}
+                data-testid="countersign">Countersign</Btn>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      <Card style={{ marginTop: awaitingUs.length ? 12 : 0 }}>
+        <CardTitle right={<Chip tone="gray">{rows.length}</Chip>}>Signature record</CardTitle>
+        {loading && <div style={{ fontSize: 13, color: S.sub }}>Loading…</div>}
+        {!loading && rows.length === 0 && (
+          <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+            Nothing signed yet. Estimates, contracts and sent change orders
+            appear in the customer's portal for signing, and land here with
+            the time, date and network address recorded by the server.
+          </div>
+        )}
+        {rows.map((r) => (
+          <div key={r.id} style={{
+            border: `1px solid ${S.line}`, borderRadius: 11, padding: 13, marginTop: 10,
+            opacity: r.voided_at ? 0.55 : 1,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{r.doc_title}</div>
+                <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2 }}>
+                  {r.signer_role === "customer" ? "Homeowner" : "Company"} · {r.signer_name}
+                </div>
+              </div>
+              <Chip tone={r.voided_at ? "red" : r.signer_role === "customer" ? "blue" : "green"}>
+                {r.voided_at ? "Voided" : r.signer_role === "customer" ? "Signed" : "Countersigned"}
+              </Chip>
+            </div>
+
+            <div style={{ background: "#fff", border: `1px solid ${S.line}`, borderRadius: 9, padding: "8px 10px", marginTop: 9 }}>
+              <SignatureMark sig={r} height={44} />
+            </div>
+
+            <div style={{ marginTop: 9, fontSize: 11.5, color: S.sub, lineHeight: 1.6 }}>
+              <div>Signed {r.signed_at ? new Date(r.signed_at).toLocaleString() : "—"}</div>
+              <div>From {r.signer_ip || "address not recorded"}</div>
+              <div style={{ wordBreak: "break-all" }}>Document reference {r.doc_hash}</div>
+              {r.voided_at && <div style={{ color: "#B3261E" }}>Voided by {r.voided_by} on {String(r.voided_at).slice(0, 10)}</div>}
+            </div>
+
+            {!r.voided_at && (
+              <Btn kind="ghost" small style={{ width: "100%", marginTop: 10 }} onClick={() => voidSig(r)}>
+                Void this signature
+              </Btn>
+            )}
+          </div>
+        ))}
+        <div style={{ fontSize: 11, color: S.sub, marginTop: 12, lineHeight: 1.55 }}>
+          Signatures are voided, never deleted. A missing row proves nothing;
+          a voided one with a name and a date is a record.
+        </div>
+      </Card>
+
+      <Sheet open={!!signing} onClose={() => setSigning(null)} title="Countersign"
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setSigning(null)}>Cancel</Btn>
+            <Btn style={{ flex: 2 }} disabled={!sig || !consent || busy} onClick={countersign}>
+              {busy ? "Signing…" : "Countersign"}
+            </Btn>
+          </div>
+        }>
+        {signing && (
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{signing.doc_title}</div>
+            <div style={{ fontSize: 12.5, color: S.sub, marginTop: 3, marginBottom: 14 }}>
+              {signing.signer_name} signed this on {String(signing.signed_at || "").slice(0, 10)}.
+              Countersigning binds the company to the same document.
+            </div>
+            <SignatureField value={sig} onChange={setSig}
+              label={`Sign as ${(currentUser || {}).name || "the company"}`} />
+            <div style={{ marginTop: 14 }}>
+              <SignConsent checked={consent} onChange={setConsent} what="this document on behalf of the company" />
+            </div>
+            {err && <Callout label="Could not countersign" tone="red">{err}</Callout>}
+          </div>
+        )}
+      </Sheet>
     </>
   );
 }
