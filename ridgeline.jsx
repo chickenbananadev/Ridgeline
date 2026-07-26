@@ -1834,7 +1834,6 @@ function stateForZip(zip) {
    from company settings on load. */
 let JURIS_OVERRIDES = {};
 function setJurisOverrides(map) { JURIS_OVERRIDES = map || {}; }
-function getJurisOverrides() { return JURIS_OVERRIDES; }
 
 /* ZIPs looked up on demand and saved, so the database grows with use
    rather than needing every ZIP in the country shipped up front. */
@@ -6780,6 +6779,27 @@ function stableStringify(v) {
     .map((k) => JSON.stringify(k) + ":" + stableStringify(v[k]))
     .join(",") + "}";
 }
+/* Turn a Supabase/Postgres error into something that names the actual
+   cause. "It did not save" tells the person nothing and tells whoever
+   has to fix it less. Codes are stable across Postgres versions. */
+function dbErrorMessage(error, opts) {
+  const o = opts || {};
+  if (!error) return "";
+  const code = error.code || "";
+  const msg = String(error.message || "");
+  if (code === "42P01" || /does not exist/i.test(msg)) {
+    return `The ${o.table || "table"} this needs has not been created yet. Run migration ${o.migration || ""} in the Supabase SQL editor.`.replace(/\s+/g, " ").trim();
+  }
+  if (code === "42501" || /row-level security|policy/i.test(msg)) {
+    return "The database refused this write. Check the row-level security policies for " + (o.table || "this table") + ".";
+  }
+  if (code === "23514") return "A value failed a database check constraint. " + msg;
+  if (code === "23505") return "That record already exists.";
+  if (code === "23503") return "A linked record is missing, so this could not be saved.";
+  if (code === "PGRST301" || /JWT|token/i.test(msg)) return "The session expired. Sign out and back in.";
+  return msg || "Unknown database error.";
+}
+
 function docHash(obj) {
   const str = stableStringify(obj === undefined ? null : obj);
   let h1 = 0x811c9dc5, h2 = 0x01000193;
@@ -7023,7 +7043,14 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand }) {
     };
     const { error } = await db.from("crm_signatures").insert(row);
     setBusy(false);
-    if (error) { setErr("That did not save. Please try again, or call us and we will sort it out."); return; }
+    if (error) {
+      const detail = dbErrorMessage(error, { table: "signatures", migration: "014" });
+      /* A homeowner gets a human sentence; the detail is still shown
+         because when this fails it is almost always a setup problem
+         someone on the team needs to read. */
+      setErr(`That did not save, so nothing has been signed. ${detail}`);
+      return;
+    }
     setSigned((prev) => [{ ...row, signed_at: new Date().toISOString() }, ...prev]);
     setOpenDoc(null); setSig(null); setConsent(false);
   };
@@ -8931,7 +8958,7 @@ function TabSignatures({ job, mut, toast, currentUser, brand }) {
     };
     const { error } = await db.from("crm_signatures").insert(row);
     setBusy(false);
-    if (error) { setErr("Could not save the countersignature. Check migration 014 has run."); return; }
+    if (error) { setErr(dbErrorMessage(error, { table: "signatures", migration: "014" })); return; }
     /* Contracts flip to Signed once both sides are on the same hash. */
     if (signing.doc_type === "contract") {
       mut((j) => ({ ...j, contract: { ...(j.contract || {}), status: "Signed", signedAt: todayIso() } }));
@@ -9984,7 +10011,50 @@ function TabTakeoff({ job, mut, toast, brand }) {
 
   return (
     <>
+      {/* Where the measurements come from. Being explicit about this
+          matters: a takeoff is only as good as its source, and the three
+          sources differ enormously in what a carrier will accept. */}
       <Card>
+        <CardTitle>Measure from</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 11 }}>
+          This app cannot measure a roof from a photograph. Recovering pitch
+          needs stereo imagery or LIDAR, which is why EagleView flies aircraft.
+          What it can do is the arithmetic, exactly, from whichever of these
+          you use.
+        </div>
+        {job.address && (
+          <>
+            <a href={`https://www.google.com/maps/@?api=1&map_action=map&center=${encodeURIComponent(job.address)}&basemap=satellite&zoom=20`}
+              target="_blank" rel="noreferrer" style={{ textDecoration: "none", display: "block", marginBottom: 8 }}>
+              <Btn kind="soft" style={{ width: "100%" }}>
+                <MapPin size={14} /> Satellite view of this roof
+              </Btn>
+            </a>
+            <a href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(job.address)}`}
+              target="_blank" rel="noreferrer" style={{ textDecoration: "none", display: "block", marginBottom: 8 }}>
+              <Btn kind="ghost" style={{ width: "100%" }}>
+                <Eye size={14} /> Street view — check the elevation and storeys
+              </Btn>
+            </a>
+          </>
+        )}
+        <div style={{ fontSize: 11.5, color: S.sub, lineHeight: 1.6, marginTop: 4 }}>
+          <b>Satellite tracing.</b> Good for plan dimensions on a simple roof.
+          Read the ridge and eave lengths off the image, then enter the pitch
+          you measured on site — the image cannot tell you the pitch.
+          <br /><br />
+          <b>On site.</b> A pitch gauge on the rafter or a phone level on the
+          slope, plus a tape or wheel on the eave. The most accurate source
+          you control.
+          <br /><br />
+          <b>An aerial report.</b> EagleView or Roofr, ordered per property.
+          For an insurance dispute this is the one a carrier argues with least,
+          because it is third-party. Import the PDF under Measurements and this
+          takeoff becomes your check on it.
+        </div>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone={m.squares > 0 ? "green" : "gray"}>{n2(m.squaresWithWaste)} sq</Chip>}>
           Takeoff summary
         </CardTitle>
@@ -13532,6 +13602,43 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
               Conversion counts posted reviews against customers actually asked,
               not against every completed job.
             </div>
+          </Card>
+        );
+      })()}
+
+      {/* Who is due a touch right now. This is what the sequence is for;
+          without it the steps below are just a description. */}
+      {(() => {
+        const due = completed
+          .map((j) => ({ j, next: nextReviewStep(j, settings) }))
+          .filter((x) => x.next && x.next.due <= todayIso())
+          .filter((x) => !(x.j.review && Number(x.j.review.rating) > 0 && Number(x.j.review.rating) <= 3));
+        if (!due.length) return null;
+        return (
+          <Card style={{ marginTop: 12, borderLeft: `4px solid ${T.accent}` }}>
+            <CardTitle right={<Chip tone="blue">{due.length}</Chip>}>Due now</CardTitle>
+            <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 8 }}>
+              These customers are due their next touch. Sending marks the step
+              done so the sequence advances rather than repeating.
+            </div>
+            {due.slice(0, 8).map(({ j, next }) => (
+              <div key={j.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0", borderTop: `1px solid ${S.line}` }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{j.name}</div>
+                  <div style={{ fontSize: 11.5, color: S.sub }}>{next.step.label}</div>
+                </div>
+                <Btn small onClick={() => {
+                  const done = Array.isArray(j.review && j.review.steps) ? j.review.steps : [];
+                  setReview(j, {
+                    steps: [...done, next.step.id],
+                    sent: true,
+                    requestedAt: (j.review && j.review.requestedAt) || todayIso(),
+                    lastStepAt: todayIso(),
+                  });
+                  toast(`${next.step.label} logged for ${j.name}`);
+                }}>Mark sent</Btn>
+              </div>
+            ))}
           </Card>
         );
       })()}
