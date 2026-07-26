@@ -116,6 +116,27 @@ every portal row: customer names, addresses, job details. Fix is to
 move portal reads behind a security-definer function that requires
 the token. Not yet done. Blocking for outside tenants.
 
+## Weather / rain-risk on scheduled jobs (build 27)
+Dispatch board now flags jobs whose install day has a high chance of
+rain. Uses **Open-Meteo** (api.open-meteo.com) — free, no API key, no
+Edge Function, called straight from the browser. One request per
+distinct job address returns a full 16-day forecast, cached 3 hours
+in a module-scope Map (`WEATHER_CACHE`), keyed by rounded lat/lng —
+not React state, so it survives across screens in the same session.
+
+`RAIN_POP_THRESHOLD = 40` (%) is the only tuning knob. Shows on the
+14-day day-strip (small cloud icon), a summary banner on the selected
+day, and a chip on every job row, both unassigned and crew-assigned.
+Requires the job to have `lat`/`lng` (set automatically by address
+autocomplete) and a `schedDate` — jobs without coordinates are simply
+skipped, never blocked or warned about.
+
+**Fails silent by design.** No network, a rejected fetch, and a slow
+connection all resolve to "no weather data" rather than an error —
+dispatch must never break because a weather API is unreachable.
+Covered by build27, which asserts this under three conditions: no
+`fetch` at all, `fetch` rejecting, and `fetch` resolving.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.

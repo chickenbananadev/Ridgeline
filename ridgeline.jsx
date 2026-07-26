@@ -5,7 +5,7 @@ import {
   FileText, DollarSign, ClipboardList, Settings, Star, Phone, Mail,
   MapPin, Download, LogOut, Users, Calendar as CalIcon, PieChart, Pencil, Trash2,
   ArrowUpDown, Image as ImageIcon, CheckCircle2, Circle, Send, Eye, Shield,
-  BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat,
+  BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat, CloudRain,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
   Scale, Lightbulb, ExternalLink, Lock, Layers, Smile
 , Filter , Megaphone } from "lucide-react";
@@ -7869,6 +7869,109 @@ function WarrantyCenter({ jobs, onOpenJob, onBack }) {
   );
 }
 
+/* ==================================================================
+   Weather — rain risk on scheduled jobs.
+
+   Open-Meteo: free, no API key, no Edge Function, called straight
+   from the browser. One call per distinct job site returns a full
+   16-day daily forecast, so a whole crew's week of jobs at different
+   addresses costs one request per address, not one per job-day.
+
+   Deliberately its own module-scope cache (not React state) so the
+   same address checked from the dispatch board and the calendar in
+   the same session does not re-fetch. A crew cannot be rained on by a
+   stale cache: 3 hours is short enough that a forecast that shifted
+   overnight is caught well before a truck rolls out.
+------------------------------------------------------------------- */
+const WEATHER_CACHE = new Map(); // "lat,lng" -> { fetchedAt, byDate: { iso: {pop,sum,code} } }
+const WEATHER_CACHE_MS = 3 * 60 * 60 * 1000;
+const RAIN_POP_THRESHOLD = 40; // % chance of precip that counts as "rain risk"
+
+function weatherKey(lat, lng) {
+  return `${Math.round(lat * 100) / 100},${Math.round(lng * 100) / 100}`;
+}
+
+async function fetchWeatherFor(lat, lng) {
+  const key = weatherKey(lat, lng);
+  const cached = WEATHER_CACHE.get(key);
+  if (cached && Date.now() - cached.fetchedAt < WEATHER_CACHE_MS) return cached.byDate;
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
+      `&daily=precipitation_probability_max,precipitation_sum,weathercode&timezone=auto&forecast_days=16`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("weather fetch failed");
+    const data = await res.json();
+    const byDate = {};
+    (data.daily?.time || []).forEach((iso, i) => {
+      byDate[iso] = {
+        pop: data.daily.precipitation_probability_max?.[i] ?? null,
+        sum: data.daily.precipitation_sum?.[i] ?? null,
+        code: data.daily.weathercode?.[i] ?? null,
+      };
+    });
+    WEATHER_CACHE.set(key, { fetchedAt: Date.now(), byDate });
+    return byDate;
+  } catch (e) {
+    return null; // No connection, or the address has no coordinates yet — fail quiet, never block dispatch.
+  }
+}
+
+/* Given jobs with a schedDate and coordinates, returns { [jobId]: {pop,sum,code,risky} }
+   for whichever single day each job sits on. Open-Meteo's 16-day window covers
+   everything the dispatch board's own 14-day strip can show. */
+function useScheduleWeather(jobs) {
+  const [byJob, setByJob] = useState({});
+  const scheduled = jobs.filter((j) => {
+    const lat = j.lat ?? j.property?.lat, lng = j.lng ?? j.property?.lng;
+    return j.schedDate && lat != null && lng != null;
+  });
+  const depKey = scheduled
+    .map((j) => `${j.id}:${j.schedDate}:${(j.lat ?? j.property?.lat)}:${(j.lng ?? j.property?.lng)}`)
+    .join("|");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (scheduled.length === 0) { setByJob({}); return; }
+    const byLoc = new Map();
+    scheduled.forEach((j) => {
+      const lat = j.lat ?? j.property?.lat, lng = j.lng ?? j.property?.lng;
+      const key = weatherKey(lat, lng);
+      if (!byLoc.has(key)) byLoc.set(key, { lat, lng, jobs: [] });
+      byLoc.get(key).jobs.push(j);
+    });
+    (async () => {
+      const next = {};
+      for (const { lat, lng, jobs: locJobs } of byLoc.values()) {
+        const daily = await fetchWeatherFor(lat, lng);
+        if (!daily) continue;
+        for (const j of locJobs) {
+          const day = daily[j.schedDate];
+          if (day) next[j.id] = { ...day, risky: (day.pop ?? 0) >= RAIN_POP_THRESHOLD };
+        }
+      }
+      if (!cancelled) setByJob(next);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [depKey]);
+
+  return byJob;
+}
+
+/* Small inline chip — used on job rows in the dispatch board and, via
+   the same weather lookup, wherever else a scheduled job is shown. */
+function RainChip({ w }) {
+  if (!w || w.pop == null) return null;
+  if (!w.risky) return null;
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0,
+      background: "#FDECEC", color: "#B42318", fontSize: 11, fontWeight: 800,
+      padding: "3px 7px", borderRadius: 999,
+    }}><CloudRain size={11} /> {w.pop}% rain</span>
+  );
+}
+
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded = false }) {
   /* Day-first, not a grid.
 
@@ -7889,6 +7992,8 @@ function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded
   const activeCrews = crews.filter((c) => c.active !== false);
   const today = todayIso();
   const dayDate = new Date(day + "T12:00:00");
+  const weather = useScheduleWeather(jobs);
+  const dayIsRisky = (iso) => jobs.some((j) => j.schedDate === iso && weather[j.id]?.risky);
 
   /* Fourteen days from today: far enough to plan, short enough to scan. */
   const strip = [...Array(14)].map((_, i) => {
@@ -7957,13 +8062,14 @@ function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded
               <div style={{ fontSize: 17, fontWeight: 800, color: on ? "#fff" : iso === today ? T.accent : S.ink, lineHeight: 1.2 }}>
                 {d.getDate()}
               </div>
-              <div style={{ height: 6, display: "flex", gap: 2, justifyContent: "center", marginTop: 2 }}>
+              <div style={{ height: 6, display: "flex", gap: 3, justifyContent: "center", alignItems: "center", marginTop: 2 }}>
                 {count > 0 && (
                   <span style={{
                     fontSize: 9.5, fontWeight: 800, lineHeight: 1,
                     color: on ? "#fff" : gap > 0 ? "#9A6B00" : "#177245",
                   }}>{count}{gap > 0 ? "!" : ""}</span>
                 )}
+                {dayIsRisky(iso) && <CloudRain size={9} color={on ? "#fff" : "#B42318"} />}
               </div>
             </button>
           );
@@ -7977,6 +8083,25 @@ function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded
         </span>
       </div>
 
+      {/* Rain risk — only ever counts jobs that actually have coordinates
+          and are actually scheduled today, so it never nags about jobs
+          the weather can't be checked for. */}
+      {(() => {
+        const rainy = onDay(day).filter((j) => weather[j.id]?.risky);
+        if (rainy.length === 0) return null;
+        return (
+          <Card style={{ marginBottom: 10, borderLeft: "4px solid #B42318", background: "#FDECEC" }}>
+            <div style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
+              <CloudRain size={17} color="#B42318" style={{ flexShrink: 0, marginTop: 2 }} />
+              <div style={{ fontSize: 13.5, color: "#7A1D12", lineHeight: 1.5 }}>
+                <b>{rainy.length} {rainy.length === 1 ? "job has" : "jobs have"} a {Math.max(...rainy.map((j) => weather[j.id].pop))}%+ chance of rain</b> on {dayLabel(day).toLowerCase()}.
+                Worth a look before crews roll out — a roof mid tear-off is the worst place to get caught by weather.
+              </div>
+            </div>
+          </Card>
+        );
+      })()}
+
       {/* Unassigned on this day — the thing that must not be missed. */}
       {unassignedOn(day).length > 0 && (
         <Card style={{ marginBottom: 10, borderLeft: "4px solid #E8B931" }}>
@@ -7989,6 +8114,7 @@ function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{j.name}</div>
                 <div style={{ fontSize: 11.5, color: S.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.address}</div>
               </button>
+              <RainChip w={weather[j.id]} />
               <Btn small onClick={() => openPlacer(j)}>Assign</Btn>
             </div>
           ))}
@@ -8031,6 +8157,7 @@ function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded
                   <div style={{ fontSize: 14, fontWeight: 600, color: S.ink }}>{j.name}</div>
                   <div style={{ fontSize: 11.5, color: S.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.address}</div>
                 </button>
+                <RainChip w={weather[j.id]} />
                 {j.address && (
                   <a href={directionsLink(j.address)} target="_blank" rel="noreferrer" aria-label="Directions" style={{
                     width: 32, height: 32, borderRadius: 999, background: S.soft,
