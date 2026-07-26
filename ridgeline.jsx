@@ -23,7 +23,7 @@ import {
 ------------------------------------------------------------------- */
 const PRODUCT = {
   name: "RoofStride",
-  tagline: "Roofing, start to paid.",
+  tagline: "Built for Roofing. Made to Move.",
   seatPrice: 49.99,
   trialDays: 7,
   supportEmail: "support@supremebuildinggroup.com",
@@ -2732,8 +2732,11 @@ function Login({ brand, users, onLogin }) {
                tenant's brand happened to be cached (Supreme's, in this
                build) would be actively misleading. This is the one place
                the product's own identity belongs instead of a tenant's. */
-            <img src="/roofstride-logo-horizontal.png" alt={PRODUCT.name}
-              style={{ height: 40, maxWidth: 260, objectFit: "contain", margin: "0 auto 16px", display: "block" }} />
+            <>
+              <img src="/roofstride-logo-horizontal.png" alt={PRODUCT.name}
+                style={{ height: 40, maxWidth: 260, objectFit: "contain", margin: "0 auto 10px", display: "block" }} />
+              <div style={{ fontSize: 13, color: S.sub, letterSpacing: 0.2 }}>{PRODUCT.tagline}</div>
+            </>
           ) : brand.logo ? (
             <img src={brand.logo} alt={brand.company} style={{ height: 72, maxWidth: 220, objectFit: "contain", margin: "0 auto 14px", display: "block" }} />
           ) : (

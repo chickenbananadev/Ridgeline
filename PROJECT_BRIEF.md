@@ -207,6 +207,22 @@ manifest.json at all.** `public/` is new.
   manifest paths resolve) and the render behavior (signup shows the
   product logo, not a tenant name).
 
+## Official brand slogan wired (this session)
+`PRODUCT.tagline` was a placeholder I invented ("Roofing, start to
+paid.") — never actually chosen by Jacob. Replaced with the real
+slogan: "Built for Roofing. Made to Move." Now rendered under the
+RoofStride logo on the signup screen (the one place product identity
+shows instead of tenant identity, per the build-29 fix).
+
+Jacob also supplied, not yet acted on: a marketing headline ("One
+Stride Ahead of Every Job"), the STRIDE values acronym, positioning/
+mission/vision statements, and a 10-section brand+launch roadmap
+(ideal customer and differentiators are explicitly open decisions in
+his own doc; sections 7-10 — brand system, product foundation docs,
+domain/trademark/legal, launch materials — are a checklist, not yet
+scoped to specific deliverables). Waiting on his prioritization before
+building further.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.
