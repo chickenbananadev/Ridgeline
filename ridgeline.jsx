@@ -9822,7 +9822,14 @@ function blankFacet() {
 function computeTakeoff(t) {
   const facets = Array.isArray(t.facets) ? t.facets : [];
   const rows = facets.map((f) => {
-    const plan = num(f.length) * num(f.width);
+    /* A traced facet carries its measured plan area exactly. Deriving
+       it back from a rounded equivalent side lost about 0.3% per
+       facet, which compounds across a cut-up roof — small, avoidable,
+       and the kind of drift nobody would ever spot. Typed facets still
+       compute from length x width. */
+    const plan = f.planArea != null && f.planArea !== ""
+      ? num(f.planArea)
+      : num(f.length) * num(f.width);
     const factor = slopeFactor(f.pitch);
     return { ...f, plan, factor, area: plan * factor };
   });
@@ -10156,11 +10163,14 @@ function AerialTracer({ job, onAddFacet, toast }) {
                   /* Stored as an equivalent rectangle so it slots into the
                      existing facet maths untouched: the plan area is what
                      matters and the slope factor is applied downstream. */
+                  /* planArea is what the engine uses; the side lengths are
+                     only so the facet reads sensibly if someone opens it. */
                   const side = Math.sqrt(areaSf);
                   onAddFacet({
                     id: uid("fct"),
                     name: `Traced plane ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
-                    length: side.toFixed(1), width: side.toFixed(1), pitch,
+                    length: side.toFixed(2), width: side.toFixed(2), pitch,
+                    planArea: areaSf, traced: true,
                   });
                   setPts([]);
                   toast("Plane added to the takeoff");
@@ -10188,7 +10198,14 @@ function TabTakeoff({ job, mut, toast, brand }) {
   const set = (k) => (v) => mut((j) => ({ ...j, takeoff: { ...(j.takeoff || t), [k]: v } }));
   const setFacet = (id, k, v) => mut((j) => {
     const cur = j.takeoff || t;
-    return { ...j, takeoff: { ...cur, facets: (cur.facets || []).map((f) => f.id === id ? { ...f, [k]: v } : f) } };
+    return { ...j, takeoff: { ...cur, facets: (cur.facets || []).map((f) => {
+      if (f.id !== id) return f;
+      /* Typing over a traced facet's dimensions means the person wants
+         those numbers. Clear the stored area or the edit silently does
+         nothing. */
+      const clears = (k === "length" || k === "width") && f.planArea != null;
+      return clears ? { ...f, [k]: v, planArea: null, traced: false } : { ...f, [k]: v };
+    }) } };
   });
   const addFacet = () => mut((j) => {
     const cur = j.takeoff || t;
@@ -10400,7 +10417,10 @@ function TabTakeoff({ job, mut, toast, brand }) {
               </div>
               {r.plan > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: S.sub, marginTop: 7 }}>
-                  <span>{n1(r.plan)} sf plan × {r.factor.toFixed(4)}</span>
+                  <span>
+                    {f.traced && <span style={{ color: T.accent, fontWeight: 700 }}>traced · </span>}
+                    {n1(r.plan)} sf plan × {r.factor.toFixed(4)}
+                  </span>
                   <span style={{ fontWeight: 700, color: S.ink }}>{n1(r.area)} sf</span>
                 </div>
               )}

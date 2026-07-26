@@ -85,5 +85,37 @@ ok(src.includes("onError={() =>"), "an imagery failure is handled");
 ok(src.includes("did not respond"), "and explained rather than left blank");
 ok(src.includes("fallbackUrl"), "Ohio has a second endpoint to fall back to");
 
+/* --- traced area survives the trip into the takeoff exactly --- */
+const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+const slopeFactor = (rise) => Math.sqrt(144 + Math.abs(num(rise)) ** 2) / 12;
+const planOf = (f) => (f.planArea != null && f.planArea !== "") ? num(f.planArea) : num(f.length) * num(f.width);
+
+const traced = tracedAreaSqFt(bldg, mPerPx);
+const facet = { length: Math.sqrt(traced).toFixed(2), width: Math.sqrt(traced).toFixed(2), pitch: 6, planArea: traced, traced: true };
+ok(planOf(facet) === traced, "a traced plan area reaches the engine with no loss");
+ok(Math.abs(planOf(facet) - num(facet.length) * num(facet.width)) > 0.01,
+  "and is NOT the rounded square, which would have drifted");
+
+/* a typed facet is untouched by the change */
+ok(close(planOf({ length: "40", width: "30" }) * slopeFactor(6), 1341.64, 0.01),
+  "a typed 40x30 at 6/12 is still 1341.64 sf");
+
+/* each facet takes its own pitch */
+const mixed = [
+  { planArea: 775, pitch: 6 },
+  { planArea: 129.17, pitch: 10 },
+];
+const perFacet = mixed.reduce((a, f) => a + planOf(f) * slopeFactor(f.pitch), 0);
+const averaged = (775 + 129.17) * slopeFactor(8);
+ok(Math.abs(perFacet - averaged) > 40,
+  "per-facet and averaged differ materially — averaging is not equivalent");
+ok(close(perFacet, 775 * slopeFactor(6) + 129.17 * slopeFactor(10), 0.01),
+  "each facet uses its own slope factor");
+
+ok(src.includes("f.planArea != null"), "the engine prefers a measured plan area");
+ok(src.includes("planArea: areaSf, traced: true"), "the tracer stores the exact area");
+ok(src.includes("clears ? { ...f, [k]: v, planArea: null, traced: false }"),
+  "editing a traced facet's dimensions drops the stored area so the edit takes effect");
+
 if (fails) { console.log("\nbuild 26: " + fails + " FAILED"); process.exit(1); }
 console.log("build 26 tests passed");
