@@ -22,7 +22,7 @@ import {
    search-and-replace across 18,000 lines.
 ------------------------------------------------------------------- */
 const PRODUCT = {
-  name: "Ridgeline",
+  name: "RoofStride",
   tagline: "Roofing, start to paid.",
   seatPrice: 49.99,
   trialDays: 7,
@@ -4959,7 +4959,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
         </div>
       }>
       {dupBlocked && (
-        <Callout label={dupes.length === 1 ? "This address is already in Ridgeline" : "This address is already in Ridgeline " + dupes.length + " times"} tone="red">
+        <Callout label={dupes.length === 1 ? `This address is already in ${PRODUCT.name}` : `This address is already in ${PRODUCT.name} ` + dupes.length + " times"} tone="red">
           <div style={{ marginBottom: 8 }}>
             Saving is blocked so you do not end up with two records for the same roof.
           </div>
@@ -15900,7 +15900,7 @@ function ccAddress(job) {
 }
 
 async function ccCreateProject(token, job) {
-  const body = { project: { name: job.name || job.address || "Ridgeline job", address: ccAddress(job) } };
+  const body = { project: { name: job.name || job.address || `${PRODUCT.name} job`, address: ccAddress(job) } };
   const out = await ccFetch(token, "/projects", { method: "POST", body: JSON.stringify(body) });
   const proj = out && (out.project || out);
   if (!proj || !proj.id) throw new Error("CompanyCam did not return a project id.");
@@ -16025,7 +16025,7 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
             </Callout>
             <div style={{ marginTop: 12, fontSize: 13, lineHeight: 1.65, color: S.ink }}>
               <div style={{ fontWeight: 800, fontSize: 12.5, color: S.sub, marginBottom: 6 }}>ONE-TIME, BY THE OFFICE</div>
-              <div style={{ marginBottom: 5 }}><b>1.</b> Go to console.cloud.google.com and create a project named Ridgeline.</div>
+              <div style={{ marginBottom: 5 }}><b>1.</b> Go to console.cloud.google.com and create a project named {PRODUCT.name}.</div>
               <div style={{ marginBottom: 5 }}><b>2.</b> APIs &amp; Services → Library → search "Gmail API" → Enable.</div>
               <div style={{ marginBottom: 5 }}><b>3.</b> OAuth consent screen → choose Internal if you use Google Workspace (recommended — no Google review needed), otherwise External. Fill in the app name and your support email.</div>
               <div style={{ marginBottom: 5 }}><b>4.</b> Credentials → Create credentials → OAuth client ID → Web application. Under Authorized redirect URIs, add this app's address followed by <b>/auth/gmail</b>.</div>
@@ -16624,7 +16624,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
 /* ------------------------------------------------------------------
    Setup & API keys — admin only.
 
-   Deliberate design note: Ridgeline is a browser app talking straight
+   Deliberate design note: RoofStride is a browser app talking straight
    to Supabase with the public anon key. Anything written into crm_org
    is readable by every signed-in seat, so hiding a field behind an
    admin check hides the button, not the value. Real secrets therefore
@@ -17109,7 +17109,7 @@ function SetupKeys({ apiSetup, setApiSetup, currentUser, onBack, toast }) {
           {remaining === 0 ? "Everything is connected." : remaining + " still to connect"}
         </div>
         <div style={{ fontSize: 12.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }}>
-          Secrets are never typed into this app. Ridgeline runs in the browser
+          Secrets are never typed into this app. RoofStride runs in the browser
           with a public key, so anything saved here would be readable by every
           seat. Each card tells you the exact dashboard and variable name
           instead.

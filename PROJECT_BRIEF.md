@@ -4,7 +4,16 @@ Read this first in any new session. Source of truth for what exists,
 where it lives, and what must not be redone.
 
 ## What this is
-Ridgeline: a roofing CRM for Supreme Building Group (competes with
+**Product name: RoofStride** (renamed from Ridgeline — Ridgeline
+collided with the Honda truck). The rename is a one-line change:
+`PRODUCT.name` near the top of `ridgeline.jsx`. **Infra keeps the old
+name on purpose** — GitHub repo, both Vercel projects, and the
+Supabase project all stay `Ridgeline`/`ridgeline-kappa` forever; those
+are internal plumbing, invisible to customers, and renaming them risks
+breaking the Vercel/GitHub connection for zero benefit. Only
+user-facing text changed.
+
+RoofStride: a roofing CRM for Supreme Building Group (competes with
 AccuLynx / Roofr / ServiceTitan). Owner: Jacob Henderson. He works
 **from a phone only — no terminal, ever.** All server setup must be
 browser-dashboard steps or SQL/code he pastes into a web editor.
