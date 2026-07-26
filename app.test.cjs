@@ -68611,7 +68611,7 @@ function setExportPolicy(isAdmin, logger) {
 function downloadCsv(name, rows) {
   if (!EXPORT_ALLOWED) {
     try {
-      exportLogger({ type: "export_blocked", text: `Blocked data export attempt: ${name}` });
+      exportLogger({ type: "export_blocked", text: `Blocked data export attempt: ${name}`, rule: "export_attempts" });
     } catch (e) {
     }
     if (typeof window !== "undefined" && window.alert) {
@@ -72326,7 +72326,8 @@ function JobDetail({
   leadSources = LEAD_SOURCES,
   activity = [],
   onDelete = null,
-  openTab = null
+  openTab = null,
+  features = {}
 }) {
   const [tab, setTab] = (0, import_react.useState)(openTab || "overview");
   const [open, setOpen] = (0, import_react.useState)(() => ({ overview: true, ...openTab ? { [openTab]: true } : {} }));
@@ -72661,6 +72662,7 @@ function JobDetail({
           }
         };
         const relevant = JOB_SECTIONS.filter(([id]) => {
+          if (!featureOn(features, id)) return false;
           if (id === "claim") return job.claimType === "Insurance";
           if (id === "handoff" || id === "changeorders") return true;
           return allowed.has(id);
@@ -81983,6 +81985,167 @@ var SETUP_ITEMS = [
     doneByDefault: true
   }
 ];
+var FEATURE_SWITCHES = [
+  ["portal", "Client portal", "Publish links, share documents, two-way messaging"],
+  ["claim", "Insurance claims", "Claim tracking, supplements, carrier money"],
+  ["changeorders", "Change orders", "Priced amendments after signing"],
+  ["handoff", "Sold approval gate", "Require an admin to approve before production"],
+  ["ventilation", "Ventilation calculator", "Net-free-area sizing and supplement wording"],
+  ["reviews", "Review requests", "Automated review sequence after completion"],
+  ["chat", "Team chat", "Company channel in the Inbox"],
+  ["dispatch", "Dispatch board", "Crew-by-day scheduling"],
+  ["codes", "Code lookup", "Jurisdiction requirements and citations"],
+  ["companycam", "CompanyCam", "Create and open CompanyCam projects"]
+];
+var DEFAULT_FEATURES = FEATURE_SWITCHES.reduce((a, [k]) => {
+  a[k] = true;
+  return a;
+}, {});
+function featureOn(features, key) {
+  const merged = { ...DEFAULT_FEATURES, ...features || {} };
+  return merged[key] !== false;
+}
+var ANOMALY_RULES = [
+  {
+    id: "rapid_open",
+    label: "Opened many jobs very quickly",
+    window: 6e4,
+    count: 25,
+    why: "Twenty-five jobs in a minute is scraping, not working."
+  },
+  {
+    id: "export_attempts",
+    label: "Repeated blocked export attempts",
+    window: 3e5,
+    count: 3,
+    why: "Three blocked exports in five minutes is someone testing the lock."
+  },
+  {
+    id: "bulk_delete",
+    label: "Bulk deletion",
+    window: 3e5,
+    count: 8,
+    why: "Eight deletions in five minutes is not routine tidying."
+  }
+];
+function detectAnomaly(events, now) {
+  for (const rule of ANOMALY_RULES) {
+    const since = now - rule.window;
+    const hits = events.filter((e) => e.at >= since && e.rule === rule.id).length;
+    if (hits >= rule.count) return rule;
+  }
+  return null;
+}
+function AdminControls({ features, setFeatures, activity, users, currentUser, onBack, toast: toast2, security, setSecurity }) {
+  const admin = !!(currentUser && currentUser.role === "admin");
+  const [tab, setTab] = (0, import_react.useState)("features");
+  const [q, setQ] = (0, import_react.useState)("");
+  if (!admin) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Admin controls", onBack }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 16 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub }, children: "This screen is restricted to admins." }) })
+    ] });
+  }
+  const feats = { ...DEFAULT_FEATURES, ...features || {} };
+  const sec = security || {};
+  const needle = q.trim().toLowerCase();
+  const log = (activity || []).filter((a) => !needle || String(a.text || "").toLowerCase().includes(needle) || String(a.by || "").toLowerCase().includes(needle));
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Admin controls", onBack }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, margin: "14px 0" }, children: [["features", "Features"], ["security", "Security"], ["log", "Audit log"]].map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setTab(id), style: {
+      flex: 1,
+      border: `1.5px solid ${tab === id ? T.accent : S.line}`,
+      background: tab === id ? T.accentSoft : "#fff",
+      color: tab === id ? T.accent : S.ink,
+      borderRadius: 999,
+      padding: "9px 10px",
+      fontSize: 13,
+      fontWeight: 800,
+      cursor: "pointer"
+    }, children: label }, id)) }),
+    tab === "features" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "What the company can use" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 6 }, children: "Turning something off hides it for everyone, including other admins. Existing data is kept \u2014 switch it back on and it returns." }),
+      FEATURE_SWITCHES.map(([key, label, sub]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderTop: `1px solid ${S.line}` }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 600, color: feats[key] === false ? S.sub : S.ink }, children: label }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 1 }, children: sub })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Toggle, { on: feats[key] !== false, onClick: () => setFeatures({ ...feats, [key]: feats[key] === false }) })
+      ] }, key))
+    ] }),
+    tab === "security" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Data protection" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderTop: `1px solid ${S.line}` }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 600 }, children: "Block reps from exporting" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 1, lineHeight: 1.45 }, children: "Already on. Reps cannot download CSVs of jobs, commission or contacts; every attempt is logged." })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "On" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderTop: `1px solid ${S.line}` }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 600 }, children: "Sign out on unusual activity" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 1, lineHeight: 1.45 }, children: "Ends the session when someone behaves like they are harvesting rather than working." })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            Toggle,
+            {
+              on: sec.anomalyLogout !== false,
+              onClick: () => setSecurity({ ...sec, anomalyLogout: sec.anomalyLogout === false })
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "What triggers a sign-out" }),
+        ANOMALY_RULES.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "9px 0", borderTop: `1px solid ${S.line}` }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 600, color: S.ink }, children: r.label }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 2, lineHeight: 1.45 }, children: [
+            r.count,
+            " in ",
+            Math.round(r.window / 6e4),
+            " ",
+            r.window === 6e4 ? "minute" : "minutes",
+            " \u2014 ",
+            r.why
+          ] })
+        ] }, r.id)),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "What this does and does not do", tone: "amber", children: "This raises the cost of bulk-harvesting your data. It cannot stop someone reading their own screen or photographing it, and it is not a substitute for a signed agreement about who owns the book of business. Treat it as a tripwire, not a lock." })
+      ] })
+    ] }),
+    tab === "log" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: log.length }), children: "Audit log" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: { ...inputStyle, marginBottom: 10 },
+          value: q,
+          onChange: (e) => setQ(e.target.value),
+          placeholder: "Search by person or action"
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }, children: "Deliberately not exportable \u2014 a record of who looked at what should not be the easiest thing in the building to walk out with." }),
+      log.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "Nothing matches." }),
+      log.slice(0, 200).map((a, i2) => {
+        const flagged = /deleted|export|blocked/i.test(String(a.text || "") + String(a.type || ""));
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+          padding: "9px 0",
+          borderTop: `1px solid ${S.line}`,
+          background: flagged ? "#FFF6E5" : "transparent"
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub }, children: [
+            a.at,
+            " \xB7 ",
+            a.by
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, marginTop: 2, lineHeight: 1.45 }, children: a.text })
+        ] }, a.id || i2);
+      })
+    ] })
+  ] });
+}
 function SetupKeys({ apiSetup, setApiSetup, currentUser, onBack, toast: toast2 }) {
   const admin = !!(currentUser && currentUser.role === "admin");
   const [openId, setOpenId] = (0, import_react.useState)(null);
@@ -82123,6 +82286,7 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
       ["integrations", import_lucide_react.Share2, "Integrations", "Gmail, texting, CompanyCam"],
       ["import", import_lucide_react.Upload, "Import jobs", "Bring a pipeline in from CSV"],
       ["password", import_lucide_react.Lock, "Change my password", "Update your sign-in password"],
+      currentUser && currentUser.role === "admin" && ["admin", import_lucide_react.Shield, "Admin controls", "Feature switches, security and the audit log"],
       currentUser && currentUser.role === "admin" && ["setupkeys", import_lucide_react.Lock, "Setup & keys", "API keys and services still to connect"],
       ["syscheck", import_lucide_react.AlertTriangle, "System check", "Test the database connection and setup"]
     ]]
@@ -82767,7 +82931,29 @@ function SupremeCRM() {
   });
   const [apiSetup, setApiSetup] = (0, import_react.useState)({});
   const [ccAutoCreate, setCcAutoCreate] = (0, import_react.useState)(true);
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate];
+  const [features, setFeatures] = (0, import_react.useState)({});
+  const [security, setSecurity] = (0, import_react.useState)({ anomalyLogout: true });
+  const behaviour = (0, import_react.useRef)([]);
+  const noteBehaviour = (ruleId) => {
+    const now = Date.now();
+    behaviour.current = [...behaviour.current.filter((e) => now - e.at < 3e5), { rule: ruleId, at: now }];
+    if (security.anomalyLogout === false) return;
+    const hit = detectAnomaly(behaviour.current, now);
+    if (hit) {
+      behaviour.current = [];
+      logAct({ type: "security", text: `Signed out automatically: ${hit.label.toLowerCase()}` });
+      const a = AUTH();
+      if (a) {
+        try {
+          a.signOut();
+        } catch (e) {
+        }
+      }
+      setCurrentUser(null);
+      setNav("home");
+    }
+  };
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security];
   const orgPack = () => ({
     announcements,
     calls,
@@ -82783,6 +82969,8 @@ function SupremeCRM() {
     reviewSettings,
     apiSetup,
     ccAutoCreate,
+    features,
+    security,
     version: 1
   });
   const unpackOrg = (d) => {
@@ -82800,6 +82988,8 @@ function SupremeCRM() {
     if (d.reviewSettings) setReviewSettings(d.reviewSettings);
     if (d.apiSetup) setApiSetup(d.apiSetup);
     if (d.ccAutoCreate !== void 0) setCcAutoCreate(d.ccAutoCreate);
+    if (d.features) setFeatures(d.features);
+    if (d.security) setSecurity(d.security);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
   const brandErr = useBrandSync(brand2, setBrand, liveAuth() ? !!currentUser : true);
@@ -82843,6 +83033,7 @@ function SupremeCRM() {
       setOpenJobId(null);
       setNav("jobs");
     }
+    ids.forEach(() => noteBehaviour("bulk_delete"));
     logAct({ type: "delete", text: `Deleted ${ids.length === 1 ? "job" : ids.length + " jobs"}: ${label}` });
     toast2(ids.length === 1 ? "Job deleted" : ids.length + " jobs deleted");
   };
@@ -82853,7 +83044,10 @@ function SupremeCRM() {
     ...entry
   }, ...prev].slice(0, 500));
   (0, import_react.useEffect)(() => {
-    setExportPolicy(canEditStructure(currentUser), logAct);
+    setExportPolicy(canEditStructure(currentUser), (entry) => {
+      logAct(entry);
+      if (entry && entry.rule) noteBehaviour(entry.rule);
+    });
   }, [currentUser && currentUser.role]);
   const meName = currentUser ? currentUser.name : "";
   const unreadMentions = chatMsgs.slice(chatSeenCount).filter((m2) => Array.isArray(m2.mentions) && m2.mentions.includes(meName)).length;
@@ -83121,6 +83315,7 @@ function SupremeCRM() {
   const openJob = openJobId ? jobs.find((j) => j.id === openJobId) : null;
   const quickJob = quickJobId ? jobs.find((j) => j.id === quickJobId) : null;
   const openJobScreen = (id, tab = null) => {
+    noteBehaviour("rapid_open");
     setOpenJobId(id);
     setJobOpenTab(tab);
     setNav("jobs");
@@ -83192,7 +83387,8 @@ function SupremeCRM() {
         activity,
         ccToken,
         onDelete: isAdmin ? deleteJobs : null,
-        openTab: jobOpenTab
+        openTab: jobOpenTab,
+        features
       }
     ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       liveDb() && jobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { margin: "14px 16px 0", background: "#EAF6EE", border: "1px solid #CDE8D6", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "#177245", lineHeight: 1.5 }, children: "Fresh database \u2014 no demo customers here. Everything you create now saves for real. Have a Roofr export? More \u2192 Import jobs pulls your whole pipeline in." }),
@@ -83475,6 +83671,19 @@ function SupremeCRM() {
         jobs,
         onBack: () => setNav("more"),
         toast: toast2
+      }
+    ) : nav === "admin" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      AdminControls,
+      {
+        features,
+        setFeatures,
+        activity,
+        users,
+        currentUser: liveUser,
+        onBack: () => setNav("more"),
+        toast: toast2,
+        security,
+        setSecurity
       }
     ) : nav === "setupkeys" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       SetupKeys,

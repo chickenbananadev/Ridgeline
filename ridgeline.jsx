@@ -1661,7 +1661,7 @@ function setExportPolicy(isAdmin, logger) {
 }
 function downloadCsv(name, rows) {
   if (!EXPORT_ALLOWED) {
-    try { exportLogger({ type: "export_blocked", text: `Blocked data export attempt: ${name}` }); } catch (e) {}
+    try { exportLogger({ type: "export_blocked", text: `Blocked data export attempt: ${name}`, rule: "export_attempts" }); } catch (e) {}
     if (typeof window !== "undefined" && window.alert) {
       window.alert("Exporting data is restricted to admins. The company owns this data.");
     }
@@ -4817,7 +4817,7 @@ const JOB_TAB_GROUPS = [
 ];
 
 function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [], ccToken = null,
-  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null }) {
+  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null, features = {} }) {
   const [tab, setTab] = useState(openTab || "overview");
   /* Which sections are expanded. Overview opens by default; a deep link
      opens its own section too so the caller lands on real content. */
@@ -5004,6 +5004,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           /* The claim section is meaningless on a retail job; it appears
              only where there is actually a carrier involved. */
           const relevant = JOB_SECTIONS.filter(([id]) => {
+            if (!featureOn(features, id)) return false;
             if (id === "claim") return job.claimType === "Insurance";
             if (id === "handoff" || id === "changeorders") return true;
             return allowed.has(id);
@@ -13775,6 +13776,181 @@ const SETUP_ITEMS = [
   },
 ];
 
+/* ==================================================================
+   ADMIN MASTER SWITCHES + AUDIT LOG
+
+   Two related things. The switches decide what the company can see and
+   do; the log records what was actually done. Both are admin-only, and
+   the log deliberately cannot be exported — a record of who looked at
+   what is exactly the sort of thing that should not leave with anyone.
+================================================================== */
+const FEATURE_SWITCHES = [
+  ["portal", "Client portal", "Publish links, share documents, two-way messaging"],
+  ["claim", "Insurance claims", "Claim tracking, supplements, carrier money"],
+  ["changeorders", "Change orders", "Priced amendments after signing"],
+  ["handoff", "Sold approval gate", "Require an admin to approve before production"],
+  ["ventilation", "Ventilation calculator", "Net-free-area sizing and supplement wording"],
+  ["reviews", "Review requests", "Automated review sequence after completion"],
+  ["chat", "Team chat", "Company channel in the Inbox"],
+  ["dispatch", "Dispatch board", "Crew-by-day scheduling"],
+  ["codes", "Code lookup", "Jurisdiction requirements and citations"],
+  ["companycam", "CompanyCam", "Create and open CompanyCam projects"],
+];
+const DEFAULT_FEATURES = FEATURE_SWITCHES.reduce((a, [k]) => { a[k] = true; return a; }, {});
+function featureOn(features, key) {
+  const merged = { ...DEFAULT_FEATURES, ...(features || {}) };
+  return merged[key] !== false;
+}
+
+/* What counts as unusual. Deliberately conservative: the cost of a
+   false positive is someone being signed out mid-job, which is worse
+   than a slow leak. These catch bulk behaviour, not curiosity. */
+const ANOMALY_RULES = [
+  { id: "rapid_open", label: "Opened many jobs very quickly", window: 60000, count: 25,
+    why: "Twenty-five jobs in a minute is scraping, not working." },
+  { id: "export_attempts", label: "Repeated blocked export attempts", window: 300000, count: 3,
+    why: "Three blocked exports in five minutes is someone testing the lock." },
+  { id: "bulk_delete", label: "Bulk deletion", window: 300000, count: 8,
+    why: "Eight deletions in five minutes is not routine tidying." },
+];
+
+function detectAnomaly(events, now) {
+  /* events: [{ type, at }] with `at` as epoch ms. */
+  for (const rule of ANOMALY_RULES) {
+    const since = now - rule.window;
+    const hits = events.filter((e) => e.at >= since && e.rule === rule.id).length;
+    if (hits >= rule.count) return rule;
+  }
+  return null;
+}
+
+function AdminControls({ features, setFeatures, activity, users, currentUser, onBack, toast, security, setSecurity }) {
+  const admin = !!(currentUser && currentUser.role === "admin");
+  const [tab, setTab] = useState("features");
+  const [q, setQ] = useState("");
+  if (!admin) {
+    return (
+      <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+        <SubHeader title="Admin controls" onBack={onBack} />
+        <Card style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 14, color: S.sub }}>This screen is restricted to admins.</div>
+        </Card>
+      </div>
+    );
+  }
+  const feats = { ...DEFAULT_FEATURES, ...(features || {}) };
+  const sec = security || {};
+  const needle = q.trim().toLowerCase();
+  const log = (activity || []).filter((a) => !needle
+    || String(a.text || "").toLowerCase().includes(needle)
+    || String(a.by || "").toLowerCase().includes(needle));
+
+  return (
+    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <SubHeader title="Admin controls" onBack={onBack} />
+      <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
+        {[["features", "Features"], ["security", "Security"], ["log", "Audit log"]].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)} style={{
+            flex: 1, border: `1.5px solid ${tab === id ? T.accent : S.line}`,
+            background: tab === id ? T.accentSoft : "#fff", color: tab === id ? T.accent : S.ink,
+            borderRadius: 999, padding: "9px 10px", fontSize: 13, fontWeight: 800, cursor: "pointer",
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {tab === "features" && (
+        <Card>
+          <CardTitle>What the company can use</CardTitle>
+          <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 6 }}>
+            Turning something off hides it for everyone, including other
+            admins. Existing data is kept — switch it back on and it returns.
+          </div>
+          {FEATURE_SWITCHES.map(([key, label, sub]) => (
+            <div key={key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderTop: `1px solid ${S.line}` }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: feats[key] === false ? S.sub : S.ink }}>{label}</div>
+                <div style={{ fontSize: 11.5, color: S.sub, marginTop: 1 }}>{sub}</div>
+              </div>
+              <Toggle on={feats[key] !== false} onClick={() => setFeatures({ ...feats, [key]: feats[key] === false })} />
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {tab === "security" && (
+        <>
+          <Card>
+            <CardTitle>Data protection</CardTitle>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderTop: `1px solid ${S.line}` }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>Block reps from exporting</div>
+                <div style={{ fontSize: 11.5, color: S.sub, marginTop: 1, lineHeight: 1.45 }}>
+                  Already on. Reps cannot download CSVs of jobs, commission or
+                  contacts; every attempt is logged.
+                </div>
+              </div>
+              <Chip tone="green">On</Chip>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderTop: `1px solid ${S.line}` }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>Sign out on unusual activity</div>
+                <div style={{ fontSize: 11.5, color: S.sub, marginTop: 1, lineHeight: 1.45 }}>
+                  Ends the session when someone behaves like they are harvesting
+                  rather than working.
+                </div>
+              </div>
+              <Toggle on={sec.anomalyLogout !== false}
+                onClick={() => setSecurity({ ...sec, anomalyLogout: sec.anomalyLogout === false })} />
+            </div>
+          </Card>
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle>What triggers a sign-out</CardTitle>
+            {ANOMALY_RULES.map((r) => (
+              <div key={r.id} style={{ padding: "9px 0", borderTop: `1px solid ${S.line}` }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: S.ink }}>{r.label}</div>
+                <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2, lineHeight: 1.45 }}>
+                  {r.count} in {Math.round(r.window / 60000)} {r.window === 60000 ? "minute" : "minutes"} — {r.why}
+                </div>
+              </div>
+            ))}
+            <Callout label="What this does and does not do" tone="amber">
+              This raises the cost of bulk-harvesting your data. It cannot stop
+              someone reading their own screen or photographing it, and it is
+              not a substitute for a signed agreement about who owns the book
+              of business. Treat it as a tripwire, not a lock.
+            </Callout>
+          </Card>
+        </>
+      )}
+
+      {tab === "log" && (
+        <Card>
+          <CardTitle right={<Chip tone="gray">{log.length}</Chip>}>Audit log</CardTitle>
+          <input style={{ ...inputStyle, marginBottom: 10 }} value={q} onChange={(e) => setQ(e.target.value)}
+            placeholder="Search by person or action" />
+          <div style={{ fontSize: 11.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
+            Deliberately not exportable — a record of who looked at what should
+            not be the easiest thing in the building to walk out with.
+          </div>
+          {log.length === 0 && <div style={{ fontSize: 13.5, color: S.sub }}>Nothing matches.</div>}
+          {log.slice(0, 200).map((a, i2) => {
+            const flagged = /deleted|export|blocked/i.test(String(a.text || "") + String(a.type || ""));
+            return (
+              <div key={a.id || i2} style={{
+                padding: "9px 0", borderTop: `1px solid ${S.line}`,
+                background: flagged ? "#FFF6E5" : "transparent",
+              }}>
+                <div style={{ fontSize: 11.5, color: S.sub }}>{a.at} · {a.by}</div>
+                <div style={{ fontSize: 13.5, color: S.ink, marginTop: 2, lineHeight: 1.45 }}>{a.text}</div>
+              </div>
+            );
+          })}
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function SetupKeys({ apiSetup, setApiSetup, currentUser, onBack, toast }) {
   const admin = !!(currentUser && currentUser.role === "admin");
   const [openId, setOpenId] = useState(null);
@@ -13904,6 +14080,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
       ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam"],
       ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
       ["password", Lock, "Change my password", "Update your sign-in password"],
+      currentUser && currentUser.role === "admin" && ["admin", Shield, "Admin controls", "Feature switches, security and the audit log"],
       currentUser && currentUser.role === "admin" && ["setupkeys", Lock, "Setup & keys", "API keys and services still to connect"],
       ["syscheck", AlertTriangle, "System check", "Test the database connection and setup"],
     ]],
@@ -14561,12 +14738,33 @@ export default function SupremeCRM() {
   /* Company setting, not a secret: create a CompanyCam project whenever
      a lead is created (using whichever seat's token is connected). */
   const [ccAutoCreate, setCcAutoCreate] = useState(true);
+  /* Company-wide feature switches and security posture, admin-controlled. */
+  const [features, setFeatures] = useState({});
+  const [security, setSecurity] = useState({ anomalyLogout: true });
+  /* Rolling behaviour window for anomaly detection. A ref, not state:
+     it must not trigger a render on every tap. */
+  const behaviour = useRef([]);
+  const noteBehaviour = (ruleId) => {
+    const now = Date.now();
+    behaviour.current = [...behaviour.current.filter((e) => now - e.at < 300000), { rule: ruleId, at: now }];
+    if (security.anomalyLogout === false) return;
+    const hit = detectAnomaly(behaviour.current, now);
+    if (hit) {
+      behaviour.current = [];
+      logAct({ type: "security", text: `Signed out automatically: ${hit.label.toLowerCase()}` });
+      const a = AUTH();
+      if (a) { try { a.signOut(); } catch (e) { /* offline — local sign-out still applies */ } }
+      setCurrentUser(null);
+      setNav("home");
+    }
+  };
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate];
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security];
   const orgPack = () => ({
     announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates,
-    priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, version: 1,
+    priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate,
+    features, security, version: 1,
   });
   const unpackOrg = (d) => {
     if (d.announcements) setAnnouncements(d.announcements);
@@ -14583,6 +14781,8 @@ export default function SupremeCRM() {
     if (d.reviewSettings) setReviewSettings(d.reviewSettings);
     if (d.apiSetup) setApiSetup(d.apiSetup);
     if (d.ccAutoCreate !== undefined) setCcAutoCreate(d.ccAutoCreate);
+    if (d.features) setFeatures(d.features);
+    if (d.security) setSecurity(d.security);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
   const brandErr = useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true);
@@ -14619,6 +14819,7 @@ export default function SupremeCRM() {
   const deleteJobs = (ids, label) => {
     setJobs((prev) => prev.filter((j) => !ids.includes(j.id)));
     if (openJobId && ids.includes(openJobId)) { setOpenJobId(null); setNav("jobs"); }
+    ids.forEach(() => noteBehaviour("bulk_delete"));
     logAct({ type: "delete", text: `Deleted ${ids.length === 1 ? "job" : ids.length + " jobs"}: ${label}` });
     toast(ids.length === 1 ? "Job deleted" : ids.length + " jobs deleted");
   };
@@ -14635,7 +14836,10 @@ export default function SupremeCRM() {
      return so hook order is stable; admin is derived inline rather than
      from a const declared later in the component. */
   useEffect(() => {
-    setExportPolicy(canEditStructure(currentUser), logAct);
+    setExportPolicy(canEditStructure(currentUser), (entry) => {
+      logAct(entry);
+      if (entry && entry.rule) noteBehaviour(entry.rule);
+    });
   }, [currentUser && currentUser.role]); // eslint-disable-line
 
   /* Derived here rather than from userName, which is declared further
@@ -14861,7 +15065,10 @@ export default function SupremeCRM() {
 
   const openJob = openJobId ? jobs.find((j) => j.id === openJobId) : null;
   const quickJob = quickJobId ? jobs.find((j) => j.id === quickJobId) : null;
-  const openJobScreen = (id, tab = null) => { setOpenJobId(id); setJobOpenTab(tab); setNav("jobs"); };
+  const openJobScreen = (id, tab = null) => {
+    noteBehaviour("rapid_open");
+    setOpenJobId(id); setJobOpenTab(tab); setNav("jobs");
+  };
   const backToBoard = () => setOpenJobId(null);
 
   const NavBtn = ({ id, icon: Icon, label, badge = 0 }) => {
@@ -14895,7 +15102,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           crews={crews} setCrews={setCrews} templates={templates} integrations={integrations} users={users}
           estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} setBrand={setBrand}
           onLog={logAct} leadSources={leadSources} activity={activity} ccToken={ccToken}
-          onDelete={isAdmin ? deleteJobs : null} openTab={jobOpenTab} />
+          onDelete={isAdmin ? deleteJobs : null} openTab={jobOpenTab} features={features} />
       ) : nav === "home" ? (
         <>
           {liveDb() && jobs.length === 0 && (
@@ -15015,6 +15222,10 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "crews" ? (
         <CrewManager crews={crews} setCrews={setCrews} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} />
+      ) : nav === "admin" ? (
+        <AdminControls features={features} setFeatures={setFeatures} activity={activity}
+          users={users} currentUser={liveUser} onBack={() => setNav("more")} toast={toast}
+          security={security} setSecurity={setSecurity} />
       ) : nav === "setupkeys" ? (
         <SetupKeys apiSetup={apiSetup} setApiSetup={setApiSetup} currentUser={liveUser}
           onBack={() => setNav("more")} toast={toast} />
