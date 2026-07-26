@@ -18,7 +18,10 @@ ok(isoLocal(new Date(2026, 0, 1, 2, 0, 0)) === "2026-01-01", "new year morning s
 
 ok(src.includes("function isoLocal"), "local-date helper exists");
 ok(src.includes("function todayIso"), "today helper exists");
-ok(src.includes("const iso = (d) => isoLocal(d);"), "dispatch uses local dates");
+ok(src.includes("const [day, setDay] = useState(() => todayIso());"),
+  "dispatch anchors on a local-date day, not a UTC conversion");
+ok(src.includes("const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + i - 2);"),
+  "the day strip is built from local parts anchored at midday");
 ok(!src.includes("const today = iso(new Date());"), "dispatch no longer derives today from UTC");
 
 /* --- home quick actions --- */

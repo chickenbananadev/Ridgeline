@@ -74389,165 +74389,254 @@ function WarrantyCenter({ jobs, onOpenJob, onBack }) {
   ] });
 }
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast: toast2, embedded = false }) {
-  const [weekStart, setWeekStart] = (0, import_react.useState)(() => {
-    const d = /* @__PURE__ */ new Date();
-    d.setDate(d.getDate() - (d.getDay() + 6) % 7);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  });
+  const [day, setDay] = (0, import_react.useState)(() => todayIso());
   const [assigning, setAssigning] = (0, import_react.useState)(null);
-  const days = [...Array(7)].map((_, i) => {
-    const d = new Date(weekStart);
-    d.setDate(d.getDate() + i);
-    return d;
-  });
-  const iso = (d) => isoLocal(d);
-  const today = todayIso();
+  const [pickCrew, setPickCrew] = (0, import_react.useState)(null);
+  const [pickDay, setPickDay] = (0, import_react.useState)(null);
   const activeCrews = crews.filter((c) => c.active !== false);
-  const cellJobs = (crewId, d) => jobs.filter((j) => j.crewId === crewId && j.schedDate === iso(d));
-  const unscheduled = jobs.filter((j) => ["s7", "s8"].includes(j.stageId) ? !j.schedDate || !j.crewId : j.schedDate && !j.crewId);
-  const fmtDay = (d) => d.toLocaleDateString(void 0, { weekday: "short", day: "numeric" });
-  const shiftWeek = (n) => setWeekStart((w) => {
-    const d = new Date(w);
-    d.setDate(d.getDate() + n * 7);
-    return d;
+  const today = todayIso();
+  const dayDate = /* @__PURE__ */ new Date(day + "T12:00:00");
+  const strip = [...Array(14)].map((_, i) => {
+    const d = /* @__PURE__ */ new Date();
+    d.setHours(12, 0, 0, 0);
+    d.setDate(d.getDate() + i - 2);
+    return isoLocal(d);
   });
-  const assign = (crewId, d) => {
-    if (!assigning) return;
-    mutJob(assigning.id, (j) => ({ ...j, crewId, schedDate: iso(d) }));
-    toast2(`${assigning.name} \u2192 ${(activeCrews.find((c) => c.id === crewId) || {}).name} on ${fmtDay(d)}`);
-    setAssigning(null);
+  const onDay = (iso) => jobs.filter((j) => j.schedDate === iso);
+  const crewJobs = (crewId, iso) => jobs.filter((j) => j.crewId === crewId && j.schedDate === iso);
+  const unassignedOn = (iso) => jobs.filter((j) => j.schedDate === iso && !j.crewId);
+  const needsScheduling = jobs.filter((j) => ["s7", "s8"].includes(j.stageId) ? !j.schedDate || !j.crewId : j.schedDate && !j.crewId);
+  const openPlacer = (j) => {
+    setAssigning(j);
+    setPickCrew(j.crewId || null);
+    setPickDay(j.schedDate || day);
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: embedded ? { padding: 0 } : { padding: "16px 0 110px", background: S.bg, minHeight: "100vh" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: embedded ? { padding: 0 } : { padding: "0 16px" }, children: [
-      embedded ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 16, fontWeight: 800, color: S.ink }, children: "Dispatch" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => shiftWeek(-1), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronLeft, { size: 15 }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 12, fontWeight: 700, color: S.ink, whiteSpace: "nowrap" }, children: [
-            days[0].toLocaleDateString(void 0, { month: "short", day: "numeric" }),
-            " \u2013 ",
-            days[6].toLocaleDateString(void 0, { month: "short", day: "numeric" })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => shiftWeek(1), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 15 }) })
-        ] })
-      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        SubHeader,
-        {
-          title: "Dispatch",
-          onBack,
-          right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => shiftWeek(-1), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronLeft, { size: 15 }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 12.5, fontWeight: 700, color: S.ink, whiteSpace: "nowrap" }, children: [
-              days[0].toLocaleDateString(void 0, { month: "short", day: "numeric" }),
-              " \u2013 ",
-              days[6].toLocaleDateString(void 0, { month: "short", day: "numeric" })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => shiftWeek(1), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 15 }) })
-          ] })
-        }
-      ),
-      assigning && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 10, background: T.accentSoft, border: `1.5px solid ${T.accent}`, borderRadius: 11, padding: "10px 13px", fontSize: 13, color: T.accent, fontWeight: 600 }, children: [
-        "Placing ",
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: assigning.name }),
-        " \u2014 tap a crew's day below.",
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setAssigning(null), style: { ...linkBtn, marginLeft: 10, color: T.accent }, children: "Cancel" })
+  const confirmPlace = () => {
+    if (!assigning || !pickCrew || !pickDay) return;
+    const crew2 = activeCrews.find((c) => c.id === pickCrew);
+    mutJob(assigning.id, (j) => ({ ...j, crewId: pickCrew, schedDate: pickDay }));
+    toast2(`${assigning.name} \u2192 ${crew2 ? crew2.name : "crew"} on ${pickDay}`);
+    setDay(pickDay);
+    setAssigning(null);
+    setPickCrew(null);
+    setPickDay(null);
+  };
+  const unplace = (j) => {
+    mutJob(j.id, (x) => ({ ...x, crewId: null }));
+    toast2(`${j.name} taken off the crew`);
+  };
+  const dayLabel = (iso) => {
+    if (iso === today) return "Today";
+    const d = /* @__PURE__ */ new Date(iso + "T12:00:00");
+    const t = /* @__PURE__ */ new Date(today + "T12:00:00");
+    const diff = Math.round((d - t) / 864e5);
+    if (diff === 1) return "Tomorrow";
+    if (diff === -1) return "Yesterday";
+    return d.toLocaleDateString(void 0, { weekday: "long", month: "short", day: "numeric" });
+  };
+  const Header = /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: embedded ? 16 : 22, fontWeight: 800, color: S.ink }, children: "Dispatch" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: day === today ? "ghost" : "soft", onClick: () => setDay(today), children: "Today" })
+  ] });
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: embedded ? { padding: 0 } : { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
+    embedded ? Header : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Dispatch", onBack, right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: day === today ? "ghost" : "soft", onClick: () => setDay(today), children: "Today" }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, overflowX: "auto", padding: "12px 0 4px", WebkitOverflowScrolling: "touch" }, children: strip.map((iso) => {
+      const d = /* @__PURE__ */ new Date(iso + "T12:00:00");
+      const count = onDay(iso).length;
+      const gap = unassignedOn(iso).length;
+      const on = iso === day;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setDay(iso), style: {
+        flexShrink: 0,
+        minWidth: 56,
+        border: `1.5px solid ${on ? T.accent : S.line}`,
+        background: on ? T.accent : "#fff",
+        borderRadius: 12,
+        padding: "7px 4px 6px",
+        cursor: "pointer",
+        fontFamily: "inherit",
+        textAlign: "center"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10, fontWeight: 700, color: on ? "rgba(255,255,255,.8)" : S.sub, textTransform: "uppercase" }, children: d.toLocaleDateString(void 0, { weekday: "short" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, color: on ? "#fff" : iso === today ? T.accent : S.ink, lineHeight: 1.2 }, children: d.getDate() }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 6, display: "flex", gap: 2, justifyContent: "center", marginTop: 2 }, children: count > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: {
+          fontSize: 9.5,
+          fontWeight: 800,
+          lineHeight: 1,
+          color: on ? "#fff" : gap > 0 ? "#9A6B00" : "#177245"
+        }, children: [
+          count,
+          gap > 0 ? "!" : ""
+        ] }) })
+      ] }, iso);
+    }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 15, fontWeight: 800, color: S.ink, margin: "10px 0 8px" }, children: [
+      dayLabel(day),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 12.5, fontWeight: 500, color: S.sub }, children: [
+        " \xB7 ",
+        onDay(day).length,
+        " ",
+        onDay(day).length === 1 ? "roof" : "roofs"
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { overflowX: "auto", marginTop: 12, WebkitOverflowScrolling: "touch" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minWidth: 120 + 7 * 118, padding: "0 16px" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: `112px repeat(7, 110px)`, gap: 6 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {}),
-      days.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
-        textAlign: "center",
-        fontSize: 12,
-        fontWeight: 800,
-        padding: "6px 0",
-        borderRadius: 8,
-        color: iso(d) === today ? "#fff" : S.sub,
-        background: iso(d) === today ? T.accent : "transparent"
-      }, children: fmtDay(d) }, iso(d))),
-      activeCrews.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_react.default.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, fontWeight: 800, color: S.ink, padding: "10px 4px 0", lineHeight: 1.3 }, children: [
-          c.name,
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, fontWeight: 500, color: S.sub }, children: (c.trades || []).slice(0, 2).join(", ") })
+    unassignedOn(day).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 10, borderLeft: "4px solid #E8B931" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, fontWeight: 800, color: "#9A6B00", marginBottom: 7 }, children: [
+        unassignedOn(day).length,
+        " scheduled with no crew"
+      ] }),
+      unassignedOn(day).map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", padding: "7px 0", borderTop: `1px solid ${S.line}` }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: { flex: 1, minWidth: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, fontFamily: "inherit" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: j.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: j.address })
         ] }),
-        days.map((d) => {
-          const here = cellJobs(c.id, d);
-          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "button",
-            {
-              onClick: () => assigning ? assign(c.id, d) : void 0,
-              style: {
-                minHeight: 62,
-                border: `1.5px ${assigning ? "dashed " + T.accent : "solid " + S.line}`,
-                background: "#fff",
-                borderRadius: 10,
-                padding: 4,
-                cursor: assigning ? "pointer" : "default",
-                display: "flex",
-                flexDirection: "column",
-                gap: 3,
-                textAlign: "left"
-              },
-              children: here.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                "span",
-                {
-                  onClick: (e) => {
-                    if (!assigning) {
-                      e.stopPropagation();
-                      onOpenJob(j.id);
-                    }
-                  },
-                  style: {
-                    background: T.accentSoft,
-                    color: T.accent,
-                    borderRadius: 7,
-                    padding: "4px 6px",
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    lineHeight: 1.25,
-                    cursor: "pointer",
-                    overflow: "hidden",
-                    display: "block"
-                  },
-                  children: j.name
-                },
-                j.id
-              ))
-            },
-            iso(d)
-          );
-        })
-      ] }, c.id))
-    ] }) }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 0" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { children: [
-          "Needs scheduling (",
-          unscheduled.length,
-          ")"
-        ] }),
-        unscheduled.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "Everything in production is placed." }),
-        unscheduled.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderTop: `1px solid ${S.line}` }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: { border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, color: S.ink }, children: j.name }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
-              j.address,
-              j.schedDate ? ` \xB7 ${j.schedDate} (no crew)` : ""
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, onClick: () => openPlacer(j), children: "Assign" })
+      ] }, j.id))
+    ] }),
+    activeCrews.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "No active crews. Add one under More \u2192 Crews." }) }),
+    activeCrews.map((c) => {
+      const here = crewJobs(c.id, day);
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 10 }, pad: 0, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "13px 15px", borderBottom: here.length ? `1px solid ${S.line}` : "none" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+            width: 34,
+            height: 34,
+            borderRadius: 9,
+            flexShrink: 0,
+            background: here.length ? "#EAF6EE" : S.soft,
+            display: "grid",
+            placeItems: "center"
+          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.HardHat, { size: 17, color: here.length ? "#177245" : "#C7CBD1" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700, color: S.ink }, children: c.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub }, children: [
+              here.length === 0 ? "Open \u2014 nothing booked" : `${here.length} ${here.length === 1 ? "roof" : "roofs"}`,
+              (c.trades || []).length ? ` \xB7 ${(c.trades || []).slice(0, 2).join(", ")}` : ""
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            Btn,
-            {
-              small: true,
-              kind: assigning && assigning.id === j.id ? "primary" : "ghost",
-              onClick: () => setAssigning(assigning && assigning.id === j.id ? null : j),
-              children: assigning && assigning.id === j.id ? "Placing\u2026" : "Place"
-            }
-          )
+          c.phone && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `tel:${String(c.phone).replace(/\D/g, "")}`, "aria-label": `Call ${c.name}`, style: {
+            width: 34,
+            height: 34,
+            borderRadius: 999,
+            background: T.accentSoft,
+            display: "grid",
+            placeItems: "center",
+            color: T.accent,
+            textDecoration: "none",
+            flexShrink: 0
+          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Phone, { size: 15 }) })
+        ] }),
+        here.map((j, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 9, alignItems: "center", padding: "11px 15px", borderTop: i2 ? `1px solid ${S.line}` : "none" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: { flex: 1, minWidth: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, fontFamily: "inherit" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 600, color: S.ink }, children: j.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: j.address })
+          ] }),
+          j.address && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: directionsLink(j.address), target: "_blank", rel: "noreferrer", "aria-label": "Directions", style: {
+            width: 32,
+            height: 32,
+            borderRadius: 999,
+            background: S.soft,
+            display: "grid",
+            placeItems: "center",
+            color: S.sub,
+            textDecoration: "none",
+            flexShrink: 0
+          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 14 }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => openPlacer(j), "aria-label": "Move", style: {
+            width: 32,
+            height: 32,
+            borderRadius: 999,
+            background: S.soft,
+            border: "none",
+            display: "grid",
+            placeItems: "center",
+            color: S.sub,
+            cursor: "pointer",
+            flexShrink: 0
+          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ArrowUpDown, { size: 14 }) })
         ] }, j.id))
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "Tap Place on a job, then tap the crew and day it belongs to. Jobs land here once they reach Approved or Scheduled without a crew and date." })
-    ] })
+      ] }, c.id);
+    }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 4 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: needsScheduling.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: needsScheduling.length }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Clear" }), children: "Needs scheduling" }),
+      needsScheduling.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "Everything in production is placed." }),
+      needsScheduling.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", padding: "10px 0", borderTop: `1px solid ${S.line}` }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: { flex: 1, minWidth: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, fontFamily: "inherit" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, color: S.ink }, children: j.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
+            j.address,
+            j.schedDate ? ` \xB7 ${j.schedDate}, no crew` : " \xB7 no date"
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, onClick: () => openPlacer(j), children: "Assign" })
+      ] }, j.id))
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      Sheet,
+      {
+        open: !!assigning,
+        onClose: () => setAssigning(null),
+        title: assigning ? `Schedule ${assigning.name}` : "Schedule",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+          assigning && assigning.crewId && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", onClick: () => {
+            unplace(assigning);
+            setAssigning(null);
+          }, children: "Unassign" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 1 }, disabled: !pickCrew || !pickDay, onClick: confirmPlace, "data-testid": "confirm-dispatch", children: assigning && assigning.crewId ? "Move" : "Assign" })
+        ] }),
+        children: assigning && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 12 }, children: assigning.address }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.ink, marginBottom: 7 }, children: "Day" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 14 }, children: strip.map((iso) => {
+            const d = /* @__PURE__ */ new Date(iso + "T12:00:00");
+            const on = pickDay === iso;
+            return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setPickDay(iso), style: {
+              flexShrink: 0,
+              minWidth: 54,
+              border: `1.5px solid ${on ? T.accent : S.line}`,
+              background: on ? T.accentSoft : "#fff",
+              borderRadius: 10,
+              padding: "6px 4px",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              textAlign: "center"
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10, fontWeight: 700, color: S.sub, textTransform: "uppercase" }, children: d.toLocaleDateString(void 0, { weekday: "short" }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 16, fontWeight: 800, color: on ? T.accent : S.ink }, children: d.getDate() })
+            ] }, iso);
+          }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.ink, marginBottom: 7 }, children: "Crew" }),
+          activeCrews.map((c) => {
+            const load = pickDay ? crewJobs(c.id, pickDay).length : 0;
+            const on = pickCrew === c.id;
+            return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setPickCrew(c.id), style: {
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              width: "100%",
+              textAlign: "left",
+              border: `1.5px solid ${on ? T.accent : S.line}`,
+              background: on ? T.accentSoft : "#fff",
+              borderRadius: 11,
+              padding: "11px 13px",
+              marginBottom: 7,
+              cursor: "pointer",
+              fontFamily: "inherit"
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.HardHat, { size: 16, color: on ? T.accent : S.sub }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 14, fontWeight: 700, color: S.ink }, children: c.name }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: load > 1 ? "#9A6B00" : S.sub }, children: load === 0 ? "Free that day" : `${load} already booked` })
+              ] }),
+              on && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Check, { size: 16, color: T.accent })
+            ] }, c.id);
+          }),
+          pickCrew && pickDay && crewJobs(pickCrew, pickDay).length > 1 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "That crew is already busy", tone: "amber", children: [
+            "They have ",
+            crewJobs(pickCrew, pickDay).length,
+            " roofs booked that day. Doable on small jobs, but worth a look before you commit."
+          ] })
+        ] })
+      }
+    )
   ] });
 }
 var PO_STATUSES = ["Draft", "Ordered", "Partially received", "Received", "Reconciled"];

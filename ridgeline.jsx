@@ -6745,128 +6745,269 @@ function WarrantyCenter({ jobs, onOpenJob, onBack }) {
 }
 
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded = false }) {
-  const [weekStart, setWeekStart] = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday
-    d.setHours(0, 0, 0, 0); return d;
-  });
-  const [assigning, setAssigning] = useState(null); // job being scheduled
-  const days = [...Array(7)].map((_, i) => { const d = new Date(weekStart); d.setDate(d.getDate() + i); return d; });
-  const iso = (d) => isoLocal(d);
-  const today = todayIso();
+  /* Day-first, not a grid.
+
+     The old board was a seven-day by N-crew table roughly 950px wide,
+     rendered on a 390px phone. You could see three days at once, cells
+     were 110px with 10px type, and placing a job meant tapping it then
+     scrolling sideways hunting for the right cell.
+
+     A dispatcher's real question is "who is where today", so the day is
+     the frame and crews are full-width cards inside it. The week is a
+     compact load strip you can tap, not a table you scroll. Placing a
+     job opens one sheet with both the crew and the day in it. */
+  const [day, setDay] = useState(() => todayIso());
+  const [assigning, setAssigning] = useState(null);
+  const [pickCrew, setPickCrew] = useState(null);
+  const [pickDay, setPickDay] = useState(null);
+
   const activeCrews = crews.filter((c) => c.active !== false);
-  const cellJobs = (crewId, d) => jobs.filter((j) => j.crewId === crewId && j.schedDate === iso(d));
-  const unscheduled = jobs.filter((j) =>
+  const today = todayIso();
+  const dayDate = new Date(day + "T12:00:00");
+
+  /* Fourteen days from today: far enough to plan, short enough to scan. */
+  const strip = [...Array(14)].map((_, i) => {
+    const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + i - 2);
+    return isoLocal(d);
+  });
+
+  const onDay = (iso) => jobs.filter((j) => j.schedDate === iso);
+  const crewJobs = (crewId, iso) => jobs.filter((j) => j.crewId === crewId && j.schedDate === iso);
+  const unassignedOn = (iso) => jobs.filter((j) => j.schedDate === iso && !j.crewId);
+  const needsScheduling = jobs.filter((j) =>
     ["s7", "s8"].includes(j.stageId) ? (!j.schedDate || !j.crewId) : (j.schedDate && !j.crewId));
-  const fmtDay = (d) => d.toLocaleDateString(undefined, { weekday: "short", day: "numeric" });
-  const shiftWeek = (n) => setWeekStart((w) => { const d = new Date(w); d.setDate(d.getDate() + n * 7); return d; });
-  const assign = (crewId, d) => {
-    if (!assigning) return;
-    mutJob(assigning.id, (j) => ({ ...j, crewId, schedDate: iso(d) }));
-    toast(`${assigning.name} → ${(activeCrews.find((c) => c.id === crewId) || {}).name} on ${fmtDay(d)}`);
-    setAssigning(null);
+
+  const openPlacer = (j) => { setAssigning(j); setPickCrew(j.crewId || null); setPickDay(j.schedDate || day); };
+  const confirmPlace = () => {
+    if (!assigning || !pickCrew || !pickDay) return;
+    const crew = activeCrews.find((c) => c.id === pickCrew);
+    mutJob(assigning.id, (j) => ({ ...j, crewId: pickCrew, schedDate: pickDay }));
+    toast(`${assigning.name} → ${crew ? crew.name : "crew"} on ${pickDay}`);
+    setDay(pickDay);
+    setAssigning(null); setPickCrew(null); setPickDay(null);
   };
+  const unplace = (j) => {
+    mutJob(j.id, (x) => ({ ...x, crewId: null }));
+    toast(`${j.name} taken off the crew`);
+  };
+
+  const dayLabel = (iso) => {
+    if (iso === today) return "Today";
+    const d = new Date(iso + "T12:00:00");
+    const t = new Date(today + "T12:00:00");
+    const diff = Math.round((d - t) / 86400000);
+    if (diff === 1) return "Tomorrow";
+    if (diff === -1) return "Yesterday";
+    return d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+  };
+
+  const Header = (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+      <div style={{ fontSize: embedded ? 16 : 22, fontWeight: 800, color: S.ink }}>Dispatch</div>
+      <Btn small kind={day === today ? "ghost" : "soft"} onClick={() => setDay(today)}>Today</Btn>
+    </div>
+  );
+
   return (
-    <div style={embedded ? { padding: 0 } : { padding: "16px 0 110px", background: S.bg, minHeight: "100vh" }}>
-      <div style={embedded ? { padding: 0 } : { padding: "0 16px" }}>
-        {embedded ? (
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-            <div style={{ fontSize: 16, fontWeight: 800, color: S.ink }}>Dispatch</div>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <Btn small kind="ghost" onClick={() => shiftWeek(-1)}><ChevronLeft size={15} /></Btn>
-              <span style={{ fontSize: 12, fontWeight: 700, color: S.ink, whiteSpace: "nowrap" }}>
-                {days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – {days[6].toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-              </span>
-              <Btn small kind="ghost" onClick={() => shiftWeek(1)}><ChevronRight size={15} /></Btn>
-            </div>
-          </div>
-        ) : (
-          <SubHeader title="Dispatch" onBack={onBack}
-            right={
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <Btn small kind="ghost" onClick={() => shiftWeek(-1)}><ChevronLeft size={15} /></Btn>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: S.ink, whiteSpace: "nowrap" }}>
-                  {days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – {days[6].toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                </span>
-                <Btn small kind="ghost" onClick={() => shiftWeek(1)}><ChevronRight size={15} /></Btn>
+    <div style={embedded ? { padding: 0 } : { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      {embedded ? Header : <SubHeader title="Dispatch" onBack={onBack} right={
+        <Btn small kind={day === today ? "ghost" : "soft"} onClick={() => setDay(today)}>Today</Btn>} />}
+
+      {/* Day strip — load per day at a glance, no horizontal table. */}
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", padding: "12px 0 4px", WebkitOverflowScrolling: "touch" }}>
+        {strip.map((iso) => {
+          const d = new Date(iso + "T12:00:00");
+          const count = onDay(iso).length;
+          const gap = unassignedOn(iso).length;
+          const on = iso === day;
+          return (
+            <button key={iso} onClick={() => setDay(iso)} style={{
+              flexShrink: 0, minWidth: 56, border: `1.5px solid ${on ? T.accent : S.line}`,
+              background: on ? T.accent : "#fff", borderRadius: 12, padding: "7px 4px 6px",
+              cursor: "pointer", fontFamily: "inherit", textAlign: "center",
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: on ? "rgba(255,255,255,.8)" : S.sub, textTransform: "uppercase" }}>
+                {d.toLocaleDateString(undefined, { weekday: "short" })}
               </div>
-            } />
-        )}
-        {assigning && (
-          <div style={{ marginTop: 10, background: T.accentSoft, border: `1.5px solid ${T.accent}`, borderRadius: 11, padding: "10px 13px", fontSize: 13, color: T.accent, fontWeight: 600 }}>
-            Placing <b>{assigning.name}</b> — tap a crew's day below.
-            <button onClick={() => setAssigning(null)} style={{ ...linkBtn, marginLeft: 10, color: T.accent }}>Cancel</button>
-          </div>
-        )}
+              <div style={{ fontSize: 17, fontWeight: 800, color: on ? "#fff" : iso === today ? T.accent : S.ink, lineHeight: 1.2 }}>
+                {d.getDate()}
+              </div>
+              <div style={{ height: 6, display: "flex", gap: 2, justifyContent: "center", marginTop: 2 }}>
+                {count > 0 && (
+                  <span style={{
+                    fontSize: 9.5, fontWeight: 800, lineHeight: 1,
+                    color: on ? "#fff" : gap > 0 ? "#9A6B00" : "#177245",
+                  }}>{count}{gap > 0 ? "!" : ""}</span>
+                )}
+              </div>
+            </button>
+          );
+        })}
       </div>
 
-      <div style={{ overflowX: "auto", marginTop: 12, WebkitOverflowScrolling: "touch" }}>
-        <div style={{ minWidth: 120 + 7 * 118, padding: "0 16px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: `112px repeat(7, 110px)`, gap: 6 }}>
-            <div />
-            {days.map((d) => (
-              <div key={iso(d)} style={{
-                textAlign: "center", fontSize: 12, fontWeight: 800, padding: "6px 0", borderRadius: 8,
-                color: iso(d) === today ? "#fff" : S.sub, background: iso(d) === today ? T.accent : "transparent",
-              }}>{fmtDay(d)}</div>
-            ))}
-            {activeCrews.map((c) => (
-              <React.Fragment key={c.id}>
-                <div style={{ fontSize: 12.5, fontWeight: 800, color: S.ink, padding: "10px 4px 0", lineHeight: 1.3 }}>
-                  {c.name}
-                  <div style={{ fontSize: 10.5, fontWeight: 500, color: S.sub }}>{(c.trades || []).slice(0, 2).join(", ")}</div>
-                </div>
-                {days.map((d) => {
-                  const here = cellJobs(c.id, d);
-                  return (
-                    <button key={iso(d)} onClick={() => assigning ? assign(c.id, d) : undefined}
-                      style={{
-                        minHeight: 62, border: `1.5px ${assigning ? "dashed " + T.accent : "solid " + S.line}`,
-                        background: "#fff", borderRadius: 10, padding: 4, cursor: assigning ? "pointer" : "default",
-                        display: "flex", flexDirection: "column", gap: 3, textAlign: "left",
-                      }}>
-                      {here.map((j) => (
-                        <span key={j.id} onClick={(e) => { if (!assigning) { e.stopPropagation(); onOpenJob(j.id); } }}
-                          style={{
-                            background: T.accentSoft, color: T.accent, borderRadius: 7, padding: "4px 6px",
-                            fontSize: 10.5, fontWeight: 700, lineHeight: 1.25, cursor: "pointer",
-                            overflow: "hidden", display: "block",
-                          }}>
-                          {j.name}
-                        </span>
-                      ))}
-                    </button>
-                  );
-                })}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
+      <div style={{ fontSize: 15, fontWeight: 800, color: S.ink, margin: "10px 0 8px" }}>
+        {dayLabel(day)}
+        <span style={{ fontSize: 12.5, fontWeight: 500, color: S.sub }}>
+          {" · "}{onDay(day).length} {onDay(day).length === 1 ? "roof" : "roofs"}
+        </span>
       </div>
 
-      <div style={{ padding: "16px 16px 0" }}>
-        <Card>
-          <CardTitle>Needs scheduling ({unscheduled.length})</CardTitle>
-          {unscheduled.length === 0 && <div style={{ fontSize: 13.5, color: S.sub }}>Everything in production is placed.</div>}
-          {unscheduled.map((j) => (
-            <div key={j.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 0", borderTop: `1px solid ${S.line}` }}>
-              <button onClick={() => onOpenJob(j.id)} style={{ border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{j.name}</div>
-                <div style={{ fontSize: 12, color: S.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {j.address}{j.schedDate ? ` · ${j.schedDate} (no crew)` : ""}
-                </div>
+      {/* Unassigned on this day — the thing that must not be missed. */}
+      {unassignedOn(day).length > 0 && (
+        <Card style={{ marginBottom: 10, borderLeft: "4px solid #E8B931" }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#9A6B00", marginBottom: 7 }}>
+            {unassignedOn(day).length} scheduled with no crew
+          </div>
+          {unassignedOn(day).map((j) => (
+            <div key={j.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "7px 0", borderTop: `1px solid ${S.line}` }}>
+              <button onClick={() => onOpenJob(j.id)} style={{ flex: 1, minWidth: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, fontFamily: "inherit" }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{j.name}</div>
+                <div style={{ fontSize: 11.5, color: S.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.address}</div>
               </button>
-              <Btn small kind={assigning && assigning.id === j.id ? "primary" : "ghost"}
-                onClick={() => setAssigning(assigning && assigning.id === j.id ? null : j)}>
-                {assigning && assigning.id === j.id ? "Placing…" : "Place"}
-              </Btn>
+              <Btn small onClick={() => openPlacer(j)}>Assign</Btn>
             </div>
           ))}
         </Card>
-        <div style={{ fontSize: 12, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
-          Tap Place on a job, then tap the crew and day it belongs to. Jobs land here once they reach Approved or
-          Scheduled without a crew and date.
-        </div>
-      </div>
+      )}
+
+      {/* Crews for the selected day, full width. */}
+      {activeCrews.length === 0 && (
+        <Card><div style={{ fontSize: 13.5, color: S.sub }}>No active crews. Add one under More → Crews.</div></Card>
+      )}
+      {activeCrews.map((c) => {
+        const here = crewJobs(c.id, day);
+        return (
+          <Card key={c.id} style={{ marginBottom: 10 }} pad={0}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 15px", borderBottom: here.length ? `1px solid ${S.line}` : "none" }}>
+              <span style={{
+                width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+                background: here.length ? "#EAF6EE" : S.soft,
+                display: "grid", placeItems: "center",
+              }}>
+                <HardHat size={17} color={here.length ? "#177245" : "#C7CBD1"} />
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{c.name}</div>
+                <div style={{ fontSize: 11.5, color: S.sub }}>
+                  {here.length === 0 ? "Open — nothing booked" : `${here.length} ${here.length === 1 ? "roof" : "roofs"}`}
+                  {(c.trades || []).length ? ` · ${(c.trades || []).slice(0, 2).join(", ")}` : ""}
+                </div>
+              </div>
+              {c.phone && (
+                <a href={`tel:${String(c.phone).replace(/\D/g, "")}`} aria-label={`Call ${c.name}`} style={{
+                  width: 34, height: 34, borderRadius: 999, background: T.accentSoft,
+                  display: "grid", placeItems: "center", color: T.accent, textDecoration: "none", flexShrink: 0,
+                }}><Phone size={15} /></a>
+              )}
+            </div>
+            {here.map((j, i2) => (
+              <div key={j.id} style={{ display: "flex", gap: 9, alignItems: "center", padding: "11px 15px", borderTop: i2 ? `1px solid ${S.line}` : "none" }}>
+                <button onClick={() => onOpenJob(j.id)} style={{ flex: 1, minWidth: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, fontFamily: "inherit" }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: S.ink }}>{j.name}</div>
+                  <div style={{ fontSize: 11.5, color: S.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.address}</div>
+                </button>
+                {j.address && (
+                  <a href={directionsLink(j.address)} target="_blank" rel="noreferrer" aria-label="Directions" style={{
+                    width: 32, height: 32, borderRadius: 999, background: S.soft,
+                    display: "grid", placeItems: "center", color: S.sub, textDecoration: "none", flexShrink: 0,
+                  }}><MapPin size={14} /></a>
+                )}
+                <button onClick={() => openPlacer(j)} aria-label="Move" style={{
+                  width: 32, height: 32, borderRadius: 999, background: S.soft, border: "none",
+                  display: "grid", placeItems: "center", color: S.sub, cursor: "pointer", flexShrink: 0,
+                }}><ArrowUpDown size={14} /></button>
+              </div>
+            ))}
+          </Card>
+        );
+      })}
+
+      {/* Backlog */}
+      <Card style={{ marginTop: 4 }}>
+        <CardTitle right={needsScheduling.length ? <Chip tone="amber">{needsScheduling.length}</Chip> : <Chip tone="green">Clear</Chip>}>
+          Needs scheduling
+        </CardTitle>
+        {needsScheduling.length === 0 && (
+          <div style={{ fontSize: 13.5, color: S.sub }}>Everything in production is placed.</div>
+        )}
+        {needsScheduling.map((j) => (
+          <div key={j.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "10px 0", borderTop: `1px solid ${S.line}` }}>
+            <button onClick={() => onOpenJob(j.id)} style={{ flex: 1, minWidth: 0, border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, fontFamily: "inherit" }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{j.name}</div>
+              <div style={{ fontSize: 11.5, color: S.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {j.address}{j.schedDate ? ` · ${j.schedDate}, no crew` : " · no date"}
+              </div>
+            </button>
+            <Btn small onClick={() => openPlacer(j)}>Assign</Btn>
+          </div>
+        ))}
+      </Card>
+
+      {/* One sheet, both decisions — no sideways hunting for a cell. */}
+      <Sheet open={!!assigning} onClose={() => setAssigning(null)}
+        title={assigning ? `Schedule ${assigning.name}` : "Schedule"}
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            {assigning && assigning.crewId && (
+              <Btn kind="ghost" onClick={() => { unplace(assigning); setAssigning(null); }}>Unassign</Btn>
+            )}
+            <Btn style={{ flex: 1 }} disabled={!pickCrew || !pickDay} onClick={confirmPlace} data-testid="confirm-dispatch">
+              {assigning && assigning.crewId ? "Move" : "Assign"}
+            </Btn>
+          </div>
+        }>
+        {assigning && (
+          <div>
+            <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 12 }}>{assigning.address}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: S.ink, marginBottom: 7 }}>Day</div>
+            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 14 }}>
+              {strip.map((iso) => {
+                const d = new Date(iso + "T12:00:00");
+                const on = pickDay === iso;
+                return (
+                  <button key={iso} onClick={() => setPickDay(iso)} style={{
+                    flexShrink: 0, minWidth: 54, border: `1.5px solid ${on ? T.accent : S.line}`,
+                    background: on ? T.accentSoft : "#fff", borderRadius: 10, padding: "6px 4px",
+                    cursor: "pointer", fontFamily: "inherit", textAlign: "center",
+                  }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: S.sub, textTransform: "uppercase" }}>
+                      {d.toLocaleDateString(undefined, { weekday: "short" })}
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: on ? T.accent : S.ink }}>{d.getDate()}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: S.ink, marginBottom: 7 }}>Crew</div>
+            {activeCrews.map((c) => {
+              const load = pickDay ? crewJobs(c.id, pickDay).length : 0;
+              const on = pickCrew === c.id;
+              return (
+                <button key={c.id} onClick={() => setPickCrew(c.id)} style={{
+                  display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+                  border: `1.5px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : "#fff",
+                  borderRadius: 11, padding: "11px 13px", marginBottom: 7, cursor: "pointer", fontFamily: "inherit",
+                }}>
+                  <HardHat size={16} color={on ? T.accent : S.sub} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: S.ink }}>{c.name}</span>
+                    <span style={{ fontSize: 11.5, color: load > 1 ? "#9A6B00" : S.sub }}>
+                      {load === 0 ? "Free that day" : `${load} already booked`}
+                    </span>
+                  </span>
+                  {on && <Check size={16} color={T.accent} />}
+                </button>
+              );
+            })}
+            {pickCrew && pickDay && crewJobs(pickCrew, pickDay).length > 1 && (
+              <Callout label="That crew is already busy" tone="amber">
+                They have {crewJobs(pickCrew, pickDay).length} roofs booked that
+                day. Doable on small jobs, but worth a look before you commit.
+              </Callout>
+            )}
+          </div>
+        )}
+      </Sheet>
     </div>
   );
 }
