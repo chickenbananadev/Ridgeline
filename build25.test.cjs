@@ -43,12 +43,12 @@ ok(src.includes("steps: [...done, next.step.id]"), "logging records which step w
 ok(src.includes("Number(x.j.review.rating) <= 3"), "unhappy customers are held back from the sequence");
 
 /* --- measurement sources --- */
-ok(src.includes("Measure from"), "the takeoff explains where measurements come from");
-ok(src.includes("Pitch is the one thing no"), "the real limit — pitch — is stated plainly");
-ok(src.includes("Trace the roof below on free state aerial imagery"), "tracing leads the card");
+ok(src.includes("Where the dimensions come from"), "the takeoff explains where measurements come from");
+ok(src.includes("the only one that gives you pitch"), "pitch is named as the on-site-only measurement");
+ok(src.includes("This is a calculator, not a survey"), "the tool is honest about what it is");
 ok(src.includes("basemap=satellite"), "satellite view is one tap away");
-ok(src.includes("map_action=pano"), "street view is offered for storeys and elevation");
-ok(src.includes("the image cannot tell you the pitch"), "the satellite caveat is explicit");
+ok(src.includes("an aerial report") || src.includes("An aerial report"), "ordering a real report is the recommended route");
+ok(src.includes("cannot give you pitch"), "the satellite caveat is explicit");
 ok(src.includes("third-party"), "why an aerial report wins a dispute is explained");
 
 /* --- no dead code reintroduced --- */

@@ -1,12 +1,4 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-/* Map stack. Leaflet handles tiles, touch and zoom; Geoman handles
-   drawing, vertex editing and snapping; Turf computes geodesic area.
-   All three are open source and free, and every one of them replaces
-   something that was hand-rolled here and buggy. */
-import L from "leaflet";
-import "@geoman-io/leaflet-geoman-free";
-import turfArea from "@turf/area";
-import turfLength from "@turf/length";
 import {
   Home, Briefcase, Plus, MessageCircle, Menu, Search, SlidersHorizontal,
   ChevronDown, ChevronRight, ChevronLeft, ChevronUp, X, Check, GripVertical, Camera,
@@ -9949,662 +9941,6 @@ function computeTakeoff(t) {
    which already accounts for the Mercator stretch — no separate
    correction, and no way for the two to disagree.
 ================================================================== */
-/* ==================================================================
-   GEOCODING — several providers, because one is not reliable enough
-
-   Finding the house was failing silently. The tracer used the existing
-   Geoapify autocomplete helper, which is built for partial typing as
-   someone fills a form, not for resolving a complete formatted
-   address, and it returns an empty array on any failure — a dead key,
-   a rate limit, a CORS refusal — so every failure looked identical and
-   said nothing.
-
-   This tries providers in order and reports which one answered, or
-   what each one said when none did. Nominatim goes first because it
-   sends permissive CORS headers and needs no key. The Census geocoder
-   is second and is the most accurate of the three for a US street
-   address. Geoapify is last, since it is the one carrying a key that
-   can expire.
-
-   Whatever happens, the user gets a text box and can search manually.
-   A tool that cannot be steered by hand when the automation misses is
-   a tool people stop trusting.
-================================================================== */
-const GEOCODERS = [
-  {
-    id: "nominatim", label: "OpenStreetMap",
-    async run(q) {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=${encodeURIComponent(q)}`;
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const r = (data || [])[0];
-      if (!r) throw new Error("no match");
-      return { lat: Number(r.lat), lon: Number(r.lon), label: r.display_name || q };
-    },
-  },
-  {
-    id: "census", label: "US Census",
-    async run(q) {
-      const url = `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress`
-        + `?address=${encodeURIComponent(q)}&benchmark=Public_AR_Current&format=json`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const m = ((data.result || {}).addressMatches || [])[0];
-      if (!m) throw new Error("no match");
-      return { lat: Number(m.coordinates.y), lon: Number(m.coordinates.x), label: m.matchedAddress || q };
-    },
-  },
-  {
-    id: "geoapify", label: "Geoapify",
-    async run(q) {
-      if (!geoReady()) throw new Error("not configured");
-      const url = `${GEO_PROVIDER.base}/search?text=${encodeURIComponent(q)}`
-        + `&filter=countrycode:us&limit=1&format=json&apiKey=${GEO_PROVIDER.apiKey}`;
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const r = (data.results || [])[0];
-      if (!r) throw new Error("no match");
-      return { lat: Number(r.lat), lon: Number(r.lon), label: r.formatted || q };
-    },
-  },
-];
-
-/* Returns { lat, lon, label, via } or { failed, tried } — never null,
-   so the caller always has something to show. */
-async function geocodeAddress(query) {
-  const q = String(query || "").trim();
-  if (!q) return { failed: true, tried: [], reason: "No address to look up." };
-  const tried = [];
-  for (const g of GEOCODERS) {
-    try {
-      const hit = await g.run(q);
-      if (hit && Number.isFinite(hit.lat) && Number.isFinite(hit.lon)) {
-        return { ...hit, via: g.label, tried };
-      }
-      tried.push(`${g.label}: no usable result`);
-    } catch (e) {
-      tried.push(`${g.label}: ${(e && e.message) || "failed"}`);
-    }
-  }
-  return { failed: true, tried, reason: "None of the lookup services could place that address." };
-}
-
-/* Accepts "39.2896, -84.5230" so a user can paste coordinates straight
-   off a phone's map app when an address will not resolve. */
-function parseLatLon(text) {
-  const m = String(text || "").match(/(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/);
-  if (!m) return null;
-  const lat = Number(m[1]), lon = Number(m[2]);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
-  return { lat, lon };
-}
-
-const TILE = 256;
-const EARTH_CIRC = 156543.03392804097; // metres per pixel at zoom 0, equator
-
-const TILE_SOURCES = [
-  {
-    id: "esri", name: "Esri World Imagery",
-    detail: "Free worldwide aerial, 30cm or better across the US",
-    url: (z, x, y) => `https://server.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
-    credit: "Esri, Vantor, Earthstar Geographics and the GIS User Community",
-    maxZoom: 21,
-  },
-  {
-    id: "usgs", name: "USGS Imagery",
-    detail: "US government aerial, public domain",
-    url: (z, x, y) => `https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/${z}/${y}/${x}`,
-    credit: "USGS National Map — public domain",
-    maxZoom: 20,
-  },
-];
-
-/* lon/lat -> absolute pixel coordinates at a zoom level. */
-function lonLatToPixel(lon, lat, z) {
-  const worldSize = TILE * Math.pow(2, z);
-  const x = ((lon + 180) / 360) * worldSize;
-  const latRad = (lat * Math.PI) / 180;
-  const y = (0.5 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / (2 * Math.PI)) * worldSize;
-  return { x, y };
-}
-/* True ground metres per screen pixel. */
-function metresPerPixel(lat, z) {
-  return (EARTH_CIRC * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, z);
-}
-
-/* The tiles needed to fill a viewport of `size` px centred on lon/lat,
-   with each tile's offset within that viewport. */
-function tileGrid(lon, lat, z, size) {
-  const c = lonLatToPixel(lon, lat, z);
-  const originX = c.x - size / 2;
-  const originY = c.y - size / 2;
-  const firstX = Math.floor(originX / TILE);
-  const firstY = Math.floor(originY / TILE);
-  const lastX = Math.floor((originX + size) / TILE);
-  const lastY = Math.floor((originY + size) / TILE);
-  const max = Math.pow(2, z);
-  const out = [];
-  for (let tx = firstX; tx <= lastX; tx++) {
-    for (let ty = firstY; ty <= lastY; ty++) {
-      if (ty < 0 || ty >= max) continue;
-      const wrapped = ((tx % max) + max) % max;
-      out.push({
-        key: `${z}/${wrapped}/${ty}`,
-        x: wrapped, y: ty, z,
-        left: tx * TILE - originX,
-        top: ty * TILE - originY,
-      });
-    }
-  }
-  return out;
-}
-
-/* Shoelace. Returns signed area in square pixels; sign tells us the
-   winding direction, which we do not care about, so take the absolute. */
-function polygonAreaPx(pts) {
-  if (!pts || pts.length < 3) return 0;
-  let a = 0;
-  for (let i = 0; i < pts.length; i++) {
-    const j = (i + 1) % pts.length;
-    a += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
-  }
-  return Math.abs(a) / 2;
-}
-function polygonPerimeterPx(pts) {
-  if (!pts || pts.length < 2) return 0;
-  let d = 0;
-  for (let i = 0; i < pts.length; i++) {
-    const j = (i + 1) % pts.length;
-    d += Math.hypot(pts[j].x - pts[i].x, pts[j].y - pts[i].y);
-  }
-  return d;
-}
-const M2_TO_SQFT = 10.7639104167;
-const M_TO_FT = 3.280839895;
-
-/* Pixels to real feet. mPerPx is already true ground metres. */
-function tracedAreaSqFt(pts, mPerPx) {
-  return polygonAreaPx(pts) * mPerPx * mPerPx * M2_TO_SQFT;
-}
-function tracedLengthFt(pts, mPerPx) {
-  return polygonPerimeterPx(pts) * mPerPx * M_TO_FT;
-}
-
-/* ==================================================================
-   TRACING PRECISION
-
-   Imagery resolution was never the limit. At zoom 20 a map pixel is
-   4.5 inches, but on a 360px phone screen showing a 512px map that is
-   6.5 inches per SCREEN pixel, and a finger is accurate to maybe eight
-   of them. That is four feet of error on every corner, which is why
-   tracing felt like guesswork.
-
-   Three things fix it, and none of them need better imagery:
-
-   - Magnification. Scaling the same tiles 4x takes tap error from four
-     feet to about one. The pixels do not get sharper, but the target
-     gets bigger, and that is what finger precision actually depends on.
-   - Snapping. Roof facets are overwhelmingly rectangular. Constraining
-     each new edge to square or 45 degrees off the previous one removes
-     the remaining error entirely on those shapes.
-   - Draggable points. Place roughly, then nudge. Nobody hits a corner
-     exactly on the first tap, and forcing them to undo and retry is
-     what makes a tool feel cheap.
-================================================================== */
-
-/* Snap a candidate point to a nearby existing vertex. Distances are in
-   map pixels; the caller converts the screen tolerance. */
-function snapToVertex(pt, vertices, tolPx) {
-  let best = null, bestD = tolPx;
-  for (const v of vertices) {
-    const d = Math.hypot(v.x - pt.x, v.y - pt.y);
-    if (d < bestD) { bestD = d; best = v; }
-  }
-  return best ? { x: best.x, y: best.y, snapped: "vertex" } : null;
-}
-
-/* Constrain a segment to the nearest of a set of angles, measured from
-   `refAngle`. Keeps the segment's length and rotates it onto the
-   constraint, which is what makes a traced rectangle come out square
-   rather than merely close. */
-function snapToAngle(from, to, refAngle, stepsDeg, tolDeg) {
-  const dx = to.x - from.x, dy = to.y - from.y;
-  const len = Math.hypot(dx, dy);
-  if (len < 1) return null;
-  const ang = Math.atan2(dy, dx);
-  let best = null, bestDiff = (tolDeg * Math.PI) / 180;
-  for (const step of stepsDeg) {
-    const target = refAngle + (step * Math.PI) / 180;
-    /* Compare on the unit circle so 359 and 1 degree are close. */
-    let diff = Math.abs(Math.atan2(Math.sin(ang - target), Math.cos(ang - target)));
-    if (diff < bestDiff) { bestDiff = diff; best = target; }
-  }
-  if (best == null) return null;
-  return {
-    x: from.x + Math.cos(best) * len,
-    y: from.y + Math.sin(best) * len,
-    snapped: "angle",
-  };
-}
-
-/* The full placement rule, in the order that matters: an explicit
-   vertex beats a computed angle, because closing a polygon exactly on
-   its first point is worth more than keeping an edge square. */
-function placePoint(raw, pts, otherVertices, tolPx, tolDeg, squareOn) {
-  const all = [...pts, ...otherVertices];
-  const v = snapToVertex(raw, all, tolPx);
-  if (v) return v;
-  if (!squareOn || pts.length === 0) return { ...raw, snapped: null };
-  const from = pts[pts.length - 1];
-  /* Reference angle: the previous edge if there is one, otherwise
-     horizontal. Constraining relative to the last edge is what keeps a
-     rotated building square to itself rather than to the screen. */
-  const ref = pts.length >= 2
-    ? Math.atan2(from.y - pts[pts.length - 2].y, from.x - pts[pts.length - 2].x)
-    : 0;
-  const a = snapToAngle(from, raw, ref, [0, 45, 90, 135, 180, 225, 270, 315], tolDeg);
-  return a || { ...raw, snapped: null };
-}
-
-/* ==================================================================
-   AERIAL TRACING — on Leaflet, not hand-rolled
-
-   The previous version was a map library I wrote by hand: tile grid,
-   pan, magnification, snapping, vertex dragging. Every one of those is
-   a solved problem, and mine had bugs I kept chasing instead of
-   building the roofing part.
-
-   This uses the standard open-source stack:
-     Leaflet          — tiles, native pinch-zoom, pan, touch handling
-     Leaflet-Geoman   — polygon drawing, vertex editing, snapping
-     Turf             — geodesic area
-
-   Two things this buys beyond bug count. Pinch-zoom is real, so
-   precision is limited by the imagery rather than by how many discrete
-   zoom buttons I remembered to add. And Turf computes area on the
-   ellipsoid rather than on a projected plane, so the Web Mercator
-   correction I was applying by hand is no longer something that can be
-   got wrong.
-================================================================== */
-function AerialTracer({ job, onAddFacet, toast }) {
-  const [lat, setLat] = useState(null);
-  const [lon, setLon] = useState(null);
-  const [status, setStatus] = useState("idle");
-  const [err, setErr] = useState("");
-  const [tried, setTried] = useState([]);
-  const [via, setVia] = useState("");
-  const [found, setFound] = useState("");
-  const [manual, setManual] = useState("");
-  const [pitch, setPitch] = useState(6);
-  const [shape, setShape] = useState(null);   // { areaSf, perimFt, edges }
-  const [srcId, setSrcId] = useState("esri");
-  const [ready, setReady] = useState(false);
-
-  const hostRef = useRef(null);
-  const mapRef = useRef(null);
-  const layerRef = useRef(null);
-  const tileRef = useRef(null);
-
-  const jobQuery = [job.address, job.city, job.state, job.zip].filter(Boolean).join(", ");
-  const source = TILE_SOURCES.find((s) => s.id === srcId) || TILE_SOURCES[0];
-
-  const locate = async (queryText) => {
-    const q = (queryText || "").trim() || jobQuery;
-    setStatus("locating"); setErr(""); setTried([]);
-    const coords = parseLatLon(q);
-    if (coords) {
-      setLat(coords.lat); setLon(coords.lon);
-      setVia("coordinates"); setFound(`${coords.lat.toFixed(5)}, ${coords.lon.toFixed(5)}`);
-      setStatus("ready"); return;
-    }
-    const hit = await geocodeAddress(q);
-    if (hit.failed) {
-      setStatus("idle"); setErr(hit.reason); setTried(hit.tried || []);
-      setManual((m) => m || q); return;
-    }
-    setLat(hit.lat); setLon(hit.lon);
-    setVia(hit.via); setFound(hit.label); setStatus("ready");
-  };
-
-  /* Measure whatever polygon is currently drawn. Turf works on GeoJSON
-     lat/lon, so this is geodesic — no projection correction to forget. */
-  const measure = (layer) => {
-    if (!layer) { setShape(null); return; }
-    try {
-      const gj = layer.toGeoJSON();
-      const m2 = turfArea(gj);
-      const ring = (gj.geometry.coordinates || [])[0] || [];
-      const edges = [];
-      for (let i = 0; i < ring.length - 1; i++) {
-        const line = { type: "Feature", geometry: { type: "LineString", coordinates: [ring[i], ring[i + 1]] } };
-        edges.push(turfLength(line, { units: "feet" }));
-      }
-      setShape({
-        areaSf: m2 * 10.7639104167,
-        perimFt: edges.reduce((a, e) => a + e, 0),
-        edges,
-      });
-    } catch (e) { setShape(null); }
-  };
-
-  /* Build the map once coordinates exist, and tear it down cleanly.
-     Leaflet holds DOM and listeners, so skipping remove() leaks a map
-     every time the section is reopened. */
-  useEffect(() => {
-    if (lat == null || lon == null || !hostRef.current) return;
-    if (mapRef.current) {
-      mapRef.current.setView([lat, lon], 20);
-      return;
-    }
-    const map = L.map(hostRef.current, {
-      center: [lat, lon], zoom: 20, maxZoom: 22,
-      zoomControl: true, attributionControl: true,
-      /* Roof tracing is a fingertip task; inertia throws the view. */
-      inertia: false,
-    });
-    mapRef.current = map;
-
-    tileRef.current = L.tileLayer(
-      source.url(0, 0, 0).replace("/0/0/0", "/{z}/{y}/{x}"),
-      { maxNativeZoom: source.maxZoom, maxZoom: 22, attribution: source.credit }
-    ).addTo(map);
-
-    const drawn = new L.FeatureGroup().addTo(map);
-    layerRef.current = drawn;
-
-    /* Geoman handles drawing, vertex editing and snapping. snapDistance
-       is in pixels, so it behaves the same at every zoom. */
-    map.pm.setGlobalOptions({
-      snappable: true, snapDistance: 20,
-      allowSelfIntersection: false,
-      templineStyle: { color: "#1B6DE0", weight: 3 },
-      hintlineStyle: { color: "#1B6DE0", dashArray: "6,6", weight: 2 },
-      pathOptions: { color: "#1B6DE0", fillColor: "#1B6DE0", fillOpacity: 0.25, weight: 3 },
-    });
-    map.pm.addControls({
-      position: "topright",
-      drawMarker: false, drawCircleMarker: false, drawPolyline: false,
-      drawCircle: false, drawText: false, cutPolygon: false, rotateMode: false,
-      drawRectangle: true, drawPolygon: true,
-      editMode: true, dragMode: true, removalMode: true,
-    });
-
-    map.on("pm:create", (e) => {
-      /* One facet at a time — clearing the previous shape is what makes
-         "add as a facet" unambiguous. */
-      drawn.clearLayers();
-      drawn.addLayer(e.layer);
-      measure(e.layer);
-      e.layer.on("pm:edit", () => measure(e.layer));
-      e.layer.on("pm:dragend", () => measure(e.layer));
-    });
-    map.on("pm:remove", () => setShape(null));
-
-    setReady(true);
-    return () => {
-      try { map.remove(); } catch (e2) { /* already gone */ }
-      mapRef.current = null; layerRef.current = null; tileRef.current = null;
-    };
-  }, [lat, lon]); // eslint-disable-line
-
-  /* Swap imagery without rebuilding the map or losing the drawing. */
-  useEffect(() => {
-    if (!mapRef.current || !tileRef.current) return;
-    mapRef.current.removeLayer(tileRef.current);
-    tileRef.current = L.tileLayer(
-      source.url(0, 0, 0).replace("/0/0/0", "/{z}/{y}/{x}"),
-      { maxNativeZoom: source.maxZoom, maxZoom: 22, attribution: source.credit }
-    ).addTo(mapRef.current);
-  }, [srcId]); // eslint-disable-line
-
-  const clearShape = () => {
-    if (layerRef.current) layerRef.current.clearLayers();
-    setShape(null);
-  };
-
-  const roofSf = shape ? shape.areaSf * slopeFactor(pitch) : 0;
-
-  return (
-    <Card style={{ marginTop: 12 }}>
-      <CardTitle right={<Chip tone="green">Free</Chip>}>Trace from aerial</CardTitle>
-
-      {status === "idle" && (
-        <>
-          <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 11 }}>
-            Find the roof, then draw round one plane. Pinch to zoom in as far
-            as you need, drag any corner to adjust, and set the pitch.
-          </div>
-          {!jobQuery && (
-            <Callout label="No address on this job" tone="amber">
-              Add the address on the Overview section, or type one below.
-            </Callout>
-          )}
-          {jobQuery && (
-            <>
-              <Btn style={{ width: "100%" }} onClick={() => locate()} data-testid="locate-roof">
-                <MapPin size={14} /> Find this roof
-              </Btn>
-              <div style={{ fontSize: 11.5, color: S.sub, marginTop: 9, textAlign: "center" }}>
-                Searching for {jobQuery}
-              </div>
-            </>
-          )}
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${S.line}` }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: S.ink, marginBottom: 6 }}>Or search manually</div>
-            <input style={inputStyle} value={manual} onChange={(e) => setManual(e.target.value)}
-              placeholder="Address, or paste 39.2896, -84.5230"
-              onKeyDown={(e) => { if (e.key === "Enter" && manual.trim()) locate(manual); }} />
-            <Btn kind="soft" style={{ width: "100%", marginTop: 8 }} disabled={!manual.trim()}
-              onClick={() => locate(manual)} data-testid="manual-locate">
-              <Search size={14} /> Search
-            </Btn>
-            <div style={{ fontSize: 11, color: S.sub, marginTop: 7, lineHeight: 1.5 }}>
-              Coordinates work too. Long-press the roof in any map app, copy
-              what it gives you, and paste it here.
-            </div>
-          </div>
-        </>
-      )}
-      {status === "locating" && <div style={{ fontSize: 13, color: S.sub, padding: "6px 0" }}>Looking that up…</div>}
-      {err && (
-        <Callout label="Could not find it" tone="amber">
-          {err}
-          {tried.length > 0 && (
-            <div style={{ marginTop: 7, fontSize: 11.5, lineHeight: 1.6 }}>
-              {tried.map((t, i) => <div key={i}>· {t}</div>)}
-            </div>
-          )}
-          <div style={{ marginTop: 7, fontSize: 12 }}>
-            Try a simpler address — house number, street and zip is usually
-            enough — or paste coordinates.
-          </div>
-        </Callout>
-      )}
-
-      {lat != null && (
-        <>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 9 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: S.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {found || "Located"}
-              </div>
-              <div style={{ fontSize: 10.5, color: S.sub }}>via {via}</div>
-            </div>
-            <Btn kind="ghost" small onClick={() => { setStatus("idle"); clearShape(); setManual(found || jobQuery); }}>
-              Search again
-            </Btn>
-          </div>
-
-          <div ref={hostRef} data-testid="leaflet-map"
-            style={{
-              width: "100%", aspectRatio: "1 / 1", borderRadius: 11,
-              overflow: "hidden", border: `1px solid ${S.line}`, background: "#33383D",
-            }} />
-
-          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
-            Tap the <b>polygon</b> or <b>rectangle</b> tool at the top right of
-            the map, then tap each corner. Corners snap to each other, so
-            adjoining facets share exact points. Pinch to zoom past the imagery
-            limit if you need a bigger target.
-          </div>
-
-          {shape && (
-            <div style={{ marginTop: 12, background: S.soft, borderRadius: 11, padding: "12px 13px" }}>
-              <KV k="Plan area traced" v={`${shape.areaSf.toLocaleString(undefined, { maximumFractionDigits: 0 })} sq ft`} />
-              <KV k="Perimeter" v={`${shape.perimFt.toLocaleString(undefined, { maximumFractionDigits: 0 })} ft`} />
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, margin: "8px 0 4px" }}>
-                {shape.edges.map((e, i) => (
-                  <span key={i} style={{ fontSize: 10.5, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 6, padding: "3px 7px", color: S.sub }}>
-                    {e.toFixed(1)}′
-                  </span>
-                ))}
-              </div>
-              <div style={{ margin: "10px 0 8px" }}>
-                <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 6 }}>
-                  Pitch of this plane — no overhead image can tell you this, measure it on site
-                </div>
-                <select style={selStyle} value={pitch} onChange={(e) => setPitch(Number(e.target.value))}>
-                  {PITCH_OPTIONS.map((p) => <option key={p} value={p}>{p}/12</option>)}
-                </select>
-              </div>
-              <KV k="Roof area of this plane" v={`${roofSf.toLocaleString(undefined, { maximumFractionDigits: 0 })} sq ft`} strong />
-              <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
-                <Btn kind="ghost" style={{ flex: 1 }} onClick={clearShape}>Clear</Btn>
-                <Btn style={{ flex: 2 }} data-testid="add-traced-facet"
-                  onClick={() => {
-                    const side = Math.sqrt(shape.areaSf);
-                    onAddFacet({
-                      id: uid("fct"),
-                      name: `Traced plane ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`,
-                      length: side.toFixed(2), width: side.toFixed(2), pitch,
-                      planArea: shape.areaSf, traced: true,
-                    });
-                    clearShape();
-                    toast("Plane added to the takeoff");
-                  }}>
-                  <Plus size={14} /> Add as a facet
-                </Btn>
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
-            {TILE_SOURCES.map((s2) => (
-              <button key={s2.id} onClick={() => setSrcId(s2.id)} style={{
-                flex: 1, border: `1px solid ${srcId === s2.id ? T.accent : S.line}`,
-                background: srcId === s2.id ? T.accentSoft : "#fff",
-                color: srcId === s2.id ? T.accent : S.sub,
-                borderRadius: 9, padding: "7px 6px", fontSize: 11.5, fontWeight: 700,
-                cursor: "pointer", fontFamily: "inherit",
-              }}>{s2.name}</button>
-            ))}
-          </div>
-
-          <div style={{ fontSize: 11, color: S.sub, marginTop: 10, lineHeight: 1.55 }}>
-            Area is computed on the ellipsoid by Turf, not on a flat projection,
-            so there is no map-stretch correction to get wrong. Imagery:{" "}
-            {source.credit}.
-          </div>
-        </>
-      )}
-    </Card>
-  );
-}
-
-/* A top-level roof measuring screen.
-
-   The tracer already existed inside a job's Roof takeoff section, but
-   that is three levels down — open a job, find a collapsed accordion,
-   expand it — and it was effectively invisible. Measuring a roof is a
-   thing people want to do on its own, sometimes before a job exists at
-   all, so it gets its own screen on the menu. Traced planes accumulate
-   here and can be pushed onto a job afterwards. */
-function RoofMeasure({ jobs, onBack, toast, onOpenJob, mutJob }) {
-  const [planes, setPlanes] = useState([]);
-  const [jobId, setJobId] = useState("");
-
-  /* A throwaway job shape so the tracer can be reused unchanged. */
-  const target = jobs.find((j) => j.id === jobId);
-  const pseudoJob = target || { address: "", city: "", state: "", zip: "" };
-
-  const totalPlan = planes.reduce((a, p) => a + p.planArea, 0);
-  const totalRoof = planes.reduce((a, p) => a + p.planArea * slopeFactor(p.pitch), 0);
-  const squares = totalRoof / 100;
-
-  return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
-      <SubHeader title="Measure a roof" onBack={onBack} />
-
-      <Card style={{ marginTop: 14 }}>
-        <CardTitle>Which property?</CardTitle>
-        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 10 }}>
-          Pick a job to use its address, or leave this blank and type any
-          address into the search below.
-        </div>
-        <select style={selStyle} value={jobId} onChange={(e) => { setJobId(e.target.value); setPlanes([]); }}>
-          <option value="">No job — I'll type an address</option>
-          {jobs.map((j) => <option key={j.id} value={j.id}>{j.name} — {j.address}</option>)}
-        </select>
-      </Card>
-
-      <AerialTracer
-        job={pseudoJob}
-        toast={toast}
-        onAddFacet={(f) => setPlanes((p) => [...p, { ...f, planArea: f.planArea, pitch: f.pitch }])} />
-
-      {planes.length > 0 && (
-        <Card style={{ marginTop: 12 }}>
-          <CardTitle right={<Chip tone="green">{squares.toFixed(2)} sq</Chip>}>
-            Planes traced
-          </CardTitle>
-          {planes.map((p, i) => (
-            <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: S.ink }}>Plane {i + 1}</div>
-                <div style={{ fontSize: 11.5, color: S.sub }}>
-                  {p.planArea.toFixed(0)} sf plan · {p.pitch}/12 · {(p.planArea * slopeFactor(p.pitch)).toFixed(0)} sf roof
-                </div>
-              </div>
-              <button onClick={() => setPlanes((arr) => arr.filter((x) => x.id !== p.id))}
-                style={{ border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}>
-                <Trash2 size={15} color="#B42318" />
-              </button>
-            </div>
-          ))}
-          <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 8, paddingTop: 10 }}>
-            <KV k="Footprint" v={`${totalPlan.toFixed(0)} sq ft`} />
-            <KV k="Roof area" v={`${totalRoof.toFixed(0)} sq ft`} />
-            <KV k="Squares" v={squares.toFixed(2)} strong />
-          </div>
-          {target && (
-            <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => {
-              mutJob(target.id, (j) => {
-                const cur = j.takeoff || { facets: [], wasteBand: "moderate", exposure: "arch" };
-                const keep = (cur.facets || []).filter((x) => x.length || x.width || x.planArea);
-                return { ...j, takeoff: { ...cur, facets: [...keep, ...planes] } };
-              });
-              toast(`${planes.length} ${planes.length === 1 ? "plane" : "planes"} sent to ${target.name}`);
-              onOpenJob(target.id, "takeoff");
-            }}>
-              Send to {target.name}
-            </Btn>
-          )}
-          {!target && (
-            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
-              Pick a job above to send these planes into its takeoff, where
-              waste, materials and the linear measurements get worked out.
-            </div>
-          )}
-        </Card>
-      )}
-    </div>
-  );
-}
-
 function TabTakeoff({ job, mut, toast, brand }) {
   const t = job.takeoff || { facets: [blankFacet()], wasteBand: "moderate", exposure: "arch" };
   const m = computeTakeoff(t);
@@ -10729,51 +10065,41 @@ function TabTakeoff({ job, mut, toast, brand }) {
           matters: a takeoff is only as good as its source, and the three
           sources differ enormously in what a carrier will accept. */}
       <Card>
-        <CardTitle>Measure from</CardTitle>
+        <CardTitle>Where the dimensions come from</CardTitle>
         <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 11 }}>
-          Trace the roof below on free state aerial imagery to get plan areas,
-          then set the pitch you measured on site. Pitch is the one thing no
-          overhead image can give you — recovering it needs stereo imagery or
-          LIDAR, which is why EagleView flies aircraft.
+          This is a calculator, not a survey. It does the geometry exactly —
+          slope factors per facet, waste, every derived quantity — from
+          dimensions you give it. Getting those dimensions right is a separate
+          job, and there are three honest ways to do it.
         </div>
-        {job.address && (
-          <>
-            <a href={`https://www.google.com/maps/@?api=1&map_action=map&center=${encodeURIComponent(job.address)}&basemap=satellite&zoom=20`}
-              target="_blank" rel="noreferrer" style={{ textDecoration: "none", display: "block", marginBottom: 8 }}>
-              <Btn kind="soft" style={{ width: "100%" }}>
-                <MapPin size={14} /> Satellite view of this roof
-              </Btn>
-            </a>
-            <a href={`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(job.address)}`}
-              target="_blank" rel="noreferrer" style={{ textDecoration: "none", display: "block", marginBottom: 8 }}>
-              <Btn kind="ghost" style={{ width: "100%" }}>
-                <Eye size={14} /> Street view — check the elevation and storeys
-              </Btn>
-            </a>
-          </>
-        )}
-        <div style={{ fontSize: 11.5, color: S.sub, lineHeight: 1.6, marginTop: 4 }}>
-          <b>Satellite tracing.</b> Good for plan dimensions on a simple roof.
-          Read the ridge and eave lengths off the image, then enter the pitch
-          you measured on site — the image cannot tell you the pitch.
+        <div style={{ fontSize: 12, color: S.ink, lineHeight: 1.6 }}>
+          <b>An aerial report — the default for anything that matters.</b>{" "}
+          EagleView or Roofr, ordered per property for roughly the price of an
+          hour on site. Third-party, which is why a carrier argues with it
+          least. Import the PDF under Measurements and the facets below fill
+          themselves in.
           <br /><br />
           <b>On site.</b> A pitch gauge on the rafter or a phone level on the
-          slope, plus a tape or wheel on the eave. The most accurate source
-          you control.
+          slope, plus a tape or wheel on the eave. The most accurate source you
+          control, and the only one that gives you pitch.
           <br /><br />
-          <b>An aerial report.</b> EagleView or Roofr, ordered per property.
-          For an insurance dispute this is the one a carrier argues with least,
-          because it is third-party. Import the PDF under Measurements and this
-          takeoff becomes your check on it.
+          <b>Off a drawing or a drone shot.</b> Plan dimensions per facet,
+          keyed in below. Fine for a retail quote on a simple roof.
+        </div>
+        {job.address && (
+          <a href={`https://www.google.com/maps/@?api=1&map_action=map&center=${encodeURIComponent(job.address)}&basemap=satellite&zoom=20`}
+            target="_blank" rel="noreferrer" style={{ textDecoration: "none", display: "block", marginTop: 11 }}>
+            <Btn kind="ghost" small style={{ width: "100%" }}>
+              <MapPin size={14} /> Satellite view of this roof
+            </Btn>
+          </a>
+        )}
+        <div style={{ fontSize: 11, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
+          Opens in your map app for a look at the layout. Reading dimensions
+          off a satellite image by eye is rough, and it cannot give you pitch
+          at all.
         </div>
       </Card>
-
-      <AerialTracer job={job} toast={toast}
-        onAddFacet={(f) => mut((j) => {
-          const cur = j.takeoff || t;
-          const existing = (cur.facets || []).filter((x) => x.length || x.width);
-          return { ...j, takeoff: { ...cur, facets: [...existing, f] } };
-        })} />
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone={m.squares > 0 ? "green" : "gray"}>{n2(m.squaresWithWaste)} sq</Chip>}>
@@ -10927,11 +10253,10 @@ function TabTakeoff({ job, mut, toast, brand }) {
             <Btn style={{ flex: 1 }} onClick={printReport}><Printer size={14} /> Report</Btn>
           </div>
           <div style={{ fontSize: 11, color: S.sub, marginTop: 11, lineHeight: 1.55 }}>
-            This is a calculated takeoff, not an aerial survey. The arithmetic
-            is exact; the accuracy is whatever the dimensions you entered are.
-            For an insurance claim, an EagleView or Roofr report carries more
-            weight with a carrier — import one under Measurements and this will
-            check it.
+            The arithmetic is exact; the accuracy is whatever the dimensions you
+            entered are. For an insurance claim, an EagleView or Roofr report
+            carries more weight with a carrier because it is third-party —
+            import one under Measurements and this becomes your check on it.
           </div>
         </Card>
       )}
@@ -10977,9 +10302,10 @@ function TabMeasure({ job, mut, toast, onGoTakeoff }) {
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Measure it yourself</CardTitle>
         <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
-          No report to import? The <b>Roof takeoff</b> section below traces the
-          roof on free state aerial imagery and works out squares, waste and
-          every linear quantity from it.
+          Importing an EagleView or Roofr PDF above fills the facets in
+          automatically. Failing that, the <b>Roof takeoff</b> section below
+          works out squares, waste, materials and every linear quantity from
+          dimensions you key in.
         </div>
         <Btn kind="soft" style={{ width: "100%", marginTop: 11 }} onClick={() => onGoTakeoff && onGoTakeoff()}>
           <Layers size={14} /> Open roof takeoff
@@ -17319,7 +16645,6 @@ function SetupKeys({ apiSetup, setApiSetup, currentUser, onBack, toast }) {
 function MoreMenu({ onNav, onLogout, brand, currentUser }) {
   const groups = [
     ["Sales", [
-      ["roofmeasure", Layers, "Measure a roof", "Trace it on aerial imagery and get squares"],
       ["activity", ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", Phone, "Calls & attribution", "Log calls, see which sources make money"],
       ["performance", PieChart, "Performance", "Rep scoreboard & funnel"],
@@ -18518,9 +17843,6 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "crews" ? (
         <CrewManager crews={crews} setCrews={setCrews} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} />
-      ) : nav === "roofmeasure" ? (
-        <RoofMeasure jobs={jobs} onBack={() => setNav("more")} toast={toast}
-          onOpenJob={openJobScreen} mutJob={mutJob} />
       ) : nav === "claims" ? (
         <ClaimsDashboard jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
       ) : nav === "crewpay" ? (

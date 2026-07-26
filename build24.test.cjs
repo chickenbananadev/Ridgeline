@@ -70,7 +70,7 @@ ok(src.includes("function TabTakeoff"), "the takeoff section exists");
 ok(src.includes("Enter plan dimensions, not along-the-slope"),
   "the double-counting error is warned about");
 ok(src.includes("counts the slope twice"), "and explained");
-ok(src.includes("not an aerial survey"), "the tool is honest about what it is not");
+ok(src.includes("not a survey"), "the tool is honest about what it is not");
 ok(src.includes("carries more\n            weight with a carrier") || src.includes("carries more"),
   "an aerial report is acknowledged as stronger for a claim");
 ok(src.includes("Steep and high charges apply to"), "access modifiers are surfaced");
