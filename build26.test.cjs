@@ -60,30 +60,28 @@ function perim(pts) {
 ok(perim(square) === 40, "square perimeter is 40");
 
 /* --- imagery sources are public domain, and that is the point --- */
-ok(src.includes("const AERIAL_SOURCES"), "imagery sources are defined");
-ok(src.includes("geo1.oit.ohio.gov"), "Ohio OSIP endpoint present");
-ok(src.includes("kyraster.ky.gov"), "Kentucky KyFromAbove endpoint present");
-ok(src.includes("public domain"), "the licence position is recorded");
-ok(src.includes("prohibit\n   commercial tracing") || src.includes("commercial tracing"),
-  "why Mapbox and Google were rejected is explained");
-ok(src.includes("exportImage"), "images are requested for an exact bounding box");
-ok(src.includes("bboxSR=3857"), "the bounding box is in Web Mercator");
-ok(src.includes("leaf-off"), "leaf-off is called out as the reason these beat consumer satellite");
+ok(src.includes("const TILE_SOURCES"), "imagery sources are defined");
+ok(src.includes("World_Imagery"), "Esri World Imagery endpoint present");
+ok(src.includes("nationalmap.gov"), "USGS fallback endpoint present");
+ok(src.includes("no API key"), "the licence position is recorded");
+ok(src.includes("battle-tested"), "the choice of a standard tile scheme is explained");
+ok(src.includes("function tileGrid"), "tiles are laid out for the viewport");
+ok(src.includes("EARTH_CIRC"), "Web Mercator resolution constant is used");
+ok(src.includes("30cm or better"), "imagery resolution is stated");
 
 /* --- the maths is in the code, not just the test --- */
 ok(src.includes("function polygonAreaPx"), "shoelace is implemented");
-ok(src.includes("function aerialRequest"), "the request builder exists");
-ok(src.includes("const inflate = 1 / Math.cos(lat * Math.PI / 180)"),
-  "Mercator inflation is applied when sizing the window");
-ok(src.includes("mPerPx: (spanM) / px"), "metres per pixel is derived from true ground span");
+ok(src.includes("function lonLatToPixel"), "the projection helper exists");
+ok(src.includes("Math.cos((lat * Math.PI) / 180)) / Math.pow(2, z)"), "latitude is in the resolution formula");
+ok(src.includes("function metresPerPixel"), "metres per pixel is a single shared helper");
 ok(src.includes("function AerialTracer"), "the tracer component exists");
 ok(src.includes('data-testid="add-traced-facet"'), "a traced plane can be added to the takeoff");
-ok(src.includes("the image cannot tell you this"), "the pitch limitation is stated at the point of entry");
+ok(src.includes("no overhead image can tell you this"), "the pitch limitation is stated at the point of entry");
 
 /* --- graceful failure: a government server going down must not break the page --- */
-ok(src.includes("onError={() =>"), "an imagery failure is handled");
-ok(src.includes("did not respond"), "and explained rather than left blank");
-ok(src.includes("fallbackUrl"), "Ohio has a second endpoint to fall back to");
+ok(src.includes("onError={() => setFailed"), "a failed tile is counted");
+ok(src.includes("Some tiles did not load"), "and explained rather than left blank");
+ok(src.includes("TILE_SOURCES.map"), "a second imagery source can be selected");
 
 /* --- traced area survives the trip into the takeoff exactly --- */
 const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
@@ -118,11 +116,9 @@ ok(src.includes("clears ? { ...f, [k]: v, planArea: null, traced: false }"),
   "editing a traced facet's dimensions drops the stored area so the edit takes effect");
 
 /* --- the two bugs that made the tracer look inert --- */
-ok(src.includes("setLon(Number(h.lng))"),
-  "the tracer reads lng, the field geoAutocomplete actually returns");
+ok(src.includes("Number(h.lng)"), "the tracer reads lng, the field geoAutocomplete returns");
 ok(!src.includes("setLon(h.lon)"), "the wrong field name is gone");
-ok(src.includes("job.zip ? stateForZip(job.zip)"),
-  "state resolves from the zip rather than a regex on the address");
+ok(src.includes("[job.address, job.city, job.state, job.zip]"), "the geocode query uses every address part available");
 
 /* --- discoverability --- */
 ok(src.includes("Open roof takeoff"), "Measurements points at the tracer");

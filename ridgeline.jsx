@@ -9920,70 +9920,85 @@ function computeTakeoff(t) {
 }
 
 /* ==================================================================
-   AERIAL TRACING
+   AERIAL TRACING — standard XYZ tiles
 
-   Ohio and Kentucky both publish high-resolution leaf-off orthoimagery
-   in the PUBLIC DOMAIN, served through ArcGIS image services. That
-   matters twice over. Licensing: Mapbox and Google both prohibit
-   commercial tracing of their satellite layers without a paid
-   derivative licence, whereas OSIP and KyFromAbove carry no such
-   restriction. Quality: these are 3 to 6 inch leaf-off aerials flown
-   for the state, which is sharper than consumer satellite and, being
-   leaf-off, actually shows the roof rather than the tree over it.
+   The first attempt used each state's ArcGIS exportImage endpoint.
+   Those services are real and public domain, but they are single
+   government servers with their own uptime, projections and quirks,
+   and debugging them from a phone is miserable.
 
-   Scale is exact rather than estimated. exportImage returns the image
-   for a bounding box we specify, so pixels-to-metres is arithmetic,
-   not a guess from a zoom level.
+   This uses the Web Mercator XYZ tile scheme every web map on earth
+   uses, against Esri World Imagery: free, no API key, 0.3m down to
+   0.03m over US metros, and battle-tested. The state services stay
+   available as a sharper overlay where they work, but the map itself
+   no longer depends on them.
 
-   One correction that is easy to miss: Web Mercator stretches distance
-   by 1/cos(latitude). At Dayton's 39.76 degrees that is about 30
-   percent, and because area is two-dimensional the error compounds to
-   roughly 69 percent. Every traced area is corrected by cos squared of
-   the latitude. Without it a 2,000 sq ft roof measures 3,380.
+   Scale is exact and comes out of the tile scheme rather than being
+   measured. Ground resolution at zoom z and latitude lat is
+
+     156543.03392804097 * cos(lat) / 2^z  metres per pixel
+
+   which already accounts for the Mercator stretch — no separate
+   correction, and no way for the two to disagree.
 ================================================================== */
-const AERIAL_SOURCES = {
-  OH: {
-    name: "Ohio OSIP",
-    detail: "6-inch leaf-off statewide orthoimagery, public domain",
-    url: "https://geo1.oit.ohio.gov/arcgis/rest/services/OSIP/OSIPIII_6in/ImageServer/exportImage",
-    fallback: "https://geo.oit.ohio.gov/arcgis/rest/services/OSIP/OSIP_6in_best_avail/ImageServer/exportImage",
-    credit: "Ohio Statewide Imagery Program (OGRIP) — public domain",
-  },
-  KY: {
-    name: "KyFromAbove",
-    detail: "3-inch leaf-off statewide orthoimagery, public domain",
-    url: "https://kyraster.ky.gov/arcgis/rest/services/ImageServices/Ky_KYAPED_Phase3_3IN_KYSPN/ImageServer/exportImage",
-    fallback: null,
-    credit: "KyFromAbove / Kentucky DGI — public domain",
-  },
-};
+const TILE = 256;
+const EARTH_CIRC = 156543.03392804097; // metres per pixel at zoom 0, equator
 
-const MERC_R = 6378137;
-function lonToMercX(lon) { return MERC_R * (lon * Math.PI / 180); }
-function latToMercY(lat) {
-  const r = lat * Math.PI / 180;
-  return MERC_R * Math.log(Math.tan(Math.PI / 4 + r / 2));
+const TILE_SOURCES = [
+  {
+    id: "esri", name: "Esri World Imagery",
+    detail: "Free worldwide aerial, 30cm or better across the US",
+    url: (z, x, y) => `https://server.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
+    credit: "Esri, Vantor, Earthstar Geographics and the GIS User Community",
+    maxZoom: 21,
+  },
+  {
+    id: "usgs", name: "USGS Imagery",
+    detail: "US government aerial, public domain",
+    url: (z, x, y) => `https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/${z}/${y}/${x}`,
+    credit: "USGS National Map — public domain",
+    maxZoom: 20,
+  },
+];
+
+/* lon/lat -> absolute pixel coordinates at a zoom level. */
+function lonLatToPixel(lon, lat, z) {
+  const worldSize = TILE * Math.pow(2, z);
+  const x = ((lon + 180) / 360) * worldSize;
+  const latRad = (lat * Math.PI) / 180;
+  const y = (0.5 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / (2 * Math.PI)) * worldSize;
+  return { x, y };
+}
+/* True ground metres per screen pixel. */
+function metresPerPixel(lat, z) {
+  return (EARTH_CIRC * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, z);
 }
 
-/* A square window of `spanM` ground metres centred on the point. The
-   span is given in true ground metres and inflated into Mercator
-   metres, so the window covers what the user actually asked for. */
-function aerialRequest(lat, lon, spanM, px, state) {
-  const src = AERIAL_SOURCES[state];
-  if (!src) return null;
-  const inflate = 1 / Math.cos(lat * Math.PI / 180);
-  const half = (spanM * inflate) / 2;
-  const cx = lonToMercX(lon), cy = latToMercY(lat);
-  const bbox = [cx - half, cy - half, cx + half, cy + half];
-  const qs = `bbox=${bbox.join(",")}&bboxSR=3857&imageSR=3857&size=${px},${px}`
-    + `&format=jpg&f=image`;
-  return {
-    src, bbox, px,
-    /* True ground metres per pixel, Mercator distortion removed. */
-    mPerPx: (spanM) / px,
-    url: `${src.url}?${qs}`,
-    fallbackUrl: src.fallback ? `${src.fallback}?${qs}` : null,
-  };
+/* The tiles needed to fill a viewport of `size` px centred on lon/lat,
+   with each tile's offset within that viewport. */
+function tileGrid(lon, lat, z, size) {
+  const c = lonLatToPixel(lon, lat, z);
+  const originX = c.x - size / 2;
+  const originY = c.y - size / 2;
+  const firstX = Math.floor(originX / TILE);
+  const firstY = Math.floor(originY / TILE);
+  const lastX = Math.floor((originX + size) / TILE);
+  const lastY = Math.floor((originY + size) / TILE);
+  const max = Math.pow(2, z);
+  const out = [];
+  for (let tx = firstX; tx <= lastX; tx++) {
+    for (let ty = firstY; ty <= lastY; ty++) {
+      if (ty < 0 || ty >= max) continue;
+      const wrapped = ((tx % max) + max) % max;
+      out.push({
+        key: `${z}/${wrapped}/${ty}`,
+        x: wrapped, y: ty, z,
+        left: tx * TILE - originX,
+        top: ty * TILE - originY,
+      });
+    }
+  }
+  return out;
 }
 
 /* Shoelace. Returns signed area in square pixels; sign tells us the
@@ -10020,156 +10035,166 @@ function tracedLengthFt(pts, mPerPx) {
 function AerialTracer({ job, onAddFacet, toast }) {
   const [lat, setLat] = useState(null);
   const [lon, setLon] = useState(null);
-  const [span, setSpan] = useState(60);      // ground metres across
+  const [zoom, setZoom] = useState(20);
+  const [srcId, setSrcId] = useState("esri");
   const [pts, setPts] = useState([]);
   const [pitch, setPitch] = useState(6);
   const [status, setStatus] = useState("idle");
   const [err, setErr] = useState("");
-  const [imgFailed, setImgFailed] = useState(false);
-  const [usedFallback, setUsedFallback] = useState(false);
+  const [failed, setFailed] = useState(0);
   const wrapRef = useRef(null);
 
-  /* Resolve the state from the job, then the zip, then the address text.
-     The zip is the reliable one — an address string often omits the
-     state entirely. */
-  const state = String(
-    job.state
-    || (job.zip ? stateForZip(job.zip) : "")
-    || ((job.address || "").match(/\b(OH|KY|IL)\b/) || [])[1]
-    || ""
-  ).toUpperCase();
-  const source = AERIAL_SOURCES[state] || null;
-  const PX = 640;
-  const req = lat != null && lon != null ? aerialRequest(lat, lon, span, PX, state) : null;
+  const SIZE = 512;
+  const source = TILE_SOURCES.find((s) => s.id === srcId) || TILE_SOURCES[0];
+  const z = Math.min(zoom, source.maxZoom);
+  const ready = lat != null && lon != null;
+  const tiles = ready ? tileGrid(lon, lat, z, SIZE) : [];
+  const mPerPx = ready ? metresPerPixel(lat, z) : 0;
 
+  /* Geocode once, from whatever the job actually has. */
   const locate = async () => {
-    setStatus("locating"); setErr(""); setImgFailed(false); setUsedFallback(false);
-    /* Geoapify returns lon as `lng` through this helper. Reading `lon`
-       silently produced undefined, which left the window unbuilt and
-       made the button look inert. */
-    const query = [job.address, job.zip].filter(Boolean).join(" ");
-    const hits = await geoAutocomplete(query);
-    const h = (hits || [])[0];
-    if (!h || h.lat == null || h.lng == null) {
+    setStatus("locating"); setErr(""); setFailed(0);
+    const query = [job.address, job.city, job.state, job.zip].filter(Boolean).join(", ");
+    const hits = await geoAutocomplete(query || job.address || "");
+    const h = (hits || []).find((x) => x.lat != null && x.lng != null);
+    if (!h) {
       setStatus("idle");
-      setErr("Could not place that address. Check the address and zip on the Overview section.");
+      setErr("Could not place that address. Check the address and zip on the Overview section, then try again.");
       return;
     }
     setLat(Number(h.lat)); setLon(Number(h.lng)); setPts([]); setStatus("ready");
   };
 
+  /* Nudge the centre when the roof sits off to one side. */
+  const pan = (dxPx, dyPx) => {
+    if (!ready) return;
+    const c = lonLatToPixel(lon, lat, z);
+    const nx = c.x + dxPx, ny = c.y + dyPx;
+    const worldSize = TILE * Math.pow(2, z);
+    const newLon = (nx / worldSize) * 360 - 180;
+    const n = Math.PI - (2 * Math.PI * ny) / worldSize;
+    const newLat = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+    setLon(newLon); setLat(newLat); setPts([]);
+  };
+
   const addPoint = (e) => {
-    if (!req) return;
+    if (!ready) return;
     const rect = wrapRef.current.getBoundingClientRect();
     const t = e.touches ? e.touches[0] : e;
-    const x = ((t.clientX - rect.left) / rect.width) * PX;
-    const y = ((t.clientY - rect.top) / rect.height) * PX;
+    const x = ((t.clientX - rect.left) / rect.width) * SIZE;
+    const y = ((t.clientY - rect.top) / rect.height) * SIZE;
     setPts((p) => [...p, { x, y }]);
   };
 
-  const areaSf = req ? tracedAreaSqFt(pts, req.mPerPx) : 0;
-  const perimFt = req ? tracedLengthFt(pts, req.mPerPx) : 0;
+  const areaSf = tracedAreaSqFt(pts, mPerPx);
+  const perimFt = tracedLengthFt(pts, mPerPx);
   const roofSf = areaSf * slopeFactor(pitch);
-
-  if (!source) {
-    return (
-      <Card style={{ marginTop: 12 }}>
-        <CardTitle>Trace from aerial</CardTitle>
-        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
-          Free public-domain aerial imagery is available for Ohio and Kentucky.
-          {state
-            ? ` This job resolves to ${state}, which does not publish open imagery — measure on site or order an aerial report.`
-            : " This job has no state or zip on record, so there is nothing to look up. Add the zip on the Overview section."}
-        </div>
-      </Card>
-    );
-  }
+  const spanFt = Math.round(mPerPx * SIZE * 3.28084);
 
   return (
     <Card style={{ marginTop: 12 }}>
       <CardTitle right={<Chip tone="green">Free</Chip>}>Trace from aerial</CardTitle>
-      <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 11 }}>
-        <b>{source.name}</b> — {source.detail}. Leaf-off, so you see the roof
-        rather than the tree over it, and public domain, so tracing it for
-        commercial work carries no licence problem.
-      </div>
 
       {status === "idle" && (
-        <Btn style={{ width: "100%" }} onClick={locate} data-testid="locate-roof">
-          <MapPin size={14} /> Find this roof
-        </Btn>
+        <>
+          <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 11 }}>
+            Find the roof on aerial imagery, tap round one plane, set its pitch.
+            The plan area comes off the image and the slope factor turns it into
+            roof area.
+          </div>
+          <Btn style={{ width: "100%" }} onClick={locate} data-testid="locate-roof">
+            <MapPin size={14} /> Find this roof
+          </Btn>
+          {job.address && (
+            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 9, textAlign: "center" }}>
+              {job.address}
+            </div>
+          )}
+        </>
       )}
-      {status === "locating" && <div style={{ fontSize: 13, color: S.sub }}>Locating…</div>}
+      {status === "locating" && <div style={{ fontSize: 13, color: S.sub, padding: "6px 0" }}>Finding the address…</div>}
       {err && <Callout label="Could not locate" tone="amber">{err}</Callout>}
 
-      {req && (
+      {ready && (
         <>
-          <div style={{ display: "flex", gap: 8, marginBottom: 9 }}>
-            {[40, 60, 90].map((s) => (
-              <button key={s} onClick={() => { setSpan(s); setPts([]); }} style={{
-                flex: 1, border: `1.5px solid ${span === s ? T.accent : S.line}`,
-                background: span === s ? T.accentSoft : "#fff", color: span === s ? T.accent : S.ink,
-                borderRadius: 999, padding: "7px 4px", fontSize: 12.5, fontWeight: 700,
+          {/* Zoom and imagery source */}
+          <div style={{ display: "flex", gap: 7, marginBottom: 9 }}>
+            {[19, 20, 21].map((zz) => (
+              <button key={zz} onClick={() => { setZoom(zz); setPts([]); }} style={{
+                flex: 1, border: `1.5px solid ${zoom === zz ? T.accent : S.line}`,
+                background: zoom === zz ? T.accentSoft : "#fff", color: zoom === zz ? T.accent : S.ink,
+                borderRadius: 999, padding: "7px 4px", fontSize: 12, fontWeight: 700,
                 cursor: "pointer", fontFamily: "inherit",
-              }}>{Math.round(s * M_TO_FT)} ft</button>
+              }}>{zz === 19 ? "Wide" : zz === 20 ? "Close" : "Closest"}</button>
             ))}
           </div>
 
+          {/* The map */}
           <div ref={wrapRef} onClick={addPoint}
             style={{
               position: "relative", width: "100%", aspectRatio: "1 / 1",
               borderRadius: 11, overflow: "hidden", border: `1px solid ${S.line}`,
-              background: "#EAECEF", cursor: "crosshair", touchAction: "manipulation",
+              background: "#33383D", cursor: "crosshair", touchAction: "manipulation",
             }}>
-            {/* Rendered as an img rather than drawn into the canvas: we
-                only need it underneath the overlay, and an img is not
-                subject to the cross-origin restrictions that would
-                otherwise taint a canvas. */}
-            <img
-              src={usedFallback && req.fallbackUrl ? req.fallbackUrl : req.url}
-              alt="Aerial view"
-              onError={() => {
-                if (!usedFallback && req.fallbackUrl) { setUsedFallback(true); return; }
-                setImgFailed(true);
-              }}
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            <div style={{ position: "absolute", inset: 0 }}>
+              {tiles.map((t) => (
+                <img key={t.key} src={source.url(t.z, t.x, t.y)} alt=""
+                  onError={() => setFailed((n) => n + 1)}
+                  style={{
+                    position: "absolute",
+                    left: `${(t.left / SIZE) * 100}%`, top: `${(t.top / SIZE) * 100}%`,
+                    width: `${(TILE / SIZE) * 100}%`, height: `${(TILE / SIZE) * 100}%`,
+                    display: "block",
+                  }} />
+              ))}
+            </div>
 
-            {imgFailed && (
-              <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", padding: 20, textAlign: "center" }}>
-                <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
-                  The imagery service did not respond. It is a state government
-                  server and is occasionally down for maintenance — try again
-                  later, or measure on site.
-                </div>
-              </div>
+            {/* Centre crosshair, so it is obvious where the address landed */}
+            {pts.length === 0 && (
+              <svg viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
+                <circle cx={SIZE / 2} cy={SIZE / 2} r="12" fill="none" stroke="#fff" strokeWidth="2" opacity="0.9" />
+                <circle cx={SIZE / 2} cy={SIZE / 2} r="2.5" fill="#fff" />
+              </svg>
             )}
 
-            {/* Overlay: the traced outline. */}
-            <svg viewBox={`0 0 ${PX} ${PX}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
+            {/* The trace */}
+            <svg viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}>
               {pts.length > 1 && (
                 <polygon points={pts.map((p) => `${p.x},${p.y}`).join(" ")}
-                  fill="rgba(27,109,224,.25)" stroke="#1B6DE0" strokeWidth="3" />
+                  fill="rgba(27,109,224,.28)" stroke="#1B6DE0" strokeWidth="2.5" />
               )}
               {pts.map((p, i) => (
-                <circle key={i} cx={p.x} cy={p.y} r="7" fill="#fff" stroke="#1B6DE0" strokeWidth="3" />
+                <circle key={i} cx={p.x} cy={p.y} r="6" fill="#fff" stroke="#1B6DE0" strokeWidth="2.5" />
               ))}
             </svg>
 
-            {pts.length === 0 && !imgFailed && (
+            {pts.length === 0 && (
               <div style={{
-                position: "absolute", left: 0, right: 0, bottom: 0, padding: "9px 12px",
-                background: "rgba(16,24,40,.72)", color: "#fff", fontSize: 12, lineHeight: 1.4,
+                position: "absolute", left: 0, right: 0, bottom: 0, padding: "8px 11px",
+                background: "rgba(16,24,40,.75)", color: "#fff", fontSize: 11.5, lineHeight: 1.4,
               }}>
-                Tap each corner of one roof plane. Trace the plane, not the whole roof.
+                Tap each corner of ONE roof plane. Add each plane separately.
               </div>
             )}
           </div>
 
-          <div style={{ display: "flex", gap: 8, marginTop: 9 }}>
+          {/* Pan */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginTop: 8 }}>
+            <Btn kind="ghost" small onClick={() => pan(0, -SIZE / 3)}>↑</Btn>
+            <Btn kind="ghost" small onClick={() => pan(0, SIZE / 3)}>↓</Btn>
+            <Btn kind="ghost" small onClick={() => pan(-SIZE / 3, 0)}>←</Btn>
+            <Btn kind="ghost" small onClick={() => pan(SIZE / 3, 0)}>→</Btn>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <Btn kind="ghost" small style={{ flex: 1 }} disabled={!pts.length}
               onClick={() => setPts((p) => p.slice(0, -1))}>Undo point</Btn>
             <Btn kind="ghost" small style={{ flex: 1 }} disabled={!pts.length}
               onClick={() => setPts([])}>Clear</Btn>
+          </div>
+
+          <div style={{ fontSize: 11, color: S.sub, marginTop: 8, textAlign: "center" }}>
+            About {spanFt} ft across · {(mPerPx * 39.37).toFixed(1)} in per pixel
           </div>
 
           {pts.length >= 3 && (
@@ -10178,7 +10203,7 @@ function AerialTracer({ job, onAddFacet, toast }) {
               <KV k="Perimeter" v={`${perimFt.toLocaleString(undefined, { maximumFractionDigits: 0 })} ft`} />
               <div style={{ margin: "10px 0 8px" }}>
                 <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 6 }}>
-                  Pitch of this plane — the image cannot tell you this, measure it on site
+                  Pitch of this plane — no overhead image can tell you this, measure it on site
                 </div>
                 <select style={selStyle} value={pitch} onChange={(e) => setPitch(Number(e.target.value))}>
                   {PITCH_OPTIONS.map((p) => <option key={p} value={p}>{p}/12</option>)}
@@ -10187,11 +10212,6 @@ function AerialTracer({ job, onAddFacet, toast }) {
               <KV k="Roof area of this plane" v={`${roofSf.toLocaleString(undefined, { maximumFractionDigits: 0 })} sq ft`} strong />
               <Btn style={{ width: "100%", marginTop: 11 }} data-testid="add-traced-facet"
                 onClick={() => {
-                  /* Stored as an equivalent rectangle so it slots into the
-                     existing facet maths untouched: the plan area is what
-                     matters and the slope factor is applied downstream. */
-                  /* planArea is what the engine uses; the side lengths are
-                     only so the facet reads sensibly if someone opens it. */
                   const side = Math.sqrt(areaSf);
                   onAddFacet({
                     id: uid("fct"),
@@ -10207,11 +10227,27 @@ function AerialTracer({ job, onAddFacet, toast }) {
             </div>
           )}
 
-          <div style={{ fontSize: 11, color: S.sub, marginTop: 11, lineHeight: 1.55 }}>
-            Scale is computed from the image's bounding box, not estimated from
-            a zoom level, and corrected for Web Mercator distortion at this
-            latitude. What the image cannot give you is pitch — measure that on
-            the roof. Imagery: {source.credit}.
+          <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
+            {TILE_SOURCES.map((s2) => (
+              <button key={s2.id} onClick={() => { setSrcId(s2.id); setFailed(0); }} style={{
+                flex: 1, border: `1px solid ${srcId === s2.id ? T.accent : S.line}`,
+                background: srcId === s2.id ? T.accentSoft : "#fff",
+                color: srcId === s2.id ? T.accent : S.sub,
+                borderRadius: 9, padding: "7px 6px", fontSize: 11.5, fontWeight: 700,
+                cursor: "pointer", fontFamily: "inherit",
+              }}>{s2.name}</button>
+            ))}
+          </div>
+          {failed > 2 && (
+            <Callout label="Some tiles did not load" tone="amber">
+              Try the other imagery source above, or zoom out one step — the
+              closest zoom is not available everywhere.
+            </Callout>
+          )}
+
+          <div style={{ fontSize: 11, color: S.sub, marginTop: 10, lineHeight: 1.55 }}>
+            Scale comes from the tile zoom and this latitude, so it already
+            accounts for map projection stretch. Imagery: {source.credit}.
           </div>
         </>
       )}
