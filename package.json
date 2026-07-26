@@ -36,7 +36,8 @@
     "bundle:test": "npx esbuild ridgeline.jsx --loader:.jsx=jsx --jsx=automatic --bundle --external:react --external:react-dom --external:lucide-react --format=cjs --outfile=app.test.cjs",
     "test:build26": "node build26.test.cjs",
     "test:build27": "node build27.test.cjs",
-    "test:build28": "node build28.test.cjs"
+    "test:build28": "node build28.test.cjs",
+    "test:build29": "node build29.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

@@ -2727,7 +2727,14 @@ function Login({ brand, users, onLogin }) {
     }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          {brand.logo ? (
+          {mode === "signup" ? (
+            /* Signing up creates a brand-new company — showing whichever
+               tenant's brand happened to be cached (Supreme's, in this
+               build) would be actively misleading. This is the one place
+               the product's own identity belongs instead of a tenant's. */
+            <img src="/roofstride-logo-horizontal.png" alt={PRODUCT.name}
+              style={{ height: 40, maxWidth: 260, objectFit: "contain", margin: "0 auto 16px", display: "block" }} />
+          ) : brand.logo ? (
             <img src={brand.logo} alt={brand.company} style={{ height: 72, maxWidth: 220, objectFit: "contain", margin: "0 auto 14px", display: "block" }} />
           ) : (
             <div style={{
@@ -2736,8 +2743,12 @@ function Login({ brand, users, onLogin }) {
               fontWeight: 800, fontSize: 20, letterSpacing: 1,
             }}>{brand.short}</div>
           )}
-          <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>{brand.company}</div>
-          <div style={{ fontSize: 14, color: S.sub, marginTop: 6 }}>{brand.slogan}</div>
+          {mode !== "signup" && (
+            <>
+              <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>{brand.company}</div>
+              <div style={{ fontSize: 14, color: S.sub, marginTop: 6 }}>{brand.slogan}</div>
+            </>
+          )}
         </div>
 
         {mode === "login" && (

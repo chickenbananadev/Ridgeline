@@ -175,6 +175,38 @@ partner API agreements), native iOS/Android (different stack),
 dialer (needs Twilio Voice), Google Ads/Analytics (external
 accounts). Revisit only when the prerequisite exists.
 
+## Brand assets & PWA icon set (build 29)
+Jacob supplied final RoofStride logo files (app icon, wordmark, mark,
+horizontal lockup). Processed into a real icon set for the first time
+— **the app previously had no favicon, no apple-touch-icon, no
+manifest.json at all.** `public/` is new.
+
+- Source app icon (1024x1024) had its rounded-square shape pre-baked
+  with transparent corners — flattened onto its dominant navy fill
+  (#062860) before resizing, because iOS/Android apply their own
+  corner-masking and render pre-rounded transparent PNGs badly
+  (visible checkerboard/white corners). Full-bleed square in, OS
+  rounds it.
+- Generated: apple-touch-icon.png (180), icon-192/512.png (PWA),
+  favicon-16/32.png, favicon.ico (multi-res).
+- `public/manifest.json`: name/short_name "RoofStride", theme
+  #062860.
+- `index.html`: fixed a real staleness — title was hardcoded
+  `"Ridgeline — Supreme Building Group"`, present since before
+  multi-tenancy existed. Now just `"RoofStride"`, since the HTML
+  shell loads before any tenant is known.
+- **Real bug found and fixed while wiring this up:** the auth
+  screen's header (logo + company name + slogan) was shared across
+  login/signup/forgot modes, so someone signing up for a **brand-new**
+  company saw Supreme Building Group's logo and slogan first. Signup
+  mode now shows the RoofStride product lockup
+  (`public/roofstride-logo-horizontal.png`) instead of whatever
+  tenant's brand happens to be cached; login/forgot still show the
+  signed-in tenant's own brand as before.
+- build29 tests both the asset wiring (files exist, non-trivial size,
+  manifest paths resolve) and the render behavior (signup shows the
+  product logo, not a tenant name).
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.
