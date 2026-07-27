@@ -269,6 +269,33 @@ off on: "when I signed up as a new user I could access all Supreme
 info." Deliberately NOT fixed this session per his explicit instruction
 to leave that one alone — flagged for him to decide on timing.
 
+## crm_org made per-tenant (this session) — the real fix for the deferred bug
+Same flaw as crm_brand, different table: crm_org (stages, price list,
+crews, lead sources, message templates, vendors, feature toggles,
+jurisdiction overrides) was hardcoded to `id=1`. A brand-new tenant's
+first login tries to seed its settings via `upsert({id:1,...})` —
+since id=1 already belongs to Supreme, that becomes an UPDATE against
+Supreme's row, which 015's RLS correctly blocks. This is almost
+certainly the actual mechanism behind "new signup could see Supreme's
+data" — Jacob gave the go-ahead to fix it this session.
+
+Fixed identically to crm_brand: migration 017 (unique constraint on
+tenant_id), useDbSync's hydrate + first-boot-seed + debounced-save all
+scoped by tenant_id with `onConflict: "tenant_id"`, gated so nothing
+fires before tenantId is known. **Migrations 015, 016, AND 017 must
+all be run, in order, before this is actually fixed in production** —
+if 015 hasn't run yet, none of the tenant RLS exists at all regardless
+of what the app code does.
+
+## Logo update (this session) — charcoal/teal, not navy/orange
+Jacob supplied new brand files (RoofStride.zip): charcoal #20242A
+(was navy #062860), teal accent #0A9E98 (was orange). Regenerated the
+full icon set from `RoofStride-App-Icon-Black-Teal.png` (same flatten-
+onto-dominant-fill process as before — pre-rounded transparent
+corners). Updated: all PWA/favicon assets, `public/roofstride-logo-
+horizontal.png`, `public/roofstride-mark.png`, `manifest.json` theme_
+color, `index.html` meta theme-color, `DEFAULT_BRAND.primary`.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.

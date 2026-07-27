@@ -47,7 +47,7 @@ const DEFAULT_BRAND = {
   website: "",
   address: "",
   license: "",
-  primary: "#062860",
+  primary: "#20242A",
   accent: "#1B6DE0",
   accentSoft: "#EAF2FD",
   googleReviewLink: "",
@@ -17902,7 +17902,7 @@ function useBrandSync(brand, setBrand, hasSession, tenantId) {
 
 function useDbSync(st) {
   const {
-    ready, isCrew, userName,
+    ready, isCrew, userName, tenantId,
     jobs, setJobs, appointments, setAppointments,
     activity, setActivity, chatMsgs, setChatMsgs,
     orgPack, unpackOrg,
@@ -17919,18 +17919,23 @@ function useDbSync(st) {
   /* ---------- hydrate once per login ---------- */
   useEffect(() => {
     const db = DB();
-    if (!db || !ready) return;
+    if (!db || !ready || !tenantId) return;
     let alive = true;
     (async () => {
       try {
-        const { data: orgRow, error: orgErr } = await db.from("crm_org").select("data").eq("id", 1).maybeSingle();
+        /* Tenant-scoped, not the old hardcoded id=1 — that meant every
+           company's stages, price list, crews, and lead sources lived
+           in the SAME row, and a brand-new tenant's first-boot seed
+           would try to upsert that same id, get blocked by 015's RLS,
+           and silently fail. */
+        const { data: orgRow, error: orgErr } = await db.from("crm_org").select("data").eq("tenant_id", tenantId).maybeSingle();
         if (orgErr) throw orgErr;
         if (!alive) return;
         if (orgRow && orgRow.data && Object.keys(orgRow.data).length) {
           unpackOrg(orgRow.data);
         } else {
-          /* First boot: persist the built-in defaults as the org baseline. */
-          await db.from("crm_org").upsert({ id: 1, data: orgPack(), updated_at: new Date().toISOString() });
+          /* First boot: persist the built-in defaults as THIS tenant's baseline. */
+          await db.from("crm_org").upsert({ tenant_id: tenantId, data: orgPack(), updated_at: new Date().toISOString() }, { onConflict: "tenant_id" });
         }
 
         const { data: jobRows, error: jErr } = await db.from("crm_jobs").select("id, data");
@@ -17985,7 +17990,7 @@ function useDbSync(st) {
       if (alive) setHydrated(true);
     })();
     return () => { alive = false; };
-  }, [ready]);
+  }, [ready, tenantId]);
 
   /* ---------- realtime: chat + activity from other devices ---------- */
   useEffect(() => {
@@ -18146,14 +18151,14 @@ function useDbSync(st) {
   const packStr = JSON.stringify(st.orgDeps);
   useEffect(() => {
     const db = DB();
-    if (!db || !ready || !hydrated) return;
+    if (!db || !ready || !hydrated || !tenantId) return;
     if (orgTimer.current) clearTimeout(orgTimer.current);
     orgTimer.current = setTimeout(() => {
-      db.from("crm_org").upsert({ id: 1, data: orgPack(), updated_at: new Date().toISOString() })
+      db.from("crm_org").upsert({ tenant_id: tenantId, data: orgPack(), updated_at: new Date().toISOString() }, { onConflict: "tenant_id" })
         .then(({ error }) => { if (error) setSyncErr("Settings save failed. " + error.message); });
     }, 1400);
     return () => { if (orgTimer.current) clearTimeout(orgTimer.current); };
-  }, [packStr, ready, hydrated]);
+  }, [packStr, ready, hydrated, tenantId]);
 
   return { hydrated, syncErr };
 }
@@ -18362,7 +18367,7 @@ export default function SupremeCRM() {
   const { hydrated, syncErr } = useDbSync({
     ready: liveAuth() ? !!currentUser : true,
     isCrew: !!(currentUser && currentUser.role === "crew"),
-    userName: syncUserName,
+    userName: syncUserName, tenantId: currentUser && currentUser.tenantId,
     jobs, setJobs, appointments, setAppointments,
     activity, setActivity, chatMsgs, setChatMsgs,
     orgPack, unpackOrg, orgDeps,
