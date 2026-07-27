@@ -18115,17 +18115,25 @@ function useBrandSync(brand, setBrand, hasSession, tenantId) {
      login and fetch a single hardcoded row (id=1) so the sign-in screen
      could show a logo — which meant every visitor, from every company,
      saw the SAME row. The pre-auth screen shows RoofStride's own brand
-     now instead (see Login below), so this only runs once a tenant is
-     known post sign-in.
-     CRITICAL: falls back to the legacy id=1 row whenever tenantId is
-     unavailable — not just pre-login, but for any signed-in user whose
-     account predates migration 015/016, or on a database where those
-     migrations haven't been run yet. Hard-blocking on tenantId here
-     once caused the whole app to hang on "Loading…" forever for every
-     real user, since profiles.tenant_id doesn't exist until 015 runs. */
+     now instead (see Login below), so this must only run once a user is
+     actually signed in.
+     BUG FIXED: the legacy id=1 fallback (added to stop the app hanging
+     on "Loading…" forever when tenantId is unavailable) had no
+     `hasSession` check at all — only `!db`. Since a real Supabase
+     connection exists in production regardless of auth state, this
+     effect ran on every page load, pre-auth included, took the
+     fallback branch (tenantId is null before sign-in), and fetched
+     Supreme's OWN real saved brand row — merging their actual saved
+     blue accent color into `brand` on the public login/signup screen,
+     which is exactly why the button kept rendering blue even after
+     DEFAULT_BRAND was fixed to teal: DEFAULT_BRAND was correct, but
+     this effect was silently overwriting it seconds after mount, every
+     time, for every visitor. Now gated on `hasSession` — the fallback
+     still exists for real signed-in users on a pre-migration database,
+     it just no longer fires before anyone has signed in. */
   useEffect(() => {
     const db = DB();
-    if (!db) { setLoaded(true); return; }
+    if (!db || !hasSession) { if (!db) setLoaded(true); return; }
     let alive = true;
     const finish = () => { if (alive) setLoaded(true); };
     const query = tenantId
@@ -18145,7 +18153,7 @@ function useBrandSync(brand, setBrand, hasSession, tenantId) {
       .catch(() => finish());
     const t = setTimeout(finish, 4000);
     return () => { alive = false; clearTimeout(t); };
-  }, [tenantId]);
+  }, [tenantId, hasSession]);
 
   useEffect(() => {
     const db = DB();

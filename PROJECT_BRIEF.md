@@ -554,6 +554,48 @@ locally — the discrepancy is almost certainly Vercel deployment lag or
 a cached bundle on Jacob's device, not a code bug. Told him plainly
 rather than guessing.
 
+## REAL BUG FOUND — pre-auth was fetching Supreme's real saved brand data
+Jacob's follow-up screenshot proved it: the placeholder-text fix from
+the previous commit WAS live (showing "Your full name" correctly), but
+the button was still Supreme's real blue. Since the placeholder and
+color fixes shipped in the SAME commit, this ruled out deployment lag
+entirely — it had to be a real, separate code bug specifically in the
+color path, not caching.
+
+**Root cause**: `useBrandSync`'s READ effect (added as part of the
+"hang forever" fix two sessions ago) had a comment claiming it "only
+runs once a tenant is known post sign-in" — but the actual code only
+checked `if (!db) { ... return; }`. No `hasSession` check at all. Since
+a real Supabase connection exists in production regardless of auth
+state, this effect ran on every page load, pre-auth included. Before
+sign-in, `tenantId` is null, so it took the legacy `id=1` fallback
+path — which fetched Supreme's OWN real saved brand row (their actual
+blue accent, saved in the database from before any of this session's
+work) and merged it into `brand` state via `setBrand`, overwriting the
+correctly-set `DEFAULT_BRAND` teal seconds after every page mount, for
+every visitor, including strangers looking at the public signup page.
+
+**Fixed**: added the `hasSession` check the comment always claimed
+existed. The legacy `id=1` fallback still works correctly for real
+signed-in users on a pre-migration database (that's still needed and
+still there) — it just no longer fires before anyone has actually
+signed in.
+
+**New regression test (build34)**: mocks a live Supabase connection
+where Supreme's real saved brand row has a different accent color
+than the neutral default, with nobody signed in, and asserts that
+color is never applied to the pre-auth screen. Verified this test
+actually catches the bug the same way as build32 — reverted the fix,
+confirmed build34 failed, restored the fix, confirmed it passed again.
+
+This is the second time in two sessions a "fix the hang" patch quietly
+reintroduced a "pre-auth shows tenant-specific data" bug via a legacy
+fallback path that wasn't scoped as tightly as its own comments
+claimed. Worth being extra careful about this exact failure shape if
+touching useBrandSync or useDbSync again: any fallback added for
+resilience needs its OWN explicit session/auth gate, not just a
+comment saying it's already covered.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.
