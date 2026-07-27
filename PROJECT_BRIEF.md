@@ -632,6 +632,78 @@ shows its original 4 rows.
 definition in that file is also stale (superseded by migrations since);
 never treat schema.sql as the source of truth for it.
 
+## Marketing page redesign — STRIDE, real scroll motion, typography (this session)
+Jacob's feedback: some marketing photos aren't great/cropped right,
+STRIDE reads as "just going down the page" (a plain 1-column text
+list on mobile — he referenced a different layout he'd shown before),
+and wanted a real Apple-style scroll-linked effect between sections,
+"so it looks interactive." Also: keep using teal/branding consistently.
+
+**Root cause check first**: only 4 of the 35 marketing photos Jacob
+added were actually wired into the page at all. The 6 "brand-*.jpg"
+photos (matching the panel titles in `brand6sheet.png` — the
+reference sheet in /mnt/project/) were sitting completely unused, and
+STRIDE had zero photos — a flat 3-col-collapsing-to-1-col text grid,
+which is exactly what "just going down the page" describes.
+
+**STRIDE rebuilt**: photo-paired card grid, one of the 6 unused
+brand-*.jpg photos per value, genuinely 2 columns on mobile (not 1) —
+`.mkt-stride-grid { grid-template-columns: 1fr 1fr }` under the mobile
+media query, `repeat(3, 1fr)` at desktop width. Verified structurally:
+all 6 STRIDE array entries reference distinct real photo files: confirmed
+present on disk.
+
+**Real scroll-linked motion, replacing the old one-shot IntersectionObserver
+fade.** `Reveal` is now driven by a single rAF-scheduled scroll listener
+(`MKT_MOTION`) that continuously computes each registered section's
+progress through the viewport and writes opacity/scale/translateY
+directly via `el.style` (not React state — a state update per scroll
+pixel would thrash re-renders). Content settles into focus as it
+centers and drifts back slightly on the way out, the whole time it's
+on screen, not just once on first entry. `prefers-reduced-motion`
+short-circuits at the hook level. Had to add a `requestAnimationFrame`
+fallback (`setTimeout`) since jsdom's test environment doesn't provide
+it — caught via a real smoke-test crash, not assumed.
+
+**Typography**: added Space Grotesk (Google Fonts, loaded once via
+`useMktFont()`, marketing page only) paired with the existing Inter,
+applied to every major headline. Deliberately restrained — display
+face for headlines only, never body copy, per the frontend-design
+skill's "spend your boldness in one place" guidance.
+
+**Color audit**: swept the full marketing-component source range for
+any non-`MKT.teal` accent color. Found none — the marketing page has
+always used its own hardcoded MKT constants, independent of tenant
+branding, so it was never actually at risk of showing the wrong color;
+confirmed rather than assumed.
+
+**A real limitation, worth knowing**: verifying the new scroll-motion
+system visually through the jsdom+wkhtmltoimage screenshot pipeline
+(built earlier this session) doesn't work — jsdom fakes zero-value
+`getBoundingClientRect()`, so the animation freezes at an arbitrary,
+non-representative opacity when serialized as a static snapshot. This
+looked like a rendering bug (photos appearing as flat placeholder
+color) until traced to the actual cause: not a broken image, a
+testing-method mismatch. Verified structural correctness instead (CSS
+rules, distinct photo sources) and confirmed all suites still pass.
+The actual on-screen motion needs a real browser with real scroll to
+be seen properly — static-snapshot testing cannot validate it.
+
+**NOT done**: only 10 of the 35 supplied marketing photos are wired in
+anywhere (4 original + 6 new STRIDE cards). The rest (field-*, sales-*,
+social-*, heroad-* — 23 more) remain available in
+`public/marketing/photos/` if Jacob wants broader photo coverage later;
+left unused deliberately rather than force-fitting all 35 in and
+bloating the page.
+
+**Also NOT done**: actually improving specific miscropped photos.
+Added proper `aspect-ratio` + `object-fit: cover` containers
+throughout, which should reduce how jarring any awkward source crop
+looks, but there's no image-generation/editing tool in this
+environment — a genuinely miscomposed photo (e.g. a cut-off face)
+needs to go back through whatever created the original 35, not
+something fixable from the already-cropped JPG alone.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.

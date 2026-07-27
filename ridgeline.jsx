@@ -2654,6 +2654,101 @@ function SignaturePad({ open, onClose, title, onApply }) {
    fabricated mockups.
    ================================================================== */
 const MKT = { ink: "#20242A", teal: "#0A9E98", tealDark: "#087F7A", sub: "#5B6470", bg: "#F7F8FA", line: "#E5E7EB" };
+const MKT_DISPLAY_FONT = "'Space Grotesk', 'Inter', -apple-system, sans-serif";
+
+/* Loads Space Grotesk once, on the marketing page only — the rest of
+   the app stays on the system/Inter stack. A confident, geometric
+   display face for headlines only (never body copy) is the one
+   deliberate typographic choice on this page; everything else stays
+   quiet so that choice reads, rather than fighting for attention with
+   five other decisions. */
+function useMktFont() {
+  useEffect(() => {
+    if (document.getElementById("mkt-font-link")) return;
+    const link = document.createElement("link");
+    link.id = "mkt-font-link";
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap";
+    document.head.appendChild(link);
+  }, []);
+}
+
+/* ==================================================================
+   Scroll-linked motion — the page's signature element. Not a one-shot
+   fade-in-once-then-forget (that was the old Reveal): every section
+   continuously tracks its own position in the viewport and answers to
+   it the whole time it's on screen, the way apple.com's product pages
+   do — content settles into full focus as it centers, and drifts back
+   slightly as it leaves, so scrolling itself feels like the thing
+   moving the page forward ("stride" literalized). A single imperative
+   rAF-driven scroll listener drives every registered section by
+   writing directly to element.style — not React state — because a
+   piece of state per scroll pixel would re-render the whole page 60
+   times a second. `prefers-reduced-motion` short-circuits to fully
+   visible/static, honored at the hook level so no page consumer has
+   to remember to check it.
+   ================================================================== */
+const MKT_MOTION = { els: new Set(), raf: null, reduced: false };
+
+function mktMotionTick() {
+  MKT_MOTION.raf = null;
+  const vh = window.innerHeight;
+  MKT_MOTION.els.forEach((el) => {
+    const r = el.getBoundingClientRect();
+    // progress: 0 when the element's center is at the bottom of the
+    // viewport, 1 when its center is at the top — i.e. how far it has
+    // travelled THROUGH the viewport, continuously, not a single trigger.
+    const center = r.top + r.height / 2;
+    let p = 1 - center / vh;
+    p = Math.max(0, Math.min(1, p));
+    const settle = Math.min(1, p / 0.4);              // 0->1 over the first 40% of travel
+    const drift = Math.max(0, (p - 0.85) / 0.15);      // eases back out over the last 15%
+    const eased = settle * (1 - drift * 0.35);
+    const rise = (1 - settle) * (el.dataset.mktY ? +el.dataset.mktY : 26);
+    const scale = 0.96 + eased * 0.04;
+    el.style.opacity = String(0.15 + eased * 0.85);
+    el.style.transform = `translateY(${rise}px) scale(${scale})`;
+    if (el.dataset.mktParallax) {
+      const depth = +el.dataset.mktParallax;
+      el.style.setProperty("--mkt-parallax", `${(0.5 - p) * depth}px`);
+    }
+  });
+}
+function mktMotionSchedule() {
+  if (MKT_MOTION.raf != null) return;
+  if (typeof requestAnimationFrame === "function") {
+    MKT_MOTION.raf = requestAnimationFrame(mktMotionTick);
+  } else {
+    MKT_MOTION.raf = setTimeout(mktMotionTick, 16);
+  }
+}
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("scroll", mktMotionSchedule, { passive: true });
+  window.addEventListener("resize", mktMotionSchedule, { passive: true });
+  if (window.matchMedia) {
+    try { MKT_MOTION.reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
+    catch { /* some test/embed environments don't implement matchMedia fully */ }
+  }
+}
+
+function Reveal({ children, delay = 0, y = 26, parallax, style, className, id }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || MKT_MOTION.reduced) return;
+    el.dataset.mktY = String(y);
+    if (parallax) el.dataset.mktParallax = String(parallax);
+    el.style.transition = `opacity .5s cubic-bezier(.22,.61,.36,1) ${delay}ms, transform .5s cubic-bezier(.22,.61,.36,1) ${delay}ms`;
+    MKT_MOTION.els.add(el);
+    mktMotionSchedule();
+    return () => { MKT_MOTION.els.delete(el); };
+  }, [y, parallax, delay]);
+  return (
+    <div ref={ref} className={className ? `mkt-reveal ${className}` : "mkt-reveal"} id={id} style={{
+      willChange: "opacity, transform", ...style,
+    }}>{children}</div>
+  );
+}
 
 function MktNav({ onSignIn, onStartTrial }) {
   return (
@@ -2682,36 +2777,6 @@ function MktNav({ onSignIn, onStartTrial }) {
   );
 }
 
-/* Apple-style scroll reveal: sections start slightly lowered and
-   transparent, then ease up into place the moment they cross into
-   view. One IntersectionObserver per instance, disconnected after
-   the first reveal — this plays once on the way down, not every
-   time a section re-enters the viewport, which is what keeps it
-   feeling calm rather than jumpy on a long marketing page. */
-function Reveal({ children, delay = 0, y = 28, style, className, id }) {
-  const ref = useRef(null);
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (typeof IntersectionObserver === "undefined") { setShown(true); return; }
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((e) => { if (e.isIntersecting) { setShown(true); io.disconnect(); } });
-    }, { threshold: 0.15, rootMargin: "0px 0px -8% 0px" });
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-  return (
-    <div ref={ref} className={className ? `mkt-reveal ${className}` : "mkt-reveal"} id={id} style={{
-      opacity: shown ? 1 : 0,
-      transform: shown ? "translateY(0)" : `translateY(${y}px)`,
-      transition: `opacity .7s cubic-bezier(.22,.61,.36,1) ${delay}ms, transform .7s cubic-bezier(.22,.61,.36,1) ${delay}ms`,
-      willChange: "opacity, transform",
-      ...style,
-    }}>{children}</div>
-  );
-}
-
 function MktFeatureRow({ eyebrow, title, body, points, img, reverse, id }) {
   return (
     <Reveal id={id} className="mkt-row" style={{
@@ -2722,7 +2787,7 @@ function MktFeatureRow({ eyebrow, title, body, points, img, reverse, id }) {
         <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, marginBottom: 10, textTransform: "uppercase" }}>
           {eyebrow}
         </div>
-        <div style={{ fontSize: 30, fontWeight: 800, color: MKT.ink, lineHeight: 1.25, marginBottom: 14 }}>{title}</div>
+        <div style={{ fontFamily: MKT_DISPLAY_FONT, fontSize: 30, fontWeight: 700, color: MKT.ink, lineHeight: 1.22, letterSpacing: -0.3, marginBottom: 14 }}>{title}</div>
         <div style={{ fontSize: 16, color: MKT.sub, lineHeight: 1.6, marginBottom: 18 }}>{body}</div>
         {points && (
           <div>
@@ -2755,13 +2820,14 @@ function scrollToMktSection(id) {
 }
 
 function Marketing({ onSignIn, onStartTrial }) {
+  useMktFont();
   const STRIDE = [
-    ["S", "Simplicity", "We turn complicated roofing workflows into clear, straightforward steps."],
-    ["T", "Transparency", "Clear information, honest communication, and no hidden surprises."],
-    ["R", "Responsibility", "We take ownership, solve problems, and follow through on our commitments."],
-    ["I", "Innovation", "We build practical technology around real roofing challenges — not unnecessary gimmicks."],
-    ["D", "Dependability", "Roofing doesn't stop when conditions get difficult. RoofStride stays reliable in the office and in the field."],
-    ["E", "Empowerment", "We give roofing professionals the visibility, tools, and control to operate with confidence."],
+    ["S", "Simplicity", "We turn complicated roofing workflows into clear, straightforward steps.", "brand-know-happening.jpg"],
+    ["T", "Transparency", "Clear information, honest communication, and no hidden surprises.", "brand-trust-built-in.jpg"],
+    ["R", "Responsibility", "We take ownership, solve problems, and follow through on our commitments.", "brand-one-clear-story.jpg"],
+    ["I", "Innovation", "We build practical technology around real roofing challenges — not unnecessary gimmicks.", "brand-one-stride-ahead.jpg"],
+    ["D", "Dependability", "Roofing doesn't stop when conditions get difficult. RoofStride stays reliable in the office and in the field.", "brand-start-in-step.jpg"],
+    ["E", "Empowerment", "We give roofing professionals the visibility, tools, and control to operate with confidence.", "brand-team-forward.jpg"],
   ];
   return (
     <div id="top" style={{ background: "#fff" }}>
@@ -2771,7 +2837,8 @@ function Marketing({ onSignIn, onStartTrial }) {
           .mkt-row img { width: 100% !important; max-width: 320px; }
           .mkt-hero-grid { flex-direction: column !important; text-align: center !important; }
           .mkt-hero-grid .mkt-hero-copy { align-items: center !important; }
-          .mkt-stride-grid { grid-template-columns: 1fr !important; }
+          .mkt-stride-grid { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
+          .mkt-stride-card .mkt-stride-body { font-size: 11.5px !important; }
           .mkt-hero-title { font-size: 34px !important; }
           .mkt-footer-grid { grid-template-columns: 1fr 1fr !important; }
           .mkt-panel-grid { grid-template-columns: 1fr !important; }
@@ -2796,7 +2863,7 @@ function Marketing({ onSignIn, onStartTrial }) {
               fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal,
               textTransform: "uppercase", marginBottom: 14,
             }}>Roofing operations, one platform</div>
-            <div className="mkt-hero-title" style={{ fontSize: 46, fontWeight: 800, lineHeight: 1.15, marginBottom: 18 }}>
+            <div className="mkt-hero-title" style={{ fontFamily: MKT_DISPLAY_FONT, fontSize: 48, fontWeight: 700, lineHeight: 1.12, marginBottom: 18, letterSpacing: -0.5 }}>
               One Stride Ahead<br />of Every Job.
             </div>
             <div style={{ fontSize: 18, color: "rgba(255,255,255,.75)", lineHeight: 1.6, marginBottom: 8, maxWidth: 480 }}>
@@ -2889,7 +2956,7 @@ function Marketing({ onSignIn, onStartTrial }) {
               <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
                 Built by roofers, not a Silicon Valley guess
               </div>
-              <div style={{ fontSize: 24, fontWeight: 800, color: "#fff", lineHeight: 1.3 }}>
+              <div style={{ fontFamily: MKT_DISPLAY_FONT, fontSize: 24, fontWeight: 700, color: "#fff", lineHeight: 1.28, letterSpacing: -0.2 }}>
                 Every screen in this app was shaped by what actually happens between a knock on the door and a signed job.
               </div>
             </div>
@@ -2906,7 +2973,7 @@ function Marketing({ onSignIn, onStartTrial }) {
             <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
               And more, day to day
             </div>
-            <div style={{ fontSize: 26, fontWeight: 800, color: MKT.ink }}>The parts that keep everyone moving</div>
+            <div style={{ fontFamily: MKT_DISPLAY_FONT, fontSize: 27, fontWeight: 700, color: MKT.ink, letterSpacing: -0.2 }}>The parts that keep everyone moving</div>
           </div>
           <div className="mkt-panel-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
             {[
@@ -2925,29 +2992,40 @@ function Marketing({ onSignIn, onStartTrial }) {
         </Reveal>
       </div>
 
-      {/* ---------- STRIDE values ---------- */}
+      {/* ---------- STRIDE values — a photo-paired card grid, not a flat
+         list. Each value gets a real photo (previously unused assets),
+         a proper 2-up grid even on mobile (this was the thing that
+         read as "just going down the page" before), and its own
+         staggered reveal delay so the six cards visibly step in one
+         after another rather than all snapping in together. */}
       <div id="values" style={{ background: MKT.ink, color: "#fff", padding: "72px 20px" }}>
         <Reveal style={{ maxWidth: 1100, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 44 }}>
             <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
               What RoofStride stands for
             </div>
-            <div style={{ fontSize: 30, fontWeight: 800 }}>The STRIDE standard</div>
+            <div style={{ fontFamily: MKT_DISPLAY_FONT, fontSize: 32, fontWeight: 700, letterSpacing: -0.3 }}>The STRIDE standard</div>
           </div>
-          <div className="mkt-stride-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 28 }}>
-            {STRIDE.map(([letter, name, body], i) => (
-              <Reveal key={letter} delay={i * 60} y={18} style={{
-                background: "rgba(255,255,255,.06)", borderRadius: 14, padding: "22px 20px",
-                border: "1px solid rgba(255,255,255,.1)",
+          <div className="mkt-stride-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
+            {STRIDE.map(([letter, name, body, photo], i) => (
+              <Reveal key={letter} className="mkt-stride-card" delay={(i % 3) * 70} y={22} style={{
+                background: "rgba(255,255,255,.05)", borderRadius: 16, overflow: "hidden",
+                border: "1px solid rgba(255,255,255,.1)", display: "flex", flexDirection: "column",
               }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-                  <span style={{
-                    width: 34, height: 34, borderRadius: 9, background: MKT.teal, color: "#fff",
-                    display: "grid", placeItems: "center", fontWeight: 800, fontSize: 15, flexShrink: 0,
-                  }}>{letter}</span>
-                  <span style={{ fontSize: 16, fontWeight: 800 }}>{name}</span>
+                <div style={{ aspectRatio: "4 / 3", overflow: "hidden", background: "rgba(255,255,255,.08)" }}>
+                  <img src={`/marketing/photos/${photo}`} alt={name}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 30%", display: "block" }} />
                 </div>
-                <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.65)", lineHeight: 1.55 }}>{body}</div>
+                <div style={{ padding: "16px 18px 20px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                    <span style={{
+                      width: 28, height: 28, borderRadius: 8, background: MKT.teal, color: "#fff",
+                      display: "grid", placeItems: "center", fontWeight: 800, fontSize: 13, flexShrink: 0,
+                    }}>{letter}</span>
+                    <span style={{ fontSize: 15.5, fontWeight: 800 }}>{name}</span>
+                  </div>
+                  <div className="mkt-stride-body" style={{ fontSize: 12.5, color: "rgba(255,255,255,.65)", lineHeight: 1.5 }}>{body}</div>
+                </div>
               </Reveal>
             ))}
           </div>
@@ -2960,7 +3038,7 @@ function Marketing({ onSignIn, onStartTrial }) {
           <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
             Pricing
           </div>
-          <div style={{ fontSize: 30, fontWeight: 800, color: MKT.ink, marginBottom: 30 }}>One plan. Every feature.</div>
+          <div style={{ fontFamily: MKT_DISPLAY_FONT, fontSize: 30, fontWeight: 700, color: MKT.ink, marginBottom: 30, letterSpacing: -0.3 }}>One plan. Every feature.</div>
           <div style={{
             background: "#fff", borderRadius: 20, padding: "36px 32px", border: `1px solid ${MKT.line}`,
             boxShadow: "0 20px 50px rgba(32,36,42,.08)",
@@ -2993,7 +3071,7 @@ function Marketing({ onSignIn, onStartTrial }) {
       {/* ---------- Final CTA ---------- */}
       <div style={{ background: MKT.teal, padding: "56px 20px", textAlign: "center" }}>
         <Reveal y={16}>
-          <div style={{ fontSize: 26, fontWeight: 800, color: "#fff", marginBottom: 18 }}>
+          <div style={{ fontFamily: MKT_DISPLAY_FONT, fontSize: 27, fontWeight: 700, color: "#fff", marginBottom: 18, letterSpacing: -0.2 }}>
             Ready to run roofing operations with clarity?
           </div>
           <button onClick={onStartTrial} style={{
