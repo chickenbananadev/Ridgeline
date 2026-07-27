@@ -357,6 +357,42 @@ currently passing, so this wasn't fixed globally — just worth knowing
 if a future button placed as the first child of a large container
 starts causing a confusing click-target mismatch in a test.
 
+## Marketing screenshots fixed (this session) — two real rendering bugs
+Jacob caught this live on his phone at the real deployed URL, not in a
+test: the hero screenshot showed the red "Demo mode" warning banner,
+and round icon badges (the L/P/A/C/I pipeline-stage circles) had their
+letters visibly off-center.
+
+**Neither bug exists in the live app** — both were artifacts of the
+screenshot-CAPTURE pipeline, not the product:
+- The demo banner is real and correct in the app (there's no Supabase
+  connection in the jsdom capture environment, so it renders exactly
+  as designed) — it just has no business appearing on a marketing
+  screenshot. Now stripped before rasterizing.
+- The off-center letters: this app uses `display: grid; place-items:
+  center` (46 places) for every round badge. wkhtmltoimage's rendering
+  engine (an old WebKit build) does not correctly support that CSS
+  Grid shorthand — a real, modern phone browser renders it fine. Fixed
+  with a render-compat CSS override injected ONLY into the screenshot-
+  capture HTML (`[style*="display: grid; place-items: center"] {
+  display: flex !important; ... }`) — nothing in the shipped app
+  changed, because nothing in the shipped app was actually broken.
+
+**A second real bug found while fixing this**: the original capture
+script called `element.remove()` directly on the LIVE React-managed
+DOM to strip the banner, then kept clicking through the same app
+instance for more screenshots — crashed with "The child can not be
+found in the parent" on the next re-render, because React still
+expected a node that had been ripped out from underneath it. Fixed by
+stripping the banner from a serialized HTML STRING via a detached
+`DOMParser` document, never touching the live tree.
+
+Regenerated all 6 screenshots; `shot-supplement-check.png` is
+byte-identical to before (that card has no circular badges, so it was
+never affected). If screenshots ever need regenerating again: capture
+via the jsdom harness → strip demo banner on a STRING/detached DOM,
+not the live one → inject the place-items compat CSS → rasterize.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.
