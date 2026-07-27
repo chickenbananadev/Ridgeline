@@ -680,18 +680,76 @@ only static assets and one string constant.
    portal is enumerable," confirmed still true by direct policy inspection
    via the Supabase MCP connector this session. Real fix: move portal reads
    behind a security-definer function keyed by token, not a blanket
-   `anon`-readable policy.
-2. **Migrations 015 (multi-tenancy), 016 (crm_brand tenant_id), and 017
-   (crm_org tenant_id) have not been run** — confirmed via `list_tables`:
-   no table has a `tenant_id` column yet, and `crm_brand` already has 2 rows
-   under the old `id`-singleton scheme (meaning a second tenant has already
-   signed up and is sharing/at risk of clobbering Supreme's row right now,
-   under the exact mechanism this doc already described). This is live,
-   present risk, not hypothetical — every signed-in user of every tenant is
-   currently reading/writing the same `id=1` brand and org rows.
-3. Both of the above are database changes with real consequences for a
-   system already in use by more than one signed-up company. Flagged to
-   Jacob rather than applied automatically; his call on timing/order.
+   `anon`-readable policy. **Still not fixed — needs a design decision, not
+   just a query change.**
+2. ~~Migrations 015/016/017 not run~~ — **done this session.** All 16
+   pending migrations (002–017, from `roofstride_all_migrations.sql`) were
+   applied via `apply_migration`. One conflict surfaced along the way: 016
+   failed on a unique-constraint violation because `crm_brand` had a second
+   row (`id=99`) containing only `{"_probe": <timestamp>}` — confirmed via
+   direct query to be leftover System Check diagnostic write-test data, not
+   a second tenant's real row — deleted, then 016 re-ran clean. `crm_org`
+   checked for the same pattern before 017; only one legitimate row, no
+   conflict.
+
+## SESSION LOG — 2026-07-27 design/bug pass
+- **Supplement Check "ugly bubble" chips**: root cause was `display:flex`
+  rows without `alignItems` set, so the pill-shaped `Chip` (borderRadius
+  999) stretched to match a taller sibling and rendered as a blob instead
+  of a pill. Fixed at the `Chip` component itself (`alignSelf:
+  "flex-start", flexShrink: 0`) rather than the 148 call sites, since 192
+  flex rows in the file lack `alignItems` and could hit the same bug.
+- **Team chat "text box too high" / dead gray gap before the bottom nav**:
+  the embedded composer used `position: sticky, bottom: 0`, which only
+  "catches" once a thread is tall enough to scroll past it — with a short
+  or empty thread it just sat in normal flow after the last message,
+  leaving a tall gap of background color before the nav bar. Switched it
+  to `position: fixed, bottom: 86` (same convention already used by the
+  standalone/non-embedded composer elsewhere in the file) and increased
+  the embedded wrapper's reserved bottom padding from 8px to 170px so the
+  last message never sits under the now-fixed composer. Verified visually
+  with Playwright against both an empty thread and a populated one.
+- **Chat message showing a raw sender name ("jacobhenderson.36")**: `by_name`
+  is snapshotted onto each `crm_chat` row at send time, not live-joined to
+  `profiles`. One historical row (the very first test message, sent
+  2026-07-24 04:53) was written before Jacob's profile name was corrected
+  to "Jacob Henderson" and kept the old raw fallback forever after. Fixed
+  by updating that one row directly; every message since already showed
+  correctly once the profile name was set. Not a live bug — `profiles.name`
+  is correct for all four accounts today.
+- **Checked while there**: all four `profiles` rows share the single
+  `internal` tenant (Supreme Building Group) — this is the expected result
+  of migration 015's backfill (everything that existed before
+  multi-tenancy belonged to one company by definition) and `create_tenant()`
+  correctly refuses to run for any account whose `profile.tenant_id` is
+  already set, so new self-serve signups get their own isolated tenant
+  going forward. Not a leak; flagging only because the *rows themselves*
+  are worth a look if `steven@supremebuildinggroup.com` /
+  `brandyn@allamericanroofpros.com` are stale test accounts Jacob no longer
+  needs.
+- **Marketing/landing page redesign**: added a reusable `Reveal` component
+  (IntersectionObserver-driven fade-up, plays once per section) and applied
+  it to every section below the hero — feature rows, STRIDE values
+  (staggered per card), pricing, and final CTA — for the "sections ease
+  into place as you scroll" feel that was asked for. Replaced the one-line
+  logo+copyright footer with a real four-column footer (Product feature
+  links that smooth-scroll to their section, Company links, Support/contact
+  email, tagline blurb) plus a "Back to top" control, all same-page anchors
+  since this is a single-page marketing site — no links point at pages that
+  don't exist. Also fixed a latent contrast bug in the old footer: it used
+  the dark-ink `roofstride-mark.png` at 0.7 opacity directly on the
+  dark-ink footer background, which would have rendered nearly invisible;
+  the new footer inverts the full wordmark to white instead.
+- All 35 test suites pass after every change above. Verified visually with
+  Playwright: hero, all feature-row reveals, STRIDE grid, footer (desktop
+  and 390px mobile width), footer anchor links (Pipeline & leads → scrolls
+  to Pipeline section; Back to top → scrolls to 0), and the Inbox composer
+  fix on both an empty and a populated thread.
+- **Not started this session**: the broader "many things through the site
+  need improved" pass beyond Supplement Check, Team Chat, and the marketing
+  page — this is genuinely open-ended (the app is ~19,000 lines across
+  dozens of screens) and needs to be worked through screen by screen rather
+  than claimed done in one pass.
 
 ## Honest limits (do not promise otherwise)
 - Google reviews cannot be auto-posted; no API exists. The compliant

@@ -2323,6 +2323,7 @@ function Chip({ children, tone = "gray" }) {
     <span style={{
       background: t.bg, color: t.fg, fontSize: 12, fontWeight: 600,
       padding: "3px 10px", borderRadius: 999, whiteSpace: "nowrap", display: "inline-block",
+      alignSelf: "flex-start", flexShrink: 0,
     }}>{children}</span>
   );
 }
@@ -2681,9 +2682,39 @@ function MktNav({ onSignIn, onStartTrial }) {
   );
 }
 
-function MktFeatureRow({ eyebrow, title, body, points, img, reverse }) {
+/* Apple-style scroll reveal: sections start slightly lowered and
+   transparent, then ease up into place the moment they cross into
+   view. One IntersectionObserver per instance, disconnected after
+   the first reveal — this plays once on the way down, not every
+   time a section re-enters the viewport, which is what keeps it
+   feeling calm rather than jumpy on a long marketing page. */
+function Reveal({ children, delay = 0, y = 28, style, className, id }) {
+  const ref = useRef(null);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === "undefined") { setShown(true); return; }
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => { if (e.isIntersecting) { setShown(true); io.disconnect(); } });
+    }, { threshold: 0.15, rootMargin: "0px 0px -8% 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   return (
-    <div className="mkt-row" style={{
+    <div ref={ref} className={className ? `mkt-reveal ${className}` : "mkt-reveal"} id={id} style={{
+      opacity: shown ? 1 : 0,
+      transform: shown ? "translateY(0)" : `translateY(${y}px)`,
+      transition: `opacity .7s cubic-bezier(.22,.61,.36,1) ${delay}ms, transform .7s cubic-bezier(.22,.61,.36,1) ${delay}ms`,
+      willChange: "opacity, transform",
+      ...style,
+    }}>{children}</div>
+  );
+}
+
+function MktFeatureRow({ eyebrow, title, body, points, img, reverse, id }) {
+  return (
+    <Reveal id={id} className="mkt-row" style={{
       display: "flex", alignItems: "center", gap: 56, maxWidth: 1100, margin: "0 auto",
       padding: "64px 20px", flexDirection: reverse ? "row-reverse" : "row",
     }}>
@@ -2710,8 +2741,17 @@ function MktFeatureRow({ eyebrow, title, body, points, img, reverse }) {
           boxShadow: "0 20px 50px rgba(32,36,42,.18)", border: `1px solid ${MKT.line}`,
         }} />
       </div>
-    </div>
+    </Reveal>
   );
+}
+
+/* Smooth-scrolls to a same-page section by id — used by the footer's
+   "Product" links and "Back to top", so they feel like real navigation
+   without needing actual routes for a single-page marketing site. */
+function scrollToMktSection(id) {
+  if (typeof document === "undefined") return;
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function Marketing({ onSignIn, onStartTrial }) {
@@ -2724,7 +2764,7 @@ function Marketing({ onSignIn, onStartTrial }) {
     ["E", "Empowerment", "We give roofing professionals the visibility, tools, and control to operate with confidence."],
   ];
   return (
-    <div style={{ background: "#fff" }}>
+    <div id="top" style={{ background: "#fff" }}>
       <style>{`
         @media (max-width: 760px) {
           .mkt-row { flex-direction: column !important; padding: 40px 20px !important; gap: 32px !important; }
@@ -2733,6 +2773,13 @@ function Marketing({ onSignIn, onStartTrial }) {
           .mkt-hero-grid .mkt-hero-copy { align-items: center !important; }
           .mkt-stride-grid { grid-template-columns: 1fr !important; }
           .mkt-hero-title { font-size: 34px !important; }
+          .mkt-footer-grid { grid-template-columns: 1fr 1fr !important; }
+        }
+        @media (max-width: 480px) {
+          .mkt-footer-grid { grid-template-columns: 1fr !important; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .mkt-reveal { transition: none !important; opacity: 1 !important; transform: none !important; }
         }
       `}</style>
 
@@ -2784,6 +2831,7 @@ function Marketing({ onSignIn, onStartTrial }) {
 
       {/* ---------- Feature rows — every image below is a real screenshot of the running app ---------- */}
       <MktFeatureRow
+        id="features"
         eyebrow="Pipeline"
         title="Every job, every dollar, one board."
         body="Twelve stages from lead to paid, with dollar values by stage and a focus list that ranks what actually needs attention today — with the reason printed next to it, not a black-box score."
@@ -2826,8 +2874,8 @@ function Marketing({ onSignIn, onStartTrial }) {
       />
 
       {/* ---------- STRIDE values ---------- */}
-      <div style={{ background: MKT.ink, color: "#fff", padding: "72px 20px" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+      <div id="values" style={{ background: MKT.ink, color: "#fff", padding: "72px 20px" }}>
+        <Reveal style={{ maxWidth: 1100, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 44 }}>
             <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
               What RoofStride stands for
@@ -2835,8 +2883,8 @@ function Marketing({ onSignIn, onStartTrial }) {
             <div style={{ fontSize: 30, fontWeight: 800 }}>The STRIDE standard</div>
           </div>
           <div className="mkt-stride-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 28 }}>
-            {STRIDE.map(([letter, name, body]) => (
-              <div key={letter} style={{
+            {STRIDE.map(([letter, name, body], i) => (
+              <Reveal key={letter} delay={i * 60} y={18} style={{
                 background: "rgba(255,255,255,.06)", borderRadius: 14, padding: "22px 20px",
                 border: "1px solid rgba(255,255,255,.1)",
               }}>
@@ -2848,15 +2896,15 @@ function Marketing({ onSignIn, onStartTrial }) {
                   <span style={{ fontSize: 16, fontWeight: 800 }}>{name}</span>
                 </div>
                 <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.65)", lineHeight: 1.55 }}>{body}</div>
-              </div>
+              </Reveal>
             ))}
           </div>
-        </div>
+        </Reveal>
       </div>
 
       {/* ---------- Pricing ---------- */}
-      <div style={{ padding: "72px 20px", background: MKT.bg }}>
-        <div style={{ maxWidth: 480, margin: "0 auto", textAlign: "center" }}>
+      <div id="pricing" style={{ padding: "72px 20px", background: MKT.bg }}>
+        <Reveal style={{ maxWidth: 480, margin: "0 auto", textAlign: "center" }}>
           <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
             Pricing
           </div>
@@ -2887,24 +2935,77 @@ function Marketing({ onSignIn, onStartTrial }) {
               ))}
             </div>
           </div>
-        </div>
+        </Reveal>
       </div>
 
       {/* ---------- Final CTA ---------- */}
       <div style={{ background: MKT.teal, padding: "56px 20px", textAlign: "center" }}>
-        <div style={{ fontSize: 26, fontWeight: 800, color: "#fff", marginBottom: 18 }}>
-          Ready to run roofing operations with clarity?
-        </div>
-        <button onClick={onStartTrial} style={{
-          border: "none", background: "#fff", color: MKT.tealDark, fontWeight: 700,
-          fontSize: 16, cursor: "pointer", fontFamily: "inherit", padding: "15px 30px", borderRadius: 10,
-        }}>Start your free trial</button>
+        <Reveal y={16}>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#fff", marginBottom: 18 }}>
+            Ready to run roofing operations with clarity?
+          </div>
+          <button onClick={onStartTrial} style={{
+            border: "none", background: "#fff", color: MKT.tealDark, fontWeight: 700,
+            fontSize: 16, cursor: "pointer", fontFamily: "inherit", padding: "15px 30px", borderRadius: 10,
+          }}>Start your free trial</button>
+        </Reveal>
       </div>
 
-      {/* ---------- Footer ---------- */}
-      <div style={{ background: MKT.ink, padding: "28px 20px", textAlign: "center" }}>
-        <img src="/roofstride-mark.png" alt="" style={{ height: 22, opacity: 0.7, margin: "0 auto 10px", display: "block" }} />
-        <div style={{ fontSize: 12.5, color: "rgba(255,255,255,.45)" }}>© {new Date().getFullYear()} {PRODUCT.name}</div>
+      {/* ---------- Footer — describes the product's modules and gives a
+         way back to the top-level actions, instead of the single
+         logo-and-copyright strip this used to be. Every link here is
+         either a same-page smooth-scroll anchor or a real in-app action
+         (sign in / start trial) — nothing points at a page that doesn't
+         exist yet, since a footer full of dead links reads worse than a
+         short one. */}
+      <div className="mkt-footer" style={{ background: MKT.ink, padding: "56px 20px 28px" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <div className="mkt-footer-grid" style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 32, paddingBottom: 40, borderBottom: "1px solid rgba(255,255,255,.1)" }}>
+            <div>
+              <img src="/roofstride-logo-horizontal.png" alt={PRODUCT.name} style={{ height: 26, display: "block", marginBottom: 14, filter: "brightness(0) invert(1)" }} />
+              <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.55)", lineHeight: 1.6, maxWidth: 280 }}>
+                {PRODUCT.tagline} One platform for leads, production, claims, and the money — built around how roofing companies actually work.
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.8, color: "rgba(255,255,255,.4)", textTransform: "uppercase", marginBottom: 14 }}>Product</div>
+              {[
+                ["Pipeline & leads", "features"],
+                ["Estimating & supplements", "features"],
+                ["Insurance & claims", "features"],
+                ["Dispatch & production", "features"],
+                ["Financials & reporting", "features"],
+              ].map(([label, anchor]) => (
+                <button key={label} onClick={() => scrollToMktSection(anchor)} style={{
+                  display: "block", border: "none", background: "none", cursor: "pointer",
+                  color: "rgba(255,255,255,.7)", fontSize: 13.5, padding: "6px 0", textAlign: "left", fontFamily: "inherit",
+                }}>{label}</button>
+              ))}
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.8, color: "rgba(255,255,255,.4)", textTransform: "uppercase", marginBottom: 14 }}>Company</div>
+              <button onClick={() => scrollToMktSection("values")} style={{ display: "block", border: "none", background: "none", cursor: "pointer", color: "rgba(255,255,255,.7)", fontSize: 13.5, padding: "6px 0", textAlign: "left", fontFamily: "inherit" }}>What we stand for</button>
+              <button onClick={() => scrollToMktSection("pricing")} style={{ display: "block", border: "none", background: "none", cursor: "pointer", color: "rgba(255,255,255,.7)", fontSize: 13.5, padding: "6px 0", textAlign: "left", fontFamily: "inherit" }}>Pricing</button>
+              <button onClick={onSignIn} style={{ display: "block", border: "none", background: "none", cursor: "pointer", color: "rgba(255,255,255,.7)", fontSize: 13.5, padding: "6px 0", textAlign: "left", fontFamily: "inherit" }}>Sign in</button>
+              <button onClick={onStartTrial} style={{ display: "block", border: "none", background: "none", cursor: "pointer", color: "rgba(255,255,255,.7)", fontSize: 13.5, padding: "6px 0", textAlign: "left", fontFamily: "inherit" }}>Start free trial</button>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.8, color: "rgba(255,255,255,.4)", textTransform: "uppercase", marginBottom: 14 }}>Support</div>
+              <a href={`mailto:${PRODUCT.supportEmail}`} style={{ display: "block", color: "rgba(255,255,255,.7)", fontSize: 13.5, padding: "6px 0", textDecoration: "none" }}>{PRODUCT.supportEmail}</a>
+              <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.5)", padding: "6px 0", lineHeight: 1.5 }}>
+                {PRODUCT.trialDays}-day free trial on every new account — a real person answers, not a bot.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, paddingTop: 22 }}>
+            <div style={{ fontSize: 12.5, color: "rgba(255,255,255,.4)" }}>© {new Date().getFullYear()} {PRODUCT.name}. Built for roofing crews, not spreadsheets.</div>
+            <button onClick={() => scrollToMktSection("top")} style={{
+              border: "1px solid rgba(255,255,255,.18)", background: "none", cursor: "pointer",
+              color: "rgba(255,255,255,.7)", fontSize: 12.5, fontWeight: 700, padding: "7px 14px",
+              borderRadius: 8, fontFamily: "inherit",
+            }}>Back to top ↑</button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -14930,7 +15031,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
   const colorOf = (n) => AV_COLORS[Math.abs(String(n || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV_COLORS.length];
 
   return (
-    <div style={embedded ? { paddingBottom: 8 } : { padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }}>
+    <div style={embedded ? { paddingBottom: 170 } : { padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }}>
       {!embedded && <SubHeader title="Team chat" onBack={onBack} />}
 
       {msgs.length === 0 && (
@@ -15087,8 +15188,17 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
       <div ref={endRef} />
 
       <div style={embedded ? {
-        position: "sticky", bottom: 0, background: "#fff", borderTop: `1px solid ${S.line}`,
-        padding: "10px 0 4px", marginTop: 12,
+        /* Pinned to the true bottom of the viewport, just above the
+           bottom nav bar — not `sticky`, which only "catches" once the
+           thread is tall enough to scroll past it. With a short thread
+           (or none yet) a sticky box just sits in the document flow
+           right after the last message, leaving a tall dead gap of
+           background color below it before the nav bar. Fixed positioning
+           keeps the composer in the same visual spot regardless of how
+           much is above it, matching the standalone layout used
+           elsewhere in the app. */
+        position: "fixed", left: 0, right: 0, bottom: 86, background: "#fff",
+        borderTop: `1px solid ${S.line}`, padding: "10px 16px", zIndex: 40,
       } : {
         position: "fixed", left: 0, right: 0, bottom: 86, background: "#fff",
         borderTop: `1px solid ${S.line}`, padding: "10px 16px",
