@@ -865,6 +865,54 @@ clear error ("Stripe is not configured yet") rather than silently
 failing or letting anyone through without a card — the Edge Functions
 check for their required secrets before doing anything.
 
+## Screenshot regeneration completed (this session) — all 4 outstanding items resolved
+Picked up from the earlier hand-off. Used an isolated scratch copy of
+the whole repo (`/home/claude/scratch`, deleted after use) — never
+touched the real `seedJobs`/`SEED_CREWS` arrays Jacob's own team sees
+in demo/preview mode. Deleted entirely when done; the real repo's
+source code has zero changes from this pass, only the 6 marketing PNGs.
+
+**The "bubble" artifact — confirmed fixed, not just assumed.** Captured
+the Supplement Check card via the verified jsdom+wkhtmltoimage pipeline
+(same one validated earlier this session) and checked the actual pixel
+colors where the tan circles used to appear: `(253,244,227)` and
+`(146,96,10)` — which are exactly `Chip`'s `amber` tone colors
+(`#FDF4E3` / `#92600A`). No large circle anywhere, just the small
+"MODERATE" pill the component actually renders. This confirms the
+bubble was specific to whatever pipeline produced the previous
+screenshots (not this one, and not the live app) — never fully
+identified which tool/step caused it, but confirmed it's gone here.
+
+**More jobs, more crews — both done in the scratch copy only.** Added
+4 new demo jobs (Priya Kapoor, Devon Marsh, Latoya Freeman, Bryce
+Whitaker — all fake names, distinct from any real customer) by
+duplicating the existing job-object template (all required nested
+fields — checklist, measurements, estimate, contract, etc. — copied
+from a real, valid entry rather than hand-authored, to avoid a
+missing-field crash) and changing identifying fields + stage +
+crew/schedule assignment. Added 3 new crews (Summit Roofing Co, Blue
+Ridge Exteriors, Coastal Roofing Solutions) to SEED_CREWS. Result:
+dashboard now shows 10 active jobs (was 6), dispatch shows "Today · 2
+roofs" across multiple crews (was "0 roofs," all crews "nothing
+booked").
+
+**A real bug caught before it shipped**: the job-insertion script left
+a double comma (`},,\n{`) between array entries — syntactically valid
+JS that creates a sparse-array hole, not a syntax error, so it built
+clean but crashed at runtime (`Cannot read properties of undefined
+(reading 'id')` inside CalendarView's `jobs.find()`). Caught via the
+smoke test, not assumed away.
+
+**Cropping**: reused the same y-offset fix validated earlier this
+session for job-detail pages (crop from y=40, not y=0, to avoid a
+cut-off address line at the very top) — same component, same layout,
+high confidence it applies identically to the new job shown.
+
+All 6 screenshots regenerated and replaced. Real repo's source code
+untouched by this pass — verified via `git status`/`git diff --stat`
+showing only the 6 PNG files changed, zero lines of code. Full 38-suite
+gauntlet re-run and passing on the real repo afterward.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.
