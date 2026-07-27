@@ -3091,11 +3091,11 @@ function Login({ brand, users, onLogin, initialMode = "login", onBackToMarketing
               </div>
               <Field label="Your name">
                 <input style={inputStyle} value={suName} autoComplete="name"
-                  onChange={(e) => setSuName(e.target.value)} placeholder="Jacob Henderson" />
+                  onChange={(e) => setSuName(e.target.value)} placeholder="Your full name" />
               </Field>
               <Field label="Company name">
                 <input style={inputStyle} value={suCompany} autoComplete="organization"
-                  onChange={(e) => setSuCompany(e.target.value)} placeholder="Supreme Building Group" />
+                  onChange={(e) => setSuCompany(e.target.value)} placeholder="Your company name" />
               </Field>
               <Field label="Work email">
                 <input style={inputStyle} type="email" value={email} autoComplete="username"
@@ -12301,7 +12301,7 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 7 }}>
             <input style={{ ...inputStyle, flex: 1, padding: "7px 10px", fontSize: 13 }} value={l.by || ""}
-              placeholder="Paid to / by (e.g. Jacob, QXO, Black Bull)" onChange={(e) => onEdit(l.id, "by", e.target.value)} />
+              placeholder="Paid to / by (e.g. a rep's name, a supplier, a bank)" onChange={(e) => onEdit(l.id, "by", e.target.value)} />
             <label style={{ display: "flex", gap: 5, alignItems: "center", fontSize: 12.5, color: S.ink, whiteSpace: "nowrap", cursor: "pointer" }}>
               <input type="checkbox" checked={!!l.reimburse} style={{ width: 16, height: 16, accentColor: T.accent }}
                 onChange={(e) => onEdit(l.id, "reimburse", e.target.checked)} />

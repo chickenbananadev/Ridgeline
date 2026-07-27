@@ -527,6 +527,33 @@ build33: asserts the actual rendered Sign-in button's color
 avatar palette (a legitimate, unrelated reuse of the old hex) wasn't
 accidentally touched.
 
+## More hardcoded personal info found (this session, immediately after the last fix)
+Jacob's next screenshot was the SIGNUP form specifically (not login) —
+"Your name" and "Company name" fields had placeholder text of
+"Jacob Henderson" and "Supreme Building Group" literally. Same class
+of bug as the email/password placeholders, just on fields I hadn't
+checked yet. Fixed to "Your full name" / "Your company name". Also
+found and fixed one more in an unrelated spot while sweeping for
+others: a cost-line "Paid to / by" field's example text named Jacob
+specifically ("e.g. Jacob, QXO, Black Bull") — lower stakes (inside
+the authenticated app, not the public signup screen) but same
+principle, fixed to a generic example.
+
+## Investigated: Jacob still saw a blue button after the teal fix shipped
+Rigorously checked this rather than assuming deployment lag: sampled
+the exact pixel color from Jacob's own screenshot
+(rgb(149, 181, 235)) and compared it mathematically against what the
+OLD blue (#1B6DE0) blended at 50% opacity over white should produce
+— they match almost exactly. Then rendered the actual current code
+locally the same way and got rgb(10, 158, 152) (real teal) as
+expected. Confirmed via source: `T.accent = brand.accent || "#0A9E98"`
+runs unconditionally on every render (before the pre-auth early
+return), and `brand` initializes directly to `DEFAULT_BRAND`, whose
+accent is `#0A9E98`. The code is correct and was verified working
+locally — the discrepancy is almost certainly Vercel deployment lag or
+a cached bundle on Jacob's device, not a code bug. Told him plainly
+rather than guessing.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.

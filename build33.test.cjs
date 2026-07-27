@@ -23,6 +23,12 @@ check("no remaining supremebuildinggroup.com in any placeholder attribute",
 check("login password placeholder is just 'Password'",
   /placeholder="Password"/.test(src));
 check("no leftover 'Enter your password' placeholder", !/Enter your password/.test(src));
+check("signup name field placeholder is generic, not Jacob's own name",
+  /placeholder="Your full name"/.test(src) && !/placeholder="Jacob Henderson"/.test(src));
+check("signup company field placeholder is generic, not Jacob's own company",
+  /placeholder="Your company name"/.test(src) && !/placeholder="Supreme Building Group"/.test(src));
+check("cost-line paid-to example no longer names Jacob specifically",
+  !/e\.g\. Jacob, QXO, Black Bull/.test(src));
 
 /* ---- render: confirm the actual button color and placeholders ---- */
 const { JSDOM } = require("jsdom");
