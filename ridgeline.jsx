@@ -18436,6 +18436,39 @@ function useDbSync(st) {
   return { hydrated, syncErr };
 }
 
+/* Bottom nav button — hoisted to module scope (was defined inside
+   SupremeCRM's render body, the exact "component defined inside
+   render" pattern that caused the input-focus and touch-tap bugs
+   elsewhere in this app; harmless here since it holds no state of its
+   own, but there's no reason to leave it as the one exception).
+   Active state uses a soft rounded highlight behind the icon rather
+   than just recoloring it — a small, deliberate difference from the
+   plain "icon turns blue" treatment most bottom bars use. */
+function NavBtn({ id, icon: Icon, label, badge = 0, active, onPress }) {
+  return (
+    <button onClick={() => onPress(id)} style={{
+      flex: 1, border: "none", background: "none", cursor: "pointer",
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 0",
+    }}>
+      <span style={{
+        position: "relative", display: "inline-grid", placeItems: "center",
+        width: 38, height: 26, borderRadius: 10,
+        background: active ? T.accentSoft : "transparent",
+      }}>
+        {badge > 0 && (
+          <span style={{
+            position: "absolute", top: -5, right: -1, minWidth: 16, height: 16, borderRadius: 99,
+            background: "#B42318", color: "#fff", fontSize: 10, fontWeight: 800,
+            display: "grid", placeItems: "center", padding: "0 4px", zIndex: 1,
+          }}>{badge}</span>
+        )}
+        <Icon size={20} color={active ? T.accent : "#9CA3AF"} strokeWidth={active ? 2.4 : 2} />
+      </span>
+      <span style={{ fontSize: 11, fontWeight: active ? 700 : 500, color: active ? T.accent : "#9CA3AF" }}>{label}</span>
+    </button>
+  );
+}
+
 export default function SupremeCRM() {
   /* A portal link opens for a homeowner with no account, so this check
      runs before any auth state is considered. */
@@ -18937,28 +18970,6 @@ export default function SupremeCRM() {
   };
   const backToBoard = () => setOpenJobId(null);
 
-  const NavBtn = ({ id, icon: Icon, label, badge = 0 }) => {
-    const active = nav === id && !openJob;
-    return (
-      <button onClick={() => { setNav(id); setOpenJobId(null); }} style={{
-        flex: 1, border: "none", background: "none", cursor: "pointer",
-        display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 0",
-      }}>
-        <span style={{ position: "relative", display: "inline-grid" }}>
-          {badge > 0 && (
-            <span style={{
-              position: "absolute", top: -5, right: -9, minWidth: 16, height: 16, borderRadius: 99,
-              background: "#B42318", color: "#fff", fontSize: 10, fontWeight: 800,
-              display: "grid", placeItems: "center", padding: "0 4px", zIndex: 1,
-            }}>{badge}</span>
-          )}
-          <Icon size={21} color={active ? T.accent : "#9CA3AF"} strokeWidth={active ? 2.4 : 2} />
-        </span>
-        <span style={{ fontSize: 11, fontWeight: active ? 700 : 500, color: active ? T.accent : "#9CA3AF" }}>{label}</span>
-      </button>
-    );
-  };
-
   return (
     <div style={{ fontFamily: "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif", background: S.bg, minHeight: "100vh" }}>
       {openJob ? (
@@ -19147,22 +19158,32 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         }}>{brandErr || syncErr}</div>
       )}
 
-      {/* Bottom navigation */}
+      {/* Bottom navigation — four destinations plus a quick-add action.
+         Deliberately not a plain floating circle with a raised blue "+":
+         that specific shape (round FAB centered in a 5-icon bar) is the
+         single most common bottom-nav pattern in field-service apps and
+         reads as a direct copy of it. Squircle instead of circle (matches
+         the actual RoofStride mark's rounded-square language), sitting
+         closer to the bar instead of dramatically floating above it. */}
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50,
         background: "#fff", borderTop: `1px solid ${S.line}`,
         display: "flex", alignItems: "center", paddingBottom: "env(safe-area-inset-bottom)",
       }}>
-        <NavBtn id="home" icon={Home} label="Home" />
-        <NavBtn id="jobs" icon={Briefcase} label="Jobs" />
-        <button onClick={() => { setLeadSeed(null); setNewLeadOpen(true); }} style={{
+        <NavBtn id="home" icon={Home} label="Home" active={nav === "home" && !openJob}
+          onPress={(id) => { setNav(id); setOpenJobId(null); }} />
+        <NavBtn id="jobs" icon={Briefcase} label="Jobs" active={nav === "jobs" && !openJob}
+          onPress={(id) => { setNav(id); setOpenJobId(null); }} />
+        <button onClick={() => { setLeadSeed(null); setNewLeadOpen(true); }} aria-label="New lead" style={{
           border: "none", cursor: "pointer", background: T.accent, color: "#fff",
-          width: 52, height: 52, borderRadius: 999, display: "grid", placeItems: "center",
-          margin: "0 10px", transform: "translateY(-12px)", boxShadow: "0 6px 16px rgba(27,109,224,.35)",
+          width: 46, height: 46, borderRadius: 15, display: "grid", placeItems: "center",
+          margin: "0 8px", transform: "translateY(-6px)", boxShadow: `0 4px 12px ${T.accent}55`,
           flexShrink: 0,
-        }}><Plus size={25} /></button>
-        <NavBtn id="inbox" icon={MessageCircle} label="Inbox" badge={Math.max(0, chatMsgs.length - chatSeenCount)} />
-        <NavBtn id="more" icon={Menu} label="More" badge={unreadMentions} />
+        }}><Plus size={22} /></button>
+        <NavBtn id="inbox" icon={MessageCircle} label="Inbox" badge={Math.max(0, chatMsgs.length - chatSeenCount)}
+          active={nav === "inbox" && !openJob} onPress={(id) => { setNav(id); setOpenJobId(null); }} />
+        <NavBtn id="more" icon={Menu} label="More" badge={unreadMentions}
+          active={nav === "more" && !openJob} onPress={(id) => { setNav(id); setOpenJobId(null); }} />
       </div>
 
       <JobQuickPanel job={quickJob} onClose={() => setQuickJobId(null)} onOpenJob={openJobScreen}

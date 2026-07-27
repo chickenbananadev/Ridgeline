@@ -393,6 +393,44 @@ never affected). If screenshots ever need regenerating again: capture
 via the jsdom harness → strip demo banner on a STRING/detached DOM,
 not the live one → inject the place-items compat CSS → rasterize.
 
+## Bottom nav redesigned — was reading as a copy of Roofr (this session)
+Jacob flagged the bottom nav (Home / Jobs / floating "+" / Inbox /
+More) as looking identical to Roofr's. The floating raised circular
+FAB dead-center in a 5-icon bar is the single most common bottom-nav
+pattern in field-service apps — that shape specifically is what reads
+as copied, not the icon choices (house/briefcase/message/menu are
+universal conventions, not Roofr's invention).
+
+Kept exactly what was asked: 4 real destinations (Home, Jobs, Inbox,
+More — Jacob's "4 of the most needed"), Inbox unchanged in its
+ordinal position (third of four, still right before More). Changed:
+- FAB: squircle (borderRadius 15, matches the RoofStride mark's own
+  rounded-square language) instead of a plain circle, smaller and
+  sitting closer to the bar (translateY(-6px) not -12px) instead of
+  dramatically floating above it.
+- Active-tab treatment: a soft rounded pill highlight (`T.accentSoft`)
+  behind the icon, not just recoloring the icon — a small, deliberate
+  difference from the generic "icon turns blue" pattern.
+- Still uses `T.accent`/`T.accentSoft` (the signed-in TENANT's own
+  brand colors), not a hardcoded RoofStride teal — this screen is
+  post-auth and every company's instance should look like their own
+  brand, not force RoofStride's colors onto Supreme's or anyone else's
+  app. Only the marketing site and the pre-auth Login screen show
+  RoofStride's own identity; this was a deliberate choice to keep that
+  distinction intact.
+
+Also hoisted `NavBtn` out of `SupremeCRM`'s render body to module
+scope while touching this — it was defined inside the render function
+(the same anti-pattern that caused the input-focus and touch-tap bugs
+documented earlier), just harmless here since it held no state of its
+own. Took explicit `active`/`onPress` props instead of reading `nav`/
+`openJob`/`setNav`/`setOpenJobId` from closure.
+
+Verified via pixel-sampling a real render (the `view` tool wasn't
+displaying images in this session) rather than skipping visual
+verification — confirmed the pill highlight, squircle color/dimensions,
+and centering all render as designed.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.
