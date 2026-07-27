@@ -5012,7 +5012,7 @@ function Dashboard({
       const initials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
       const mine = (m) => m.by === userName;
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("chat"), children: "Open chat \u2192" }), children: "Team chat" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("inbox"), children: "Open chat \u2192" }), children: "Team chat" }),
         recent.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10 }, children: "No messages yet \u2014 say something." }),
         recent.map((m) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 0" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
@@ -5336,7 +5336,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast:
     toast2("Commission report exported");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Performance", onBack }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Financials & performance", onBack }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, marginBottom: 8 }, children: "VIEWING" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
@@ -7639,7 +7639,9 @@ function JobDetail({
   activity = [],
   onDelete = null,
   openTab = null,
-  features = {}
+  features = {},
+  onOpenCodeLookup = () => {
+  }
 }) {
   const [tab, setTab] = (0, import_react.useState)(openTab || "overview");
   const [open, setOpen] = (0, import_react.useState)(() => ({ overview: true, ...openTab ? { [openTab]: true } : {} }));
@@ -7892,7 +7894,8 @@ function JobDetail({
                   leadSources,
                   activity,
                   users,
-                  isAdmin
+                  isAdmin,
+                  onOpenCodeLookup
                 }
               );
             case "claim":
@@ -8103,7 +8106,8 @@ function JobDetail({
   ] });
 }
 function TabOverview({ job, juris, mut, toast: toast2, reviewSettings, brand: brand2, currentUser = { name: "Team" }, onLog = () => {
-}, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false }) {
+}, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false, onOpenCodeLookup = () => {
+} }) {
   const notes = job.notes || [];
   const [noteTxt, setNoteTxt] = (0, import_react.useState)("");
   const [noteVisible, setNoteVisible] = (0, import_react.useState)(false);
@@ -8453,7 +8457,8 @@ function TabOverview({ job, juris, mut, toast: toast2, reviewSettings, brand: br
         juris.state,
         " default.",
         juris.state === "IL" ? " Illinois adoption is municipal, so the local ordinance must be confirmed before this goes in a supplement." : " Confirm the local building department and any amendments before relying on it."
-      ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: { ...linkBtn, marginTop: 10 }, onClick: () => onOpenCodeLookup(job.zip), children: "Verify / edit building department \u2192" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Job snapshot" }),
@@ -15519,9 +15524,10 @@ function LetterTemplates() {
 }
 function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2, onSaveDept = () => {
 }, onSaveJurisdiction = () => {
+}, seed = null, onConsumeSeed = () => {
 } }) {
-  const [tab, setTab] = (0, import_react.useState)("clients");
-  const [zip, setZip] = (0, import_react.useState)("");
+  const [tab, setTab] = (0, import_react.useState)(seed && seed.zip ? "codes" : "clients");
+  const [zip, setZip] = (0, import_react.useState)(seed ? seed.zip || "" : "");
   const [tplState, setTplState] = (0, import_react.useState)("OH");
   const [openTpl, setOpenTpl] = (0, import_react.useState)(null);
   const [resourcePage, setResourcePage] = (0, import_react.useState)(null);
@@ -15533,9 +15539,16 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2, onSaveDept = () 
   const [kbQ, setKbQ] = (0, import_react.useState)("");
   const [kbSys, setKbSys] = (0, import_react.useState)("all");
   const [openKb, setOpenKb] = (0, import_react.useState)(null);
+  (0, import_react.useEffect)(() => {
+    if (seed) {
+      setTab("codes");
+      if (seed.zip) setZip(seed.zip);
+      onConsumeSeed();
+    }
+  }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
   const kbHits = (() => {
     const q = kbQ.trim().toLowerCase();
     if (!q) return null;
@@ -15740,6 +15753,7 @@ Authority: ${c.cite}`;
       ] }) }, j.id)),
       insJobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, marginTop: 8 }, children: "No insurance jobs yet." })
     ] }),
+    tab === "claims" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimsDashboard, { jobs, onOpenJob, embedded: true }) }),
     tab === "supplements" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 14, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10 }, children: "One template library, three jurisdictions \u2014 pick the job's state and every template renders with the right code citation." }),
@@ -19233,7 +19247,7 @@ function detectAnomaly(events, now) {
   }
   return null;
 }
-function ClaimsDashboard({ jobs, onBack, onOpenJob }) {
+function ClaimsDashboard({ jobs, onBack, onOpenJob, embedded = false }) {
   const [stage, setStage] = (0, import_react.useState)("all");
   const claims = jobs.filter((j) => j.claimType === "Insurance" && (j.claim || j.insurance));
   const rows = claims.map((j) => ({ j, m: claimMath(j), st: (j.claim || {}).stage || "filed" }));
@@ -19244,8 +19258,8 @@ function ClaimsDashboard({ jobs, onBack, onOpenJob }) {
   const acv = rows.reduce((a, r) => a + r.m.acvReceived, 0);
   const deduct = rows.reduce((a, r) => a + Math.max(0, r.m.deductible - r.m.deductibleCollected), 0);
   const unwaived = rows.filter((r) => r.m.deductible - r.m.deductibleCollected > 0).length;
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Claims", onBack }),
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: embedded ? 0 : "20px 16px 110px", background: embedded ? "transparent" : S.bg, minHeight: embedded ? void 0 : "100vh" }, children: [
+    !embedded && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Claims", onBack }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14, borderLeft: `4px solid ${owed > 0 ? "#E8B931" : S.line}` }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }, children: "OWED BY CARRIERS" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 34, fontWeight: 800, color: owed > 0 ? "#9A6B00" : S.ink, marginTop: 4, lineHeight: 1.1 }, children: money(owed) }),
@@ -20091,7 +20105,7 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
     ["Sales", [
       ["activity", import_lucide_react.ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", import_lucide_react.Phone, "Calls & attribution", "Log calls, see which sources make money"],
-      ["performance", import_lucide_react.PieChart, "Performance", "Rep scoreboard & funnel"],
+      ["performance", import_lucide_react.PieChart, "Financials & performance", "Company money, commission, rep scoreboard & funnel"],
       ["contacts", import_lucide_react.Users, "Contacts", "Every client, with consent status"],
       ["leadsources", import_lucide_react.Filter, "Lead sources", "Add, remove, and reorder the options"],
       ["reviews", import_lucide_react.Star, "Review automation", "Google review requests"]
@@ -20118,8 +20132,8 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
       ["branding", import_lucide_react.Settings, "Company branding", "Name, logo, colors, what prints on documents"],
       ["integrations", import_lucide_react.Share2, "Integrations", "Gmail, texting, CompanyCam"],
       ["import", import_lucide_react.Upload, "Import jobs", "Bring a pipeline in from CSV"],
+      ["workflow", import_lucide_react.ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
       ["password", import_lucide_react.Lock, "Change my password", "Update your sign-in password"],
-      ["claims", import_lucide_react.Shield, "Claims", "Every open claim and what carriers owe"],
       currentUser && currentUser.role === "admin" && ["crewpay", import_lucide_react.HardHat, "Crew payouts", "What each crew is owed and has been paid"],
       currentUser && currentUser.role === "admin" && ["admin", import_lucide_react.Shield, "Admin controls", "Feature switches, security and the audit log"],
       currentUser && currentUser.role === "admin" && ["setupkeys", import_lucide_react.Lock, "Setup & keys", "API keys and services still to connect"],
@@ -20813,6 +20827,7 @@ function SupremeCRM() {
   const [openJobId, setOpenJobId] = (0, import_react.useState)(null);
   const [filtersOpen, setFiltersOpen] = (0, import_react.useState)(false);
   const [workflowOpen, setWorkflowOpen] = (0, import_react.useState)(false);
+  const [codeSeed, setCodeSeed] = (0, import_react.useState)(null);
   const [newLeadOpen, setNewLeadOpen] = (0, import_react.useState)(false);
   const [quickTaskOpen, setQuickTaskOpen] = (0, import_react.useState)(false);
   const [quickJobId, setQuickJobId] = (0, import_react.useState)(null);
@@ -21278,6 +21293,11 @@ function SupremeCRM() {
     setNav("jobs");
   };
   const backToBoard = () => setOpenJobId(null);
+  const openCodeLookup = (zip) => {
+    setCodeSeed({ zip: zip || "" });
+    setOpenJobId(null);
+    setNav("insurance");
+  };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontFamily: "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif", background: S.bg, minHeight: "100vh" }, children: [
     openJob ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       JobDetail,
@@ -21307,7 +21327,8 @@ function SupremeCRM() {
         ccToken,
         onDelete: isAdmin ? deleteJobs : null,
         openTab: jobOpenTab,
-        features
+        features,
+        onOpenCodeLookup: openCodeLookup
       }
     ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       liveDb() && jobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { margin: "14px 16px 0", background: "#EAF6EE", border: "1px solid #CDE8D6", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "#177245", lineHeight: 1.5 }, children: "Fresh database \u2014 no demo customers here. Everything you create now saves for real. Have a Roofr export? More \u2192 Import jobs pulls your whole pipeline in." }),
@@ -21395,7 +21416,7 @@ function SupremeCRM() {
           });
         }
       }
-    ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand: brand2, onNav: (id) => id === "password" ? setChangePwOpen(true) : setNav(id), onLogout: async () => {
+    ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand: brand2, onNav: (id) => id === "password" ? setChangePwOpen(true) : id === "workflow" ? setWorkflowOpen(true) : setNav(id), onLogout: async () => {
       const a = AUTH();
       if (a) {
         try {
@@ -21424,7 +21445,9 @@ function SupremeCRM() {
           setLearnedJurisdictions(next);
           logAct({ type: "code", text: `Added ${rec.city || rec.zip}, ${rec.county} to the jurisdiction list` });
           toast2(rec.needsContact ? "Saved \u2014 add the permit office when you have it" : "Saved with its building department");
-        }
+        },
+        seed: codeSeed,
+        onConsumeSeed: () => setCodeSeed(null)
       }
     ) : nav === "performance" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       Performance,
@@ -21523,30 +21546,7 @@ function SupremeCRM() {
           setLeadSeed(seed);
         }
       }
-    ) : nav === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActivityFeed, { activity, currentUser: liveUser, onOpenJob: openJobScreen, onBack: () => setNav("more") }) : nav === "chat" ? (
-      /* Chat lives in the Inbox now. Anything still pointing here —
-         the More menu, an old deep link — lands in the right place. */
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        Inbox,
-        {
-          jobs,
-          onOpenJob: openJobScreen,
-          onCompose: () => setInboxPick(true),
-          chatMsgs,
-          setChatMsgs,
-          users,
-          currentUser: liveUser,
-          unreadChat: Math.max(0, chatMsgs.length - chatSeenCount),
-          onSeenChat: () => setChatSeenCount(chatMsgs.length),
-          onDeleteMsg: (id) => {
-            const db = DB();
-            if (db) db.from("crm_chat").delete().eq("id", id).then(() => {
-            }, () => {
-            });
-          }
-        }
-      )
-    ) : nav === "vendors" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    ) : nav === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ActivityFeed, { activity, currentUser: liveUser, onOpenJob: openJobScreen, onBack: () => setNav("more") }) : nav === "vendors" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       VendorManager,
       {
         vendors,

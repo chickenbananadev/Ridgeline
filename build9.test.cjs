@@ -34,7 +34,7 @@ ok(src.includes('Call — ${text}') || src.includes("`Call — ${text}`"), "call
 /* --- deep links --- */
 ok(src.includes("const [jobOpenTab, setJobOpenTab]"), "deep-link tab state exists");
 ok(src.includes('onOpenJob(job.id, "tasks")'), "home tasks open the Tasks tab");
-ok(src.includes("openTab = null, features = {} }"), "JobDetail accepts a starting tab");
+ok(src.includes("openTab = null, features = {}"), "JobDetail accepts a starting tab");
 
 /* --- home ordering: pipeline reads before today --- */
 const pipeIdx = src.indexOf("Pipeline at a glance");

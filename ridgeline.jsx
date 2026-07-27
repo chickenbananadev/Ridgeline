@@ -4097,7 +4097,7 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         const mine = (m) => m.by === userName;
         return (
           <Card style={{ marginTop: 16 }}>
-            <CardTitle right={<button style={linkBtn} onClick={() => go("chat")}>Open chat →</button>}>Team chat</CardTitle>
+            <CardTitle right={<button style={linkBtn} onClick={() => go("inbox")}>Open chat →</button>}>Team chat</CardTitle>
             {recent.length === 0 && (
               <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>No messages yet — say something.</div>
             )}
@@ -4414,7 +4414,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
 
   return (
     <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
-      <SubHeader title="Performance" onBack={onBack} />
+      <SubHeader title="Financials & performance" onBack={onBack} />
 
       <Card style={{ marginTop: 14 }}>
         <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginBottom: 8 }}>VIEWING</div>
@@ -6390,7 +6390,7 @@ const JOB_TAB_GROUPS = [
 ];
 
 function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [], ccToken = null,
-  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null, features = {} }) {
+  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null, features = {}, onOpenCodeLookup = () => {} }) {
   const [tab, setTab] = useState(openTab || "overview");
   /* Which sections are expanded. Overview opens by default; a deep link
      opens its own section too so the caller lands on real content. */
@@ -6576,7 +6576,8 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           const render = (id) => {
             switch (id) {
               case "overview": return <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand}
-                currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} users={users} isAdmin={isAdmin} />;
+                currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} users={users} isAdmin={isAdmin}
+                onOpenCodeLookup={onOpenCodeLookup} />;
               case "claim": return <TabClaim job={job} mut={mut} toast={toast} brand={brand} />;
               case "handoff": return <TabHandoff job={job} mut={mut} toast={toast} isAdmin={isAdmin}
                 currentUser={currentUser} stages={stages} onMoveStage={onMoveStage} />;
@@ -6711,7 +6712,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
 }
 
 /* ---------- Overview ---------- */
-function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false }) {
+function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false, onOpenCodeLookup = () => {} }) {
   const notes = job.notes || [];
   const [noteTxt, setNoteTxt] = useState("");
   const [noteVisible, setNoteVisible] = useState(false);
@@ -7038,6 +7039,11 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
               {juris.state === "IL" ? " Illinois adoption is municipal, so the local ordinance must be confirmed before this goes in a supplement." : " Confirm the local building department and any amendments before relying on it."}
             </Callout>
           )}
+          {/* Verify/correct the building department without leaving the job:
+              opens the Code lookup already primed with this address's zip. */}
+          <button style={{ ...linkBtn, marginTop: 10 }} onClick={() => onOpenCodeLookup(job.zip)}>
+            Verify / edit building department →
+          </button>
         </Card>
       )}
 
@@ -13823,9 +13829,9 @@ function LetterTemplates() {
   );
 }
 
-function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {} }) {
-  const [tab, setTab] = useState("clients");
-  const [zip, setZip] = useState("");
+function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {}, seed = null, onConsumeSeed = () => {} }) {
+  const [tab, setTab] = useState(seed && seed.zip ? "codes" : "clients");
+  const [zip, setZip] = useState(seed ? seed.zip || "" : "");
   const [tplState, setTplState] = useState("OH");
   const [openTpl, setOpenTpl] = useState(null);
   const [resourcePage, setResourcePage] = useState(null);
@@ -13837,9 +13843,19 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
   const [kbQ, setKbQ] = useState("");
   const [kbSys, setKbSys] = useState("all");
   const [openKb, setOpenKb] = useState(null);
+  /* A deep link from a job primes the Code lookup with that address's zip.
+     Apply it once, then clear it upstream so a later plain visit opens on
+     Clients as usual. */
+  useEffect(() => {
+    if (seed) {
+      setTab("codes");
+      if (seed.zip) setZip(seed.zip);
+      onConsumeSeed();
+    }
+  }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
 
   /* One index across codes, terms and supplement triggers, so a rep
      types what they half-remember rather than guessing which tab it
@@ -14027,6 +14043,15 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
             </Card>
           ))}
           {insJobs.length === 0 && <div style={{ fontSize: 14, color: S.sub, marginTop: 8 }}>No insurance jobs yet.</div>}
+        </div>
+      )}
+
+      {/* Claims = the company-wide carrier-money roll-up, folded in from
+          the old standalone Claims destination so insurance lives in one
+          place. */}
+      {tab === "claims" && (
+        <div style={{ marginTop: 14 }}>
+          <ClaimsDashboard jobs={jobs} onOpenJob={onOpenJob} embedded />
         </div>
       )}
 
@@ -17288,7 +17313,7 @@ function detectAnomaly(events, now) {
    "what is the carrier sitting on across the whole book", which is the
    number that actually gets chased.
 ================================================================== */
-function ClaimsDashboard({ jobs, onBack, onOpenJob }) {
+function ClaimsDashboard({ jobs, onBack, onOpenJob, embedded = false }) {
   const [stage, setStage] = useState("all");
   const claims = jobs.filter((j) => j.claimType === "Insurance" && (j.claim || j.insurance));
   const rows = claims.map((j) => ({ j, m: claimMath(j), st: (j.claim || {}).stage || "filed" }));
@@ -17302,8 +17327,8 @@ function ClaimsDashboard({ jobs, onBack, onOpenJob }) {
   const unwaived = rows.filter((r) => r.m.deductible - r.m.deductibleCollected > 0).length;
 
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
-      <SubHeader title="Claims" onBack={onBack} />
+    <div style={{ padding: embedded ? 0 : "20px 16px 110px", background: embedded ? "transparent" : S.bg, minHeight: embedded ? undefined : "100vh" }}>
+      {!embedded && <SubHeader title="Claims" onBack={onBack} />}
 
       <Card style={{ marginTop: 14, borderLeft: `4px solid ${owed > 0 ? "#E8B931" : S.line}` }}>
         <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }}>OWED BY CARRIERS</div>
@@ -18118,7 +18143,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
     ["Sales", [
       ["activity", ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", Phone, "Calls & attribution", "Log calls, see which sources make money"],
-      ["performance", PieChart, "Performance", "Rep scoreboard & funnel"],
+      ["performance", PieChart, "Financials & performance", "Company money, commission, rep scoreboard & funnel"],
       ["contacts", Users, "Contacts", "Every client, with consent status"],
       ["leadsources", Filter, "Lead sources", "Add, remove, and reorder the options"],
       ["reviews", Star, "Review automation", "Google review requests"],
@@ -18145,8 +18170,8 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
       ["branding", Settings, "Company branding", "Name, logo, colors, what prints on documents"],
       ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam"],
       ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
+      ["workflow", ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
       ["password", Lock, "Change my password", "Update your sign-in password"],
-      ["claims", Shield, "Claims", "Every open claim and what carriers owe"],
       currentUser && currentUser.role === "admin" && ["crewpay", HardHat, "Crew payouts", "What each crew is owed and has been paid"],
       currentUser && currentUser.role === "admin" && ["admin", Shield, "Admin controls", "Feature switches, security and the audit log"],
       currentUser && currentUser.role === "admin" && ["setupkeys", Lock, "Setup & keys", "API keys and services still to connect"],
@@ -18880,6 +18905,7 @@ export default function SupremeCRM() {
   const [openJobId, setOpenJobId] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
+  const [codeSeed, setCodeSeed] = useState(null);
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [quickTaskOpen, setQuickTaskOpen] = useState(false);
   const [quickJobId, setQuickJobId] = useState(null);
@@ -19270,6 +19296,11 @@ export default function SupremeCRM() {
     setOpenJobId(id); setJobOpenTab(tab); setNav("jobs");
   };
   const backToBoard = () => setOpenJobId(null);
+  /* Deep link from a job's jurisdiction card into the Insurance hub's
+     Code lookup, primed with the job's zip — so verifying/correcting the
+     building department for that address doesn't mean leaving the job and
+     re-typing the zip. */
+  const openCodeLookup = (zip) => { setCodeSeed({ zip: zip || "" }); setOpenJobId(null); setNav("insurance"); };
 
   return (
     <div style={{ fontFamily: "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif", background: S.bg, minHeight: "100vh" }}>
@@ -19280,7 +19311,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           crews={crews} setCrews={setCrews} templates={templates} integrations={integrations} users={users}
           estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} setBrand={setBrand}
           onLog={logAct} leadSources={leadSources} activity={activity} ccToken={ccToken}
-          onDelete={isAdmin ? deleteJobs : null} openTab={jobOpenTab} features={features} />
+          onDelete={isAdmin ? deleteJobs : null} openTab={jobOpenTab} features={features}
+          onOpenCodeLookup={openCodeLookup} />
       ) : nav === "home" ? (
         <>
           {liveDb() && jobs.length === 0 && (
@@ -19327,7 +19359,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             if (db) db.from("crm_chat").delete().eq("id", id).then(() => {}, () => {});
           }} />
       ) : nav === "more" ? (
-        <MoreMenu brand={brand} onNav={(id) => (id === "password" ? setChangePwOpen(true) : setNav(id))} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
+        <MoreMenu brand={brand} onNav={(id) => (id === "password" ? setChangePwOpen(true) : id === "workflow" ? setWorkflowOpen(true) : setNav(id))} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
       ) : nav === "insurance" ? (
         <InsuranceHub jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} toast={toast}
           onSaveDept={(zip, dept) => {
@@ -19345,7 +19377,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             toast(rec.needsContact
               ? "Saved — add the permit office when you have it"
               : "Saved with its building department");
-          }} />
+          }}
+          seed={codeSeed} onConsumeSeed={() => setCodeSeed(null)} />
       ) : nav === "performance" ? (
         <Performance jobs={jobs} stages={stages} users={users} onBack={() => setNav("more")}
           isAdmin={isAdmin} currentUser={liveUser} toast={toast} />
@@ -19381,20 +19414,6 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onCreateLead={(seed) => { setNewLeadOpen(true); setLeadSeed(seed); }} />
       ) : nav === "activity" ? (
         <ActivityFeed activity={activity} currentUser={liveUser} onOpenJob={openJobScreen} onBack={() => setNav("more")} />
-      ) : nav === "chat" ? (
-        /* Chat lives in the Inbox now. Anything still pointing here —
-           the More menu, an old deep link — lands in the right place. */
-        <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)}
-          chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} users={users} currentUser={liveUser}
-          unreadChat={Math.max(0, chatMsgs.length - chatSeenCount)}
-          onSeenChat={() => setChatSeenCount(chatMsgs.length)}
-          onDeleteMsg={(id) => {
-            /* Remove the row for real. Failure is non-fatal: the message
-               is already gone locally and will not come back unless a
-               refresh re-hydrates it, which surfaces the problem. */
-            const db = DB();
-            if (db) db.from("crm_chat").delete().eq("id", id).then(() => {}, () => {});
-          }} />
       ) : nav === "vendors" ? (
         <VendorManager vendors={vendors} setVendors={setVendors} currentUser={liveUser}
           onBack={() => setNav("more")} toast={toast} />

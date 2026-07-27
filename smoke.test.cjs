@@ -49,7 +49,7 @@ const bodyLen = () => document.body.textContent.length;
   clickText("Jobs"); // nav
   clickText("More");
   console.log("more:", bodyLen());
-  for (const m of ["Activity feed","Calls & attribution","Dispatch board","Purchase orders","Warranties","Team chat","Insurance","Performance","Calendar","Contacts","Team & seats","Crews","Documents","Price list","Message templates","Integrations","Import jobs","Lead sources","Vendors","Review automation","Company branding"]) {
+  for (const m of ["Activity feed","Calls & attribution","Dispatch board","Purchase orders","Warranties","Team chat","Insurance","Financials & performance","Calendar","Contacts","Team & seats","Crews","Documents","Price list","Message templates","Integrations","Import jobs","Lead sources","Vendors","Review automation","Company branding"]) {
     clickText("More");
     clickText("COMPANY"); clickText("SETUP");
     clickText(m);
