@@ -6363,7 +6363,6 @@ const JOB_SECTIONS = [
   ["estimate", "Estimate", FileText, "Sell"],
   ["contract", "Contract", PenLine, "Sell"],
   ["changeorders", "Change orders", ScrollText, "Sell"],
-  ["signatures", "Signatures", PenLine, "Sell"],
   ["materials", "Materials", Package, "Sell"],
   ["report", "Report", ScrollText, "Sell"],
   // Claim (insurance jobs only — gated in the render filter)
@@ -6392,9 +6391,10 @@ const JOB_TAB_GROUPS = [
 function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [], ccToken = null,
   estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null, features = {}, onOpenCodeLookup = () => {} }) {
   const [tab, setTab] = useState(openTab || "overview");
-  /* Which sections are expanded. Overview opens by default; a deep link
-     opens its own section too so the caller lands on real content. */
-  const [open, setOpen] = useState(() => ({ overview: true, ...(openTab ? { [openTab]: true } : {}) }));
+  /* Every section starts collapsed so the job opens as a clean, scannable
+     stack; the rep expands what they need. A deep link still opens its own
+     section so the caller lands on real content. */
+  const [open, setOpen] = useState(() => (openTab ? { [openTab]: true } : {}));
   const [activityOpen, setActivityOpen] = useState(false);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const jumpToSection = (id) => {
@@ -6517,7 +6517,6 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           {[
             ["estimate", "Estimate", FileText],
             ["contract", "Contract", PenLine],
-            ["signatures", "Signatures", PenLine],
             ["materials", "Materials", Package],
             ["workorder", "Work order", ClipboardList],
             ["financials", "Financials", DollarSign],
@@ -6582,14 +6581,18 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "handoff": return <TabHandoff job={job} mut={mut} toast={toast} isAdmin={isAdmin}
                 currentUser={currentUser} stages={stages} onMoveStage={onMoveStage} />;
               case "changeorders": return <TabChangeOrders job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />;
-              case "signatures": return <TabSignatures job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />;
               case "checklist": return <TabChecklist job={job} mut={mut} toast={toast} />;
               case "ventilation": return <TabVentilation job={job} mut={mut} toast={toast} />;
               case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
               case "materials": return <TabMaterials job={job} mut={mut} toast={toast} />;
               case "estimate": return <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
                 estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} />;
-              case "contract": return <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast} />;
+              case "contract": return (<>
+                <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast} />
+                {/* Countersign queue + signature audit trail live with the
+                    contract now, not in a separate section. */}
+                <TabSignatures job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />
+              </>);
               case "report": return <TabReport job={job} brand={brand} juris={juris} />;
               case "messages": return <TabMessages job={job} mut={mut} toast={toast} brand={brand}
                 templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />;
@@ -6609,7 +6612,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           const relevant = JOB_SECTIONS.filter(([id]) => {
             if (!featureOn(features, id)) return false;
             if (id === "claim") return job.claimType === "Insurance";
-            if (id === "handoff" || id === "changeorders" || id === "signatures") return true;
+            if (id === "handoff" || id === "changeorders") return true;
             return allowed.has(id);
           });
           /* A few sections carry a hint in the header, because a
@@ -6617,7 +6620,6 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
              for. */
           const HINTS = {
             claim: "Carrier money and supplements",
-            signatures: "Sign and countersign",
           };
           /* Interleave a group divider before the first visible section
              of each group, so the accordion reads Inspect → Sell → …

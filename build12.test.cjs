@@ -15,7 +15,7 @@ ok(!src.includes("const activeGroup = (groups.find"), "grouped tab strip removed
 ok(!src.includes('borderBottom: tab === id ? `2.5px solid ${T.accent}`'), "tab underline styling removed");
 
 /* accordion behaviour */
-ok(src.includes("const [open, setOpen] = useState(() => ({ overview: true"), "overview opens by default");
+ok(src.includes("useState(() => (openTab ? { [openTab]: true } : {}))"), "sections start collapsed by default");
 ok(src.includes("setOpen((o) => ({ ...o, [id]: !o[id] }))"), "sections toggle independently");
 ok(src.includes('anyOpen ? "Collapse all" : "Expand all"'), "the control is a labelled toggle, not one-way");
 ok(src.includes("if (anyOpen) return {};"), "collapse closes every section including Overview");

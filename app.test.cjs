@@ -7595,7 +7595,6 @@ var JOB_SECTIONS = [
   ["estimate", "Estimate", import_lucide_react.FileText, "Sell"],
   ["contract", "Contract", import_lucide_react.PenLine, "Sell"],
   ["changeorders", "Change orders", import_lucide_react.ScrollText, "Sell"],
-  ["signatures", "Signatures", import_lucide_react.PenLine, "Sell"],
   ["materials", "Materials", import_lucide_react.Package, "Sell"],
   ["report", "Report", import_lucide_react.ScrollText, "Sell"],
   // Claim (insurance jobs only — gated in the render filter)
@@ -7644,7 +7643,7 @@ function JobDetail({
   }
 }) {
   const [tab, setTab] = (0, import_react.useState)(openTab || "overview");
-  const [open, setOpen] = (0, import_react.useState)(() => ({ overview: true, ...openTab ? { [openTab]: true } : {} }));
+  const [open, setOpen] = (0, import_react.useState)(() => openTab ? { [openTab]: true } : {});
   const [activityOpen, setActivityOpen] = (0, import_react.useState)(false);
   const [quickActionsOpen, setQuickActionsOpen] = (0, import_react.useState)(false);
   const jumpToSection = (id) => {
@@ -7790,7 +7789,6 @@ function JobDetail({
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: quickActionsOpen, onClose: () => setQuickActionsOpen(false), title: "Quick actions", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: [
       ["estimate", "Estimate", import_lucide_react.FileText],
       ["contract", "Contract", import_lucide_react.PenLine],
-      ["signatures", "Signatures", import_lucide_react.PenLine],
       ["materials", "Materials", import_lucide_react.Package],
       ["workorder", "Work order", import_lucide_react.ClipboardList],
       ["financials", "Financials", import_lucide_react.DollarSign],
@@ -7915,8 +7913,6 @@ function JobDetail({
               );
             case "changeorders":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChangeOrders, { job, mut, toast: toast2, currentUser, brand: brand2 });
-            case "signatures":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabSignatures, { job, mut, toast: toast2, currentUser, brand: brand2 });
             case "checklist":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChecklist, { job, mut, toast: toast2 });
             case "ventilation":
@@ -7938,7 +7934,10 @@ function JobDetail({
                 }
               );
             case "contract":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabContract, { job, brand: brand2, setBrand, mut, toast: toast2 });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabContract, { job, brand: brand2, setBrand, mut, toast: toast2 }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabSignatures, { job, mut, toast: toast2, currentUser, brand: brand2 })
+              ] });
             case "report":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabReport, { job, brand: brand2, juris });
             case "messages":
@@ -7997,12 +7996,11 @@ function JobDetail({
         const relevant = JOB_SECTIONS.filter(([id]) => {
           if (!featureOn(features, id)) return false;
           if (id === "claim") return job.claimType === "Insurance";
-          if (id === "handoff" || id === "changeorders" || id === "signatures") return true;
+          if (id === "handoff" || id === "changeorders") return true;
           return allowed.has(id);
         });
         const HINTS = {
-          claim: "Carrier money and supplements",
-          signatures: "Sign and countersign"
+          claim: "Carrier money and supplements"
         };
         const rows = [];
         let lastGroup = null;
