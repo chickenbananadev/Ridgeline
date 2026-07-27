@@ -947,6 +947,51 @@ template data as the job clicked last time, so the supplement
 findings text is the same. Real repo's source code untouched by this
 pass, same as before.
 
+## Scroll motion timing bug fixed — real cause found (this session)
+Jacob's screenshot showed it clearly: headline text still faded even
+with the phone-mockup screenshot well into view below it. Root cause:
+`mktMotionTick` computed progress from the element's own vertical
+CENTER (`r.top + r.height/2`). On mobile, `MktFeatureRow` stacks
+headline + body + a full phone screenshot vertically in ONE tall
+`Reveal`-wrapped block — often taller than the viewport itself. Waiting
+for a tall element's own center to reach the viewport's middle means
+the headline, near the element's TOP, has long since scrolled out of
+view by the time that condition is met — so the text stayed faded
+through the entire window it was actually readable on screen.
+
+Fixed by tracking entry and exit from separate edges instead: entry
+progress now comes from the TOP edge (brightens once the top has
+scrolled up enough, regardless of the element's total height), exit
+comes from the BOTTOM edge separately (only starts fading once the
+bottom is genuinely close to leaving through the top of the screen).
+This works correctly regardless of element height, short or tall.
+
+## STRIDE photos replaced with purpose-built images (this session)
+Jacob provided `Acc-Stride-RoofStride-STRIDE-Unified-All.zip` — a
+single 1536×1024 composite sheet (`stride-unified-6-sheet.png`, 3×2
+grid of 512×512 panels), same pattern as the other reference sheets in
+this project. Sliced into 6 individual JPEGs, named by STRIDE letter
+(`stride-simplicity.jpg` through `stride-empowerment.jpg`), assigned in
+natural reading order (row 0 left-to-right, then row 1) to S/T/R/I/D/E
+— **if the panel-to-letter mapping is wrong, it's a one-line fix, just
+say which ones are swapped.**
+
+These replace the old repurposed brand-*.jpg photos (which were
+originally captured for a different marketing sheet, not built for
+this use). Old 6 files deleted after confirming zero remaining
+references anywhere in the source. Card image container changed from
+a 4:3 to a 1:1 aspect ratio to match the new photos' native square
+format — no cropping needed now, `object-position` reset to plain
+"center" since it's no longer doing meaningful cropping work.
+
+The zip also contained a second JPEG (`782D163A-73F7-4C1F-A7AB-
+254F204CD76A.jpeg`) with a similar-looking auto-generated filename to
+an existing project reference image — confirmed via pixel comparison
+that it's actually a DIFFERENT image (different dimensions, different
+content), not a duplicate. Left unwired anywhere since Jacob's message
+only asked about "these 6 images" for the STRIDE section — flagged to
+him in case he wants it used somewhere.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.

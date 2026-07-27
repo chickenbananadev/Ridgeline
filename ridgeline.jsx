@@ -2705,22 +2705,32 @@ function mktMotionTick() {
   const vh = window.innerHeight;
   MKT_MOTION.els.forEach((el) => {
     const r = el.getBoundingClientRect();
-    // progress: 0 when the element's center is at the bottom of the
-    // viewport, 1 when its center is at the top — i.e. how far it has
-    // travelled THROUGH the viewport, continuously, not a single trigger.
-    const center = r.top + r.height / 2;
-    let p = 1 - center / vh;
-    p = Math.max(0, Math.min(1, p));
-    const settle = Math.min(1, p / 0.42);              // 0->1 over the first 42% of travel
-    const drift = Math.max(0, (p - 0.82) / 0.18);      // eases back out over the last 18%
-    const eased = settle * (1 - drift * 0.4);
-    const rise = (1 - settle) * (el.dataset.mktY ? +el.dataset.mktY : 60);
+    /* Entry and exit tracked from separate edges, not the element's
+       own vertical center. This is the actual bug behind "doesn't
+       brighten until you're well past the section": a stacked mobile
+       row (headline + body + a full phone screenshot below it) is
+       often much taller than the viewport itself. Waiting for a tall
+       element's own CENTER to reach the viewport's middle means the
+       headline — near the element's top — has long since scrolled up
+       and out of view by the time that condition is met, so the text
+       stayed faded through the entire time it was actually readable.
+       Entry now tracks the TOP edge (brightens once the top has
+       scrolled up into the view enough, regardless of how tall the
+       rest of the element is); exit tracks the BOTTOM edge separately
+       (only starts fading once the bottom is genuinely about to
+       leave through the top of the screen). */
+    let entry = 1 - r.top / (vh * 0.55);
+    entry = Math.max(0, Math.min(1, entry));
+    let exit = 1 - r.bottom / (vh * 0.35);
+    exit = Math.max(0, Math.min(1, exit));
+    const eased = entry * (1 - exit * 0.4);
+    const rise = (1 - entry) * (el.dataset.mktY ? +el.dataset.mktY : 60);
     const scale = 0.86 + eased * 0.14;
     el.style.opacity = String(0.08 + eased * 0.92);
     el.style.transform = `translateY(${rise}px) scale(${scale})`;
     if (el.dataset.mktParallax) {
       const depth = +el.dataset.mktParallax;
-      el.style.setProperty("--mkt-parallax", `${(0.5 - p) * depth}px`);
+      el.style.setProperty("--mkt-parallax", `${(0.5 - entry) * depth}px`);
     }
   });
 }
@@ -2843,12 +2853,12 @@ function scrollToMktSection(id) {
 function Marketing({ onSignIn, onStartTrial }) {
   useMktFont();
   const STRIDE = [
-    ["S", "Simplicity", "We turn complicated roofing workflows into clear, straightforward steps.", "brand-know-happening.jpg"],
-    ["T", "Transparency", "Clear information, honest communication, and no hidden surprises.", "brand-trust-built-in.jpg"],
-    ["R", "Responsibility", "We take ownership, solve problems, and follow through on our commitments.", "brand-one-clear-story.jpg"],
-    ["I", "Innovation", "We build practical technology around real roofing challenges — not unnecessary gimmicks.", "brand-one-stride-ahead.jpg"],
-    ["D", "Dependability", "Roofing doesn't stop when conditions get difficult. RoofStride stays reliable in the office and in the field.", "brand-start-in-step.jpg"],
-    ["E", "Empowerment", "We give roofing professionals the visibility, tools, and control to operate with confidence.", "brand-team-forward.jpg"],
+    ["S", "Simplicity", "We turn complicated roofing workflows into clear, straightforward steps.", "stride-simplicity.jpg"],
+    ["T", "Transparency", "Clear information, honest communication, and no hidden surprises.", "stride-transparency.jpg"],
+    ["R", "Responsibility", "We take ownership, solve problems, and follow through on our commitments.", "stride-responsibility.jpg"],
+    ["I", "Innovation", "We build practical technology around real roofing challenges — not unnecessary gimmicks.", "stride-innovation.jpg"],
+    ["D", "Dependability", "Roofing doesn't stop when conditions get difficult. RoofStride stays reliable in the office and in the field.", "stride-dependability.jpg"],
+    ["E", "Empowerment", "We give roofing professionals the visibility, tools, and control to operate with confidence.", "stride-empowerment.jpg"],
   ];
   return (
     <div id="top" style={{ background: "#fff" }}>
@@ -3047,9 +3057,9 @@ function Marketing({ onSignIn, onStartTrial }) {
                 background: "rgba(255,255,255,.05)", borderRadius: 16, overflow: "hidden",
                 border: "1px solid rgba(255,255,255,.1)", display: "flex", flexDirection: "column",
               }}>
-                <div style={{ aspectRatio: "4 / 3", overflow: "hidden", background: "rgba(255,255,255,.08)" }}>
+                <div style={{ aspectRatio: "1 / 1", overflow: "hidden", background: "rgba(255,255,255,.08)" }}>
                   <img src={`/marketing/photos/${photo}`} alt={name}
-                    style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 30%", display: "block" }} />
+                    style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", display: "block" }} />
                 </div>
                 <div style={{ padding: "16px 18px 20px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
