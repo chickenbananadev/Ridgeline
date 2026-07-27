@@ -431,6 +431,63 @@ displaying images in this session) rather than skipping visual
 verification — confirmed the pill highlight, squircle color/dimensions,
 and centering all render as designed.
 
+## CRITICAL FIX — app was hanging on "Loading…" forever in production
+Jacob reported: "the site just loads and never works for the app
+aspect." Root cause: the crm_org/crm_brand tenant-scoping fix from
+earlier this session hard-blocked on `tenantId` with NO fallback —
+`if (!db || !ready || !tenantId) return;` in the hydrate effect meant
+that if `tenantId` was ever falsy, `setHydrated(true)` was NEVER
+called, and the app shows a permanent loading screen
+(`if (booting || (liveAuth() && currentUser && !hydrated))`).
+
+`tenantId` comes from `profiles.tenant_id`, which does not exist as a
+column until migration 015 runs. **Since migrations 015/016/017 had
+not been confirmed as run, every real sign-in got `tenantId = null`,
+and the app never loaded past the loading screen for anyone.** This
+was a severe regression I introduced and shipped without catching —
+none of the 32 suites at the time exercised live mode
+(`window.__SUPABASE__` present); they all run in demo mode, where
+`DB()` returns null and every affected code path bails out before the
+`!tenantId` check is ever reached. The bug was invisible to the whole
+test suite.
+
+**Fixed with a legacy fallback, not a harder gate.** Every place that
+used to hard-block on `tenantId` now branches: tenant-scoped query
+when `tenantId` is available, the OLD `id=1` singleton query when it
+is not. This means:
+- The app works exactly as it did before ANY of this session's
+  multi-tenancy work, for as long as migrations haven't been run.
+- The moment migrations 015/016/017 are actually run and a user's
+  profile carries a real `tenant_id`, the SAME code automatically
+  switches to correct per-tenant isolation — no further changes
+  needed, no redeploy required beyond what's already shipped.
+- Fixed in: `useBrandSync`'s read AND save effects, `useDbSync`'s
+  hydrate effect (the one directly causing the hang), the debounced
+  org-save effect, and the SystemCheck diagnostic's stored-branding
+  report (was silently reporting "nothing saved" against real data).
+
+**New regression test: build32.** Simulates real live mode
+(`window.__SUPABASE__` set to a mock Supabase client) with a profile
+that has no `tenant_id` at all — exactly what a pre-migration database
+returns. Asserts the app renders past the loading screen rather than
+hanging. Verified this test actually catches the bug by temporarily
+reverting the fix and confirming build32 fails against the broken
+code, then restoring the fix and confirming it passes again — this
+is the kind of bug that's easy to "fix" with a test that doesn't
+actually re-exercise the failure mode, so I checked directly rather
+than assuming.
+
+Also updated two existing suites (build29, build30) that had encoded
+the ORIGINAL hard-block behavior as if it were correct — after this
+fix, those specific assertions were testing for the bug itself. Now
+assert the fallback behavior instead.
+
+**Reminder: migrations 015, 016, and 017 still need to be run**, in
+that order, for tenant isolation to actually take effect. Until then,
+the app now correctly behaves exactly as it did before any of this
+session's multi-tenancy changes — functional, just not yet
+tenant-isolated.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.

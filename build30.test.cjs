@@ -15,14 +15,14 @@ check("migration 017 is idempotent", /if not exists[\s\S]*pg_constraint/.test(mi
 check("useDbSync destructures tenantId", /ready, isCrew, userName, tenantId,/.test(src));
 check("org hydrate read is scoped by tenant_id, not a hardcoded id",
   /db\.from\("crm_org"\)\.select\("data"\)\.eq\("tenant_id", tenantId\)/.test(src));
-check("org hydrate never fires without a known tenant",
-  /if \(!db \|\| !ready \|\| !tenantId\) return;/.test(src));
+check("org hydrate falls back to legacy id=1 when tenantId is unavailable, rather than hard-blocking forever (fixed after a production hang)",
+  /db\.from\("crm_org"\)\.select\("data"\)\.eq\("id", 1\)\.maybeSingle\(\)/.test(src));
 check("org first-boot seed upserts by tenant_id with onConflict, not id:1",
   /upsert\(\{ tenant_id: tenantId, data: orgPack\(\), updated_at: new Date\(\)\.toISOString\(\) \}, \{ onConflict: "tenant_id" \}\)/.test(src));
-check("org debounced save is also tenant-scoped and gated on tenantId",
-  /if \(!db \|\| !ready \|\| !hydrated \|\| !tenantId\) return;/.test(src));
-check("no remaining hardcoded crm_org id:1 anywhere", !/"crm_org"\)\.upsert\(\{ id: 1/.test(src)
-  && !/"crm_org"\)\.select\("data"\)\.eq\("id", 1\)/.test(src));
+check("org debounced save falls back to legacy id=1 when tenantId is unavailable, rather than silently never saving (fixed after a production hang)",
+  /db\.from\("crm_org"\)\.upsert\(\{ id: 1, data: orgPack\(\), updated_at: new Date\(\)\.toISOString\(\) \}\)/.test(src));
+check("the legacy id=1 fallback exists deliberately in exactly the right places (org read, org first-boot seed, org debounced save)",
+  (src.match(/"crm_org"\)\.(?:select\("data"\)\.eq\("id", 1\)\.maybeSingle\(\)|upsert\(\{ id: 1)/g) || []).length >= 3);
 check("useDbSync call site passes tenantId through", /tenantId: currentUser && currentUser\.tenantId,/.test(src));
 
 /* ---- static: new logo colors wired everywhere ---- */

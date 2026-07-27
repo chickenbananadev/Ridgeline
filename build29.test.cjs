@@ -69,8 +69,8 @@ check("fromProfile carries tenantId through", /tenantId: row\.tenant_id \|\| nul
 check("useBrandSync takes a tenantId parameter", /function useBrandSync\(brand, setBrand, hasSession, tenantId\)/.test(src));
 check("brand read is scoped by tenant_id, not a hardcoded id",
   /db\.from\("crm_brand"\)\.select\("data"\)\.eq\("tenant_id", tenantId\)/.test(src));
-check("brand read never fires without a known tenant",
-  /if \(!db \|\| !tenantId\)/.test(src));
+check("brand read falls back to legacy id=1 when tenantId is unavailable, rather than hard-blocking forever (fixed after a production hang)",
+  /db\.from\("crm_brand"\)\.select\("data"\)\.eq\("id", 1\)\.maybeSingle\(\)/.test(src));
 check("brand save upserts by tenant_id with onConflict, not a shared id",
   /upsert\(\{ tenant_id: tenantId, data: payload,[\s\S]*?\{ onConflict: "tenant_id" \}\)/.test(src));
 check("no remaining hardcoded crm_brand id:1 read/write in the live sync path",

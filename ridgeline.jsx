@@ -8153,11 +8153,14 @@ function SystemCheck({ currentUser, onBack }) {
       }
       /* Report what is actually stored, and how big it is — an oversized
          logo is the usual reason a save appears to succeed then vanish.
-         Scoped to this user's own tenant, not the old shared id=1 row. */
+         Scoped to this user's own tenant when known; falls back to the
+         legacy id=1 row otherwise so this check stays accurate before
+         migration 015/016 have run, rather than always reporting
+         "nothing saved yet" against data that is actually there. */
       try {
         const { data: bRow } = currentUser && currentUser.tenantId
           ? await db.from("crm_brand").select("data").eq("tenant_id", currentUser.tenantId).maybeSingle()
-          : { data: null };
+          : await db.from("crm_brand").select("data").eq("id", 1).maybeSingle();
         const d = (bRow && bRow.data) || null;
         const size = d ? JSON.stringify(d).length : 0;
         const logoKb = d && d.logo ? Math.round(String(d.logo).length / 1024) : 0;
@@ -18108,24 +18111,27 @@ function useBrandSync(brand, setBrand, hasSession, tenantId) {
   const [loaded, setLoaded] = useState(!DB());   // state, not a ref: the
   const [brandErr, setBrandErr] = useState("");  // save effect must re-run when this flips
 
-  /* Tenant-scoped read. This used to run before login and fetch a single
-     hardcoded row (id=1) so the sign-in screen could show a logo — which
-     meant literally every visitor, from every company, saw the SAME
-     row. That row's write policy is tenant-scoped, but the read policy
-     is deliberately open (so the client portal can render branding
-     before a homeowner signs in), so a hardcoded id was actively
-     dangerous: any tenant reading or writing "the" row was reading or
-     writing whoever got there first, not their own company.
-     Now it only runs once a signed-in user's tenant is known, and reads
-     that tenant's own row. The pre-auth sign-in screen shows RoofStride's
-     own product branding instead — see Login below — so nothing needs
-     brand data before a tenant is known. */
+  /* Tenant-scoped read, with a legacy fallback. This used to run before
+     login and fetch a single hardcoded row (id=1) so the sign-in screen
+     could show a logo — which meant every visitor, from every company,
+     saw the SAME row. The pre-auth screen shows RoofStride's own brand
+     now instead (see Login below), so this only runs once a tenant is
+     known post sign-in.
+     CRITICAL: falls back to the legacy id=1 row whenever tenantId is
+     unavailable — not just pre-login, but for any signed-in user whose
+     account predates migration 015/016, or on a database where those
+     migrations haven't been run yet. Hard-blocking on tenantId here
+     once caused the whole app to hang on "Loading…" forever for every
+     real user, since profiles.tenant_id doesn't exist until 015 runs. */
   useEffect(() => {
     const db = DB();
-    if (!db || !tenantId) { if (!db) setLoaded(true); return; }
+    if (!db) { setLoaded(true); return; }
     let alive = true;
     const finish = () => { if (alive) setLoaded(true); };
-    db.from("crm_brand").select("data").eq("tenant_id", tenantId).maybeSingle()
+    const query = tenantId
+      ? db.from("crm_brand").select("data").eq("tenant_id", tenantId).maybeSingle()
+      : db.from("crm_brand").select("data").eq("id", 1).maybeSingle();
+    query
       .then(({ data, error }) => {
         if (!alive) return;
         const d = data && data.data;
@@ -18143,13 +18149,15 @@ function useBrandSync(brand, setBrand, hasSession, tenantId) {
 
   useEffect(() => {
     const db = DB();
-    if (!db || !hasSession || !loaded || !tenantId) return;
+    if (!db || !hasSession || !loaded) return;
     if (JSON.stringify(brand) === JSON.stringify(lastSaved.current)) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       const payload = brand;
-      db.from("crm_brand")
-        .upsert({ tenant_id: tenantId, data: payload, updated_at: new Date().toISOString() }, { onConflict: "tenant_id" })
+      const write = tenantId
+        ? db.from("crm_brand").upsert({ tenant_id: tenantId, data: payload, updated_at: new Date().toISOString() }, { onConflict: "tenant_id" })
+        : db.from("crm_brand").upsert({ id: 1, data: payload, updated_at: new Date().toISOString() });
+      write
         .then(({ error }) => {
           if (error) {
             const missing = /relation .*crm_brand.* does not exist|schema cache/i.test(error.message || "");
@@ -18192,23 +18200,34 @@ function useDbSync(st) {
   /* ---------- hydrate once per login ---------- */
   useEffect(() => {
     const db = DB();
-    if (!db || !ready || !tenantId) return;
+    if (!db || !ready) return;
     let alive = true;
     (async () => {
       try {
-        /* Tenant-scoped, not the old hardcoded id=1 — that meant every
-           company's stages, price list, crews, and lead sources lived
-           in the SAME row, and a brand-new tenant's first-boot seed
-           would try to upsert that same id, get blocked by 015's RLS,
-           and silently fail. */
-        const { data: orgRow, error: orgErr } = await db.from("crm_org").select("data").eq("tenant_id", tenantId).maybeSingle();
+        /* Tenant-scoped when possible, legacy id=1 fallback otherwise.
+           CRITICAL: this must never hard-block on tenantId — it once
+           did (bailing out entirely when tenantId was falsy), which
+           meant hydrated never became true and the whole app hung on
+           "Loading…" forever for every real user, because
+           profiles.tenant_id does not exist until migration 015 runs.
+           Tenant-scoped avoids every company's stages/price-list/crews
+           living in the same row; the legacy path is what keeps the
+           app functional in the meantime. */
+        const orgQuery = tenantId
+          ? db.from("crm_org").select("data").eq("tenant_id", tenantId).maybeSingle()
+          : db.from("crm_org").select("data").eq("id", 1).maybeSingle();
+        const { data: orgRow, error: orgErr } = await orgQuery;
         if (orgErr) throw orgErr;
         if (!alive) return;
         if (orgRow && orgRow.data && Object.keys(orgRow.data).length) {
           unpackOrg(orgRow.data);
         } else {
           /* First boot: persist the built-in defaults as THIS tenant's baseline. */
-          await db.from("crm_org").upsert({ tenant_id: tenantId, data: orgPack(), updated_at: new Date().toISOString() }, { onConflict: "tenant_id" });
+          if (tenantId) {
+            await db.from("crm_org").upsert({ tenant_id: tenantId, data: orgPack(), updated_at: new Date().toISOString() }, { onConflict: "tenant_id" });
+          } else {
+            await db.from("crm_org").upsert({ id: 1, data: orgPack(), updated_at: new Date().toISOString() });
+          }
         }
 
         const { data: jobRows, error: jErr } = await db.from("crm_jobs").select("id, data");
@@ -18424,11 +18443,13 @@ function useDbSync(st) {
   const packStr = JSON.stringify(st.orgDeps);
   useEffect(() => {
     const db = DB();
-    if (!db || !ready || !hydrated || !tenantId) return;
+    if (!db || !ready || !hydrated) return;
     if (orgTimer.current) clearTimeout(orgTimer.current);
     orgTimer.current = setTimeout(() => {
-      db.from("crm_org").upsert({ tenant_id: tenantId, data: orgPack(), updated_at: new Date().toISOString() }, { onConflict: "tenant_id" })
-        .then(({ error }) => { if (error) setSyncErr("Settings save failed. " + error.message); });
+      const write = tenantId
+        ? db.from("crm_org").upsert({ tenant_id: tenantId, data: orgPack(), updated_at: new Date().toISOString() }, { onConflict: "tenant_id" })
+        : db.from("crm_org").upsert({ id: 1, data: orgPack(), updated_at: new Date().toISOString() });
+      write.then(({ error }) => { if (error) setSyncErr("Settings save failed. " + error.message); });
     }, 1400);
     return () => { if (orgTimer.current) clearTimeout(orgTimer.current); };
   }, [packStr, ready, hydrated, tenantId]);
