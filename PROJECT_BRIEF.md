@@ -223,6 +223,52 @@ domain/trademark/legal, launch materials — are a checklist, not yet
 scoped to specific deliverables). Waiting on his prioritization before
 building further.
 
+## crm_brand made genuinely per-tenant (this session)
+Root cause of "login screen shows Supreme's logo to everyone": crm_brand
+was a true singleton, hardcoded to `id=1`, fetched and saved by every
+tenant regardless of who they were. 015 added tenant_id and scoped the
+*write* RLS policy by tenant, but the app code never stopped hardcoding
+id=1, and the *read* policy is deliberately open (`using (true)`) so the
+client portal can render branding pre-auth. Net effect: every visitor,
+from every company, saw Supreme's logo/name/slogan before signing in,
+and any other tenant's Company Branding save would likely fail RLS
+silently (or, if it somehow succeeded, would have clobbered Supreme's
+row — the write-side risk 015 already closed, but the read-side and the
+app's hardcoded id were still wrong).
+
+Fixed:
+- **Migration 016**: unique constraint on `crm_brand.tenant_id`.
+- **`useBrandSync(brand, setBrand, hasSession, tenantId)`**: reads and
+  writes scoped by `tenant_id` (upsert `onConflict: "tenant_id"`), and
+  never fires at all before a tenant is known — no more pre-auth fetch.
+- **`fromProfile`**: now carries `tenantId: row.tenant_id`.
+- **`Login`**: simplified — it never renders once signed in, so there
+  is no legitimate tenant to show. Always shows RoofStride's own logo +
+  tagline now, for every mode (login/signup/forgot), plus the bottom-
+  of-screen copyright footer (was `brand.company`, now `PRODUCT.name`).
+- **`DEFAULT_BRAND`**: was Jacob's real phone/email/address/Google
+  review link, hardcoded as the fallback for every brand-new tenant.
+  Neutralized to a generic "Your Company" placeholder.
+- **SystemCheck probe**: was a shared `id=99` row — only the first
+  tenant to ever run System Check could write it; every other company
+  would see a false "write blocked." Now a random per-run id.
+- **SystemCheck's stored-branding report**: was also `.eq("id",1)`;
+  now scoped to `currentUser.tenantId`.
+
+**Migration 016 must be run in Supabase before this deploys**, or
+Company Branding saves will fail with a clear in-app error pointing
+at it (built into the error-message branch already).
+
+## OUTSTANDING — crm_org has the identical flaw, not yet touched
+While fixing crm_brand, found `db.from("crm_org").select("data").eq("id", 1)`
+— the exact same hardcoded-singleton pattern, but for the table holding
+stages, price list, crews, lead sources, message templates, vendors,
+feature toggles, and jurisdiction overrides. This is almost certainly
+the actual mechanism behind the bug Jacob reported and asked to hold
+off on: "when I signed up as a new user I could access all Supreme
+info." Deliberately NOT fixed this session per his explicit instruction
+to leave that one alone — flagged for him to decide on timing.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.

@@ -54,13 +54,56 @@ check("manifest icon paths match saved files", manifest.icons.every((i) =>
   fs.existsSync(path.join(__dirname, "public", i.src.replace(/^\//, "")))));
 
 /* ---- static: signup shows product brand, not tenant brand ---- */
-check("signup mode branches before the shared tenant header",
-  /mode === "signup" \? \(/.test(src));
-check("signup uses the RoofStride horizontal lockup image", /roofstride-logo-horizontal\.png/.test(src));
-check("signup does not render tenant company name/slogan", /mode !== "signup" && \(/.test(src));
+check("Login always shows RoofStride's own identity, not a tenant's",
+  /Login never renders once signed in/.test(src));
+check("Login no longer branches on mode to decide whose brand to show",
+  !/mode === "signup" \? \(/.test(src));
+check("Login uses the RoofStride horizontal lockup image", /roofstride-logo-horizontal\.png/.test(src));
 
-/* ---- render: login still shows tenant brand; signup shows product brand ---- */
+/* ---- static: the actual root cause — tenant-scoped brand storage ---- */
+const migration016 = fs.readFileSync(path.join(__dirname, "supabase/migrations/016_brand_per_tenant.sql"), "utf8");
+check("migration 016 adds a unique constraint on tenant_id", /unique \(tenant_id\)/.test(migration016));
+check("migration 016 is idempotent", /if not exists[\s\S]*pg_constraint/.test(migration016));
+
+check("fromProfile carries tenantId through", /tenantId: row\.tenant_id \|\| null/.test(src));
+check("useBrandSync takes a tenantId parameter", /function useBrandSync\(brand, setBrand, hasSession, tenantId\)/.test(src));
+check("brand read is scoped by tenant_id, not a hardcoded id",
+  /db\.from\("crm_brand"\)\.select\("data"\)\.eq\("tenant_id", tenantId\)/.test(src));
+check("brand read never fires without a known tenant",
+  /if \(!db \|\| !tenantId\)/.test(src));
+check("brand save upserts by tenant_id with onConflict, not a shared id",
+  /upsert\(\{ tenant_id: tenantId, data: payload,[\s\S]*?\{ onConflict: "tenant_id" \}\)/.test(src));
+check("no remaining hardcoded crm_brand id:1 read/write in the live sync path",
+  !/\.eq\("id", 1\)\.maybeSingle\(\)/.test(src.split("function SystemCheck")[0]));
+
+const defaultBrandBlock = src.match(/const DEFAULT_BRAND = \{[\s\S]*?\n\};/)[0];
+check("DEFAULT_BRAND no longer leaks Jacob's real contact info",
+  !/847\) 757-9890/.test(defaultBrandBlock) && !/steven@supremebuildinggroup\.com/.test(defaultBrandBlock)
+    && !/Supreme-Building-Group-Review/.test(defaultBrandBlock));
+check("DEFAULT_BRAND is an explicit neutral placeholder", /company: "Your Company"/.test(defaultBrandBlock));
+
+check("SystemCheck probe uses a random per-run id, not a shared id=99",
+  /const probeId = 1000 \+ Math\.floor\(Math\.random\(\) \* 2000000000\)/.test(src));
+check("SystemCheck stored-branding report is tenant-scoped",
+  /currentUser && currentUser\.tenantId[\s\S]*?eq\("tenant_id", currentUser\.tenantId\)/.test(src));
+
+/* ---- render: the FIRST screen anyone sees, before any click, must
+   never show a tenant's name/slogan — this is the exact bug reported:
+   the default landing screen showed "Supreme Building Group" and its
+   slogan to every visitor, not just the signup form. ---- */
 const App = require("./app.test.cjs").default;
+const root = createRoot(document.getElementById("root"));
+act(() => { root.render(React.createElement(App)); });
+
+check("first paint shows the RoofStride logo, not any tenant's",
+  !!document.querySelector('img[alt="RoofStride"]'));
+check("first paint never shows Supreme's company name",
+  !/Supreme Building Group/.test(document.body.textContent));
+check("first paint never shows Supreme's slogan",
+  !/Committed to Supreme Quality/.test(document.body.textContent));
+check("first paint never shows the old placeholder default company name either",
+  !/Your Company\b/.test(document.body.textContent));
+
 function clickText(txt) {
   const els = [...document.querySelectorAll("button, a, div, span")];
   const el = els.find((e) => e.textContent && e.textContent.trim().startsWith(txt)
@@ -70,22 +113,14 @@ function clickText(txt) {
   act(() => { btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
   return true;
 }
-const root = createRoot(document.getElementById("root"));
-act(() => { root.render(React.createElement(App)); });
 
-// Demo mode's very first screen is the account-picker gate, not the real
-// auth screen, so the login-branding assertion runs after "Sign in" too —
-// but the tenant name should already be visible pre-auth in a live deploy.
-// In demo mode (no Supabase), just confirm signup mode swaps the logo
-// correctly, since that path doesn't require a live tenant fetch.
 const createAcct = [...document.querySelectorAll("button")]
   .find((b) => /Create an account/.test(b.textContent || ""));
 if (createAcct) {
   act(() => { createAcct.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
-  check("signup panel shows the product logo image", !!document.querySelector('img[alt="RoofStride"]'));
-  check("signup panel does not show a tenant company name heading",
-    !document.querySelector("div")?.textContent?.includes("Supreme Building Group") ||
-    !/Committed to Supreme Quality/.test(document.body.textContent));
+  check("signup panel also shows the product logo image", !!document.querySelector('img[alt="RoofStride"]'));
+  check("signup panel never shows Supreme's company name",
+    !/Supreme Building Group/.test(document.body.textContent));
 }
 
 console.error = realErr;

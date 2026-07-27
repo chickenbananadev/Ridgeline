@@ -29,19 +29,28 @@ const PRODUCT = {
   supportEmail: "support@supremebuildinggroup.com",
 };
 
+/* Neutral placeholder only — NOT Supreme's real data. This is what a
+   brand-new tenant sees on every document until they fill in Company
+   Branding, and what flashes briefly before any tenant's real brand
+   loads. It used to be Supreme's actual phone/email/address/Google
+   review link hardcoded here, which meant a brand-new company's
+   customers could receive review requests linking to SUPREME's
+   Google listing, and every unbranded document leaked Jacob's real
+   contact info to a stranger's client. Supreme's own real data lives
+   in their own crm_brand row now and loads normally post sign-in. */
 const DEFAULT_BRAND = {
-  company: "Supreme Building Group",
-  short: "SBG",
-  slogan: "Committed to Supreme Quality and Results",
-  phone: "(847) 757-9890",
-  email: "steven@supremebuildinggroup.com",
-  website: "https://supremebuildinggroup.com",
-  address: "333 Commerce Dr. Suite 250, Crystal Lake, IL 60014",
+  company: "Your Company",
+  short: "YC",
+  slogan: "",
+  phone: "",
+  email: "",
+  website: "",
+  address: "",
   license: "",
-  primary: "#28373E",
+  primary: "#062860",
   accent: "#1B6DE0",
   accentSoft: "#EAF2FD",
-  googleReviewLink: "https://tinyurl.com/Supreme-Building-Group-Review",
+  googleReviewLink: "",
 };
 
 /* ================================================================
@@ -2276,7 +2285,7 @@ const fromProfile = (row) => ({
   id: row.id, name: row.name, email: row.email, phone: row.phone || "",
   role: row.role, title: row.title || "", active: row.active,
   commissionRate: row.commission_rate != null ? Number(row.commission_rate) : 60,
-  addedAt: row.added_at || "",
+  addedAt: row.added_at || "", tenantId: row.tenant_id || null,
 });
 const toProfile = (u) => ({
   name: u.name, email: u.email, phone: u.phone || null, role: u.role,
@@ -2727,31 +2736,15 @@ function Login({ brand, users, onLogin }) {
     }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          {mode === "signup" ? (
-            /* Signing up creates a brand-new company — showing whichever
-               tenant's brand happened to be cached (Supreme's, in this
-               build) would be actively misleading. This is the one place
-               the product's own identity belongs instead of a tenant's. */
-            <>
-              <img src="/roofstride-logo-horizontal.png" alt={PRODUCT.name}
-                style={{ height: 40, maxWidth: 260, objectFit: "contain", margin: "0 auto 10px", display: "block" }} />
-              <div style={{ fontSize: 13, color: S.sub, letterSpacing: 0.2 }}>{PRODUCT.tagline}</div>
-            </>
-          ) : brand.logo ? (
-            <img src={brand.logo} alt={brand.company} style={{ height: 72, maxWidth: 220, objectFit: "contain", margin: "0 auto 14px", display: "block" }} />
-          ) : (
-            <div style={{
-              width: 64, height: 64, margin: "0 auto 14px", borderRadius: 16,
-              background: brand.primary, color: "#fff", display: "grid", placeItems: "center",
-              fontWeight: 800, fontSize: 20, letterSpacing: 1,
-            }}>{brand.short}</div>
-          )}
-          {mode !== "signup" && (
-            <>
-              <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>{brand.company}</div>
-              <div style={{ fontSize: 14, color: S.sub, marginTop: 6 }}>{brand.slogan}</div>
-            </>
-          )}
+          {/* Login never renders once signed in — there is no legitimate
+             tenant to show here, only whichever company happens to be
+             cached or a neutral placeholder. Every mode (login, signup,
+             forgot) shows RoofStride's own identity instead. A signed-in
+             company's own logo and colors show throughout the rest of the
+             app, which is the only place they're actually known. */}
+          <img src="/roofstride-logo-horizontal.png" alt={PRODUCT.name}
+            style={{ height: 40, maxWidth: 260, objectFit: "contain", margin: "0 auto 10px", display: "block" }} />
+          <div style={{ fontSize: 13, color: S.sub, letterSpacing: 0.2 }}>{PRODUCT.tagline}</div>
         </div>
 
         {mode === "login" && (
@@ -2909,7 +2902,7 @@ function Login({ brand, users, onLogin }) {
         )}
       </div>
       <div style={{ position: "absolute", bottom: 20, fontSize: 12, color: "#9CA3AF" }}>
-        © {new Date().getFullYear()} {brand.company}
+        © {new Date().getFullYear()} {PRODUCT.name}
       </div>
     </div>
   );
@@ -7868,23 +7861,30 @@ function SystemCheck({ currentUser, onBack }) {
           out.push({ label: human, ok: false, detail: String((e && e.message) || e) });
         }
       }
-      /* Write test against a throwaway row — id 1 holds real branding
-         and must never be used as a probe target. */
+      /* Write test against a throwaway row. Each run picks a fresh random
+         id rather than the old shared id=99 — with tenant-scoped RLS,
+         a fixed shared id meant only the FIRST tenant to ever run this
+         check could write it; every other company would see a false
+         "write blocked" here even though their real data saves fine. */
+      const probeId = 1000 + Math.floor(Math.random() * 2000000000);
       try {
-        const { error } = await db.from("crm_brand").upsert({ id: 99, data: { _probe: Date.now() }, updated_at: new Date().toISOString() });
+        const { error } = await db.from("crm_brand").insert({ id: probeId, data: { _probe: Date.now() }, updated_at: new Date().toISOString() });
         out.push({
           label: "Can save settings",
           ok: !error,
           detail: error ? `Write blocked: ${error.message}` : "Write succeeded",
         });
-        if (!error) await db.from("crm_brand").delete().eq("id", 99);
+        if (!error) await db.from("crm_brand").delete().eq("id", probeId);
       } catch (e) {
         out.push({ label: "Can save settings", ok: false, detail: String((e && e.message) || e) });
       }
       /* Report what is actually stored, and how big it is — an oversized
-         logo is the usual reason a save appears to succeed then vanish. */
+         logo is the usual reason a save appears to succeed then vanish.
+         Scoped to this user's own tenant, not the old shared id=1 row. */
       try {
-        const { data: bRow } = await db.from("crm_brand").select("data").eq("id", 1).maybeSingle();
+        const { data: bRow } = currentUser && currentUser.tenantId
+          ? await db.from("crm_brand").select("data").eq("tenant_id", currentUser.tenantId).maybeSingle()
+          : { data: null };
         const d = (bRow && bRow.data) || null;
         const size = d ? JSON.stringify(d).length : 0;
         const logoKb = d && d.logo ? Math.round(String(d.logo).length / 1024) : 0;
@@ -17829,25 +17829,33 @@ const liveDb = () => !!DB();
 
 const EMPTY_FIN = () => ({ costLines: [], reimbursements: [] });
 
-function useBrandSync(brand, setBrand, hasSession) {
+function useBrandSync(brand, setBrand, hasSession, tenantId) {
   const lastSaved = useRef(null);
   const timer = useRef(null);
   const [loaded, setLoaded] = useState(!DB());   // state, not a ref: the
   const [brandErr, setBrandErr] = useState("");  // save effect must re-run when this flips
 
-  /* Public read — runs before login so the login screen can show the
-     logo. Always resolves the loaded flag, including on failure, or
-     saving would stay blocked forever. */
+  /* Tenant-scoped read. This used to run before login and fetch a single
+     hardcoded row (id=1) so the sign-in screen could show a logo — which
+     meant literally every visitor, from every company, saw the SAME
+     row. That row's write policy is tenant-scoped, but the read policy
+     is deliberately open (so the client portal can render branding
+     before a homeowner signs in), so a hardcoded id was actively
+     dangerous: any tenant reading or writing "the" row was reading or
+     writing whoever got there first, not their own company.
+     Now it only runs once a signed-in user's tenant is known, and reads
+     that tenant's own row. The pre-auth sign-in screen shows RoofStride's
+     own product branding instead — see Login below — so nothing needs
+     brand data before a tenant is known. */
   useEffect(() => {
     const db = DB();
-    if (!db) return;
+    if (!db || !tenantId) { if (!db) setLoaded(true); return; }
     let alive = true;
     const finish = () => { if (alive) setLoaded(true); };
-    db.from("crm_brand").select("data").eq("id", 1).maybeSingle()
+    db.from("crm_brand").select("data").eq("tenant_id", tenantId).maybeSingle()
       .then(({ data, error }) => {
         if (!alive) return;
         const d = data && data.data;
-        /* A row holding only diagnostic keys is not real branding. */
         const real = d && Object.keys(d).some((k) => !k.startsWith("_"));
         if (!error && real) {
           lastSaved.current = d;
@@ -17856,26 +17864,28 @@ function useBrandSync(brand, setBrand, hasSession) {
         finish();
       })
       .catch(() => finish());
-    /* Safety net: if the request hangs, stop blocking saves. */
     const t = setTimeout(finish, 4000);
     return () => { alive = false; clearTimeout(t); };
-  }, []);
+  }, [tenantId]);
 
   useEffect(() => {
     const db = DB();
-    if (!db || !hasSession || !loaded) return;
+    if (!db || !hasSession || !loaded || !tenantId) return;
     if (JSON.stringify(brand) === JSON.stringify(lastSaved.current)) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       const payload = brand;
-      db.from("crm_brand").upsert({ id: 1, data: payload, updated_at: new Date().toISOString() })
+      db.from("crm_brand")
+        .upsert({ tenant_id: tenantId, data: payload, updated_at: new Date().toISOString() }, { onConflict: "tenant_id" })
         .then(({ error }) => {
           if (error) {
             const missing = /relation .*crm_brand.* does not exist|schema cache/i.test(error.message || "");
             const toobig = /payload|too large|value too long|entity too large/i.test(error.message || "");
+            const noConstraint = /no unique or exclusion constraint|there is no unique constraint/i.test(error.message || "");
             setBrandErr(
               missing ? "Branding can't save: the crm_brand table doesn't exist. Run the branding migration in Supabase, then reload."
               : toobig ? "Branding can't save: the logo file is too large. Upload a smaller image."
+              : noConstraint ? "Branding can't save yet: run migration 016 (adds the per-tenant constraint) in Supabase, then reload."
               : "Branding save failed: " + (error.message || "unknown error"));
           } else {
             lastSaved.current = payload;
@@ -17885,7 +17895,7 @@ function useBrandSync(brand, setBrand, hasSession) {
         .catch((e) => setBrandErr("Branding save failed: " + ((e && e.message) || "network error")));
     }, 900);
     return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [brand, hasSession, loaded]);
+  }, [brand, hasSession, loaded, tenantId]);
 
   return brandErr;
 }
@@ -18348,7 +18358,7 @@ export default function SupremeCRM() {
     if (d.security) setSecurity(d.security);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
-  const brandErr = useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true);
+  const brandErr = useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true, currentUser && currentUser.tenantId);
   const { hydrated, syncErr } = useDbSync({
     ready: liveAuth() ? !!currentUser : true,
     isCrew: !!(currentUser && currentUser.role === "crew"),
