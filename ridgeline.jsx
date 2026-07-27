@@ -11299,6 +11299,8 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
   };
 
   const [tplSheet, setTplSheet] = useState(false);
+  const [marginSheet, setMarginSheet] = useState(false);
+  const [upgradesSheet, setUpgradesSheet] = useState(false);
   const [tplName, setTplName] = useState("");
   /* Tier-aware. When packages are OFF this behaves exactly as it
      always did (reads/writes est.items directly). When packages are
@@ -11410,21 +11412,9 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
       )}
 
       <Card style={{ marginTop: 12 }}>
-        <CardTitle>Pricing controls</CardTitle>
-        <div style={{ fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
-          Set profit across every line at once. Margin is profit as a share of the sell price; markup is a
-          percentage added on top of cost. Lines with a unit cost are computed from cost; lines without one scale
-          from their current price.
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <select style={{ ...selStyle, flex: 1 }} value={adjMode} disabled={locked} onChange={(e) => setAdjMode(e.target.value)}>
-            <option value="margin">Profit margin</option>
-            <option value="markup">Markup</option>
-          </select>
-          <input style={{ ...inputStyle, width: 80, textAlign: "right" }} value={adjPct} disabled={locked}
-            inputMode="decimal" placeholder="30" onChange={(e) => setAdjPct(e.target.value)} />
-          <span style={{ color: S.sub, fontSize: 13 }}>%</span>
-          <Btn small onClick={applyPricing} disabled={locked}>Apply</Btn>
+        <CardTitle right={<Btn kind="soft" small onClick={() => setMarginSheet(true)}>Open</Btn>}>Pricing controls</CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+          Set profit across every line at once — margin or markup, applied in one tap.
         </div>
       </Card>
 
@@ -11502,40 +11492,12 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
       </Card>
 
       <Card style={{ marginTop: 12 }}>
-        <CardTitle>Optional upgrades</CardTitle>
-        <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
-          Add-ons the customer can check on or off — the total updates as they choose. Shown on the {tiersOn ? "active package" : "estimate"} in the client portal.
+        <CardTitle right={<Btn kind="soft" small onClick={() => setUpgradesSheet(true)}>Open</Btn>}>Optional upgrades</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
+          {est.upgrades.length === 0
+            ? "None yet — add-ons the customer can check on or off, updating the total as they choose."
+            : `${est.upgrades.length} option${est.upgrades.length === 1 ? "" : "s"} · ${est.upgrades.filter((u) => u.selected).length} currently selected`}
         </div>
-        {est.upgrades.length === 0 && <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>No optional upgrades yet.</div>}
-        {est.upgrades.map((u) => (
-          <div key={u.id} style={{ borderBottom: `1px solid ${S.line}`, padding: "10px 0", display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <input type="checkbox" checked={!!u.selected} disabled={locked} style={{ width: 18, height: 18, accentColor: T.accent, marginTop: 8, flexShrink: 0 }}
-              onChange={(e) => toggleUpgrade(u.id, e.target.checked)} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <input style={{ ...inputStyle, marginBottom: 8, fontWeight: 600 }} value={u.desc} disabled={locked}
-                placeholder="e.g. Extended lifetime warranty, upgraded ridge vent…"
-                onChange={(e) => setUpgrade(u.id, "desc", e.target.value)} />
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <span style={{ fontSize: 11.5, color: S.sub }}>Price</span>
-                <input style={{ ...inputStyle, width: 100, textAlign: "right" }} value={u.price} disabled={locked}
-                  inputMode="decimal" onChange={(e) => setUpgrade(u.id, "price", e.target.value)} />
-                <span style={{ fontSize: 11.5, color: S.sub, marginLeft: 8 }}>Cost</span>
-                <input style={{ ...inputStyle, width: 92, textAlign: "right", fontSize: 13 }} value={u.cost ?? ""} disabled={locked}
-                  inputMode="decimal" placeholder="—" onChange={(e) => setUpgrade(u.id, "cost", e.target.value)} />
-                {!locked && (
-                  <button onClick={() => removeUpgrade(u.id)} style={{ border: "none", background: "none", cursor: "pointer", marginLeft: "auto" }}>
-                    <Trash2 size={15} color="#B42318" />
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-        {!locked && (
-          <Btn kind="soft" small style={{ marginTop: 12 }} onClick={addUpgrade}>
-            <Plus size={14} /> Add upgrade option
-          </Btn>
-        )}
       </Card>
 
       <Card style={{ marginTop: 12 }}>
@@ -11609,6 +11571,59 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
           setEst({ clientSig: dataUrl, sigAt: at, status: "Signed" });
           toast("Estimate signed and locked");
         }} />
+
+      <Sheet open={marginSheet} onClose={() => setMarginSheet(false)} title="Pricing controls">
+        <div style={{ fontSize: 13, color: S.sub, marginBottom: 14, lineHeight: 1.5 }}>
+          Margin is profit as a share of the sell price; markup is a percentage added on top of cost.
+          Lines with a unit cost are computed from cost; lines without one scale from their current price.
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select style={{ ...selStyle, flex: 1 }} value={adjMode} disabled={locked} onChange={(e) => setAdjMode(e.target.value)}>
+            <option value="margin">Profit margin</option>
+            <option value="markup">Markup</option>
+          </select>
+          <input style={{ ...inputStyle, width: 80, textAlign: "right" }} value={adjPct} disabled={locked}
+            inputMode="decimal" placeholder="30" onChange={(e) => setAdjPct(e.target.value)} />
+          <span style={{ color: S.sub, fontSize: 13 }}>%</span>
+          <Btn small onClick={() => { applyPricing(); setMarginSheet(false); }} disabled={locked}>Apply</Btn>
+        </div>
+      </Sheet>
+
+      <Sheet open={upgradesSheet} onClose={() => setUpgradesSheet(false)} title="Optional upgrades">
+        <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 14, lineHeight: 1.5 }}>
+          Add-ons the customer can check on or off — the total updates as they choose. Shown on the {tiersOn ? "active package" : "estimate"} in the client portal.
+        </div>
+        {est.upgrades.length === 0 && <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>No optional upgrades yet.</div>}
+        {est.upgrades.map((u) => (
+          <div key={u.id} style={{ borderBottom: `1px solid ${S.line}`, padding: "10px 0", display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <input type="checkbox" checked={!!u.selected} disabled={locked} style={{ width: 18, height: 18, accentColor: T.accent, marginTop: 8, flexShrink: 0 }}
+              onChange={(e) => toggleUpgrade(u.id, e.target.checked)} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <input style={{ ...inputStyle, marginBottom: 8, fontWeight: 600 }} value={u.desc} disabled={locked}
+                placeholder="e.g. Extended lifetime warranty, upgraded ridge vent…"
+                onChange={(e) => setUpgrade(u.id, "desc", e.target.value)} />
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{ fontSize: 11.5, color: S.sub }}>Price</span>
+                <input style={{ ...inputStyle, width: 100, textAlign: "right" }} value={u.price} disabled={locked}
+                  inputMode="decimal" onChange={(e) => setUpgrade(u.id, "price", e.target.value)} />
+                <span style={{ fontSize: 11.5, color: S.sub, marginLeft: 8 }}>Cost</span>
+                <input style={{ ...inputStyle, width: 92, textAlign: "right", fontSize: 13 }} value={u.cost ?? ""} disabled={locked}
+                  inputMode="decimal" placeholder="—" onChange={(e) => setUpgrade(u.id, "cost", e.target.value)} />
+                {!locked && (
+                  <button onClick={() => removeUpgrade(u.id)} style={{ border: "none", background: "none", cursor: "pointer", marginLeft: "auto" }}>
+                    <Trash2 size={15} color="#B42318" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+        {!locked && (
+          <Btn kind="soft" small style={{ marginTop: 12 }} onClick={addUpgrade}>
+            <Plus size={14} /> Add upgrade option
+          </Btn>
+        )}
+      </Sheet>
 
       <Sheet open={tplSheet} onClose={() => setTplSheet(false)} title="Estimate templates">
         <Field label="Save current lines as">

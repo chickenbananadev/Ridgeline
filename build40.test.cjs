@@ -55,6 +55,22 @@ function setInputValue(el, value) {
   act(() => { nativeSetter.call(el, value); el.dispatchEvent(new dom.window.Event("input", { bubbles: true })); });
 }
 function totalNow() { return (document.body.textContent.match(/Total investment\$[\d,.]+/) || [])[0]; }
+function clickOpenNear(cardTitleText) {
+  // Find the SMALLEST container whose own text starts with the card
+  // title and also includes "Open" -- climbing a fixed number of
+  // ancestor levels (the earlier approach) can reach a shared parent
+  // spanning multiple sibling cards once you go up far enough, which
+  // false-matches the wrong card's button. Smallest-match avoids that.
+  const all = [...document.querySelectorAll("div")]
+    .filter((e) => e.textContent && e.textContent.trim().startsWith(cardTitleText) && e.textContent.includes("Open"));
+  all.sort((a, b) => a.textContent.length - b.textContent.length);
+  const container = all[0];
+  if (!container) return false;
+  const btn = [...container.querySelectorAll("button")].find((b) => b.textContent.trim() === "Open");
+  if (!btn) return false;
+  act(() => { btn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })); });
+  return true;
+}
 
 const root = createRoot(document.getElementById("root"));
 act(() => { root.render(React.createElement(App)); });
@@ -64,7 +80,7 @@ clickText("Omkar Hirekhan"); // estimate status "Sent" -- editable
 clickText("Estimate");
 
 // Save a template from the flat estimate.
-clickText("Open");
+clickOpenNear("Estimate templates");
 const nameInput = [...document.querySelectorAll("input")].find((i) => i.placeholder === "Full replacement — architectural");
 check("template-name input found", !!nameInput);
 setInputValue(nameInput, "Regression Test Package");
@@ -79,7 +95,7 @@ check("packages checkbox found and enabled", !!cb && !cb.disabled);
 act(() => { cb.click(); });
 
 // Apply the template while packages are on.
-clickText("Open");
+clickOpenNear("Estimate templates");
 const totalBeforeApply = totalNow();
 const addBtn = [...document.querySelectorAll("button")].find((b) => b.textContent.trim() === "Add");
 check("an Add (apply template) button is present", !!addBtn);

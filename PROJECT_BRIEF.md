@@ -1207,6 +1207,48 @@ confirmed it passed again.
 
 All 40 suites pass.
 
+## Moved Pricing controls + Optional upgrades into their own Sheets (this session)
+Jacob's feedback on the Estimate tab layout: upgrades and profit
+margin shouldn't be inline cards competing for space with everything
+else on one long scroll — they should open to their own page, matching
+how Estimate templates and Estimate document already work in this same
+tab (an "Open" button on a compact card, full controls live in a
+`<Sheet>`).
+
+Converted both to that exact pattern:
+- **Pricing controls** (margin/markup bulk-apply): card now just shows
+  a one-line description + Open button; the select/input/Apply
+  controls moved into a Sheet, applying and closing together.
+- **Optional upgrades**: card now shows a compact summary ("N options —
+  M currently selected", or a plain empty state) + Open button; the
+  full checkbox/desc/price/cost list and "Add upgrade option" moved
+  into a Sheet.
+
+Net effect: the main Estimate tab is now Basic info → Packages (tier
+tabs, kept inline since picking a tier is a quick, frequent action) →
+compact Pricing controls / Optional upgrades / Pricing / Estimate
+templates / Estimate document cards, each opening its own focused page
+for the actual work — not five different editors all expanded on one
+scroll.
+
+**A real test-writing lesson surfaced while updating build40 for
+this**: three cards now share the literal button label "Open"
+(Pricing controls, Optional upgrades, Estimate templates). My first
+fix attempt found the right button by climbing a fixed number of DOM
+ancestor levels checking for the card's title text — this looked
+correct on manual inspection but was WRONG in practice: climbing high
+enough eventually reaches a container that spans multiple sibling
+cards at once, so it can false-match a DIFFERENT card's button once
+you're high enough that the container's full text happens to include
+the target string too. Fixed by finding the SMALLEST container whose
+own text starts with the card's title and contains "Open", then
+searching only within that specific container — smallest-match, not
+fixed-depth climbing. Worth remembering this pattern (smallest match,
+not ancestor climbing) any time multiple UI elements share an
+identical label.
+
+All 40 suites pass.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.
