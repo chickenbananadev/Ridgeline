@@ -27,9 +27,14 @@ Deno.serve(async (req) => {
   if (!user) {
     return new Response(JSON.stringify({ error: "Not signed in" }), { status: 401, headers: cors });
   }
-  const { data: me } = await admin.from("profiles").select("role, active").eq("id", user.id).single();
+  const { data: me } = await admin.from("profiles").select("role, active, tenant_id").eq("id", user.id).single();
   if (!me || !me.active || me.role !== "admin") {
     return new Response(JSON.stringify({ error: "Admins only" }), { status: 403, headers: cors });
+  }
+  if (!me.tenant_id) {
+    // Should not happen for a real admin (create_tenant assigns this at
+    // signup), but fail loudly instead of inviting someone into limbo.
+    return new Response(JSON.stringify({ error: "Your account has no company yet — sign out and back in, or contact support." }), { status: 400, headers: cors });
   }
 
   const { name, email, role, title, commission_rate } = await req.json();
@@ -37,14 +42,21 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "Name and email required" }), { status: 400, headers: cors });
   }
 
+  // tenant_id rides in the invite metadata so handle_new_auth_user()
+  // (the profile-creation trigger) stamps it on insert. Without this
+  // the new profile is created with tenant_id NULL — the account can
+  // sign in, but current_tenant_id() never matches anything, so the
+  // whole app looks empty. This was the original bug: invites created
+  // a login but never actually handed the person a working seat.
   const { data, error } = await admin.auth.admin.inviteUserByEmail(email, {
-    data: { name, role: role ?? "rep", title: title ?? "Sales Rep" },
+    data: { name, role: role ?? "rep", title: title ?? "Sales Rep", tenant_id: me.tenant_id },
   });
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: cors });
   }
 
-  // Trigger creates the profile; fill in the rest.
+  // Trigger creates the profile (tenant_id included, from metadata
+  // above); fill in the fields the trigger doesn't know about.
   await admin.from("profiles")
     .update({ name, role: role ?? "rep", title: title ?? "Sales Rep", commission_rate: commission_rate ?? 60 })
     .eq("id", data.user.id);
