@@ -780,6 +780,91 @@ regeneration pass, not yet done:
    generation tool available to fix a genuinely miscomposed source
    photo (as opposed to a bad crop of a fine photo).
 
+## Real Stripe integration built — card required for signup (this session)
+Jacob confirmed: card required at signup, 7-day trial, matching the
+two-tier pricing (per-seat / unlimited). Built the real thing, not a
+fake card form — see the earlier session note about why a card input
+that doesn't actually process anything is a trust problem, not a
+shortcut.
+
+**Flow**: signUpOwner creates the Supabase auth user only (no longer
+calls create_tenant). The signup button now says "Continue to
+payment" and calls startCheckout, which hits a new Edge Function
+(create-checkout-session) that creates a Stripe Checkout Session —
+mode: subscription, trial_period_days: 7, payment_method_collection:
+"always" (this is what actually requires the card during the trial,
+not just after). Browser redirects to Stripe's hosted page. On
+success, Stripe redirects back to `/?checkout=success&session_id=...`;
+CheckoutReturnScreen calls another new Edge Function (complete-signup),
+which verifies the session server-side with Stripe (checks
+session.metadata.supabase_user_id matches the caller, checks
+session.status === "complete") — never trusts the URL by itself — and
+ONLY THEN calls create_tenant, now extended (migration 021) to accept
+the Stripe customer/subscription IDs and store them on the tenant row.
+
+**stripe-webhook** (new Edge Function) keeps tenant status current
+over time: subscription updates, cancellations, failed/recovered
+payments. is_tenant_locked() (migration 021) is a real database-level
+lock now, not just a UI hint — checks status = canceled, trial
+expired, or past_due.
+
+**A real Postgres gotcha caught before it broke anything**: adding
+Stripe params to create_tenant with CREATE OR REPLACE would have
+created an AMBIGUOUS OVERLOAD (Postgres matches by full signature;
+a new 4-arg version doesn't replace the old 1-arg one, it sits
+alongside it, and a 1-arg call becomes ambiguous between them). Same
+issue for my_tenant() adding a new return column — CREATE OR REPLACE
+can't change a return type in place. Both fixed with an explicit DROP
+FUNCTION IF EXISTS before recreating. Migration applied directly via
+the Supabase MCP connector and verified live (checked
+information_schema.columns for the new `plan` column).
+
+## WHAT JACOB NEEDS TO DO — this cannot go live without these
+The code is real and tested, but Stripe integration inherently needs
+Jacob's own Stripe account and dashboard access, which nothing in this
+environment can substitute for:
+
+1. **Create a Stripe account** (stripe.com) if he doesn't have one.
+2. **Create a Product** ("RoofStride") with two Prices:
+   - A **graduated/tiered** recurring price for the per-seat plan:
+     tier 1 = up to 3 units at a flat $49.99, tier 2 = 4+ units at
+     $14.99/unit. (Stripe dashboard: Product > Add price > Recurring >
+     "Customer chooses quantity" isn't it — use the pricing model
+     dropdown, choose "Graduated" or "Volume" tiered pricing, and set
+     the two tiers above.)
+   - A flat $169.99/mo recurring price for the unlimited plan.
+   - Copy both Price IDs (they look like `price_1AbC...`).
+3. **Set Supabase Edge Function secrets** (`supabase secrets set`, or
+   via the Supabase dashboard's Edge Function settings):
+   - `STRIPE_SECRET_KEY` — from Stripe dashboard, Developers > API keys
+   - `STRIPE_PRICE_PER_SEAT` — the graduated price ID from step 2
+   - `STRIPE_PRICE_UNLIMITED` — the flat price ID from step 2
+   - `APP_URL` — e.g. `https://roofstride-kappa.vercel.app` (no
+     trailing slash) or the real custom domain once one exists
+   - `STRIPE_WEBHOOK_SECRET` — from step 5 below
+4. **Deploy the three new Edge Functions**:
+   `supabase functions deploy create-checkout-session`
+   `supabase functions deploy complete-signup`
+   `supabase functions deploy stripe-webhook --no-verify-jwt`
+   (the `--no-verify-jwt` on the webhook is required — Stripe calls it
+   directly with no Supabase auth header; the signature check inside
+   the function is what verifies it's genuinely from Stripe instead)
+5. **Add the webhook endpoint in Stripe**: Developers > Webhooks >
+   Add endpoint, URL =
+   `https://wkvcsgzlsdidysoyzcwm.supabase.co/functions/v1/stripe-webhook`,
+   events: `customer.subscription.updated`,
+   `customer.subscription.deleted`, `invoice.payment_failed`,
+   `invoice.paid`. Stripe shows a signing secret once — that's the
+   `STRIPE_WEBHOOK_SECRET` from step 3.
+6. **Run migration 021** — already applied directly to the live
+   database this session via the Supabase MCP connector; nothing
+   further needed here.
+
+Until steps 1-5 are done, clicking "Continue to payment" will show a
+clear error ("Stripe is not configured yet") rather than silently
+failing or letting anyone through without a card — the Edge Functions
+check for their required secrets before doing anything.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.

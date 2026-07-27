@@ -33,8 +33,8 @@ check("pre-auth gate renders Marketing when entry is marketing",
   /if \(entry === "marketing"\) \{[\s\S]*?<Marketing/.test(src));
 check("Sign in on marketing routes to login mode",
   /onSignIn=\{\(\) => \{ setAuthMode\("login"\); setEntry\("auth"\); \}\}/.test(src));
-check("Start trial on marketing routes to signup mode",
-  /onStartTrial=\{\(\) => \{ setAuthMode\("signup"\); setEntry\("auth"\); \}\}/.test(src));
+check("Start trial on marketing routes to signup mode and captures the selected plan",
+  /onStartTrial=\{\(plan\) => \{ setSelectedPlan\(plan \|\| "per_seat"\); setAuthMode\("signup"\); setEntry\("auth"\); \}\}/.test(src));
 check("Login can navigate back to marketing", /onBackToMarketing && \(/.test(src));
 check("marketing headline present", /One Stride Ahead/.test(src));
 check("brand slogan present", /PRODUCT\.tagline/.test(src) && !/Roofing, start to paid\./.test(src));

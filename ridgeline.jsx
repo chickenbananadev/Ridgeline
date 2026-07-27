@@ -3091,7 +3091,7 @@ function Marketing({ onSignIn, onStartTrial }) {
               <div style={{ fontSize: 13, color: MKT.sub, marginBottom: 18 }}>
                 Includes {PRODUCT.baseSeats} seats · ${PRODUCT.extraSeatPrice.toFixed(2)}/mo per seat after that
               </div>
-              <button onClick={onStartTrial} style={{
+              <button onClick={() => onStartTrial("per_seat")} style={{
                 width: "100%", border: `1.5px solid ${MKT.teal}`, background: "transparent", color: MKT.teal, fontWeight: 700,
                 fontSize: 15, cursor: "pointer", fontFamily: "inherit", padding: "13px", borderRadius: 10,
               }}>Start your free trial</button>
@@ -3112,7 +3112,7 @@ function Marketing({ onSignIn, onStartTrial }) {
               <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", marginBottom: 18 }}>
                 Flat rate, up to {PRODUCT.unlimitedSeatCap} seats — never count logins again
               </div>
-              <button onClick={onStartTrial} style={{
+              <button onClick={() => onStartTrial("unlimited")} style={{
                 width: "100%", border: "none", background: MKT.teal, color: "#fff", fontWeight: 700,
                 fontSize: 15, cursor: "pointer", fontFamily: "inherit", padding: "13px", borderRadius: 10,
               }}>Start your free trial</button>
@@ -3213,7 +3213,7 @@ function Marketing({ onSignIn, onStartTrial }) {
   );
 }
 
-function Login({ brand, users, onLogin, initialMode = "login", onBackToMarketing }) {
+function Login({ brand, users, onLogin, initialMode = "login", selectedPlan = "per_seat", onBackToMarketing }) {
   const [mode, setMode] = useState(initialMode);
   /* Sign-up fields. Kept separate from the sign-in fields so a
      half-typed company name does not leak into a login attempt. */
@@ -3389,8 +3389,9 @@ function Login({ brand, users, onLogin, initialMode = "login", onBackToMarketing
                 Start your {PRODUCT.trialDays}-day trial
               </div>
               <div style={{ fontSize: 13.5, color: S.sub, marginBottom: 18, lineHeight: 1.5 }}>
-                No card required. After the trial it's ${PRODUCT.basePrice.toFixed(2)}/mo for the first {PRODUCT.baseSeats} seats
-                (${PRODUCT.extraSeatPrice.toFixed(2)}/seat after that, or ${PRODUCT.unlimitedPrice.toFixed(2)}/mo flat for up to {PRODUCT.unlimitedSeatCap}) — you choose whether to continue.
+                Card required to start — you won't be charged for {PRODUCT.trialDays} days. After that it's
+                ${PRODUCT.basePrice.toFixed(2)}/mo for the first {PRODUCT.baseSeats} seats (${PRODUCT.extraSeatPrice.toFixed(2)}/seat after that),
+                or ${PRODUCT.unlimitedPrice.toFixed(2)}/mo flat for up to {PRODUCT.unlimitedSeatCap}. Cancel anytime before the trial ends and you won't be charged.
               </div>
               <Field label="Your name">
                 <input style={inputStyle} value={suName} autoComplete="name"
@@ -3426,12 +3427,23 @@ function Login({ brand, users, onLogin, initialMode = "login", onBackToMarketing
                       name: suName.trim(), email: email.trim(),
                       password: pw, company: suCompany.trim(),
                     });
-                    if (r && r.confirmEmail) setSuDone(true);
+                    if (r && r.confirmEmail) { setSuDone(true); setBusy(false); return; }
+                    // Card required: hand off to Stripe Checkout next.
+                    // create_tenant does not run until Stripe confirms
+                    // a card was actually collected — see
+                    // complete-signup, called when the browser lands
+                    // back here after checkout. This redirects the
+                    // whole page, so busy intentionally stays true —
+                    // there is nothing to reset once the browser is on
+                    // its way to a different domain.
+                    if (!a.startCheckout) throw new Error("Checkout is not available on this build.");
+                    await a.startCheckout({ plan: selectedPlan, company: suCompany.trim() });
                   } catch (e2) {
                     setErr((e2 && e2.message) || "Something went wrong. Try again.");
-                  } finally { setBusy(false); }
+                    setBusy(false);
+                  }
                 }}>
-                {busy ? "Creating your company…" : "Start free trial"}
+                {busy ? "Setting up your trial…" : "Continue to payment"}
               </Btn>
               {pw && pw.length < 8 && (
                 <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8 }}>Password needs at least 8 characters.</div>
@@ -8336,6 +8348,53 @@ function PublicPortal({ token }) {
 
           return null;
         })}
+      </div>
+    </div>
+  );
+}
+
+/* Shown once, right after Stripe redirects back from Checkout. Never
+   trusts the URL by itself — session_id is just an opaque string at
+   that point, not proof anything happened — so this calls
+   complete-signup, which verifies the session server-side with Stripe
+   before create_tenant ever runs. Clears the query string on success
+   so a refresh doesn't try to redeem the same session_id twice (Stripe
+   sessions are one-time; retrying an already-consumed one errors, so
+   this also treats "already" in the response as success, not a
+   failure state, since that just means a refresh landed here again). */
+function CheckoutReturnScreen({ sessionId, onDone }) {
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const a = AUTH();
+        if (!a || !a.completeSignupAfterCheckout) throw new Error("Checkout completion is not available on this build.");
+        await a.completeSignupAfterCheckout(sessionId);
+        if (!alive) return;
+        try { window.history.replaceState({}, "", window.location.pathname); } catch { /* non-browser test env */ }
+        onDone();
+      } catch (e) {
+        if (alive) setErr((e && e.message) || "Could not finish setting up your account.");
+      }
+    })();
+    return () => { alive = false; };
+  }, [sessionId]);
+  return (
+    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff", padding: 24 }}>
+      <div style={{ textAlign: "center", maxWidth: 360 }}>
+        {err ? (
+          <>
+            <div style={{ fontSize: 16, fontWeight: 700, color: S.ink, marginBottom: 8 }}>Something didn't go through</div>
+            <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.5, marginBottom: 16 }}>{err}</div>
+            <div style={{ fontSize: 13, color: S.sub }}>If your card was charged and this keeps happening, contact {PRODUCT.supportEmail}.</div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 16, fontWeight: 700, color: S.ink, marginBottom: 8 }}>Setting up your account…</div>
+            <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.5 }}>Confirming with Stripe — this only takes a moment.</div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -18362,6 +18421,8 @@ export default function SupremeCRM() {
      different modes. Once currentUser is set none of this matters. */
   const [entry, setEntry] = useState("marketing");
   const [authMode, setAuthMode] = useState("login");
+  const [selectedPlan, setSelectedPlan] = useState("per_seat");
+  const [checkoutDone, setCheckoutDone] = useState(false);
   const [users, setUsers] = useState(SEED_USERS);
   const [booting, setBooting] = useState(liveAuth());
   const [authError, setAuthError] = useState("");
@@ -18798,14 +18859,14 @@ export default function SupremeCRM() {
       return (
         <Marketing
           onSignIn={() => { setAuthMode("login"); setEntry("auth"); }}
-          onStartTrial={() => { setAuthMode("signup"); setEntry("auth"); }}
+          onStartTrial={(plan) => { setSelectedPlan(plan || "per_seat"); setAuthMode("signup"); setEntry("auth"); }}
         />
       );
     }
     return (
       <>
         <Login brand={brand} users={users} onLogin={setCurrentUser}
-          initialMode={authMode} onBackToMarketing={() => setEntry("marketing")} />
+          initialMode={authMode} selectedPlan={selectedPlan} onBackToMarketing={() => setEntry("marketing")} />
         {authError && (
           <div style={{
             position: "fixed", bottom: 20, left: 20, right: 20, maxWidth: 420, margin: "0 auto",
@@ -18815,6 +18876,13 @@ export default function SupremeCRM() {
         )}
       </>
     );
+  }
+  const checkoutSessionId = (!checkoutDone && typeof window !== "undefined")
+    ? new URLSearchParams(window.location.search).get("session_id") : null;
+  const checkoutOutcome = (typeof window !== "undefined")
+    ? new URLSearchParams(window.location.search).get("checkout") : null;
+  if (currentUser && checkoutOutcome === "success" && checkoutSessionId) {
+    return <CheckoutReturnScreen sessionId={checkoutSessionId} onDone={() => setCheckoutDone(true)} />;
   }
   const liveUser = users.find((u) => u.id === currentUser.id) || currentUser;
   if (!liveUser.active) {

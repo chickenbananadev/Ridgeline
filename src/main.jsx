@@ -67,23 +67,38 @@ if (url && anon) {
       const { error } = await supabase.from("profiles").update(patch).eq("id", id);
       if (error) throw error;
     },
-    /* Sign-up: create the auth user, then create their company via
-       the create_tenant RPC. Two steps because a brand-new user has
-       no tenant yet and so passes none of the RLS policies — the RPC
-       runs as definer to bridge that gap. */
+    /* Sign-up: create the auth user only. The tenant is NOT created
+       here anymore — Stripe Checkout (card required) happens in
+       between, and create_tenant only runs after the complete-signup
+       Edge Function verifies with Stripe that a card was actually
+       collected. See startCheckout / completeSignupAfterCheckout. */
     async signUpOwner({ name, email, password, company }) {
       const { data, error } = await supabase.auth.signUp({
         email, password,
         options: { data: { name, role: "admin", title: "Owner" } },
       });
       if (error) throw error;
-      /* Email confirmation on = no session yet. The company gets
-         created on first sign-in instead; report which happened so
-         the UI can say the right thing. */
+      /* Email confirmation on = no session yet. Checkout needs an
+         active session (it calls an Edge Function as this user), so
+         if there's no session, the person has to confirm their email
+         and sign in before checkout can proceed. */
       if (!data.session) return { confirmEmail: true };
-      const { error: rpcErr } = await supabase.rpc("create_tenant", { org_name: company });
-      if (rpcErr) throw rpcErr;
       return { confirmEmail: false };
+    },
+    /* Redirects the browser to Stripe Checkout. plan is "per_seat" or
+       "unlimited", matching the two cards on the pricing section. */
+    async startCheckout({ plan, company }) {
+      const { data, error } = await supabase.functions.invoke("create-checkout-session", { body: { plan, company } });
+      if (error) throw error;
+      if (!data?.url) throw new Error("Stripe did not return a checkout link.");
+      window.location.href = data.url;
+    },
+    /* Called once, when the browser lands back on the app with
+       ?checkout=success&session_id=... in the URL. */
+    async completeSignupAfterCheckout(sessionId) {
+      const { data, error } = await supabase.functions.invoke("complete-signup", { body: { session_id: sessionId } });
+      if (error) throw error;
+      return data;
     },
     /* Called after sign-in. No-op when the user already has a company,
        so it is safe to run on every session start. */
