@@ -704,6 +704,82 @@ environment — a genuinely miscomposed photo (e.g. a cut-off face)
 needs to go back through whatever created the original 35, not
 something fixable from the already-cropped JPG alone.
 
+## Marketing page fixes round 2 (this session, direct feedback from live site)
+Jacob tested the actual deployed site and found real, specific problems.
+Fixed:
+
+**Scroll motion had a real bug, not just a subtlety issue.** `Reveal`
+was applying a CSS `transition: opacity .5s, transform .5s` on TOP of
+values that get recalculated every animation frame during scroll —
+each new target arrived before the transition finished easing toward
+the last one, so the effect perpetually lagged/chased instead of
+tracking the scroll gesture directly. This is the actual reason it
+read as "not really happening." Fixed: removed the transition entirely
+(a true scroll-scrubbed effect, the way Apple's own pages and
+GSAP ScrollTrigger's scrub mode work, maps position 1:1 with no easing
+layered on — the rAF loop is what already makes it smooth). Also
+substantially increased the magnitude: scale range 0.86→1.0 (was
+0.96→1.0), opacity 0.08→1.0 (was 0.15→1.0), rise up to 60px (was 26px).
+
+**Pricing model changed** from flat $49.99/seat to two real tiers:
+`PRODUCT.basePrice` ($49.99, includes `baseSeats` = 3),
+`PRODUCT.extraSeatPrice` ($14.99/seat beyond that), or
+`PRODUCT.unlimitedPrice` ($169.99 flat, up to `unlimitedSeatCap` = 20).
+`seatPrice` kept as a getter alias (`= basePrice`) for anything not yet
+migrated. Pricing section rebuilt as a genuine two-card comparison
+(pay-per-seat vs. unlimited) instead of one flat-price card. Updated
+every copy reference: hero trial line, in-app signup form, pricing
+section.
+
+**Found and flagged, not resolved**: the pricing section says "card
+required" but the actual signup form still says "No card required" —
+because it's telling the truth about what the code does; there's still
+no real Stripe integration. This is the same open item from earlier
+in the session. Needs Jacob's call: build real card collection, or
+roll the marketing copy back to match reality.
+
+**Footer logo wasn't teal** because of `filter: brightness(0) invert(1)`
+on the PNG — that converts the WHOLE image to solid white, erasing the
+teal "Stride" along with the black "Roof". Replaced with a text-based
+recreation (`<span>Roof</span><span style={color:teal}>Stride</span>`)
+so the two-tone treatment survives on the dark footer background.
+
+**Hero screenshot cutoff**: the source PNG (840×1800, from the other
+session's Playwright capture) is much taller than what was being shown
+raw — the image just stopped mid-content at an arbitrary point with no
+framing to signal "this is intentional." Fixed: fixed-height container
+(460px) with `overflow: hidden` and a bottom gradient fade into the
+hero's own background color, so it reads as a deliberate crop rather
+than a cut-off screenshot.
+
+## OUTSTANDING from this round — screenshot regeneration needed
+Three more things Jacob flagged, all requiring a proper screenshot
+regeneration pass, not yet done:
+1. **A "bubble" rendering artifact** on the Supplement Check screenshot
+   (and possibly others) — large tan/cream circles next to each
+   finding row. Confirmed via source + git history that
+   `SupplementCheck`'s actual JSX has never had any image/avatar
+   element that could produce this — it's some rendering-pipeline
+   artifact from however the current screenshots were captured, not a
+   real app bug. Needs re-capturing via a verified-clean pipeline (the
+   jsdom+wkhtmltoimage one built earlier this session, with the
+   CSS-Grid-place-items compat fix already validated) to confirm it's
+   actually fixed, not just guessed at.
+2. **More demo jobs / more crews requested** for fuller-looking
+   screenshots. Important constraint: the current screenshots were
+   captured from a "sanitized scratch copy" (per the other session's
+   commit message), NOT the shipped `seedJobs` array — meaning
+   whatever additional demo data gets added for screenshot purposes
+   should NOT be merged into the real seed data Jacob's own team sees
+   in demo/preview mode. Needs its own isolated scratch copy again,
+   not a permanent seedJobs edit.
+3. **Cropping still reported as wrong.** Added proper aspect-ratio +
+   object-fit containers in the previous round, which didn't fully
+   resolve it — worth trying different `object-position` values once
+   screenshots are regenerated, though there's still no image-
+   generation tool available to fix a genuinely miscomposed source
+   photo (as opposed to a bad crop of a fine photo).
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.

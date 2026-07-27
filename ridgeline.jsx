@@ -24,7 +24,17 @@ import {
 const PRODUCT = {
   name: "RoofStride",
   tagline: "Built for Roofing. Made to Move.",
-  seatPrice: 49.99,
+  /* Two-tier pricing: a base plan covering the first few seats, extra
+     seats billed individually beyond that — or a flat unlimited-up-to-
+     a-cap plan for teams that would rather not think about seat count.
+     seatPrice is kept as a back-compat alias (= basePrice) for any
+     other code that hasn't been migrated to the new fields yet. */
+  basePrice: 49.99,
+  baseSeats: 3,
+  extraSeatPrice: 14.99,
+  unlimitedPrice: 169.99,
+  unlimitedSeatCap: 20,
+  get seatPrice() { return this.basePrice; },
   trialDays: 7,
   supportEmail: "support@roofstride.com",
 };
@@ -2701,12 +2711,12 @@ function mktMotionTick() {
     const center = r.top + r.height / 2;
     let p = 1 - center / vh;
     p = Math.max(0, Math.min(1, p));
-    const settle = Math.min(1, p / 0.4);              // 0->1 over the first 40% of travel
-    const drift = Math.max(0, (p - 0.85) / 0.15);      // eases back out over the last 15%
-    const eased = settle * (1 - drift * 0.35);
-    const rise = (1 - settle) * (el.dataset.mktY ? +el.dataset.mktY : 26);
-    const scale = 0.96 + eased * 0.04;
-    el.style.opacity = String(0.15 + eased * 0.85);
+    const settle = Math.min(1, p / 0.42);              // 0->1 over the first 42% of travel
+    const drift = Math.max(0, (p - 0.82) / 0.18);      // eases back out over the last 18%
+    const eased = settle * (1 - drift * 0.4);
+    const rise = (1 - settle) * (el.dataset.mktY ? +el.dataset.mktY : 60);
+    const scale = 0.86 + eased * 0.14;
+    el.style.opacity = String(0.08 + eased * 0.92);
     el.style.transform = `translateY(${rise}px) scale(${scale})`;
     if (el.dataset.mktParallax) {
       const depth = +el.dataset.mktParallax;
@@ -2731,14 +2741,25 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   }
 }
 
-function Reveal({ children, delay = 0, y = 26, parallax, style, className, id }) {
+function Reveal({ children, delay = 0, y = 60, parallax, style, className, id }) {
   const ref = useRef(null);
   useEffect(() => {
     const el = ref.current;
     if (!el || MKT_MOTION.reduced) return;
     el.dataset.mktY = String(y);
     if (parallax) el.dataset.mktParallax = String(parallax);
-    el.style.transition = `opacity .5s cubic-bezier(.22,.61,.36,1) ${delay}ms, transform .5s cubic-bezier(.22,.61,.36,1) ${delay}ms`;
+    /* Deliberately NO CSS transition on opacity/transform here. This is
+       the actual bug that made the whole system read as "not really
+       happening": a transition fights a value that's already being
+       recalculated every animation frame during a scroll — each new
+       target arrives before the last one finishes easing toward it, so
+       the motion perpetually lags and chases instead of tracking the
+       scroll gesture directly. A true scroll-SCRUBBED effect (this is
+       how Apple's own product pages, and libraries like GSAP
+       ScrollTrigger in scrub mode, actually do it) maps scroll position
+       to style values 1:1 with no easing layered on top — the rAF loop
+       itself is what already makes it smooth. */
+    el.style.transition = "none";
     MKT_MOTION.els.add(el);
     mktMotionSchedule();
     return () => { MKT_MOTION.els.delete(el); };
@@ -2842,6 +2863,8 @@ function Marketing({ onSignIn, onStartTrial }) {
           .mkt-hero-title { font-size: 34px !important; }
           .mkt-footer-grid { grid-template-columns: 1fr 1fr !important; }
           .mkt-panel-grid { grid-template-columns: 1fr !important; }
+          .mkt-pricing-grid { grid-template-columns: 1fr !important; }
+          .mkt-pricing-features { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 480px) {
           .mkt-footer-grid { grid-template-columns: 1fr !important; }
@@ -2884,15 +2907,27 @@ function Marketing({ onSignIn, onStartTrial }) {
               }}>Sign in</button>
             </div>
             <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.55)" }}>
-              7-day free trial · ${PRODUCT.seatPrice.toFixed(2)}/seat/month after · Cancel anytime
+              7-day free trial · From ${PRODUCT.basePrice.toFixed(2)}/mo for {PRODUCT.baseSeats} seats · Cancel anytime
             </div>
           </div>
-          <div style={{ flexShrink: 0, paddingBottom: 0 }}>
-            <img src="/marketing/shot-dashboard.png" alt="RoofStride dashboard" style={{
-              width: 280, borderRadius: "20px 20px 0 0", display: "block",
+          <div style={{ flexShrink: 0, paddingBottom: 0, position: "relative" }}>
+            <div style={{
+              width: 280, height: 460, overflow: "hidden", borderRadius: "20px 20px 0 0",
               boxShadow: "0 30px 70px rgba(0,0,0,.4)", border: "1px solid rgba(255,255,255,.15)",
-              borderBottom: "none",
-            }} />
+              borderBottom: "none", position: "relative",
+            }}>
+              <img src="/marketing/shot-dashboard.png" alt="RoofStride dashboard" style={{
+                width: 280, display: "block",
+              }} />
+              {/* The source screenshot is taller than what we show — this
+                 fades the bottom into the hero's own background instead
+                 of the image just stopping mid-content, which read as a
+                 cut-off screenshot rather than an intentional crop. */}
+              <div style={{
+                position: "absolute", left: 0, right: 0, bottom: 0, height: 90,
+                background: `linear-gradient(rgba(32,36,42,0), ${MKT.ink})`,
+              }} />
+            </div>
           </div>
         </div>
       </div>
@@ -3034,33 +3069,68 @@ function Marketing({ onSignIn, onStartTrial }) {
 
       {/* ---------- Pricing ---------- */}
       <div id="pricing" style={{ padding: "72px 20px", background: MKT.bg }}>
-        <Reveal style={{ maxWidth: 480, margin: "0 auto", textAlign: "center" }}>
+        <Reveal style={{ maxWidth: 780, margin: "0 auto", textAlign: "center" }}>
           <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
             Pricing
           </div>
-          <div style={{ fontFamily: MKT_DISPLAY_FONT, fontSize: 30, fontWeight: 700, color: MKT.ink, marginBottom: 30, letterSpacing: -0.3 }}>One plan. Every feature.</div>
+          <div style={{ fontFamily: MKT_DISPLAY_FONT, fontSize: 30, fontWeight: 700, color: MKT.ink, marginBottom: 12, letterSpacing: -0.3 }}>
+            Every feature, either way you pay.
+          </div>
+          <div style={{ fontSize: 15, color: MKT.sub, marginBottom: 34, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
+            No feature gates, no tiers to unlock — the only choice is how you'd rather pay for seats.
+          </div>
+          <div className="mkt-pricing-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, textAlign: "left", marginBottom: 28 }}>
+            <div style={{
+              background: "#fff", borderRadius: 20, padding: "30px 26px", border: `1px solid ${MKT.line}`,
+              boxShadow: "0 20px 50px rgba(32,36,42,.06)",
+            }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: MKT.sub, marginBottom: 6 }}>Pay per seat</div>
+              <div style={{ fontSize: 36, fontWeight: 800, color: MKT.ink, marginBottom: 2 }}>
+                ${PRODUCT.basePrice.toFixed(2)}<span style={{ fontSize: 14, fontWeight: 600, color: MKT.sub }}>/mo</span>
+              </div>
+              <div style={{ fontSize: 13, color: MKT.sub, marginBottom: 18 }}>
+                Includes {PRODUCT.baseSeats} seats · ${PRODUCT.extraSeatPrice.toFixed(2)}/mo per seat after that
+              </div>
+              <button onClick={onStartTrial} style={{
+                width: "100%", border: `1.5px solid ${MKT.teal}`, background: "transparent", color: MKT.teal, fontWeight: 700,
+                fontSize: 15, cursor: "pointer", fontFamily: "inherit", padding: "13px", borderRadius: 10,
+              }}>Start your free trial</button>
+            </div>
+            <div style={{
+              background: MKT.ink, borderRadius: 20, padding: "30px 26px", position: "relative",
+              boxShadow: "0 20px 50px rgba(32,36,42,.18)",
+            }}>
+              <div style={{
+                position: "absolute", top: -12, left: 26, background: MKT.teal, color: "#fff",
+                fontSize: 11, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase",
+                padding: "4px 10px", borderRadius: 999,
+              }}>Best for growing crews</div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: "rgba(255,255,255,.6)", marginBottom: 6 }}>Unlimited seats</div>
+              <div style={{ fontSize: 36, fontWeight: 800, color: "#fff", marginBottom: 2 }}>
+                ${PRODUCT.unlimitedPrice.toFixed(2)}<span style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,.6)" }}>/mo</span>
+              </div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", marginBottom: 18 }}>
+                Flat rate, up to {PRODUCT.unlimitedSeatCap} seats — never count logins again
+              </div>
+              <button onClick={onStartTrial} style={{
+                width: "100%", border: "none", background: MKT.teal, color: "#fff", fontWeight: 700,
+                fontSize: 15, cursor: "pointer", fontFamily: "inherit", padding: "13px", borderRadius: 10,
+              }}>Start your free trial</button>
+            </div>
+          </div>
           <div style={{
-            background: "#fff", borderRadius: 20, padding: "36px 32px", border: `1px solid ${MKT.line}`,
-            boxShadow: "0 20px 50px rgba(32,36,42,.08)",
+            background: "#fff", borderRadius: 16, padding: "22px 24px", border: `1px solid ${MKT.line}`, textAlign: "left",
           }}>
-            <div style={{ fontSize: 46, fontWeight: 800, color: MKT.ink }}>
-              ${PRODUCT.seatPrice.toFixed(2)}<span style={{ fontSize: 16, fontWeight: 600, color: MKT.sub }}>/seat/month</span>
+            <div style={{ fontSize: 13, color: MKT.sub, marginBottom: 14 }}>
+              7-day free trial, card required. Cancel anytime before it ends and you won't be charged. Every plan includes:
             </div>
-            <div style={{ fontSize: 14, color: MKT.sub, margin: "6px 0 24px" }}>
-              7-day free trial, card required. Cancel anytime before it ends and you won't be charged.
-            </div>
-            <button onClick={onStartTrial} style={{
-              width: "100%", border: "none", background: MKT.teal, color: "#fff", fontWeight: 700,
-              fontSize: 16, cursor: "pointer", fontFamily: "inherit", padding: "15px", borderRadius: 10,
-              marginBottom: 22,
-            }}>Start your free trial</button>
-            <div style={{ textAlign: "left" }}>
+            <div className="mkt-pricing-features" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
               {["Full pipeline, estimating & contracts", "Dispatch, purchase orders & warranties",
                 "Insurance claims & code lookup", "Financials, commissions & QuickBooks export",
                 "Client portal & team chat", "Unlimited jobs, no per-job fees"].map((f, i) => (
-                <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "7px 0" }}>
-                  <CheckCircle2 size={16} color={MKT.teal} style={{ flexShrink: 0, marginTop: 2 }} />
-                  <div style={{ fontSize: 14, color: MKT.ink }}>{f}</div>
+                <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "5px 0" }}>
+                  <CheckCircle2 size={15} color={MKT.teal} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <div style={{ fontSize: 13.5, color: MKT.ink }}>{f}</div>
                 </div>
               ))}
             </div>
@@ -3092,7 +3162,9 @@ function Marketing({ onSignIn, onStartTrial }) {
         <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           <div className="mkt-footer-grid" style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 32, paddingBottom: 40, borderBottom: "1px solid rgba(255,255,255,.1)" }}>
             <div>
-              <img src="/roofstride-logo-horizontal.png" alt={PRODUCT.name} style={{ height: 26, display: "block", marginBottom: 14, filter: "brightness(0) invert(1)" }} />
+              <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 14, letterSpacing: -0.3 }}>
+                <span style={{ color: "#fff" }}>Roof</span><span style={{ color: MKT.teal }}>Stride</span>
+              </div>
               <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.55)", lineHeight: 1.6, maxWidth: 280 }}>
                 {PRODUCT.tagline} One platform for leads, production, claims, and the money — built around how roofing companies actually work.
               </div>
@@ -3317,8 +3389,8 @@ function Login({ brand, users, onLogin, initialMode = "login", onBackToMarketing
                 Start your {PRODUCT.trialDays}-day trial
               </div>
               <div style={{ fontSize: 13.5, color: S.sub, marginBottom: 18, lineHeight: 1.5 }}>
-                No card required. After the trial it is ${PRODUCT.seatPrice.toFixed(2)} per seat
-                per month, and you choose whether to continue.
+                No card required. After the trial it's ${PRODUCT.basePrice.toFixed(2)}/mo for the first {PRODUCT.baseSeats} seats
+                (${PRODUCT.extraSeatPrice.toFixed(2)}/seat after that, or ${PRODUCT.unlimitedPrice.toFixed(2)}/mo flat for up to {PRODUCT.unlimitedSeatCap}) — you choose whether to continue.
               </div>
               <Field label="Your name">
                 <input style={inputStyle} value={suName} autoComplete="name"
