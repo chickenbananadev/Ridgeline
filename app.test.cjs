@@ -2947,6 +2947,67 @@ function installedSquares(mats) {
   const total = lines.reduce((a, l) => a + l.sq, 0);
   return { lines, total: Math.round(total * 100) / 100 };
 }
+function subCodeFor(text) {
+  const s = String(text || "").toLowerCase();
+  if (/steep|pitch/.test(s)) return "steep_per_square";
+  if (/tear|layer|rip/.test(s)) return "tearoff_per_square";
+  if (/(3|three|3\+).*stor/.test(s)) return "story_3";
+  if (/(2|two|second).*stor/.test(s)) return "story_2";
+  if (/chimney|flash/.test(s)) {
+    if (/small|sm\b/.test(s)) return "chimney_small";
+    if (/large|lg\b|lrg/.test(s)) return "chimney_large";
+    return "chimney_medium";
+  }
+  if (/install|per\s*sq|square|field|labor|base/.test(s)) return "per_square";
+  return null;
+}
+var SUB_RATE_LABELS = {
+  per_square: "Install (per square)",
+  steep_per_square: "Steep charge (per square)",
+  tearoff_per_square: "Tear-off (per square, per extra layer)",
+  story_2: "2-story adder",
+  story_3: "3+ story adder",
+  chimney_small: "Chimney \u2014 small",
+  chimney_medium: "Chimney \u2014 medium",
+  chimney_large: "Chimney \u2014 large"
+};
+function subRate(crew2, code) {
+  const row = (crew2 && crew2.rateCard || []).find((r) => r.code === code);
+  return row ? num(row.price) : 0;
+}
+function computeSubPay(job, crew2) {
+  if (!crew2 || !(crew2.rateCard || []).length) return null;
+  const cov = installedSquares(generateRoofingMaterials(job.measurements));
+  const sq = cov ? cov.total : 0;
+  const wo = job.workOrder || {};
+  const lines = [];
+  const per = subRate(crew2, "per_square");
+  if (per && sq) lines.push({ label: `Install ${sq} sq @ ${money(per)}/sq`, amt: per * sq });
+  if (wo.steep) {
+    const s = subRate(crew2, "steep_per_square");
+    if (s && sq) lines.push({ label: `Steep ${sq} sq @ ${money(s)}/sq`, amt: s * sq });
+  }
+  const layers = parseInt(wo.layers || job.checklist.layers, 10) || 1;
+  if (layers > 1) {
+    const t = subRate(crew2, "tearoff_per_square");
+    if (t && sq) lines.push({ label: `Tear-off ${layers} layers, ${sq} sq @ ${money(t)}/sq`, amt: t * sq * (layers - 1) });
+  }
+  if (wo.stories === "2") {
+    const a = subRate(crew2, "story_2");
+    if (a) lines.push({ label: "2-story adder", amt: a });
+  }
+  if (wo.stories === "3+") {
+    const a = subRate(crew2, "story_3");
+    if (a) lines.push({ label: "3+ story adder", amt: a });
+  }
+  const chim = (wo.chimney || {}).size;
+  if (chim && chim !== "none") {
+    const a = subRate(crew2, `chimney_${chim}`);
+    if (a) lines.push({ label: `Chimney flashing (${chim})`, amt: a });
+  }
+  const total = lines.reduce((a, l) => a + l.amt, 0);
+  return { lines, total: Math.round(total * 100) / 100, squares: sq };
+}
 var AUTH = () => typeof window !== "undefined" ? window.__AUTH__ : null;
 var liveAuth = () => !!AUTH();
 var fromProfile = (row) => ({
@@ -14740,6 +14801,13 @@ function TabWorkOrder({ job, mut, toast: toast2, brand: brand2, crews, templates
   const m = job.measurements;
   const mats = generateRoofingMaterials(m);
   const coverage = installedSquares(mats);
+  const subPay = crew2 ? computeSubPay(job, crew2) : null;
+  const addSubToCosts = () => {
+    if (!subPay) return;
+    const line = { id: uid("l"), label: `Sub labor \u2014 ${crew2.name} (${subPay.squares} sq)`, amt: subPay.total, by: crew2.name };
+    mut((j) => ({ ...j, fin: { ...j.fin || {}, labor: [...(j.fin || {}).labor || [], line] } }));
+    toast2("Added to job costs");
+  };
   const wo = job.workOrder || { number: "", sentAt: null, status: "Draft", notes: "" };
   const setWo = (patch) => mut((j) => ({ ...j, workOrder: { ...j.workOrder || {}, ...patch } }));
   const chimney = wo.chimney || { size: "none", notes: "" };
@@ -14821,6 +14889,32 @@ function TabWorkOrder({ job, mut, toast: toast2, brand: brand2, crews, templates
           " Select crew"
         ] })
       ] })
+    ] }),
+    crew2 && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { right: subPay ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: money(subPay.total) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "No rate sheet" }), children: [
+        "Sub pay \u2014 ",
+        crew2.name
+      ] }),
+      subPay && subPay.lines.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        subPay.lines.map((l, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: i ? `1px solid ${S.line}` : "none" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.ink }, children: l.label }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" }, children: money(l.amt) })
+        ] }, i)),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "9px 0 0", borderTop: `2px solid ${S.line}`, marginTop: 6 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 800 }, children: "Total sub pay" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14.5, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }, children: money(subPay.total) })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { marginTop: 12 }, onClick: addSubToCosts, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+          " Add to job costs"
+        ] })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: (crew2.rateCard || []).length ? "This job has no installed squares yet \u2014 add measurements to price the sub's pay." : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        "No price sheet on file for ",
+        crew2.name,
+        ". Upload one in ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Crews" }),
+        " and their pay fills in here automatically."
+      ] }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "No pricing" }), children: [
@@ -18355,6 +18449,67 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast: toast2
   const [customTrade, setCustomTrade] = (0, import_react.useState)("");
   const [range, setRange] = (0, import_react.useState)("all");
   const docRef = (0, import_react.useRef)(null);
+  const priceRef = (0, import_react.useRef)(null);
+  const parseSubSheet = (text) => {
+    const rows0 = String(text).split(/\r?\n/).filter((l) => l.trim());
+    if (!rows0.length) return [];
+    const split = (l) => {
+      const out = [];
+      let cur = "", inQ = false;
+      for (let i = 0; i < l.length; i++) {
+        const ch = l[i];
+        if (ch === '"') {
+          if (inQ && l[i + 1] === '"') {
+            cur += '"';
+            i++;
+          } else inQ = !inQ;
+        } else if (ch === "," && !inQ) {
+          out.push(cur);
+          cur = "";
+        } else cur += ch;
+      }
+      out.push(cur);
+      return out.map((x) => x.trim());
+    };
+    const head = split(rows0[0]).map((h) => h.toLowerCase().replace(/[^a-z]/g, ""));
+    const idx = (names) => {
+      for (const n of names) {
+        const k = head.indexOf(n);
+        if (k >= 0) return k;
+      }
+      return -1;
+    };
+    const cItem = idx(["item", "description", "service", "name", "type", "line"]);
+    const cPrice = idx(["price", "rate", "cost", "amount", "persquare", "persq", "unitprice"]);
+    const cUnit = idx(["unit", "uom", "per"]);
+    if (cItem < 0 || cPrice < 0) return [];
+    return rows0.slice(1).map((l) => {
+      const c = split(l);
+      const item = c[cItem] || "";
+      const code = subCodeFor(item);
+      return {
+        id: uid("rc"),
+        code: code || "custom",
+        label: item,
+        unit: cUnit >= 0 ? c[cUnit] : code && code.endsWith("per_square") ? "sq" : "flat",
+        price: num(String(c[cPrice]).replace(/[$,]/g, ""))
+      };
+    }).filter((r) => r.label && r.price > 0);
+  };
+  const onPriceFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => {
+      const rows = parseSubSheet(String(r.result));
+      if (rows.length) {
+        setF((prev) => ({ ...prev, rateCard: rows }));
+        toast2(`${rows.length} price rows loaded`);
+      } else toast2("Couldn't read that sheet \u2014 needs an item column and a price column");
+    };
+    r.readAsText(file);
+    e.target.value = "";
+  };
   const paidFor = (crewId) => {
     const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 864e5;
     return jobs.filter((j) => j.crewId === crewId).reduce((sum, j) => {
@@ -18503,6 +18658,35 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast: toast2
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { marginTop: 8 }, onClick: () => docRef.current && docRef.current.click(), children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
               " Add document"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Pricing sheet", hint: "Upload this sub's price sheet (CSV with an item and a price column). Rates drive their pay automatically off each job's installed squares and conditions.", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: priceRef, type: "file", accept: ".csv,text/csv", style: { display: "none" }, onChange: onPriceFile }),
+            (f.rateCard || []).length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 10, overflow: "hidden", marginBottom: 8 }, children: (f.rateCard || []).map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: `1px solid ${S.line}` }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink }, children: r.label }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub }, children: [
+                  SUB_RATE_LABELS[r.code] || "Flat add-on",
+                  r.unit === "sq" ? " \xB7 per square" : ""
+                ] })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }, children: [
+                money(r.price),
+                r.unit === "sq" ? "/sq" : ""
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "button",
+                {
+                  onClick: () => setF({ ...f, rateCard: (f.rateCard || []).filter((x) => x.id !== r.id) }),
+                  style: { border: "none", background: "none", cursor: "pointer" },
+                  children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14, color: "#B42318" })
+                }
+              )
+            ] }, r.id)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }, children: "No price sheet yet. Recognized rows: install/steep/tear-off per square, 2- and 3-story adders, and chimney small/medium/large." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => priceRef.current && priceRef.current.click(), children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
+              " ",
+              (f.rateCard || []).length ? "Replace price sheet" : "Upload price sheet"
             ] })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Trades", children: [

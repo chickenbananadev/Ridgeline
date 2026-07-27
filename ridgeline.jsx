@@ -2329,6 +2329,55 @@ function installedSquares(mats) {
   return { lines, total: Math.round(total * 100) / 100 };
 }
 
+/* Map a free-text price-sheet row to a known pay code, so an uploaded
+   subcontractor sheet drives pay automatically. Anything unrecognized is
+   kept as a flat add-on. */
+function subCodeFor(text) {
+  const s = String(text || "").toLowerCase();
+  if (/steep|pitch/.test(s)) return "steep_per_square";
+  if (/tear|layer|rip/.test(s)) return "tearoff_per_square";
+  if (/(3|three|3\+).*stor/.test(s)) return "story_3";
+  if (/(2|two|second).*stor/.test(s)) return "story_2";
+  if (/chimney|flash/.test(s)) {
+    if (/small|sm\b/.test(s)) return "chimney_small";
+    if (/large|lg\b|lrg/.test(s)) return "chimney_large";
+    return "chimney_medium";
+  }
+  if (/install|per\s*sq|square|field|labor|base/.test(s)) return "per_square";
+  return null;
+}
+const SUB_RATE_LABELS = {
+  per_square: "Install (per square)", steep_per_square: "Steep charge (per square)",
+  tearoff_per_square: "Tear-off (per square, per extra layer)", story_2: "2-story adder",
+  story_3: "3+ story adder", chimney_small: "Chimney — small", chimney_medium: "Chimney — medium",
+  chimney_large: "Chimney — large",
+};
+function subRate(crew, code) {
+  const row = ((crew && crew.rateCard) || []).find((r) => r.code === code);
+  return row ? num(row.price) : 0;
+}
+/* Figure a subcontractor's pay for a job from their uploaded rate card and
+   the job's installed squares + conditions. Returns a transparent line
+   breakdown so the office can see exactly how the number was built. */
+function computeSubPay(job, crew) {
+  if (!crew || !((crew.rateCard || []).length)) return null;
+  const cov = installedSquares(generateRoofingMaterials(job.measurements));
+  const sq = cov ? cov.total : 0;
+  const wo = job.workOrder || {};
+  const lines = [];
+  const per = subRate(crew, "per_square");
+  if (per && sq) lines.push({ label: `Install ${sq} sq @ ${money(per)}/sq`, amt: per * sq });
+  if (wo.steep) { const s = subRate(crew, "steep_per_square"); if (s && sq) lines.push({ label: `Steep ${sq} sq @ ${money(s)}/sq`, amt: s * sq }); }
+  const layers = parseInt(wo.layers || job.checklist.layers, 10) || 1;
+  if (layers > 1) { const t = subRate(crew, "tearoff_per_square"); if (t && sq) lines.push({ label: `Tear-off ${layers} layers, ${sq} sq @ ${money(t)}/sq`, amt: t * sq * (layers - 1) }); }
+  if (wo.stories === "2") { const a = subRate(crew, "story_2"); if (a) lines.push({ label: "2-story adder", amt: a }); }
+  if (wo.stories === "3+") { const a = subRate(crew, "story_3"); if (a) lines.push({ label: "3+ story adder", amt: a }); }
+  const chim = (wo.chimney || {}).size;
+  if (chim && chim !== "none") { const a = subRate(crew, `chimney_${chim}`); if (a) lines.push({ label: `Chimney flashing (${chim})`, amt: a }); }
+  const total = lines.reduce((a, l) => a + l.amt, 0);
+  return { lines, total: Math.round(total * 100) / 100, squares: sq };
+}
+
 /* ================================================================
    AUTH ADAPTER
    When the app is deployed with Supabase credentials, src/main.jsx
@@ -13151,6 +13200,13 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
   const m = job.measurements;
   const mats = generateRoofingMaterials(m);
   const coverage = installedSquares(mats);
+  const subPay = crew ? computeSubPay(job, crew) : null;
+  const addSubToCosts = () => {
+    if (!subPay) return;
+    const line = { id: uid("l"), label: `Sub labor — ${crew.name} (${subPay.squares} sq)`, amt: subPay.total, by: crew.name };
+    mut((j) => ({ ...j, fin: { ...(j.fin || {}), labor: [...(((j.fin || {}).labor) || []), line] } }));
+    toast("Added to job costs");
+  };
   const wo = job.workOrder || { number: "", sentAt: null, status: "Draft", notes: "" };
   const setWo = (patch) => mut((j) => ({ ...j, workOrder: { ...(j.workOrder || {}), ...patch } }));
   const chimney = wo.chimney || { size: "none", notes: "" };
@@ -13218,6 +13274,40 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
           </>
         )}
       </Card>
+
+      {/* Office-only: the sub's pay, figured live from their uploaded rate
+          card and this job's installed squares + conditions. Never shown on
+          the crew-facing document below. */}
+      {crew && canSeeMoney(currentUser) && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={subPay ? <Chip tone="green">{money(subPay.total)}</Chip> : <Chip tone="gray">No rate sheet</Chip>}>
+            Sub pay — {crew.name}
+          </CardTitle>
+          {subPay && subPay.lines.length > 0 ? (
+            <>
+              {subPay.lines.map((l, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+                  <span style={{ fontSize: 13, color: S.ink }}>{l.label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{money(l.amt)}</span>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 0 0", borderTop: `2px solid ${S.line}`, marginTop: 6 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 800 }}>Total sub pay</span>
+                <span style={{ fontSize: 14.5, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>{money(subPay.total)}</span>
+              </div>
+              <Btn kind="ghost" small style={{ marginTop: 12 }} onClick={addSubToCosts}>
+                <Plus size={13} /> Add to job costs
+              </Btn>
+            </>
+          ) : (
+            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+              {(crew.rateCard || []).length
+                ? "This job has no installed squares yet — add measurements to price the sub's pay."
+                : <>No price sheet on file for {crew.name}. Upload one in <b>Crews</b> and their pay fills in here automatically.</>}
+            </div>
+          )}
+        </Card>
+      )}
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="gray">No pricing</Chip>}>Work order — {wo.number || "unassigned"}</CardTitle>
@@ -16478,6 +16568,49 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const [customTrade, setCustomTrade] = useState("");
   const [range, setRange] = useState("all");
   const docRef = useRef(null);
+  const priceRef = useRef(null);
+  /* Read a subcontractor's uploaded price sheet (CSV: an item/description
+     column and a price/rate column) and map each row to a known pay code so
+     it drives pay automatically. Unrecognized rows are kept as flat add-ons. */
+  const parseSubSheet = (text) => {
+    const rows0 = String(text).split(/\r?\n/).filter((l) => l.trim());
+    if (!rows0.length) return [];
+    const split = (l) => {
+      const out = []; let cur = "", inQ = false;
+      for (let i = 0; i < l.length; i++) {
+        const ch = l[i];
+        if (ch === '"') { if (inQ && l[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+        else if (ch === "," && !inQ) { out.push(cur); cur = ""; } else cur += ch;
+      }
+      out.push(cur); return out.map((x) => x.trim());
+    };
+    const head = split(rows0[0]).map((h) => h.toLowerCase().replace(/[^a-z]/g, ""));
+    const idx = (names) => { for (const n of names) { const k = head.indexOf(n); if (k >= 0) return k; } return -1; };
+    const cItem = idx(["item", "description", "service", "name", "type", "line"]);
+    const cPrice = idx(["price", "rate", "cost", "amount", "persquare", "persq", "unitprice"]);
+    const cUnit = idx(["unit", "uom", "per"]);
+    if (cItem < 0 || cPrice < 0) return [];
+    return rows0.slice(1).map((l) => {
+      const c = split(l); const item = c[cItem] || ""; const code = subCodeFor(item);
+      return {
+        id: uid("rc"), code: code || "custom", label: item,
+        unit: cUnit >= 0 ? c[cUnit] : (code && code.endsWith("per_square") ? "sq" : "flat"),
+        price: num(String(c[cPrice]).replace(/[$,]/g, "")),
+      };
+    }).filter((r) => r.label && r.price > 0);
+  };
+  const onPriceFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => {
+      const rows = parseSubSheet(String(r.result));
+      if (rows.length) { setF((prev) => ({ ...prev, rateCard: rows })); toast(`${rows.length} price rows loaded`); }
+      else toast("Couldn't read that sheet — needs an item column and a price column");
+    };
+    r.readAsText(file);
+    e.target.value = "";
+  };
   const paidFor = (crewId) => {
     const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 86400000;
     return jobs.filter((j) => j.crewId === crewId).reduce((sum, j) => {
@@ -16572,6 +16705,31 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
           ))}
           <Btn kind="ghost" small style={{ marginTop: 8 }} onClick={() => docRef.current && docRef.current.click()}>
             <Upload size={13} /> Add document
+          </Btn>
+        </Field>
+        <Field label="Pricing sheet" hint="Upload this sub's price sheet (CSV with an item and a price column). Rates drive their pay automatically off each job's installed squares and conditions.">
+          <input ref={priceRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={onPriceFile} />
+          {(f.rateCard || []).length > 0 ? (
+            <div style={{ border: `1px solid ${S.line}`, borderRadius: 10, overflow: "hidden", marginBottom: 8 }}>
+              {(f.rateCard || []).map((r) => (
+                <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: `1px solid ${S.line}` }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, color: S.ink }}>{r.label}</div>
+                    <div style={{ fontSize: 11.5, color: S.sub }}>{SUB_RATE_LABELS[r.code] || "Flat add-on"}{r.unit === "sq" ? " · per square" : ""}</div>
+                  </div>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{money(r.price)}{r.unit === "sq" ? "/sq" : ""}</span>
+                  <button onClick={() => setF({ ...f, rateCard: (f.rateCard || []).filter((x) => x.id !== r.id) })}
+                    style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={14} color="#B42318" /></button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
+              No price sheet yet. Recognized rows: install/steep/tear-off per square, 2- and 3-story adders, and chimney small/medium/large.
+            </div>
+          )}
+          <Btn kind="ghost" small onClick={() => priceRef.current && priceRef.current.click()}>
+            <Upload size={13} /> {(f.rateCard || []).length ? "Replace price sheet" : "Upload price sheet"}
           </Btn>
         </Field>
         <Field label="Trades">
