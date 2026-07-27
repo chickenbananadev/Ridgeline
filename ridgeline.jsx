@@ -1328,6 +1328,19 @@ function mkEstimate(over = {}) {
     number: "", date: "", validThrough: "", status: "Draft",
     scope: "", notes: "",
     items: [],
+    /* Good/Better/Best + optional upgrades. Deliberately additive:
+       `items` stays the single flattened list every existing reader
+       (estimateTotal, the PDF/doc builder, financials, commission calc,
+       the portal) already reads — none of that had to change. `tiers`
+       and `upgrades` are the AUTHORING structure; selecting a tier or
+       toggling an upgrade re-flattens into `items` via
+       applyEstimateSelection(). A job with no tiers configured (every
+       existing job, until a rep sets this up) behaves exactly as
+       before — tiers defaults to [], so applyEstimateSelection is a
+       no-op and items is untouched. */
+    tiers: [],            // [{ id, name, items: [...same shape as items] }]
+    selectedTier: null,   // id of the active tier, or null = flat estimate (old behavior)
+    upgrades: [],         // [{ id, desc, price, cost, selected }]
     concealed: [
       { id: "c1", desc: "Roof decking replacement (7/16\" OSB)", unit: "per 4×8 sheet", price: 0 },
       { id: "c2", desc: "Plank decking replacement", unit: "per LF", price: 0 },
@@ -1336,6 +1349,21 @@ function mkEstimate(over = {}) {
     ],
     clientSig: null, sigAt: null, ...over,
   };
+}
+/* Re-flattens the active tier's items + any selected upgrades into
+   est.items. Call this any time selectedTier or an upgrade's selected
+   flag changes. Safe to call on an estimate with no tiers configured
+   at all — falls straight through to the existing items unchanged. */
+function applyEstimateSelection(est) {
+  const tiers = est.tiers || [];
+  const tier = tiers.find((t) => t.id === est.selectedTier);
+  const base = tier ? tier.items : est.items;
+  const upgrades = (est.upgrades || []).filter((u) => u.selected);
+  const upgradeItems = upgrades.map((u) => ({
+    id: u.id, desc: u.desc, qty: 1, unit: "ea", price: num(u.price), cost: num(u.cost),
+    fromUpgrade: true,
+  }));
+  return [...base, ...upgradeItems];
 }
 function mkContract(over = {}) {
   return {
@@ -2318,6 +2346,57 @@ function softOf(hex) {
     return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
   } catch { return "#EAF2FD"; }
 }
+
+/* Donut chart — pure CSS conic-gradient, no charting library. Built
+   for proportion-of-a-whole breakdowns (revenue by source, job cost
+   mix) where a ranked list alone doesn't give an at-a-glance sense of
+   share. Deliberately paired with the underlying numbers wherever it's
+   used, never standing alone — a donut answers "roughly what share,"
+   a table answers "exactly how much"; people need both. */
+function DonutChart({ data, size = 132, thickness = 18, centerLabel, centerValue }) {
+  const total = data.reduce((s, d) => s + Math.max(0, d.value), 0);
+  let acc = 0;
+  const stops = data.map((d) => {
+    const pct = total > 0 ? (Math.max(0, d.value) / total) * 100 : 0;
+    const start = acc;
+    acc += pct;
+    return `${d.color} ${start}% ${acc}%`;
+  });
+  const gradient = total > 0 && stops.length
+    ? `conic-gradient(${stops.join(", ")})`
+    : `conic-gradient(${S.line} 0% 100%)`;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+      <div style={{
+        position: "relative", width: size, height: size, borderRadius: "50%",
+        background: gradient, flexShrink: 0,
+      }}>
+        <div style={{
+          position: "absolute", inset: thickness, borderRadius: "50%", background: "#fff",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        }}>
+          {centerValue != null && <div style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>{centerValue}</div>}
+          {centerLabel && <div style={{ fontSize: 10, color: S.sub, textAlign: "center", lineHeight: 1.3 }}>{centerLabel}</div>}
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0, flex: 1 }}>
+        {data.map((d) => {
+          const pct = total > 0 ? Math.round((Math.max(0, d.value) / total) * 100) : 0;
+          return (
+            <div key={d.label} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5 }}>
+              <span style={{ width: 9, height: 9, borderRadius: 3, background: d.color, flexShrink: 0 }} />
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: S.ink, flex: 1 }}>{d.label}</span>
+              <span style={{ color: S.sub, fontWeight: 700, flexShrink: 0 }}>{pct}%</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+/* A small fixed palette so charts stay visually consistent everywhere
+   they're used, rather than each call site inventing its own colors. */
+const DONUT_PALETTE = ["#0A9E98", "#1B6DE0", "#F59E0B", "#7C3AED", "#EC4899", "#177245", "#B42318", "#5B6470"];
 
 function Chip({ children, tone = "gray" }) {
   const tones = {
@@ -9303,6 +9382,12 @@ function CallLog({ jobs, leadSources, calls, setCalls, onOpenJob, onBack, curren
           <div style={{ fontSize: 13.5, color: S.sub }}>Once jobs carry lead sources, this ranks them by revenue won.</div>
         ) : (
           <>
+            <DonutChart
+              data={bySource.slice(0, 8).map((r, i) => ({ label: r.src, value: r.value, color: DONUT_PALETTE[i % DONUT_PALETTE.length] }))}
+              centerValue={money(bySource.reduce((a, r) => a + r.value, 0))}
+              centerLabel="won revenue"
+            />
+            <div style={{ height: 14 }} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 52px 44px 90px", gap: 6, fontSize: 10.5, fontWeight: 800, color: S.sub, letterSpacing: ".05em", padding: "0 0 6px" }}>
               <span>SOURCE</span><span style={{ textAlign: "right" }}>LEADS</span><span style={{ textAlign: "right" }}>WON</span><span style={{ textAlign: "right" }}>REVENUE</span>
             </div>
@@ -11087,6 +11172,62 @@ function SupplementCheck({ job }) {
   );
 }
 
+/* Shared line-item editor — the same row UI the flat estimate always
+   used, hoisted so each Good/Better/Best tier can reuse it too instead
+   of three copy-pasted editors. Purely controlled: given items + a
+   setItems callback, knows nothing about tiers, packages, or upgrades. */
+function LineItemEditor({ items, setItems, locked, addLabel = "Add line item" }) {
+  const setItem = (id, k, v) => setItems(items.map((it) => (it.id === id ? { ...it, [k]: v } : it)));
+  const lineMargin = (it) => {
+    const cost = num(it.cost), price = num(it.price);
+    return price > 0 && cost > 0 ? (((price - cost) / price) * 100).toFixed(0) : null;
+  };
+  return (
+    <>
+      {items.length === 0 && <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>No line items yet.</div>}
+      {items.map((it) => (
+        <div key={it.id} style={{ borderBottom: `1px solid ${S.line}`, padding: "10px 0" }}>
+          <input style={{ ...inputStyle, marginBottom: 8, fontWeight: 600 }} value={it.desc} disabled={locked}
+            onChange={(e) => setItem(it.id, "desc", e.target.value)} />
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input style={{ ...inputStyle, width: 84, textAlign: "right" }} value={it.qty} disabled={locked}
+              inputMode="decimal" onChange={(e) => setItem(it.id, "qty", e.target.value)} />
+            <input style={{ ...inputStyle, width: 62 }} value={it.unit} disabled={locked}
+              onChange={(e) => setItem(it.id, "unit", e.target.value)} />
+            <span style={{ color: S.sub }}>×</span>
+            <input style={{ ...inputStyle, width: 92, textAlign: "right" }} value={it.price} disabled={locked}
+              inputMode="decimal" onChange={(e) => setItem(it.id, "price", e.target.value)} />
+            <div style={{ marginLeft: "auto", fontWeight: 800, fontSize: 14 }}>{money(num(it.qty) * num(it.price))}</div>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+            <span style={{ fontSize: 11.5, color: S.sub }}>Unit cost</span>
+            <input style={{ ...inputStyle, width: 92, textAlign: "right", padding: "7px 9px", fontSize: 13 }}
+              value={it.cost ?? ""} disabled={locked} inputMode="decimal" placeholder="—"
+              onChange={(e) => setItem(it.id, "cost", e.target.value)} />
+            {lineMargin(it) != null && (
+              <Chip tone={num(lineMargin(it)) >= 30 ? "green" : num(lineMargin(it)) >= 15 ? "amber" : "red"}>
+                {lineMargin(it)}% margin
+              </Chip>
+            )}
+            {!locked && (
+              <button onClick={() => setItems(items.filter((x) => x.id !== it.id))}
+                style={{ border: "none", background: "none", cursor: "pointer", marginLeft: "auto" }}>
+                <Trash2 size={15} color="#B42318" />
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+      {!locked && (
+        <Btn kind="soft" small style={{ marginTop: 12 }}
+          onClick={() => setItems([...items, { id: uid("e"), desc: "", qty: 1, unit: "EA", price: 0 }])}>
+          <Plus size={14} /> {addLabel}
+        </Btn>
+      )}
+    </>
+  );
+}
+
 function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {} }) {
   const est = job.estimate;
   const [sigOpen, setSigOpen] = useState(false);
@@ -11095,6 +11236,36 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
   const setItem = (id, k, v) =>
     setEst({ items: est.items.map((it) => (it.id === id ? { ...it, [k]: v } : it)) });
   const total = estimateTotal(est);
+
+  /* Good/Better/Best + optional upgrades. `recompute` merges a patch
+     into the estimate and re-flattens est.items from it in the SAME
+     update, so items is never a stale render behind tiers/upgrades. */
+  const tiersOn = est.tiers.length > 0;
+  const [tierTab, setTierTab] = useState(est.selectedTier || "good");
+  const recompute = (patch) => {
+    const merged = { ...est, ...patch };
+    setEst({ ...patch, items: applyEstimateSelection(merged) });
+  };
+  const toggleTiers = (on) => {
+    if (!on) { recompute({ tiers: [], selectedTier: null }); return; }
+    if (est.tiers.length > 0) return; // already configured, checkbox shouldn't re-seed
+    const tiers = [
+      { id: "good", name: "Good", items: [] },
+      { id: "better", name: "Better", items: est.items.map((it) => ({ ...it, id: uid("e") })) },
+      { id: "best", name: "Best", items: [] },
+    ];
+    setTierTab("better");
+    recompute({ tiers, selectedTier: "better" });
+  };
+  const setTierItems = (tierId, items) => {
+    const tiers = est.tiers.map((t) => (t.id === tierId ? { ...t, items } : t));
+    recompute({ tiers });
+  };
+  const selectTier = (tierId) => recompute({ selectedTier: tierId });
+  const addUpgrade = () => recompute({ upgrades: [...est.upgrades, { id: uid("u"), desc: "", price: 0, cost: 0, selected: false }] });
+  const setUpgrade = (id, k, v) => recompute({ upgrades: est.upgrades.map((u) => (u.id === id ? { ...u, [k]: v } : u)) });
+  const toggleUpgrade = (id, checked) => recompute({ upgrades: est.upgrades.map((u) => (u.id === id ? { ...u, selected: checked } : u)) });
+  const removeUpgrade = (id) => recompute({ upgrades: est.upgrades.filter((u) => u.id !== id) });
 
   const [adjMode, setAdjMode] = useState("margin");
   const [adjPct, setAdjPct] = useState("");
@@ -11256,50 +11427,97 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
       </Card>
 
       <Card style={{ marginTop: 12 }}>
-        <CardTitle right={!locked && (
-          <button style={linkBtn} onClick={prefillFromMeasurements}>Generate from measurements</button>
-        )}>Pricing</CardTitle>
-        {est.items.length === 0 && (
-          <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>No line items yet.</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+          <CardTitle>Packages — Good / Better / Best</CardTitle>
+        </div>
+        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5, color: S.ink, cursor: locked ? "default" : "pointer", marginBottom: tiersOn ? 14 : 0 }}>
+          <input type="checkbox" checked={tiersOn} disabled={locked} style={{ width: 17, height: 17, accentColor: T.accent }}
+            onChange={(e) => toggleTiers(e.target.checked)} />
+          Offer this as Good / Better / Best packages instead of one flat price
+        </label>
+        {!tiersOn && (
+          <div style={{ fontSize: 12.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }}>
+            Off — one price, edited below. Turning this on keeps your current line items as "Better" and lets you build the other two tiers.
+          </div>
         )}
-        {est.items.map((it) => (
-          <div key={it.id} style={{ borderBottom: `1px solid ${S.line}`, padding: "10px 0" }}>
-            <input style={{ ...inputStyle, marginBottom: 8, fontWeight: 600 }} value={it.desc} disabled={locked}
-              onChange={(e) => setItem(it.id, "desc", e.target.value)} />
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input style={{ ...inputStyle, width: 84, textAlign: "right" }} value={it.qty} disabled={locked}
-                inputMode="decimal" onChange={(e) => setItem(it.id, "qty", e.target.value)} />
-              <input style={{ ...inputStyle, width: 62 }} value={it.unit} disabled={locked}
-                onChange={(e) => setItem(it.id, "unit", e.target.value)} />
-              <span style={{ color: S.sub }}>×</span>
-              <input style={{ ...inputStyle, width: 92, textAlign: "right" }} value={it.price} disabled={locked}
-                inputMode="decimal" onChange={(e) => setItem(it.id, "price", e.target.value)} />
-              <div style={{ marginLeft: "auto", fontWeight: 800, fontSize: 14 }}>{money(num(it.qty) * num(it.price))}</div>
-            </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
-              <span style={{ fontSize: 11.5, color: S.sub }}>Unit cost</span>
-              <input style={{ ...inputStyle, width: 92, textAlign: "right", padding: "7px 9px", fontSize: 13 }}
-                value={it.cost ?? ""} disabled={locked} inputMode="decimal" placeholder="—"
-                onChange={(e) => setItem(it.id, "cost", e.target.value)} />
-              {lineMargin(it) != null && (
-                <Chip tone={num(lineMargin(it)) >= 30 ? "green" : num(lineMargin(it)) >= 15 ? "amber" : "red"}>
-                  {lineMargin(it)}% margin
-                </Chip>
-              )}
-              {!locked && (
-                <button onClick={() => setEst({ items: est.items.filter((x) => x.id !== it.id) })}
-                  style={{ border: "none", background: "none", cursor: "pointer" }}>
-                  <Trash2 size={15} color="#B42318" />
+        {tiersOn && (
+          <>
+            <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+              {est.tiers.map((t) => (
+                <button key={t.id} onClick={() => setTierTab(t.id)} style={{
+                  flex: 1, border: `1.5px solid ${tierTab === t.id ? T.accent : S.line}`,
+                  background: tierTab === t.id ? T.accentSoft : "#fff", borderRadius: 9,
+                  padding: "9px 4px", cursor: "pointer", fontFamily: "inherit",
+                }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: tierTab === t.id ? T.accent : S.ink }}>{t.name}</div>
+                  <div style={{ fontSize: 11.5, color: S.sub }}>{money(estimateTotal({ items: t.items }))}</div>
+                  {est.selectedTier === t.id && <div style={{ fontSize: 9.5, fontWeight: 800, color: T.accent, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.4 }}>Customer sees this</div>}
                 </button>
-              )}
+              ))}
+            </div>
+            {est.tiers.filter((t) => t.id === tierTab).map((t) => (
+              <div key={t.id}>
+                <LineItemEditor items={t.items} locked={locked}
+                  setItems={(items) => setTierItems(t.id, items)}
+                  addLabel={`Add line to ${t.name}`} />
+                {!locked && est.selectedTier !== t.id && (
+                  <Btn kind="ghost" small style={{ marginTop: 4 }} onClick={() => selectTier(t.id)}>
+                    Show customer this tier instead
+                  </Btn>
+                )}
+              </div>
+            ))}
+          </>
+        )}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Optional upgrades</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
+          Add-ons the customer can check on or off — the total updates as they choose. Shown on the {tiersOn ? "active package" : "estimate"} in the client portal.
+        </div>
+        {est.upgrades.length === 0 && <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>No optional upgrades yet.</div>}
+        {est.upgrades.map((u) => (
+          <div key={u.id} style={{ borderBottom: `1px solid ${S.line}`, padding: "10px 0", display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <input type="checkbox" checked={!!u.selected} disabled={locked} style={{ width: 18, height: 18, accentColor: T.accent, marginTop: 8, flexShrink: 0 }}
+              onChange={(e) => toggleUpgrade(u.id, e.target.checked)} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <input style={{ ...inputStyle, marginBottom: 8, fontWeight: 600 }} value={u.desc} disabled={locked}
+                placeholder="e.g. Extended lifetime warranty, upgraded ridge vent…"
+                onChange={(e) => setUpgrade(u.id, "desc", e.target.value)} />
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{ fontSize: 11.5, color: S.sub }}>Price</span>
+                <input style={{ ...inputStyle, width: 100, textAlign: "right" }} value={u.price} disabled={locked}
+                  inputMode="decimal" onChange={(e) => setUpgrade(u.id, "price", e.target.value)} />
+                <span style={{ fontSize: 11.5, color: S.sub, marginLeft: 8 }}>Cost</span>
+                <input style={{ ...inputStyle, width: 92, textAlign: "right", fontSize: 13 }} value={u.cost ?? ""} disabled={locked}
+                  inputMode="decimal" placeholder="—" onChange={(e) => setUpgrade(u.id, "cost", e.target.value)} />
+                {!locked && (
+                  <button onClick={() => removeUpgrade(u.id)} style={{ border: "none", background: "none", cursor: "pointer", marginLeft: "auto" }}>
+                    <Trash2 size={15} color="#B42318" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ))}
         {!locked && (
-          <Btn kind="soft" small style={{ marginTop: 12 }}
-            onClick={() => setEst({ items: [...est.items, { id: uid("e"), desc: "", qty: 1, unit: "EA", price: 0 }] })}>
-            <Plus size={14} /> Add line item
+          <Btn kind="soft" small style={{ marginTop: 12 }} onClick={addUpgrade}>
+            <Plus size={14} /> Add upgrade option
           </Btn>
+        )}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={!locked && !tiersOn && (
+          <button style={linkBtn} onClick={prefillFromMeasurements}>Generate from measurements</button>
+        )}>Pricing</CardTitle>
+        {tiersOn ? (
+          <div style={{ fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
+            Managed above — editing the "{est.tiers.find((t) => t.id === est.selectedTier)?.name || "active"}" tier and any checked upgrades. This total is what the customer sees.
+          </div>
+        ) : (
+          <LineItemEditor items={est.items} setItems={(items) => setEst({ items })} locked={locked} />
         )}
         <div style={{
           display: "flex", justifyContent: "space-between", paddingTop: 14, marginTop: 8,
@@ -11311,6 +11529,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
       </Card>
 
       <Card style={{ marginTop: 12 }}>
+
         <CardTitle>Concealed conditions — unit pricing</CardTitle>
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>
           Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented.
@@ -12336,6 +12555,21 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
           <div style={{ fontSize: 12, opacity: 0.7, marginTop: 3 }}>{pct1(cap.grossMargin)} margin</div>
         </div>
       </Card>
+      {cap.contract > 0 && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle>Where this job's money goes</CardTitle>
+          <DonutChart
+            data={[
+              { label: "Materials", value: cap.materials, color: DONUT_PALETTE[0] },
+              { label: "Labor", value: cap.labor, color: DONUT_PALETTE[1] },
+              { label: "Other costs", value: cap.other, color: DONUT_PALETTE[2] },
+              { label: "Gross profit", value: Math.max(0, cap.gross), color: DONUT_PALETTE[5] },
+            ].filter((d) => d.value > 0)}
+            centerValue={pct1(cap.grossMargin)}
+            centerLabel="gross margin"
+          />
+        </Card>
+      )}
       <FinBucket title="Material costs" lines={fin.materials} total={cap.materials} onEdit={(id, k, v) => setLine("materials", id, k, v)} onDelete={(id) => delLine("materials", id)} onAdd={() => addLine("materials")} />
       <FinBucket title="Labor costs" lines={fin.labor} total={cap.labor} onEdit={(id, k, v) => setLine("labor", id, k, v)} onDelete={(id) => delLine("labor", id)} onAdd={() => addLine("labor")} />
       <FinBucket title="Other costs (permits, dump, misc.)" lines={fin.other} total={cap.other} onEdit={(id, k, v) => setLine("other", id, k, v)} onDelete={(id) => delLine("other", id)} onAdd={() => addLine("other")} />

@@ -1047,6 +1047,77 @@ what Jacob's own team actually needs for real demo/training use.
 Confirmed via `git diff` that the only ridgeline.jsx change this round
 is the motion-timing fix; the 5 changed PNGs are the only other diff.
 
+## Donut charts + Good/Better/Best estimate tiers + upgrades (this session, part 1 of 2)
+Following competitive research (RoofIT, Bolster, Joby), Jacob asked to
+build everything achievable: real pie/donut charts (RoofStride had
+none — "PieChart" was only ever a Lucide nav icon, not an actual
+chart), and Good/Better/Best estimate packages with customer-toggleable
+upgrades that recalculate live, matching Bolster's self-service upsell
+model.
+
+**DonutChart** — new hoisted, reusable component, pure CSS
+conic-gradient, no charting library. Takes `data: [{label, value,
+color}]`, renders a ring + a legend with percentages, optional center
+value/label. A shared `DONUT_PALETTE` keeps colors consistent across
+every screen that uses it. Wired into two places: revenue-by-source
+(Calls & attribution screen, alongside the existing ranked table — the
+donut answers "roughly what share," the table still answers "exactly
+how much," deliberately keeping both) and job Financials (materials/
+labor/other/profit mix, right after the summary card).
+
+**Estimate data model — additive, not a rewrite.** `mkEstimate()` gained
+`tiers: []`, `selectedTier: null`, `upgrades: []`. Critically,
+`estimateTotal()` and every existing reader of `est.items` (financials,
+PDF/doc builder, commission calc, portal, contract linkage) is
+UNCHANGED — a job with no tiers configured (every existing job) behaves
+exactly as before. `applyEstimateSelection(est)` is the one new
+function that re-flattens the active tier's items + selected upgrades
+into `est.items` — called any time a tier or upgrade selection changes,
+via a `recompute(patch)` helper that merges the patch and re-flattens
+in the same update (no stale-total render).
+
+**Rep-side UI** in the Estimate tab: a "Packages" card with an opt-in
+toggle (off by default — flat estimates still work exactly as before
+for anyone who doesn't want tiers). Turning it on seeds three tiers
+(Good/Better/Best), pre-populating "Better" from whatever line items
+already existed so no work is lost, defaulting "Better" as active. Each
+tier reuses a newly-extracted `LineItemEditor` component (hoisted out
+of what used to be inline-only JSX in the flat Pricing card — same
+editor, no duplicated row markup across three tiers). A separate
+"Optional upgrades" card (desc/price/cost/checkbox rows) exists
+independent of whether tiers are on.
+
+**An important, deliberate distinction caught by testing, not assumed:**
+clicking a tier tab changes which tier the REP is viewing/editing —
+it must NOT silently change what the customer sees. Only clicking
+"Show customer this tier instead" actually changes `selectedTier` (and
+therefore the real total). build38's first attempt at this test
+assumed tab-click alone would change the total; it didn't, correctly,
+and the fix was to the test, not the component — worth remembering
+this distinction exists if this UI gets touched again.
+
+**Also caught via testing**: the whole checkbox-interaction pattern in
+this test suite (`cb.click()`) is new — no earlier suite in this
+project had ever simulated a checkbox toggle. Manually setting
+`.checked` + dispatching a bare `Event("change")` did NOT reliably
+trigger React's onChange in this jsdom setup; `.click()` (simulating a
+real user click, letting the browser/jsdom handle the native
+click→change sequence) is what actually works. Worth using `.click()`
+for any future checkbox tests, not manual property assignment.
+
+**NOT done yet — customer portal side.** The rep can build tiers and
+upgrades, but the actual customer-facing interactive selection (in the
+client portal, matching Bolster's "customer checks a box, price updates
+live, no phone call needed" model) is not built. That's the other half
+of what Jacob asked for and needs its own pass: a portal UI showing the
+three tiers as choosable cards + upgrade checkboxes, a new secure
+Supabase RPC (matching the migration-018 pattern: token-gated, scoped
+to ONLY writing tier/upgrade selection fields, nothing else on the
+job), and wiring the portal's read path to reflect whichever
+tier/upgrades the homeowner has chosen.
+
+All 38 suites pass.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.
