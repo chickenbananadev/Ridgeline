@@ -2310,6 +2310,25 @@ function generateRoofingMaterials(m) {
   ];
 }
 
+/* Total squares of material actually going on the roof — field shingles plus
+   ridge/hip cap and starter, each at three units per square (e.g. 5 cap
+   bundles = 1.66 sq, 2 starter = 0.66 sq, 66 shingle bundles = 22 sq → 24.3
+   sq). Returns the per-line breakdown and the total so the work order can show
+   its work, and so a sub's pay can be figured off installed squares. */
+const WO_COVERAGE_PER_UNIT = {
+  "Architectural shingles": 1 / 3,
+  "Hip & ridge cap": 1 / 3,
+  "Starter strip": 1 / 3,
+};
+function installedSquares(mats) {
+  if (!mats) return null;
+  const lines = mats
+    .map((x) => ({ item: x.item, qty: x.qty, unit: x.unit, sq: (WO_COVERAGE_PER_UNIT[x.item] || 0) * x.qty }))
+    .filter((l) => l.sq > 0);
+  const total = lines.reduce((a, l) => a + l.sq, 0);
+  return { lines, total: Math.round(total * 100) / 100 };
+}
+
 /* ================================================================
    AUTH ADAPTER
    When the app is deployed with Supabase credentials, src/main.jsx
@@ -13131,7 +13150,11 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
   const crew = crews.find((c) => c.id === job.crewId) || null;
   const m = job.measurements;
   const mats = generateRoofingMaterials(m);
+  const coverage = installedSquares(mats);
   const wo = job.workOrder || { number: "", sentAt: null, status: "Draft", notes: "" };
+  const setWo = (patch) => mut((j) => ({ ...j, workOrder: { ...(j.workOrder || {}), ...patch } }));
+  const chimney = wo.chimney || { size: "none", notes: "" };
+  const CHIMNEY_SIZES = [["none", "None"], ["small", "Small"], ["medium", "Medium"], ["large", "Large"], ["custom", "Custom"]];
 
   const assign = (c) => {
     mut((j) => ({ ...j, crewId: c.id }));
@@ -13205,13 +13228,82 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
         <KV k="Address" v={job.address} />
         <KV k="Customer phone" v={fmtPhone(job.phone)} />
         <KV k="Scheduled" v={job.schedDate || "Not scheduled"} />
-        <KV k="Squares" v={m.squares || "—"} />
+        <KV k="Measured squares" v={m.squares || "—"} />
+        <KV k="Installed squares" v={coverage ? `${coverage.total} sq` : "—"} />
         <KV k="Pitch" v={m.pitch || "—"} />
-        <KV k="Layers to remove" v={job.checklist.layers || "—"} />
+        <KV k="Stories" v={wo.stories || "—"} />
+        <KV k="Layers to remove" v={wo.layers || job.checklist.layers || "—"} />
+        <KV k="Steep / access" v={wo.steep ? "Steep — extra crew/staging" : "Standard"} />
+        <KV k="Chimney flashing" v={chimney.size === "none" ? "None" : `${chimney.size[0].toUpperCase()}${chimney.size.slice(1)}${chimney.notes ? ` — ${chimney.notes}` : ""}`} />
         <KV k="Decking" v={job.checklist.deckingType || "—"} />
         <a href={directionsLink(job.address)} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
           <Btn kind="ghost" small style={{ width: "100%", marginTop: 10 }}><MapPin size={13} /> Directions to site</Btn>
         </a>
+      </Card>
+
+      {coverage && coverage.lines.length > 0 && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={<Chip tone="blue">{coverage.total} sq</Chip>}>Installed coverage</CardTitle>
+          <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
+            Total squares of material going on the roof — field, cap and starter added up.
+          </div>
+          {coverage.lines.map((l, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+              <span style={{ fontSize: 13, color: S.ink }}>{l.item} <span style={{ color: S.sub }}>({l.qty} {l.unit})</span></span>
+              <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{Math.round(l.sq * 100) / 100} sq</span>
+            </div>
+          ))}
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 0 0", borderTop: `2px solid ${S.line}`, marginTop: 6 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 800, color: S.ink }}>Total installed</span>
+            <span style={{ fontSize: 14.5, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>{coverage.total} sq</span>
+          </div>
+        </Card>
+      )}
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Job conditions</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
+          What the crew is walking into — these also drive the sub's pay when a price sheet is on file.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <Field label="Stories">
+            <select style={selStyle} value={wo.stories || ""} onChange={(e) => setWo({ stories: e.target.value })}>
+              <option value="">—</option>
+              <option value="1">1 story</option>
+              <option value="2">2 story</option>
+              <option value="3+">3+ story</option>
+            </select>
+          </Field>
+          <Field label="Layers to remove">
+            <select style={selStyle} value={wo.layers || job.checklist.layers || ""} onChange={(e) => setWo({ layers: e.target.value })}>
+              <option value="">—</option>
+              <option value="1">1 layer</option>
+              <option value="2">2 layers</option>
+              <option value="3+">3+ layers</option>
+            </select>
+          </Field>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+          <Toggle on={!!wo.steep} onClick={() => setWo({ steep: !wo.steep })} />
+          <span style={{ fontSize: 13.5, color: S.ink }}>Steep pitch — extra crew, staging or roof jacks</span>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <Field label="Chimney flashing">
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {CHIMNEY_SIZES.map(([id, label]) => (
+                <button key={id} onClick={() => setWo({ chimney: { ...chimney, size: id } })} style={{
+                  border: `1.5px solid ${chimney.size === id ? T.accent : S.line}`,
+                  background: chimney.size === id ? T.accentSoft : "#fff", color: chimney.size === id ? T.accent : S.ink,
+                  borderRadius: 8, padding: "7px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                }}>{label}</button>
+              ))}
+            </div>
+          </Field>
+          {chimney.size !== "none" && (
+            <input style={{ ...inputStyle, marginTop: 8 }} placeholder="Chimney notes — size, condition, cricket needed…"
+              value={chimney.notes || ""} onChange={(e) => setWo({ chimney: { ...chimney, notes: e.target.value } })} />
+          )}
+        </div>
       </Card>
 
       <Card style={{ marginTop: 12 }}>

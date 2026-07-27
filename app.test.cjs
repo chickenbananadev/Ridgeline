@@ -2936,6 +2936,17 @@ function generateRoofingMaterials(m) {
     { item: "Cap nails", qty: Math.max(1, Math.ceil(sq / 30)), unit: "boxes", note: "underlayment fastening" }
   ];
 }
+var WO_COVERAGE_PER_UNIT = {
+  "Architectural shingles": 1 / 3,
+  "Hip & ridge cap": 1 / 3,
+  "Starter strip": 1 / 3
+};
+function installedSquares(mats) {
+  if (!mats) return null;
+  const lines = mats.map((x) => ({ item: x.item, qty: x.qty, unit: x.unit, sq: (WO_COVERAGE_PER_UNIT[x.item] || 0) * x.qty })).filter((l) => l.sq > 0);
+  const total = lines.reduce((a, l) => a + l.sq, 0);
+  return { lines, total: Math.round(total * 100) / 100 };
+}
 var AUTH = () => typeof window !== "undefined" ? window.__AUTH__ : null;
 var liveAuth = () => !!AUTH();
 var fromProfile = (row) => ({
@@ -14728,7 +14739,11 @@ function TabWorkOrder({ job, mut, toast: toast2, brand: brand2, crews, templates
   const crew2 = crews.find((c) => c.id === job.crewId) || null;
   const m = job.measurements;
   const mats = generateRoofingMaterials(m);
+  const coverage = installedSquares(mats);
   const wo = job.workOrder || { number: "", sentAt: null, status: "Draft", notes: "" };
+  const setWo = (patch) => mut((j) => ({ ...j, workOrder: { ...j.workOrder || {}, ...patch } }));
+  const chimney = wo.chimney || { size: "none", notes: "" };
+  const CHIMNEY_SIZES = [["none", "None"], ["small", "Small"], ["medium", "Medium"], ["large", "Large"], ["custom", "Custom"]];
   const assign = (c) => {
     mut((j) => ({ ...j, crewId: c.id }));
     setPicking(false);
@@ -14817,14 +14832,93 @@ function TabWorkOrder({ job, mut, toast: toast2, brand: brand2, crews, templates
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Address", v: job.address }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Customer phone", v: fmtPhone(job.phone) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Scheduled", v: job.schedDate || "Not scheduled" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Squares", v: m.squares || "\u2014" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Measured squares", v: m.squares || "\u2014" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Installed squares", v: coverage ? `${coverage.total} sq` : "\u2014" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Pitch", v: m.pitch || "\u2014" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Layers to remove", v: job.checklist.layers || "\u2014" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Stories", v: wo.stories || "\u2014" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Layers to remove", v: wo.layers || job.checklist.layers || "\u2014" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Steep / access", v: wo.steep ? "Steep \u2014 extra crew/staging" : "Standard" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Chimney flashing", v: chimney.size === "none" ? "None" : `${chimney.size[0].toUpperCase()}${chimney.size.slice(1)}${chimney.notes ? ` \u2014 ${chimney.notes}` : ""}` }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Decking", v: job.checklist.deckingType || "\u2014" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: directionsLink(job.address), target: "_blank", rel: "noreferrer", style: { textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { width: "100%", marginTop: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 13 }),
         " Directions to site"
       ] }) })
+    ] }),
+    coverage && coverage.lines.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
+        coverage.total,
+        " sq"
+      ] }), children: "Installed coverage" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }, children: "Total squares of material going on the roof \u2014 field, cap and starter added up." }),
+      coverage.lines.map((l, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: i ? `1px solid ${S.line}` : "none" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13, color: S.ink }, children: [
+          l.item,
+          " ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub }, children: [
+            "(",
+            l.qty,
+            " ",
+            l.unit,
+            ")"
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" }, children: [
+          Math.round(l.sq * 100) / 100,
+          " sq"
+        ] })
+      ] }, i)),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "9px 0 0", borderTop: `2px solid ${S.line}`, marginTop: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 800, color: S.ink }, children: "Total installed" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 14.5, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }, children: [
+          coverage.total,
+          " sq"
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Job conditions" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 10, lineHeight: 1.5 }, children: "What the crew is walking into \u2014 these also drive the sub's pay when a price sheet is on file." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Stories", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: wo.stories || "", onChange: (e) => setWo({ stories: e.target.value }), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "\u2014" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "1", children: "1 story" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "2", children: "2 story" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "3+", children: "3+ story" })
+        ] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Layers to remove", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: wo.layers || job.checklist.layers || "", onChange: (e) => setWo({ layers: e.target.value }), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "\u2014" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "1", children: "1 layer" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "2", children: "2 layers" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "3+", children: "3+ layers" })
+        ] }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, marginTop: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Toggle, { on: !!wo.steep, onClick: () => setWo({ steep: !wo.steep }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, color: S.ink }, children: "Steep pitch \u2014 extra crew, staging or roof jacks" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Chimney flashing", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: CHIMNEY_SIZES.map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setWo({ chimney: { ...chimney, size: id } }), style: {
+          border: `1.5px solid ${chimney.size === id ? T.accent : S.line}`,
+          background: chimney.size === id ? T.accentSoft : "#fff",
+          color: chimney.size === id ? T.accent : S.ink,
+          borderRadius: 8,
+          padding: "7px 12px",
+          fontSize: 13,
+          fontWeight: 700,
+          cursor: "pointer",
+          fontFamily: "inherit"
+        }, children: label }, id)) }) }),
+        chimney.size !== "none" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            style: { ...inputStyle, marginTop: 8 },
+            placeholder: "Chimney notes \u2014 size, condition, cricket needed\u2026",
+            value: chimney.notes || "",
+            onChange: (e) => setWo({ chimney: { ...chimney, notes: e.target.value } })
+          }
+        )
+      ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Scope of work" }),
