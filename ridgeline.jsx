@@ -11300,20 +11300,40 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
 
   const [tplSheet, setTplSheet] = useState(false);
   const [tplName, setTplName] = useState("");
+  /* Tier-aware. When packages are OFF this behaves exactly as it
+     always did (reads/writes est.items directly). When packages are
+     ON, "current lines" means whichever tier the rep is looking at
+     (tierTab) — saved/applied through setTierItems, which goes
+     through recompute() and actually persists. Applying a template
+     used to write straight to est.items regardless of tier state:
+     it looked like it worked for a moment, then silently vanished
+     the instant anything else (an upgrade toggle, a tier switch)
+     triggered a recompute, since recompute always rebuilds items
+     from tiers+upgrades from scratch — whatever applyTemplate had
+     just written was never part of that source data, so it was
+     discarded on the next unrelated change. This is what made it
+     look like "the template isn't working." */
+  const activeTierItems = () => (tiersOn ? (est.tiers.find((t) => t.id === tierTab)?.items || []) : est.items);
   const saveTemplate = () => {
     const name = tplName.trim();
-    if (!name || est.items.length === 0) return;
+    const items = activeTierItems();
+    if (!name || items.length === 0) return;
     setEstimateTemplates([
       ...estimateTemplates.filter((t) => t.name.toLowerCase() !== name.toLowerCase()),
-      { id: uid("etpl"), name, items: est.items.map(({ id, ...rest }) => rest) },
+      { id: uid("etpl"), name, items: items.map(({ id, ...rest }) => rest) },
     ]);
     setTplName(""); setTplSheet(false);
     toast(`Template "${name}" saved`);
   };
   const applyTemplate = (t) => {
-    setEst({ items: [...est.items, ...t.items.map((it) => ({ ...it, id: uid("e") }))] });
+    const newItems = t.items.map((it) => ({ ...it, id: uid("e") }));
+    if (tiersOn) {
+      setTierItems(tierTab, [...activeTierItems(), ...newItems]);
+    } else {
+      setEst({ items: [...est.items, ...newItems] });
+    }
     setTplSheet(false);
-    toast(`"${t.name}" added — ${t.items.length} lines`);
+    toast(`"${t.name}" added — ${t.items.length} lines${tiersOn ? ` to ${est.tiers.find((x) => x.id === tierTab)?.name || "this tier"}` : ""}`);
   };
 
   const doc = est.doc || { sections: ["cover", "items", "notes", "terms"], coverImage: null, notes: "", terms: "" };
@@ -11595,7 +11615,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
           <div style={{ display: "flex", gap: 8 }}>
             <input style={{ ...inputStyle, flex: 1 }} value={tplName} placeholder="Full replacement — architectural"
               onChange={(e) => setTplName(e.target.value)} />
-            <Btn onClick={saveTemplate} disabled={!tplName.trim() || est.items.length === 0}>Save</Btn>
+            <Btn onClick={saveTemplate} disabled={!tplName.trim() || activeTierItems().length === 0}>Save</Btn>
           </div>
         </Field>
         <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, margin: "14px 0 6px" }}>SAVED TEMPLATES</div>

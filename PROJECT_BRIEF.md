@@ -1166,6 +1166,47 @@ Worth checking this same pattern (defensive fallback for any
 NEW field on an OLD stored object) any time a similar constructor
 function gets extended in the future.
 
+## FIX: estimate templates silently discarded when Good/Better/Best packages are on
+Jacob reported "Estimate template isn't working." Reproduced it
+directly rather than guessing from reading code: saved a template,
+applied it (total genuinely changed — worked for a moment), then
+triggered ANY unrelated change (toggling an upgrade) and watched the
+total silently revert to what it was before the template was ever
+applied.
+
+**Root cause**: `applyTemplate` wrote straight to `est.items`
+regardless of tier state — a leftover from before this session's
+tiers/upgrades work. With packages OFF this is harmless (`est.items`
+is the real source of truth). With packages ON, `est.items` is instead
+a DERIVED value: `recompute()` rebuilds it from `tiers` + selected
+`upgrades` from scratch every time anything changes. Since the
+template's items were never written into the actual tier data, the
+very next recompute (an upgrade toggle, a tier switch, anything)
+regenerated `items` from the old tier data and silently threw away
+whatever `applyTemplate` had just added. Same root issue for
+`saveTemplate` — it always read the flattened `est.items`, which
+could be the wrong content or mismatched with what the rep was
+actually looking at (`tierTab`) once tiers were on.
+
+**Fixed**: both functions are now tier-aware via a shared
+`activeTierItems()` helper — off tiers, reads/writes `est.items`
+exactly as before; on tiers, reads/writes the currently-viewed tier's
+items through `setTierItems()`, which correctly flows through
+`recompute()` and actually persists. Also fixed the Save button's
+`disabled` check, which still referenced the old flattened
+`est.items.length` and could enable/disable incorrectly once tiers
+were on.
+
+**New build40**: reproduces the exact reported scenario end-to-end —
+save a template, enable packages, apply the template, trigger an
+unrelated recompute, and assert the template's items survive rather
+than silently reverting. Verified meaningful the same way as the
+last few fixes: reverted the fix, confirmed the test failed with the
+exact assertion naming the reverted code path, restored the fix,
+confirmed it passed again.
+
+All 40 suites pass.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.
