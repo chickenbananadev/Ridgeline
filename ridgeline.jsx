@@ -48,8 +48,8 @@ const DEFAULT_BRAND = {
   address: "",
   license: "",
   primary: "#20242A",
-  accent: "#1B6DE0",
-  accentSoft: "#EAF2FD",
+  accent: "#0A9E98",
+  accentSoft: "#E3F5F4",
   googleReviewLink: "",
 };
 
@@ -2299,7 +2299,7 @@ const S = { ink: "#111827", sub: "#6B7280", line: "#E5E7EB", bg: "#F7F8FA", soft
 /* Live theme. The root component copies brand colors in on every render,
    and because inline styles read these properties at render time, a color
    change in Branding repaints the whole app immediately. */
-const T = { primary: "#28373E", accent: "#1B6DE0", accentSoft: "#EAF2FD" };
+const T = { primary: "#20242A", accent: "#0A9E98", accentSoft: "#E3F5F4" };
 function softOf(hex) {
   try {
     const n = parseInt(hex.slice(1), 16);
@@ -3025,11 +3025,11 @@ function Login({ brand, users, onLogin, initialMode = "login", onBackToMarketing
             <form onSubmit={(e) => { e.preventDefault(); submit(); }}>
             <Field label="Email">
               <input style={inputStyle} type="email" name="email" id="ridgeline-email" autoComplete="username" autoCapitalize="none" autoCorrect="off" value={email}
-                onChange={(e) => setEmail(e.target.value)} placeholder="you@supremebuildinggroup.com" />
+                onChange={(e) => setEmail(e.target.value)} placeholder="you@yourcompany.com" />
             </Field>
             <Field label="Password">
               <input style={inputStyle} type="password" name="password" id="ridgeline-password" autoComplete="current-password" value={pw}
-                onChange={(e) => setPw(e.target.value)} placeholder="Enter your password"
+                onChange={(e) => setPw(e.target.value)} placeholder="Password"
                 onKeyDown={(e) => { if (e.key === "Enter" && live && email && pw) submit(); }} />
             </Field>
             {err && <Callout label="Sign-in failed" tone="red">{err}</Callout>}
@@ -7385,7 +7385,7 @@ const SIGNATURE_FONTS = [
 
 /* Named distinctly from the older SignaturePad sheet above, which is a
    modal used for work-order sign-off. This one is an inline field. */
-function SignatureField({ label = "Sign here", value, onChange, accent = "#1B6DE0" }) {
+function SignatureField({ label = "Sign here", value, onChange, accent = "#0A9E98" }) {
   const [mode, setMode] = useState("draw");
   const [typed, setTyped] = useState("");
   const [font, setFont] = useState(SIGNATURE_FONTS[0][0]);
@@ -7541,7 +7541,7 @@ function SignatureMark({ sig, height = 54 }) {
 /* The consent and intent block. Wording matters here: ESIGN requires
    the signer to affirmatively agree to transact electronically, and
    intent has to be demonstrable rather than assumed from a click. */
-function SignConsent({ checked, onChange, what, accent = "#1B6DE0" }) {
+function SignConsent({ checked, onChange, what, accent = "#0A9E98" }) {
   return (
     <label style={{
       display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer",
@@ -16412,7 +16412,7 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
         {connecting === "gmail" ? (
           <>
             <Field label="Your email address" hint="The mailbox your customer emails should send from and receive replies to.">
-              <input style={inputStyle} type="email" value={addr} onChange={(e) => setAddr(e.target.value)} placeholder={currentUser.email || "you@supremebuildinggroup.com"} />
+              <input style={inputStyle} type="email" value={addr} onChange={(e) => setAddr(e.target.value)} placeholder={currentUser.email || "email@yourcompany.com"} />
             </Field>
             <Callout label="This records the account only">
               The real Google sign-in runs server-side once the OAuth function is deployed. This saves which account
@@ -18709,7 +18709,7 @@ export default function SupremeCRM() {
 
   /* Copy brand colors into the live theme before anything renders. */
   T.primary = brand.primary || "#28373E";
-  T.accent = brand.accent || "#1B6DE0";
+  T.accent = brand.accent || "#0A9E98";
   T.accentSoft = brand.accentSoft && brand.accentSoftCustom ? brand.accentSoft : softOf(T.accent);
 
   /* Read the seat's CompanyCam token once signed in. Failure is silent

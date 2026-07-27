@@ -488,6 +488,45 @@ the app now correctly behaves exactly as it did before any of this
 session's multi-tenancy changes — functional, just not yet
 tenant-isolated.
 
+## Pre-auth branding + generic placeholders fixed (this session)
+Jacob's screenshots of the real deployed login/signup screen showed
+two things: buttons rendering blue instead of RoofStride's teal, and
+the email placeholder still showing "you@supremebuildinggroup.com" —
+Jacob's own literal domain, hardcoded on the screen every new company
+sees when signing up.
+
+**Root cause of the color, same class of bug as the crm_brand/crm_org
+fixes**: `DEFAULT_BRAND.accent` was `#1B6DE0` (an arbitrary blue), and
+every `<Btn kind="primary">` (Sign in, Start free trial, etc.) reads
+its color from `T.accent`, which derives from `brand.accent` — pre-auth,
+`brand` is always `DEFAULT_BRAND`, so buttons never actually got
+RoofStride's real teal. Fixed by changing `DEFAULT_BRAND.accent` to
+`#0A9E98` (the real teal) and `primary` to `#20242A` (the real
+charcoal) — this ALSO means a brand-new tenant's un-customized starting
+point is now RoofStride's own professional color scheme rather than an
+arbitrary blue, until they set their own in Company Branding.
+`accentSoft` (light pill-highlight tint) auto-derives from `accent` via
+`softOf()`, so no separate change was needed there. Also updated the
+matching defensive fallbacks: the bootstrap `T` constant, `T.accent =
+brand.accent || "#1B6DE0"`, and two component default props
+(`SignatureField`, `SignConsent`) — all now default to teal instead of
+blue. Left the AV/AV_COLORS avatar palettes alone — coincidentally
+reuses the same old blue hex as one of several DISTINCT avatar colors,
+unrelated to branding.
+
+**Placeholders**: login screen's email field said
+"you@supremebuildinggroup.com" (Jacob's own domain) and password said
+"Enter your password" — both hardcoded, both shown to every new
+company on the one screen where they're deciding whether to sign up.
+Now: email placeholder matches the signup form's existing wording
+("you@yourcompany.com"), password is just "Password". Also fixed a
+third occurrence in a settings-screen fallback placeholder.
+
+build33: asserts the actual rendered Sign-in button's color
+(`rgb(10, 158, 152)`), both placeholders' literal values, and that the
+avatar palette (a legitimate, unrelated reuse of the old hex) wasn't
+accidentally touched.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.
