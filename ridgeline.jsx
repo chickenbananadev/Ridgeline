@@ -11229,7 +11229,17 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item" })
 }
 
 function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {} }) {
-  const est = job.estimate;
+  /* job.estimate for any REAL job created before tiers/upgrades
+     existed has neither field at all (undefined, not []) — this
+     JSONB blob is exactly what was last saved, and mkEstimate()'s
+     defaults only apply to brand-new estimates, never to what's
+     already stored. Every read of est.tiers/est.upgrades below this
+     line assumed an array and crashed on undefined for any existing
+     job, which is what actually caused the Estimate section to get
+     stuck mid-render instead of opening. Normalizing once here means
+     every one of those reads becomes safe without having to find and
+     patch each individual call site. */
+  const est = { ...job.estimate, tiers: job.estimate.tiers || [], upgrades: job.estimate.upgrades || [] };
   const [sigOpen, setSigOpen] = useState(false);
   const locked = est.status === "Signed";
   const setEst = (patch) => mut((j) => ({ ...j, estimate: { ...j.estimate, ...patch } }));

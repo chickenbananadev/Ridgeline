@@ -1118,6 +1118,54 @@ tier/upgrades the homeowner has chosen.
 
 All 38 suites pass.
 
+## CRITICAL FIX — Estimate tab crashed for every real existing job (this session)
+Jacob reported "Estimates is opening" then, once narrowed down: stuck
+on a loading/opening state that never finished. Real, severe bug in
+the tier/upgrade work from the previous message.
+
+**Root cause**: `mkEstimate()` gained `tiers: []`, `selectedTier: null`,
+`upgrades: []` as defaults — but those defaults only apply when
+`mkEstimate()` actually RUNS, i.e. for a brand-new estimate. Any REAL
+job already sitting in the live database was created before this
+session ever added those fields — its stored `estimate` JSONB blob
+has neither key at all. `job.estimate.tiers` for that job is
+`undefined`, not `[]`. `TabEstimate` read `est.tiers.length` directly
+(and `.map()`, `.filter()` on `est.upgrades` similarly) with no
+fallback — `undefined.length` throws, crashing the component the
+instant anyone opened the Estimate tab on any existing job. Every
+demo/seed job in the test suite is built fresh from the CURRENT
+`mkEstimate()` on every run, so it always has the new fields and could
+never have surfaced this — the bug only exists for data shaped like
+production reality, not data shaped like the current source file.
+
+**Fixed** with a single normalization at the top of `TabEstimate`:
+`const est = { ...job.estimate, tiers: job.estimate.tiers || [],
+upgrades: job.estimate.upgrades || [] };` — every existing read of
+`est.tiers`/`est.upgrades` elsewhere in the component becomes safe
+automatically, without needing to hunt down and patch each individual
+call site.
+
+**New build39, self-contained**: generates its own "legacy data"
+bundle at test run time — copies the real source, strips the
+tiers/upgrades/selectedTier defaults out of `mkEstimate` specifically
+(simulating exactly what a real stored job looks like), bundles it,
+renders it, and opens the Estimate tab. Verified this genuinely catches
+the bug: built a second copy with BOTH the missing defaults AND the
+fix reverted, confirmed it throws the exact same `Cannot read
+properties of undefined (reading 'length')` crash at `TabEstimate`
+before restoring the real fix and confirming the test passes again.
+Cleans up its own generated temp files on the way out.
+
+**A process lesson worth remembering**: any time a field is added to a
+data model with a default via a constructor-like function
+(`mkEstimate`, and the same applies to `mkContract` or similar), that
+default is invisible to every already-stored real record. Testing
+against fresh seed data can never catch this class of bug — it has to
+be tested against data shaped like what's actually already saved.
+Worth checking this same pattern (defensive fallback for any
+NEW field on an OLD stored object) any time a similar constructor
+function gets extended in the future.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.
