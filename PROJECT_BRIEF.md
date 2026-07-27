@@ -596,6 +596,42 @@ touching useBrandSync or useDbSync again: any fallback added for
 resilience needs its OWN explicit session/auth gate, not just a
 comment saying it's already covered.
 
+## Direct Supabase MCP access confirmed working (this session)
+Claude now has a live Supabase MCP connector (project: "Ridgeline - SBG",
+id `wkvcsgzlsdidysoyzcwm`) — can query/modify the actual database
+directly, not just edit migration files for Jacob to paste in. Confirmed
+via Supabase's own migration ledger that **migrations 002 through 020
+are ALL already applied** — that other Cowork session's direct DB
+access had already run everything, including 015/016/017 (multi-
+tenancy) and 018/019/020 (portal + profiles security fixes). Verified
+this isn't just a ledger entry: pulled the live `pg_policies` rows for
+crm_portal/crm_portal_msgs/profiles directly and confirmed the old
+vulnerable policies are actually gone and the new ones match the
+migration files exactly.
+
+## Legacy schema.sql tables dropped from the live database (this session)
+`supabase/schema.sql` was the ORIGINAL schema, before the app moved to
+crm_* jsonb-blob tables at migration 002. It defined 10 tables:
+`profiles` (still genuinely live, evolved through migrations 005/015/
+020) and 9 others — `stages`, `jobs`, `job_photos`, `job_tasks`,
+`job_files`, `job_cost_lines`, `job_reimbursements`, `job_payments`,
+`company_settings` — that migration 002's own comment already called
+out as superseded ("the app now reads/writes crm_*").
+
+Confirmed zero references to any of the 9 anywhere in `ridgeline.jsx`,
+`src/main.jsx`, or any `supabase/functions/*` before touching anything.
+Dropped via `apply_migration` (`drop_legacy_normalized_tables`), all 9
+with `cascade` to cleanly resolve their FK relationships to each other
+(job_photos/job_tasks/etc. → jobs → stages). `profiles` and every
+`crm_*`/`tenants` table confirmed untouched afterward — `profiles` still
+shows its original 4 rows.
+
+`schema.sql` itself is left in the repo but now has a prominent
+"HISTORICAL / DO NOT RUN" header — running it again would recreate the
+9 dropped tables as empty, orphaned, still-unused tables. `profiles`'
+definition in that file is also stale (superseded by migrations since);
+never treat schema.sql as the source of truth for it.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.

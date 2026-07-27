@@ -1,4 +1,24 @@
 -- ============================================================
+-- ⚠️ HISTORICAL / DO NOT RUN — kept for reference only.
+--
+-- This is the ORIGINAL schema, before the app moved to the crm_*
+-- jsonb-blob tables starting at migration 002. Of the 10 tables
+-- defined below, 9 (stages, jobs, job_photos, job_tasks, job_files,
+-- job_cost_lines, job_reimbursements, job_payments,
+-- company_settings) were confirmed unused anywhere in the app or
+-- Edge Functions and were DROPPED from the live database on
+-- 2026-07-27. Running this file again would recreate them as empty,
+-- orphaned tables the app still would not use.
+--
+-- `profiles` (the one table here still genuinely live) is NOT
+-- affected — it has continued to evolve through migrations 005,
+-- 015, and 020 since this file was written, and this file's version
+-- of it is stale. Never run this file to "set up" profiles; the
+-- current, correct definition only exists as the sum of every
+-- migration that has touched it since.
+-- ============================================================
+
+-- ============================================================
 -- RIDGELINE — Supabase schema + Row Level Security
 -- Paste into: Supabase dashboard -> SQL Editor -> New query -> Run
 -- Safe to re-run; drops and recreates policies.
