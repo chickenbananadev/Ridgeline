@@ -992,6 +992,61 @@ content), not a duplicate. Left unwired anywhere since Jacob's message
 only asked about "these 6 images" for the STRIDE section — flagged to
 him in case he wants it used somewhere.
 
+## Motion "very late" bug — a mistake in my own previous fix (this session)
+Jacob confirmed the earlier top/bottom-edge fix wasn't enough — STRIDE
+specifically still revealed very late. Found a real bug in my own
+prior formula: `entry = 1 - r.top / (vh * K)` is mathematically
+anchored so entry can only reach 1 once `r.top` hits exactly 0 — the
+element's top edge at the literal top of the screen — no matter what K
+was set to. That's much too late: readers look at the middle of their
+screen, not the top edge, so content stayed dim through the entire
+time it was comfortably in view. Rewritten so entry reaches 1 once the
+top edge has scrolled up to roughly the MIDDLE of the viewport, not
+the top — full brightness while still comfortably centered on screen.
+
+## CRITICAL: my own screenshot regeneration was putting Jacob's real name back (this session)
+Jacob caught this directly: multiple marketing screenshots showed his
+real name and other real Supreme reps. Root cause, found immediately:
+every one of my capture scripts this session logged into the demo
+account picker via `clickText("Jacob Henderson")` — the real owner's
+real name, since **all four demo accounts in SEED_USERS are real
+people** (Jacob Henderson, Drew Klass, Stephen Klein, Steven
+Tatgenhorst — real Supreme Building Group staff, per the top of this
+brief). There is no generic demo account in the app at all. An earlier
+screenshot (from a prior "sanitize marketing screenshots" pass, not
+mine) showed "Welcome back, Alex" — meaning that fix used a temporary
+scratch rename, the same technique this fix now uses properly. Every
+regeneration I did in between undid that, since I never renamed
+anything, just logged in as the real account.
+
+**Fixed properly this time**: in the scratch copy only (never the real
+seedJobs/SEED_USERS Jacob's team actually uses), globally replaced all
+four real names, their real emails, and Jacob's real phone number with
+clearly fake equivalents (Jacob Henderson → Alex Rivera, Drew Klass →
+Jordan Blake, Stephen Klein → Sam Whitfield, Steven Tatgenhorst →
+Casey Nguyen; emails matching; phone → (555) 010-0147, the standard
+fictional-number prefix). Confirmed zero occurrences of any real name/
+email/phone remained in the scratch copy before capturing anything.
+Re-applied the fuller job/crew data from the last round on TOP of this
+sanitized base (both fixes needed to land in the same pass, or the
+fuller-data improvement would be lost). Verified in the captured HTML
+before shipping: `grep -l` for any real name across all 6 capture
+files returned zero matches; dashboard greeting confirmed reading
+"Welcome back, Alex".
+
+**A process gap worth being explicit about going forward**: any future
+screenshot regeneration MUST do this same name/email/phone
+substitution in the scratch copy before capturing — logging in as any
+of the real SEED_USERS accounts by name, even in an isolated scratch
+copy, puts real people's names in public marketing images. This should
+be step one of the capture process from now on, not an afterthought.
+
+Real repo's source (`ridgeline.jsx`'s SEED_USERS, seedJobs, etc.) is
+untouched by this — those correctly keep the real names, since that's
+what Jacob's own team actually needs for real demo/training use.
+Confirmed via `git diff` that the only ridgeline.jsx change this round
+is the motion-timing fix; the 5 changed PNGs are the only other diff.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.

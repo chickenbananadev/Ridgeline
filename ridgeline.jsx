@@ -2706,20 +2706,22 @@ function mktMotionTick() {
   MKT_MOTION.els.forEach((el) => {
     const r = el.getBoundingClientRect();
     /* Entry and exit tracked from separate edges, not the element's
-       own vertical center. This is the actual bug behind "doesn't
-       brighten until you're well past the section": a stacked mobile
-       row (headline + body + a full phone screenshot below it) is
-       often much taller than the viewport itself. Waiting for a tall
-       element's own CENTER to reach the viewport's middle means the
-       headline — near the element's top — has long since scrolled up
-       and out of view by the time that condition is met, so the text
-       stayed faded through the entire time it was actually readable.
-       Entry now tracks the TOP edge (brightens once the top has
-       scrolled up into the view enough, regardless of how tall the
-       rest of the element is); exit tracks the BOTTOM edge separately
-       (only starts fading once the bottom is genuinely about to
-       leave through the top of the screen). */
-    let entry = 1 - r.top / (vh * 0.55);
+       own vertical center (a tall stacked mobile row can be taller
+       than the viewport, so its own center never lines up with when
+       the top content is actually visible — see the note this
+       replaced, still true). But the first version of this fix had
+       its own bug: `1 - r.top / (vh * K)` is mathematically anchored
+       so entry only reaches 1 once r.top hits exactly 0 — the
+       element's top edge at the very TOP of the screen — no matter
+       what K is. That's much too late for a natural reveal: readers
+       look at the middle of their screen, not the top edge, so
+       content stayed dim through the whole time it was comfortably
+       in view. Rewritten so entry reaches 1 once the top has scrolled
+       up to roughly the vertical middle of the viewport, not the
+       very top — full brightness while it's still centered on
+       screen, the way it actually reads as "revealed." */
+    const entryDoneAt = vh * 0.5;   // top edge at the viewport's middle = fully revealed
+    let entry = (vh - r.top) / (vh - entryDoneAt);
     entry = Math.max(0, Math.min(1, entry));
     let exit = 1 - r.bottom / (vh * 0.35);
     exit = Math.max(0, Math.min(1, exit));
