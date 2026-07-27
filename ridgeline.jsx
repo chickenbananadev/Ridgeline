@@ -1276,6 +1276,7 @@ const PORTAL_SECTIONS = [
   ["sign", "Documents to sign"],
   ["requests", "Quotes & future projects"],
   ["messages", "Messages"],
+  ["review", "Rate your experience"],
   ["yourinfo", "Your contact details"],
   ["contact", "Questions?"],
 ];
@@ -1295,14 +1296,14 @@ const DEFAULT_PORTAL_SETTINGS = {
   /* Every section is switchable, not just the document ones. A company
      that does not want a tracker or a messaging thread in front of its
      customers can turn them off. */
-  tracker: true, updates: true, messages: true, yourinfo: true, contact: true, requests: true, sign: true,
+  tracker: true, updates: true, messages: true, yourinfo: true, contact: true, requests: true, sign: true, review: true,
 };
 /* Section id -> settings key. Most match by name; the ones that predate
    the registry keep their original keys so saved jobs are unaffected. */
 const PORTAL_SECTION_KEY = {
   tracker: "tracker", rep: "showRep", updates: "updates", estimate: "estimate",
   contract: "contract", invoice: "invoice", documents: "documents", photos: "photos",
-  requests: "requests", messages: "messages", yourinfo: "yourinfo", contact: "contact", sign: "sign",
+  requests: "requests", messages: "messages", yourinfo: "yourinfo", contact: "contact", sign: "sign", review: "review",
 };
 function portalSectionOn(portal, sid) {
   const key = PORTAL_SECTION_KEY[sid];
@@ -6753,7 +6754,8 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
   };
   const cap = computeCapOut(job);
   const pay = paymentsSummary(job);
-  const canReview = (job.consent.sms.granted || job.consent.email.granted) && !job.review.sent;
+  const rv = job.review || {};
+  const hasConsent = job.consent.sms.granted || job.consent.email.granted;
   return (
     <>
       <Card style={{ marginBottom: 12 }}>
@@ -7061,23 +7063,42 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={
-          job.review.posted ? <Chip tone="green">Review posted</Chip> :
-          job.review.sent ? <Chip tone="blue">Request sent</Chip> : null
+          rv.posted ? <Chip tone="green">Review posted</Chip> :
+          rv.rating >= 4 ? <Chip tone="green">{rv.rating}★ — happy</Chip> :
+          rv.rating ? <Chip tone="amber">{rv.rating}★ — recover</Chip> :
+          rv.sent ? <Chip tone="blue">Request sent</Chip> : null
         }>Review request</CardTitle>
-        <div style={{ fontSize: 13, color: S.sub, marginBottom: 12 }}>
-          {job.review.sent
-            ? `Google review request sent${job.review.clicked ? " and the link was opened" : ""}.`
-            : job.consent.sms.granted || job.consent.email.granted
-              ? `Sends the Google review link by ${[job.consent.sms.granted && "text", job.consent.email.granted && "email"].filter(Boolean).join(" and ")} (consent on file). Follow-up after ${reviewSettings.followUpDays} days if no click.`
-              : "No SMS or email consent on file — review requests are blocked for this client."}
+        {/* Feedback funnel: the customer rates first. 4–5★ routes to a public
+            Google review; 1–3★ is captured privately for the team so it never
+            lands on Google. The send is always available. */}
+        <div style={{ fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.55 }}>
+          {rv.feedback
+            ? `Private feedback (${rv.rating || "—"}★): "${rv.feedback}"`
+            : rv.rating >= 4
+              ? `Rated ${rv.rating}★ — routed to a public Google review${rv.posted ? " (posted)" : ""}.`
+              : rv.sent
+                ? "Request sent — waiting on the customer to rate in their portal."
+                : "Sends the customer to a quick “How did we do?” rating in their portal — happy customers to Google, unhappy to a private note for you."}
         </div>
-        <Btn small kind={canReview ? "primary" : "ghost"} disabled={!canReview}
-          onClick={() => {
-            mut((j) => ({ ...j, review: { ...j.review, sent: true } }));
-            toast("Review request queued");
-          }}>
-          <Star size={14} /> Send review request
-        </Btn>
+        {!hasConsent && !rv.sent && (
+          <div style={{ fontSize: 12, color: "#92600A", marginBottom: 10 }}>
+            No SMS or email consent on file — send it by hand, or capture consent first.
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Btn small kind="primary"
+            onClick={() => {
+              mut((j) => ({ ...j, review: { ...(j.review || {}), sent: true, sentAt: todayIso() } }));
+              toast(rv.sent ? "Review request re-sent" : "Review request sent");
+            }}>
+            <Star size={14} /> {rv.sent ? "Re-send request" : "Send review request"}
+          </Btn>
+          {rv.rating >= 4 && !rv.posted && brand.googleReviewLink && (
+            <Btn small kind="ghost" onClick={() => mut((j) => ({ ...j, review: { ...(j.review || {}), posted: true } }))}>
+              Mark posted
+            </Btn>
+          )}
+        </div>
       </Card>
     </>
   );
@@ -7588,6 +7609,100 @@ function PortalTracker({ step = 0, accent = T.accent, compact = false }) {
   );
 }
 
+/* Customer-facing review funnel. The homeowner rates first; 4–5 stars are
+   routed to a public Google review, 1–3 land as private feedback for the
+   team (via crm_portal_requests) and — when gating is on — never see the
+   Google link. Degrades gracefully with no database: the happy path still
+   opens Google, the private path just thanks them. */
+function PortalReview({ token, jobId, review, accent, company }) {
+  const [rating, setRating] = useState(0);
+  const [hover, setHover] = useState(0);
+  const [text, setText] = useState("");
+  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const db = DB();
+  const link = (review && review.googleLink) || "";
+  const gate = review ? review.gateNegative !== false : true;
+  const happy = rating >= 4;
+
+  const log = async () => {
+    if (!db || !token) return;
+    const row = {
+      id: uid("rev"), token, job_id: jobId, request_type: "review_feedback",
+      category: `Rated ${rating}★`, details: text.trim() || (happy ? "Positive rating" : ""),
+      status: "New", requested_by: "Customer",
+    };
+    try { await db.from("crm_portal_requests").insert(row); } catch (e) { /* non-fatal */ }
+  };
+  const finishHappy = async () => { setBusy(true); await log(); setBusy(false); setDone(true); if (link) window.open(link, "_blank", "noopener"); };
+  const finishUnhappy = async () => { if (!text.trim()) return; setBusy(true); await log(); setBusy(false); setDone(true); };
+
+  if (review && review.submitted && !done) {
+    return (
+      <Card>
+        <CardTitle>Rate your experience</CardTitle>
+        <div style={{ fontSize: 14, lineHeight: 1.6, color: S.sub }}>
+          You rated us {review.rating}★ — thank you for the feedback.
+        </div>
+      </Card>
+    );
+  }
+  if (done) {
+    return (
+      <Card>
+        <CardTitle>Thank you</CardTitle>
+        <div style={{ fontSize: 14, lineHeight: 1.6, color: S.sub }}>
+          {happy
+            ? (link ? "Thanks so much — your review page should have opened in a new tab." : "Thanks so much for the kind words!")
+            : `Thank you for being honest with us. Someone from ${company || "our team"} will reach out.`}
+        </div>
+      </Card>
+    );
+  }
+  return (
+    <Card>
+      <CardTitle>Rate your experience</CardTitle>
+      <div style={{ fontSize: 14, color: S.sub, marginBottom: 12 }}>How did we do?</div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button key={n} onClick={() => setRating(n)} onMouseEnter={() => setHover(n)} onMouseLeave={() => setHover(0)}
+            aria-label={`${n} star${n > 1 ? "s" : ""}`} style={{ border: "none", background: "none", cursor: "pointer", padding: 2 }}>
+            <Star size={30} color={(hover || rating) >= n ? "#E8B931" : "#D3D8DE"} fill={(hover || rating) >= n ? "#E8B931" : "none"} />
+          </button>
+        ))}
+      </div>
+      {rating > 0 && happy && (
+        <>
+          <div style={{ fontSize: 14, lineHeight: 1.6, marginBottom: 12 }}>
+            Wonderful — thank you! Would you mind sharing it publicly? It genuinely helps.
+          </div>
+          <Btn onClick={finishHappy} disabled={busy} style={{ background: accent, borderColor: accent }}>
+            {link ? "Leave a Google review" : "Submit rating"}
+          </Btn>
+        </>
+      )}
+      {rating > 0 && !happy && (
+        <>
+          <div style={{ fontSize: 14, lineHeight: 1.6, marginBottom: 10 }}>
+            We’re sorry we fell short. Tell us what happened — this goes straight to the team, privately.
+          </div>
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4}
+            placeholder="What could we have done better?"
+            style={{ ...inputStyle, width: "100%", minHeight: 90, marginBottom: 10 }} />
+          <Btn onClick={finishUnhappy} disabled={busy || !text.trim()} style={{ background: accent, borderColor: accent }}>
+            Send private feedback
+          </Btn>
+          {!gate && link && (
+            <div style={{ marginTop: 10, fontSize: 12.5 }}>
+              <a href={link} target="_blank" rel="noreferrer" style={{ color: accent }}>Or leave a public review anyway →</a>
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
 function PortalRequestCenter({ token, jobId, role, customerName, accent, allowQuoteChanges = true, allowAddOns = true }) {
   const [requests, setRequests] = useState([]);
   const [kind, setKind] = useState("quote_change");
@@ -7770,6 +7885,12 @@ function buildPortalSnapshot(job, brand, token) {
       estimate: portal.estimate ? { number: job.estimate.number, date: job.estimate.date, total: estimateTotal(job.estimate), items: job.estimate.items } : null,
       contract: portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
       invoice: portal.invoice ? { contract: pay.contract, received: pay.received, balance: pay.balance } : null,
+      review: portal.review !== false ? {
+        googleLink: brand.googleReviewLink || "",
+        gateNegative: brand.gateNegativeReviews === true,
+        rating: (job.review || {}).rating || null,
+        submitted: !!(job.review || {}).rating,
+      } : null,
       schedDate: job.schedDate || null,
       updatedAt: new Date().toISOString(),
     },
@@ -8463,6 +8584,10 @@ function PublicPortal({ token }) {
               <PortalThread token={token} meRole="customer" meName={d.name} accent={prim} />
             </Card>
           );
+
+          if (sid === "review") return d.review ? wrap(
+            <PortalReview token={token} jobId={d.jobId || null} review={d.review} accent={prim} company={d.company} />
+          ) : null;
 
           if (sid === "sign") return wrap(
             <PortalSignCenter token={token} jobId={d.jobId || null} customer={d.customer || {}}
@@ -14632,15 +14757,14 @@ function Toggle({ on, onClick }) {
    sequence rather than one message, sentiment captured before the ask,
    and every customer tracked through the funnel.
 
-   One deliberate departure. Those tools became known for "review
-   gating" — asking how it went, then routing only the happy customers
-   to Google and diverting the unhappy ones to a private form. Google
-   prohibits it outright and the FTC treats it as a deceptive practice;
-   both vendors have had to walk it back. So this asks for sentiment
-   because it is genuinely useful — an unhappy customer should hear
-   from a human before anything else happens — but the public review
-   link is offered to everyone. What sentiment changes is the timing
-   and who gets told, never whether the customer is allowed to review.
+   Sentiment is captured first because it is genuinely useful — an
+   unhappy customer should hear from a human before anything else. By
+   default the public review link is still offered to everyone; sentiment
+   changes timing and who gets a call, not eligibility. Whether to go
+   further and withhold the public link from unhappy customers ("review
+   gating") is a per-company switch (brand.gateNegativeReviews, default
+   off), because Google prohibits it and the FTC treats suppressing
+   negative reviews as deceptive — see the warning by that toggle.
 ================================================================== */
 const REVIEW_STEPS = [
   { id: "ask", delay: 1, channel: "sms",
@@ -14828,15 +14952,29 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
         <Field label="BBB profile link">
           <input style={inputStyle} value={settings.bbbLink || ""} onChange={(e) => set("bbbLink")(e.target.value)} />
         </Field>
-        <Callout label="A word on review gating" tone="amber">
-          NiceJob and Birdeye became known for asking how it went and then
-          only sending happy customers to Google. Google prohibits that
-          outright and the FTC treats it as deceptive — both vendors have had
-          to walk it back. So the rating here changes <b>timing</b> and who
-          gets a phone call, never whether someone is allowed to review. It is
-          also simply better business: a fixed complaint often becomes the
-          most convincing review you own.
-        </Callout>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, borderTop: `1px solid ${S.line}`, paddingTop: 14, marginTop: 4 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>Only send happy customers to Google</div>
+            <div style={{ fontSize: 13, color: S.sub, marginTop: 3, lineHeight: 1.5 }}>
+              When on, customers who rate 1–3★ in their portal are routed only to a
+              private feedback form and never shown the public Google link. When off,
+              everyone can still choose to leave a public review; unhappy customers are
+              simply invited to tell you privately first.
+            </div>
+          </div>
+          <Toggle on={brand.gateNegativeReviews === true}
+            onClick={() => setBrandFromReviews && setBrandFromReviews({ ...brand, gateNegativeReviews: !(brand.gateNegativeReviews === true) })} />
+        </div>
+        {brand.gateNegativeReviews === true && (
+          <Callout label="Heads up — this is review gating" tone="red">
+            Google's review policies prohibit soliciting reviews only from customers
+            you expect to be positive, and the FTC treats suppressing negative reviews
+            as a deceptive practice — it can get reviews removed or your Business
+            Profile penalized. Asking for feedback first is fine and good business;
+            hiding the public link from unhappy customers is the part that carries risk.
+            Leave this off unless you understand that trade-off.
+          </Callout>
+        )}
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="blue">{completed.length} completed</Chip>}>Review requests</CardTitle>

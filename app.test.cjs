@@ -1641,6 +1641,7 @@ var PORTAL_SECTIONS = [
   ["sign", "Documents to sign"],
   ["requests", "Quotes & future projects"],
   ["messages", "Messages"],
+  ["review", "Rate your experience"],
   ["yourinfo", "Your contact details"],
   ["contact", "Questions?"]
 ];
@@ -1671,7 +1672,8 @@ var DEFAULT_PORTAL_SETTINGS = {
   yourinfo: true,
   contact: true,
   requests: true,
-  sign: true
+  sign: true,
+  review: true
 };
 var PORTAL_SECTION_KEY = {
   tracker: "tracker",
@@ -1686,7 +1688,8 @@ var PORTAL_SECTION_KEY = {
   messages: "messages",
   yourinfo: "yourinfo",
   contact: "contact",
-  sign: "sign"
+  sign: "sign",
+  review: "review"
 };
 function portalSectionOn(portal, sid) {
   const key = PORTAL_SECTION_KEY[sid];
@@ -8160,7 +8163,8 @@ function TabOverview({ job, juris, mut, toast: toast2, reviewSettings, brand: br
   };
   const cap = computeCapOut(job);
   const pay = paymentsSummary(job);
-  const canReview = (job.consent.sms.granted || job.consent.email.granted) && !job.review.sent;
+  const rv = job.review || {};
+  const hasConsent = job.consent.sms.granted || job.consent.email.granted;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Lead details" }),
@@ -8468,24 +8472,34 @@ function TabOverview({ job, juris, mut, toast: toast2, reviewSettings, brand: br
       cap.contract > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Gross profit", v: `${money(cap.gross)} (${pct1(cap.grossMargin)})` })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: job.review.posted ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Review posted" }) : job.review.sent ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "Request sent" }) : null, children: "Review request" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 12 }, children: job.review.sent ? `Google review request sent${job.review.clicked ? " and the link was opened" : ""}.` : job.consent.sms.granted || job.consent.email.granted ? `Sends the Google review link by ${[job.consent.sms.granted && "text", job.consent.email.granted && "email"].filter(Boolean).join(" and ")} (consent on file). Follow-up after ${reviewSettings.followUpDays} days if no click.` : "No SMS or email consent on file \u2014 review requests are blocked for this client." }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-        Btn,
-        {
-          small: true,
-          kind: canReview ? "primary" : "ghost",
-          disabled: !canReview,
-          onClick: () => {
-            mut((j) => ({ ...j, review: { ...j.review, sent: true } }));
-            toast2("Review request queued");
-          },
-          children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Star, { size: 14 }),
-            " Send review request"
-          ]
-        }
-      )
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: rv.posted ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Review posted" }) : rv.rating >= 4 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "green", children: [
+        rv.rating,
+        "\u2605 \u2014 happy"
+      ] }) : rv.rating ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "amber", children: [
+        rv.rating,
+        "\u2605 \u2014 recover"
+      ] }) : rv.sent ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "Request sent" }) : null, children: "Review request" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.55 }, children: rv.feedback ? `Private feedback (${rv.rating || "\u2014"}\u2605): "${rv.feedback}"` : rv.rating >= 4 ? `Rated ${rv.rating}\u2605 \u2014 routed to a public Google review${rv.posted ? " (posted)" : ""}.` : rv.sent ? "Request sent \u2014 waiting on the customer to rate in their portal." : "Sends the customer to a quick \u201CHow did we do?\u201D rating in their portal \u2014 happy customers to Google, unhappy to a private note for you." }),
+      !hasConsent && !rv.sent && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "#92600A", marginBottom: 10 }, children: "No SMS or email consent on file \u2014 send it by hand, or capture consent first." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          Btn,
+          {
+            small: true,
+            kind: "primary",
+            onClick: () => {
+              mut((j) => ({ ...j, review: { ...j.review || {}, sent: true, sentAt: todayIso() } }));
+              toast2(rv.sent ? "Review request re-sent" : "Review request sent");
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Star, { size: 14 }),
+              " ",
+              rv.sent ? "Re-send request" : "Send review request"
+            ]
+          }
+        ),
+        rv.rating >= 4 && !rv.posted && brand2.googleReviewLink && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => mut((j) => ({ ...j, review: { ...j.review || {}, posted: true } })), children: "Mark posted" })
+      ] })
     ] })
   ] });
 }
@@ -8990,6 +9004,99 @@ function PortalTracker({ step = 0, accent = T.accent, compact = false }) {
     ] }, label);
   }) });
 }
+function PortalReview({ token, jobId, review, accent, company }) {
+  const [rating, setRating] = (0, import_react.useState)(0);
+  const [hover, setHover] = (0, import_react.useState)(0);
+  const [text, setText] = (0, import_react.useState)("");
+  const [done, setDone] = (0, import_react.useState)(false);
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const db = DB();
+  const link = review && review.googleLink || "";
+  const gate = review ? review.gateNegative !== false : true;
+  const happy = rating >= 4;
+  const log = async () => {
+    if (!db || !token) return;
+    const row = {
+      id: uid("rev"),
+      token,
+      job_id: jobId,
+      request_type: "review_feedback",
+      category: `Rated ${rating}\u2605`,
+      details: text.trim() || (happy ? "Positive rating" : ""),
+      status: "New",
+      requested_by: "Customer"
+    };
+    try {
+      await db.from("crm_portal_requests").insert(row);
+    } catch (e) {
+    }
+  };
+  const finishHappy = async () => {
+    setBusy(true);
+    await log();
+    setBusy(false);
+    setDone(true);
+    if (link) window.open(link, "_blank", "noopener");
+  };
+  const finishUnhappy = async () => {
+    if (!text.trim()) return;
+    setBusy(true);
+    await log();
+    setBusy(false);
+    setDone(true);
+  };
+  if (review && review.submitted && !done) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Rate your experience" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14, lineHeight: 1.6, color: S.sub }, children: [
+        "You rated us ",
+        review.rating,
+        "\u2605 \u2014 thank you for the feedback."
+      ] })
+    ] });
+  }
+  if (done) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Thank you" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, lineHeight: 1.6, color: S.sub }, children: happy ? link ? "Thanks so much \u2014 your review page should have opened in a new tab." : "Thanks so much for the kind words!" : `Thank you for being honest with us. Someone from ${company || "our team"} will reach out.` })
+    ] });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Rate your experience" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, marginBottom: 12 }, children: "How did we do?" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginBottom: 14 }, children: [1, 2, 3, 4, 5].map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "button",
+      {
+        onClick: () => setRating(n),
+        onMouseEnter: () => setHover(n),
+        onMouseLeave: () => setHover(0),
+        "aria-label": `${n} star${n > 1 ? "s" : ""}`,
+        style: { border: "none", background: "none", cursor: "pointer", padding: 2 },
+        children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Star, { size: 30, color: (hover || rating) >= n ? "#E8B931" : "#D3D8DE", fill: (hover || rating) >= n ? "#E8B931" : "none" })
+      },
+      n
+    )) }),
+    rating > 0 && happy && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, lineHeight: 1.6, marginBottom: 12 }, children: "Wonderful \u2014 thank you! Would you mind sharing it publicly? It genuinely helps." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { onClick: finishHappy, disabled: busy, style: { background: accent, borderColor: accent }, children: link ? "Leave a Google review" : "Submit rating" })
+    ] }),
+    rating > 0 && !happy && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, lineHeight: 1.6, marginBottom: 10 }, children: "We\u2019re sorry we fell short. Tell us what happened \u2014 this goes straight to the team, privately." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "textarea",
+        {
+          value: text,
+          onChange: (e) => setText(e.target.value),
+          rows: 4,
+          placeholder: "What could we have done better?",
+          style: { ...inputStyle, width: "100%", minHeight: 90, marginBottom: 10 }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { onClick: finishUnhappy, disabled: busy || !text.trim(), style: { background: accent, borderColor: accent }, children: "Send private feedback" }),
+      !gate && link && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 10, fontSize: 12.5 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: link, target: "_blank", rel: "noreferrer", style: { color: accent }, children: "Or leave a public review anyway \u2192" }) })
+    ] })
+  ] });
+}
 function PortalRequestCenter({ token, jobId, role, customerName, accent, allowQuoteChanges = true, allowAddOns = true }) {
   const [requests, setRequests] = (0, import_react.useState)([]);
   const [kind, setKind] = (0, import_react.useState)("quote_change");
@@ -9192,6 +9299,12 @@ function buildPortalSnapshot(job, brand2, token) {
       estimate: portal.estimate ? { number: job.estimate.number, date: job.estimate.date, total: estimateTotal(job.estimate), items: job.estimate.items } : null,
       contract: portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
       invoice: portal.invoice ? { contract: pay.contract, received: pay.received, balance: pay.balance } : null,
+      review: portal.review !== false ? {
+        googleLink: brand2.googleReviewLink || "",
+        gateNegative: brand2.gateNegativeReviews === true,
+        rating: (job.review || {}).rating || null,
+        submitted: !!(job.review || {}).rating
+      } : null,
       schedDate: job.schedDate || null,
       updatedAt: (/* @__PURE__ */ new Date()).toISOString()
     }
@@ -9882,6 +9995,9 @@ function PublicPortal({ token }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PortalThread, { token, meRole: "customer", meName: d.name, accent: prim })
         ] })
       );
+      if (sid === "review") return d.review ? wrap(
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PortalReview, { token, jobId: d.jobId || null, review: d.review, accent: prim, company: d.company })
+      ) : null;
       if (sid === "sign") return wrap(
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           PortalSignCenter,
@@ -16420,11 +16536,20 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
         }
       ) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "BBB profile link", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: settings.bbbLink || "", onChange: (e) => set("bbbLink")(e.target.value) }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "A word on review gating", tone: "amber", children: [
-        "NiceJob and Birdeye became known for asking how it went and then only sending happy customers to Google. Google prohibits that outright and the FTC treats it as deceptive \u2014 both vendors have had to walk it back. So the rating here changes ",
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "timing" }),
-        " and who gets a phone call, never whether someone is allowed to review. It is also simply better business: a fixed complaint often becomes the most convincing review you own."
-      ] })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "flex-start", gap: 12, borderTop: `1px solid ${S.line}`, paddingTop: 14, marginTop: 4 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14.5, fontWeight: 700, color: S.ink }, children: "Only send happy customers to Google" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 3, lineHeight: 1.5 }, children: "When on, customers who rate 1\u20133\u2605 in their portal are routed only to a private feedback form and never shown the public Google link. When off, everyone can still choose to leave a public review; unhappy customers are simply invited to tell you privately first." })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Toggle,
+          {
+            on: brand2.gateNegativeReviews === true,
+            onClick: () => setBrandFromReviews && setBrandFromReviews({ ...brand2, gateNegativeReviews: !(brand2.gateNegativeReviews === true) })
+          }
+        )
+      ] }),
+      brand2.gateNegativeReviews === true && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Heads up \u2014 this is review gating", tone: "red", children: "Google's review policies prohibit soliciting reviews only from customers you expect to be positive, and the FTC treats suppressing negative reviews as a deceptive practice \u2014 it can get reviews removed or your Business Profile penalized. Asking for feedback first is fine and good business; hiding the public link from unhappy customers is the part that carries risk. Leave this off unless you understand that trade-off." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [

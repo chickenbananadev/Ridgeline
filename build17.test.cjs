@@ -65,8 +65,9 @@ ok(src.length > 0 && (src.match(/id: "ask"|id: "request"|id: "nudge"|id: "final"
   "four review touches");
 ok(src.includes("function reviewState"), "funnel state resolver exists");
 ok(src.includes("function nextReviewStep"), "next-due step resolver exists");
-ok(src.includes("A word on review gating"), "gating is addressed rather than copied");
-ok(src.includes("Google prohibits that"), "the reason gating is avoided is stated plainly");
+ok(src.includes("this is review gating"), "gating is addressed rather than copied");
+ok(src.includes("Google's review policies prohibit"), "the risk of gating is stated plainly");
+ok(src.includes("gateNegativeReviews"), "gating is an explicit, off-by-default choice");
 ok(src.includes("conversion"), "conversion is measured");
 
 if (fails) { console.log("\nbuild 17: " + fails + " FAILED"); process.exit(1); }
