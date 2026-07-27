@@ -3536,7 +3536,7 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
                   }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                     <span style={{ fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {st.label}
+                      {st.name}
                     </span>
                     <span style={{ fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }}>{st.value > 0 ? money(st.value) : ""}</span>
                     <span style={{ fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }}>
@@ -6049,7 +6049,6 @@ const JOB_SECTIONS = [
   ["checklist", "Inspection checklist", CheckCircle2],
   ["ventilation", "Ventilation", Wrench],
   ["measure", "Measurements", Package],
-  ["takeoff", "Roof takeoff", Layers],
   ["photos", "Photos", Camera],
   ["estimate", "Estimate", FileText],
   ["contract", "Contract", PenLine],
@@ -6239,9 +6238,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "signatures": return <TabSignatures job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />;
               case "checklist": return <TabChecklist job={job} mut={mut} toast={toast} />;
               case "ventilation": return <TabVentilation job={job} mut={mut} toast={toast} />;
-              case "measure": return <TabMeasure job={job} mut={mut} toast={toast}
-                onGoTakeoff={() => setOpen((o) => ({ ...o, takeoff: true }))} />;
-              case "takeoff": return <TabTakeoff job={job} mut={mut} toast={toast} brand={brand} />;
+              case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
               case "materials": return <TabMaterials job={job} mut={mut} toast={toast} />;
               case "estimate": return <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
                 estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} />;
@@ -6267,14 +6264,13 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           const relevant = JOB_SECTIONS.filter(([id]) => {
             if (!featureOn(features, id)) return false;
             if (id === "claim") return job.claimType === "Insurance";
-            if (id === "handoff" || id === "changeorders" || id === "signatures" || id === "takeoff") return true;
+            if (id === "handoff" || id === "changeorders" || id === "signatures") return true;
             return allowed.has(id);
           });
           /* A few sections carry a hint in the header, because a
              collapsed accordion hides the one thing someone is hunting
              for. */
           const HINTS = {
-            takeoff: "Trace on aerial imagery",
             claim: "Carrier money and supplements",
             signatures: "Sign and countersign",
           };
@@ -7093,20 +7089,33 @@ function reportDocHtml(job, brand) {
 function PortalThread({ token, meRole, meName, accent }) {
   const [msgs, setMsgs] = useState([]);
   const [txt, setTxt] = useState("");
+  /* Staff (meRole "team") already have a real session and stay on the
+     tenant-scoped table policy — that path was never the problem. An
+     anonymous customer has no session, only a token, so their read and
+     mark-read both go through security-definer functions that take the
+     token as an explicit argument (migrations 018/019): the only rows
+     ever reachable are the ones matching the token actually passed in,
+     rather than relying on RLS to filter an open-ended table read. */
   const load = () => {
     const db = DB(); if (!db || !token) return;
+    if (meRole === "customer") {
+      db.rpc("portal_get_messages", { p_token: token }).then(({ data }) => { if (data) setMsgs(data); });
+      return;
+    }
     db.from("crm_portal_msgs").select("*").eq("token", token).order("at", { ascending: true }).limit(200)
       .then(({ data }) => { if (data) setMsgs(data); });
   };
-  /* Opening the thread marks the other side's messages read. The
-     column is best-effort: on a database that has not run migration
-     009 the update fails harmlessly and the thread still works. */
+  /* Opening the thread marks the other side's messages read. Best-
+     effort: on a database that has not run the matching migration the
+     call fails harmlessly and the thread still works. */
   const markRead = () => {
     const db = DB(); if (!db || !token) return;
-    const col = meRole === "team" ? "read_by_team" : "read_by_customer";
-    const other = meRole === "team" ? "customer" : "team";
-    db.from("crm_portal_msgs").update({ [col]: true })
-      .eq("token", token).eq("by_role", other).eq(col, false)
+    if (meRole === "customer") {
+      db.rpc("portal_mark_customer_read", { p_token: token }).then(() => {}, () => {});
+      return;
+    }
+    db.from("crm_portal_msgs").update({ read_by_team: true })
+      .eq("token", token).eq("by_role", "customer").eq("read_by_team", false)
       .then(() => {}, () => {});
   };
   useEffect(() => {
@@ -7932,9 +7941,18 @@ function PublicPortal({ token }) {
   useEffect(() => {
     const db = DB();
     if (!db) { setState({ loading: false, data: null, err: "This link needs a live connection." }); return; }
-    db.from("crm_portal").select("data, revoked").eq("token", token).maybeSingle().then(({ data, error }) => {
-      if (error || !data) { setState({ loading: false, data: null, err: "This link isn't valid or has been turned off." }); return; }
-      setState({ loading: false, data: data.data, err: "" });
+    /* Goes through a security-definer function, not a direct table
+       read — see migration 018. The old direct SELECT worked fine for
+       a well-behaved client (it always filtered by token), but RLS
+       enforces which rows CAN come back, not what a query happened to
+       ask for; anyone with the public anon key could omit the token
+       filter entirely and read every tenant's portal data. The
+       function only ever returns the one row matching the token
+       actually passed in. */
+    db.rpc("portal_get_data", { p_token: token }).then(({ data, error }) => {
+      const row = Array.isArray(data) ? data[0] : data;
+      if (error || !row) { setState({ loading: false, data: null, err: "This link isn't valid or has been turned off." }); return; }
+      setState({ loading: false, data: row.data, err: "" });
     });
   }, [token]);
 
@@ -10554,507 +10572,8 @@ function MeasureImport({ onApply, toast }) {
   );
 }
 
-/* ==================================================================
-   ROOF TAKEOFF ENGINE
 
-   Honest scope. EagleView flies aircraft and runs photogrammetry on
-   stereo pairs; Roofr licenses aerial imagery and puts technicians on
-   it. Neither is reproducible in a browser — you cannot recover pitch
-   from a single flat satellite image, and pretending otherwise would
-   produce confident numbers that are wrong, which is worse than no
-   numbers at all.
-
-   What this does instead is the part those reports get judged on: the
-   geometry. Facets are entered plan-view (what you measure off a
-   drawing, a drone shot, or a tape) and the engine applies the correct
-   slope factor per facet, derives every linear quantity, applies waste
-   properly, and produces a full material takeoff.
-
-   The core identity everything rests on:
-
-     slope factor = sqrt(12² + rise²) / 12
-
-   That is the hypotenuse of the pitch triangle over its run. A 6/12
-   roof is 1.1180 times its footprint — not 1.5, not "add 10 percent".
-   Every wrong roof number in this trade starts with someone guessing
-   that figure.
-================================================================== */
-
-/* Exact, not tabulated — a table invites a typo and caps you at the
-   pitches someone thought to include. */
-function slopeFactor(rise) {
-  const r = Math.abs(num(rise));
-  return Math.sqrt(144 + r * r) / 12;
-}
-/* Hip and valley runs travel diagonally across the slope, so they take
-   a different factor: sqrt(2 + (rise/12)^2). A hip on a 6/12 is longer
-   than the same plan length of ridge. */
-function hipValleyFactor(rise) {
-  const r = Math.abs(num(rise)) / 12;
-  return Math.sqrt(2 + r * r);
-}
-
-const PITCH_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 18];
-
-/* Waste is driven by how cut-up the roof is, not by preference. These
-   are the industry-standard bands; the engine shows what it applied
-   and why rather than burying a single number. */
-const WASTE_BANDS = [
-  { id: "simple", label: "Simple gable", pct: 10,
-    hint: "Two planes, no valleys, minimal penetrations." },
-  { id: "moderate", label: "Hip or light cut-up", pct: 15,
-    hint: "Hips, one or two valleys, a few penetrations." },
-  { id: "complex", label: "Complex", pct: 18,
-    hint: "Multiple valleys, dormers, changes of pitch." },
-  { id: "veryComplex", label: "Very cut-up", pct: 22,
-    hint: "Heavy dormering, turrets, many short runs." },
-];
-
-/* Shingle exposure drives starter, ridge cap and step flashing counts.
-   Architectural is the default; three-tab differs. */
-const EXPOSURES = [
-  { id: "arch", label: "Architectural", exposure: 5.625, capPer: 0.833 },
-  { id: "threeTab", label: "Three-tab", exposure: 5, capPer: 1 },
-];
-
-function blankFacet() {
-  return { id: uid("fct"), name: "", length: "", width: "", pitch: 6 };
-}
-
-/* Everything a report needs, derived from facets plus the linear
-   measurements that cannot be inferred from areas alone. */
-function computeTakeoff(t) {
-  const facets = Array.isArray(t.facets) ? t.facets : [];
-  const rows = facets.map((f) => {
-    /* A traced facet carries its measured plan area exactly. Deriving
-       it back from a rounded equivalent side lost about 0.3% per
-       facet, which compounds across a cut-up roof — small, avoidable,
-       and the kind of drift nobody would ever spot. Typed facets still
-       compute from length x width. */
-    const plan = f.planArea != null && f.planArea !== ""
-      ? num(f.planArea)
-      : num(f.length) * num(f.width);
-    const factor = slopeFactor(f.pitch);
-    return { ...f, plan, factor, area: plan * factor };
-  });
-  const planArea = rows.reduce((a, r) => a + r.plan, 0);
-  const roofArea = rows.reduce((a, r) => a + r.area, 0);
-  const squares = roofArea / 100;
-
-  /* Predominant pitch is the one covering the most area, which is what
-     a report quotes and what drives material selection. */
-  const byPitch = {};
-  rows.forEach((r) => { byPitch[r.pitch] = (byPitch[r.pitch] || 0) + r.area; });
-  const predominant = Object.keys(byPitch).sort((a, b) => byPitch[b] - byPitch[a])[0];
-
-  const band = WASTE_BANDS.find((b) => b.id === (t.wasteBand || "moderate")) || WASTE_BANDS[1];
-  const wastePct = t.wasteOverride !== "" && t.wasteOverride != null ? num(t.wasteOverride) : band.pct;
-  const squaresWithWaste = squares * (1 + wastePct / 100);
-
-  /* Linear measurements. Ridge and eave are measured in plan and stay
-     in plan — they are horizontal. Hips and valleys are entered in plan
-     and converted, because they run up the slope. Rakes follow the
-     slope of the gable they trim. */
-  const ridge = num(t.ridge);
-  const hipPlan = num(t.hip);
-  const valleyPlan = num(t.valley);
-  const eave = num(t.eave);
-  const rakePlan = num(t.rake);
-  const stepPlan = num(t.step);
-  const wall = num(t.wall);
-  const rakePitch = t.rakePitch != null && t.rakePitch !== "" ? t.rakePitch : (predominant || 6);
-
-  const hip = hipPlan * hipValleyFactor(t.hipPitch != null && t.hipPitch !== "" ? t.hipPitch : rakePitch);
-  const valley = valleyPlan * hipValleyFactor(t.valleyPitch != null && t.valleyPitch !== "" ? t.valleyPitch : rakePitch);
-  const rake = rakePlan * slopeFactor(rakePitch);
-  const step = stepPlan * slopeFactor(t.stepPitch != null && t.stepPitch !== "" ? t.stepPitch : rakePitch);
-
-  const exp = EXPOSURES.find((e) => e.id === (t.exposure || "arch")) || EXPOSURES[0];
-
-  /* Material quantities. Bundles are ceiling'd because you cannot buy
-     part of one, and that rounding is where shortfalls come from. */
-  const bundles = Math.ceil(squaresWithWaste * 3);
-  const ridgeCapLf = ridge + hip;
-  const ridgeCapBundles = Math.ceil(ridgeCapLf / (exp.id === "arch" ? 20 : 33));
-  const starterLf = eave + rake;
-  const starterBundles = Math.ceil(starterLf / 100);
-  const dripEdgeLf = eave + rake;
-  const dripEdgeSticks = Math.ceil(dripEdgeLf / 10);
-  /* Ice barrier: code requires cover to 24in inside the exterior wall
-     line. On a typical 12in overhang that is one 36in course on
-     shallow pitches and two on steeper, where the horizontal 24in
-     needs more sheet to reach it. */
-  const iceCourses = num(predominant) >= 8 ? 2 : 1;
-  const iceRolls = Math.ceil((eave * iceCourses) / 66.7);
-  const underlaymentRolls = Math.ceil(squaresWithWaste / 10);
-  const valleyRolls = valley > 0 ? Math.ceil(valley / 50) : 0;
-  /* Step flashing: one piece per shingle course up the wall. */
-  const stepPieces = step > 0 ? Math.ceil((step * 12) / exp.exposure) : 0;
-  const nailsLb = Math.ceil(squaresWithWaste * 2.5);
-
-  const penetrations = num(t.penetrations);
-  const stories = num(t.stories) || 1;
-  const steep = num(predominant) >= 7;
-  const high = stories >= 2;
-
-  return {
-    rows, planArea, roofArea, squares, squaresWithWaste, wastePct, band,
-    predominant: predominant != null ? Number(predominant) : null,
-    ridge, hip, valley, eave, rake, step, wall,
-    hipPlan, valleyPlan, rakePlan, stepPlan,
-    exposure: exp,
-    bundles, ridgeCapLf, ridgeCapBundles, starterLf, starterBundles,
-    dripEdgeLf, dripEdgeSticks, iceCourses, iceRolls, underlaymentRolls,
-    valleyRolls, stepPieces, nailsLb, penetrations, stories, steep, high,
-  };
-}
-
-/* ==================================================================
-   AERIAL TRACING — standard XYZ tiles
-
-   The first attempt used each state's ArcGIS exportImage endpoint.
-   Those services are real and public domain, but they are single
-   government servers with their own uptime, projections and quirks,
-   and debugging them from a phone is miserable.
-
-   This uses the Web Mercator XYZ tile scheme every web map on earth
-   uses, against Esri World Imagery: free, no API key, 0.3m down to
-   0.03m over US metros, and battle-tested. The state services stay
-   available as a sharper overlay where they work, but the map itself
-   no longer depends on them.
-
-   Scale is exact and comes out of the tile scheme rather than being
-   measured. Ground resolution at zoom z and latitude lat is
-
-     156543.03392804097 * cos(lat) / 2^z  metres per pixel
-
-   which already accounts for the Mercator stretch — no separate
-   correction, and no way for the two to disagree.
-================================================================== */
-function TabTakeoff({ job, mut, toast, brand }) {
-  const t = job.takeoff || { facets: [blankFacet()], wasteBand: "moderate", exposure: "arch" };
-  const m = computeTakeoff(t);
-  const set = (k) => (v) => mut((j) => ({ ...j, takeoff: { ...(j.takeoff || t), [k]: v } }));
-  const setFacet = (id, k, v) => mut((j) => {
-    const cur = j.takeoff || t;
-    return { ...j, takeoff: { ...cur, facets: (cur.facets || []).map((f) => {
-      if (f.id !== id) return f;
-      /* Typing over a traced facet's dimensions means the person wants
-         those numbers. Clear the stored area or the edit silently does
-         nothing. */
-      const clears = (k === "length" || k === "width") && f.planArea != null;
-      return clears ? { ...f, [k]: v, planArea: null, traced: false } : { ...f, [k]: v };
-    }) } };
-  });
-  const addFacet = () => mut((j) => {
-    const cur = j.takeoff || t;
-    return { ...j, takeoff: { ...cur, facets: [...(cur.facets || []), blankFacet()] } };
-  });
-  const delFacet = (id) => mut((j) => {
-    const cur = j.takeoff || t;
-    return { ...j, takeoff: { ...cur, facets: (cur.facets || []).filter((f) => f.id !== id) } };
-  });
-
-  const n1 = (x) => num(x).toLocaleString(undefined, { maximumFractionDigits: 1 });
-  const n2 = (x) => num(x).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  const pushToJob = () => {
-    mut((j) => ({
-      ...j,
-      measurements: {
-        ...(j.measurements || {}),
-        squares: m.squaresWithWaste.toFixed(1),
-        pitch: m.predominant != null ? String(m.predominant) : "",
-        ridges: m.ridge.toFixed(0), hips: m.hip.toFixed(0), valleys: m.valley.toFixed(0),
-        eaves: m.eave.toFixed(0), rakes: m.rake.toFixed(0),
-        stepFlash: m.step.toFixed(0), wallFlash: m.wall.toFixed(0),
-        penetrations: String(m.penetrations || ""),
-        waste: String(m.wastePct),
-      },
-    }));
-    toast("Measurements updated from the takeoff");
-  };
-
-  const printReport = () => {
-    const row = (k, v) => `<div class="tot"><span>${esc(k)}</span><span>${esc(v)}</span></div>`;
-    let html = `
-      <h2 style="margin-top:0">Roof measurement report</h2>
-      <div class="muted">${esc(job.name)} &middot; ${esc(job.address)}</div>
-      <div class="muted">Prepared ${esc(new Date().toLocaleDateString())}</div>
-
-      <h2>Summary</h2>
-      ${row("Total roof area", n1(m.roofArea) + " sq ft")}
-      ${row("Squares (measured)", n2(m.squares))}
-      ${row("Predominant pitch", m.predominant != null ? m.predominant + "/12" : "—")}
-      ${row("Waste applied", m.wastePct + "% (" + esc(m.band.label) + ")")}
-      <div class="tot grand">${"<span>Squares to order</span><span>" + n2(m.squaresWithWaste) + "</span>"}</div>
-
-      <h2>Facets</h2>
-      <table><thead><tr><th>Facet</th><th class="r">Plan</th><th class="r">Pitch</th><th class="r">Factor</th><th class="r">Area</th></tr></thead><tbody>
-      ${m.rows.map((r, i) => `<tr>
-        <td>${esc(r.name || "Facet " + (i + 1))}</td>
-        <td class="r">${n1(r.plan)} sf</td>
-        <td class="r">${esc(String(r.pitch))}/12</td>
-        <td class="r">${r.factor.toFixed(4)}</td>
-        <td class="r">${n1(r.area)} sf</td>
-      </tr>`).join("")}
-      </tbody></table>
-      ${row("Plan (footprint) area", n1(m.planArea) + " sq ft")}
-      ${row("Sloped roof area", n1(m.roofArea) + " sq ft")}
-
-      <h2>Linear measurements</h2>
-      ${row("Ridge", n1(m.ridge) + " LF")}
-      ${row("Hip", n1(m.hip) + " LF")}
-      ${row("Valley", n1(m.valley) + " LF")}
-      ${row("Eave", n1(m.eave) + " LF")}
-      ${row("Rake", n1(m.rake) + " LF")}
-      ${row("Step flashing", n1(m.step) + " LF")}
-      ${row("Wall flashing", n1(m.wall) + " LF")}
-      ${row("Penetrations", String(m.penetrations || 0))}
-
-      <h2>Material takeoff</h2>
-      ${row("Field shingles", m.bundles + " bundles (" + n2(m.squaresWithWaste) + " sq)")}
-      ${row("Starter", m.starterBundles + " bundles / " + n1(m.starterLf) + " LF")}
-      ${row("Ridge cap", m.ridgeCapBundles + " bundles / " + n1(m.ridgeCapLf) + " LF")}
-      ${row("Underlayment", m.underlaymentRolls + " rolls")}
-      ${row("Ice barrier", m.iceRolls + " rolls (" + m.iceCourses + " course" + (m.iceCourses > 1 ? "s" : "") + " at eaves)")}
-      ${row("Drip edge", m.dripEdgeSticks + " sticks / " + n1(m.dripEdgeLf) + " LF")}
-      ${m.valleyRolls ? row("Valley lining", m.valleyRolls + " rolls") : ""}
-      ${m.stepPieces ? row("Step flashing", m.stepPieces + " pieces") : ""}
-      ${row("Nails", m.nailsLb + " lb")}
-
-      ${(m.steep || m.high) ? `<h2>Access modifiers</h2>
-        ${m.steep ? row("Steep charge", "Applies — " + m.predominant + "/12") : ""}
-        ${m.high ? row("High charge", "Applies — " + m.stories + " storeys") : ""}
-        <p style="font-size:12px;line-height:1.6" class="muted">Steep and high charges apply to
-        removal as well as installation. Carrier scopes frequently apply them to one and not the other.</p>` : ""}
-
-      <p style="font-size:11.5px;line-height:1.6;margin-top:16px" class="muted">
-        Measurements are derived from the facet dimensions entered above using
-        the slope factor sqrt(144 + rise&sup2;)/12 for sloped areas and
-        sqrt(2 + (rise/12)&sup2;) for hips and valleys. This is a calculated
-        takeoff, not an aerial survey: its accuracy is the accuracy of the
-        dimensions put into it. Verify against the roof before ordering.
-      </p>`;
-    openDoc(`Roof measurement report - ${job.name}`, brand, html, toast);
-  };
-
-  const Row = ({ k, v, strong, note }) => (
-    <div style={{ padding: "7px 0", borderTop: `1px solid ${S.line}` }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-        <span style={{ fontSize: 13.5, color: S.ink, fontWeight: strong ? 800 : 400 }}>{k}</span>
-        <span style={{ fontSize: 13.5, color: S.ink, fontWeight: strong ? 800 : 600, whiteSpace: "nowrap" }}>{v}</span>
-      </div>
-      {note && <div style={{ fontSize: 11, color: S.sub, marginTop: 2 }}>{note}</div>}
-    </div>
-  );
-
-  return (
-    <>
-      {/* Where the measurements come from. Being explicit about this
-          matters: a takeoff is only as good as its source, and the three
-          sources differ enormously in what a carrier will accept. */}
-      <Card>
-        <CardTitle>Where the dimensions come from</CardTitle>
-        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 11 }}>
-          This is a calculator, not a survey. It does the geometry exactly —
-          slope factors per facet, waste, every derived quantity — from
-          dimensions you give it. Getting those dimensions right is a separate
-          job, and there are three honest ways to do it.
-        </div>
-        <div style={{ fontSize: 12, color: S.ink, lineHeight: 1.6 }}>
-          <b>An aerial report — the default for anything that matters.</b>{" "}
-          EagleView or Roofr, ordered per property for roughly the price of an
-          hour on site. Third-party, which is why a carrier argues with it
-          least. Import the PDF under Measurements and the facets below fill
-          themselves in.
-          <br /><br />
-          <b>On site.</b> A pitch gauge on the rafter or a phone level on the
-          slope, plus a tape or wheel on the eave. The most accurate source you
-          control, and the only one that gives you pitch.
-          <br /><br />
-          <b>Off a drawing or a drone shot.</b> Plan dimensions per facet,
-          keyed in below. Fine for a retail quote on a simple roof.
-        </div>
-        {job.address && (
-          <a href={`https://www.google.com/maps/@?api=1&map_action=map&center=${encodeURIComponent(job.address)}&basemap=satellite&zoom=20`}
-            target="_blank" rel="noreferrer" style={{ textDecoration: "none", display: "block", marginTop: 11 }}>
-            <Btn kind="ghost" small style={{ width: "100%" }}>
-              <MapPin size={14} /> Satellite view of this roof
-            </Btn>
-          </a>
-        )}
-        <div style={{ fontSize: 11, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
-          Opens in your map app for a look at the layout. Reading dimensions
-          off a satellite image by eye is rough, and it cannot give you pitch
-          at all.
-        </div>
-      </Card>
-
-      <Card style={{ marginTop: 12 }}>
-        <CardTitle right={<Chip tone={m.squares > 0 ? "green" : "gray"}>{n2(m.squaresWithWaste)} sq</Chip>}>
-          Takeoff summary
-        </CardTitle>
-        {m.squares === 0 ? (
-          <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
-            Add facets below. Enter each roof plane's <b>plan</b> dimensions —
-            what you would measure off a drawing or a drone shot looking
-            straight down — and its pitch. The slope factor is applied per
-            facet, so a roof with mixed pitches comes out right.
-          </div>
-        ) : (
-          <>
-            <Row k="Footprint area" v={`${n1(m.planArea)} sq ft`} note="Plan area before slope" />
-            <Row k="Roof area" v={`${n1(m.roofArea)} sq ft`} note="After the slope factor" />
-            <Row k="Measured squares" v={n2(m.squares)} />
-            <Row k={`Waste (${m.wastePct}%)`} v={`+ ${n2(m.squaresWithWaste - m.squares)} sq`} />
-            <Row k="Squares to order" v={n2(m.squaresWithWaste)} strong />
-            {m.predominant != null && (
-              <Row k="Predominant pitch" v={`${m.predominant}/12`}
-                note={`Slope factor ${slopeFactor(m.predominant).toFixed(4)} — a roof of this pitch is ${((slopeFactor(m.predominant) - 1) * 100).toFixed(1)}% larger than its footprint`} />
-            )}
-          </>
-        )}
-      </Card>
-
-      <Card style={{ marginTop: 12 }}>
-        <CardTitle right={<Chip tone="gray">{(t.facets || []).length}</Chip>}>Roof facets</CardTitle>
-        {(t.facets || []).map((f, i2) => {
-          const r = m.rows[i2] || {};
-          return (
-            <div key={f.id} style={{ background: S.bg, borderRadius: 11, padding: 11, marginBottom: 9 }}>
-              <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
-                <input style={{ ...inputStyle, flex: 1, padding: "8px 10px" }} value={f.name}
-                  placeholder={`Facet ${i2 + 1} — e.g. Front slope`}
-                  onChange={(e) => setFacet(f.id, "name", e.target.value)} />
-                {(t.facets || []).length > 1 && (
-                  <button onClick={() => delFacet(f.id)} style={{ border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}>
-                    <Trash2 size={15} color="#B42318" />
-                  </button>
-                )}
-              </div>
-              <div style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 8 }}>
-                <input style={{ ...inputStyle, flex: 1, textAlign: "right", padding: "8px 10px" }} inputMode="decimal"
-                  value={f.length} placeholder="Length" onChange={(e) => setFacet(f.id, "length", e.target.value)} />
-                <span style={{ fontSize: 13, color: S.sub }}>×</span>
-                <input style={{ ...inputStyle, flex: 1, textAlign: "right", padding: "8px 10px" }} inputMode="decimal"
-                  value={f.width} placeholder="Width" onChange={(e) => setFacet(f.id, "width", e.target.value)} />
-                <select style={{ ...selStyle, width: 86, padding: "8px 6px" }} value={f.pitch}
-                  onChange={(e) => setFacet(f.id, "pitch", Number(e.target.value))}>
-                  {PITCH_OPTIONS.map((p) => <option key={p} value={p}>{p}/12</option>)}
-                </select>
-              </div>
-              {r.plan > 0 && (
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: S.sub, marginTop: 7 }}>
-                  <span>
-                    {f.traced && <span style={{ color: T.accent, fontWeight: 700 }}>traced · </span>}
-                    {n1(r.plan)} sf plan × {r.factor.toFixed(4)}
-                  </span>
-                  <span style={{ fontWeight: 700, color: S.ink }}>{n1(r.area)} sf</span>
-                </div>
-              )}
-            </div>
-          );
-        })}
-        <Btn kind="soft" small style={{ width: "100%" }} onClick={addFacet}><Plus size={13} /> Add facet</Btn>
-        <div style={{ fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
-          Enter plan dimensions, not along-the-slope. Measuring up the rafter
-          and then applying a pitch factor counts the slope twice, which is the
-          single most common takeoff error.
-        </div>
-      </Card>
-
-      <Card style={{ marginTop: 12 }}>
-        <CardTitle>Linear measurements</CardTitle>
-        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
-          Ridge and eave are horizontal, so they are taken as entered. Hips,
-          valleys, rakes and step flashing run up the slope and are converted
-          from plan length automatically.
-        </div>
-        {[
-          ["ridge", "Ridge (LF)", "Horizontal — no conversion"],
-          ["eave", "Eave (LF)", "Horizontal — no conversion"],
-          ["hip", "Hip (plan LF)", `× ${hipValleyFactor(m.predominant || 6).toFixed(4)} → ${n1(m.hip)} LF`],
-          ["valley", "Valley (plan LF)", `× ${hipValleyFactor(m.predominant || 6).toFixed(4)} → ${n1(m.valley)} LF`],
-          ["rake", "Rake (plan LF)", `× ${slopeFactor(m.predominant || 6).toFixed(4)} → ${n1(m.rake)} LF`],
-          ["step", "Step flashing (plan LF)", `× ${slopeFactor(m.predominant || 6).toFixed(4)} → ${n1(m.step)} LF`],
-          ["wall", "Wall flashing (LF)", "Horizontal headwall"],
-          ["penetrations", "Penetrations", "Pipes, vents, chimneys"],
-        ].map(([k, label, note]) => (
-          <div key={k} style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, color: S.ink }}>{label}</div>
-              <div style={{ fontSize: 11, color: S.sub, marginTop: 1 }}>{note}</div>
-            </div>
-            <input style={{ ...inputStyle, width: 92, textAlign: "right", padding: "8px 10px" }} inputMode="decimal"
-              value={t[k] || ""} onChange={(e) => set(k)(e.target.value)} placeholder="0" />
-          </div>
-        ))}
-      </Card>
-
-      <Card style={{ marginTop: 12 }}>
-        <CardTitle>Waste &amp; product</CardTitle>
-        <Field label="Roof complexity" hint="Drives the waste percentage.">
-          <select style={selStyle} value={t.wasteBand || "moderate"} onChange={(e) => set("wasteBand")(e.target.value)}>
-            {WASTE_BANDS.map((b) => <option key={b.id} value={b.id}>{b.label} — {b.pct}%</option>)}
-          </select>
-        </Field>
-        <div style={{ fontSize: 11.5, color: S.sub, marginTop: -6, marginBottom: 12 }}>
-          {m.band.hint}
-        </div>
-        <Field label="Override waste %" hint="Leave blank to use the band above.">
-          <input style={inputStyle} inputMode="decimal" value={t.wasteOverride || ""}
-            onChange={(e) => set("wasteOverride")(e.target.value)} placeholder={String(m.band.pct)} />
-        </Field>
-        <Field label="Shingle type">
-          <PillGroup options={EXPOSURES.map((e) => e.label)}
-            value={m.exposure.label}
-            onPick={(v) => set("exposure")((EXPOSURES.find((e) => e.label === v) || EXPOSURES[0]).id)} />
-        </Field>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Field label="Storeys">
-            <input style={inputStyle} inputMode="numeric" value={t.stories || ""}
-              onChange={(e) => set("stories")(e.target.value)} placeholder="1" />
-          </Field>
-        </div>
-        {(m.steep || m.high) && (
-          <Callout label="Access charges apply" tone="amber">
-            {m.steep ? `${m.predominant}/12 is steep. ` : ""}{m.high ? `${m.stories} storeys is high. ` : ""}
-            Both apply to tear-off as well as installation — carrier scopes
-            routinely apply them to one and not the other.
-          </Callout>
-        )}
-      </Card>
-
-      {m.squares > 0 && (
-        <Card style={{ marginTop: 12 }}>
-          <CardTitle>Material takeoff</CardTitle>
-          <Row k="Field shingles" v={`${m.bundles} bundles`} note={`${n2(m.squaresWithWaste)} squares at 3 bundles per square`} />
-          <Row k="Starter" v={`${m.starterBundles} bundles`} note={`${n1(m.starterLf)} LF of eave and rake`} />
-          <Row k="Ridge cap" v={`${m.ridgeCapBundles} bundles`} note={`${n1(m.ridgeCapLf)} LF of ridge and hip`} />
-          <Row k="Underlayment" v={`${m.underlaymentRolls} rolls`} />
-          <Row k="Ice barrier" v={`${m.iceRolls} rolls`} note={`${m.iceCourses} course${m.iceCourses > 1 ? "s" : ""} at the eaves for a ${m.predominant}/12`} />
-          <Row k="Drip edge" v={`${m.dripEdgeSticks} sticks`} note={`${n1(m.dripEdgeLf)} LF at 10 ft per stick`} />
-          {m.valleyRolls > 0 && <Row k="Valley lining" v={`${m.valleyRolls} rolls`} />}
-          {m.stepPieces > 0 && <Row k="Step flashing" v={`${m.stepPieces} pieces`} note={`One per course at ${m.exposure.exposure}" exposure`} />}
-          <Row k="Nails" v={`${m.nailsLb} lb`} />
-          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-            <Btn kind="ghost" style={{ flex: 1 }} onClick={pushToJob}>Send to job</Btn>
-            <Btn style={{ flex: 1 }} onClick={printReport}><Printer size={14} /> Report</Btn>
-          </div>
-          <div style={{ fontSize: 11, color: S.sub, marginTop: 11, lineHeight: 1.55 }}>
-            The arithmetic is exact; the accuracy is whatever the dimensions you
-            entered are. For an insurance claim, an EagleView or Roofr report
-            carries more weight with a carrier because it is third-party —
-            import one under Measurements and this becomes your check on it.
-          </div>
-        </Card>
-      )}
-    </>
-  );
-}
-
-function TabMeasure({ job, mut, toast, onGoTakeoff }) {
+function TabMeasure({ job, mut, toast }) {
   const m = job.measurements;
   const set = (k) => (e) => mut((j) => ({ ...j, measurements: { ...j.measurements, [k]: e.target.value } }));
   const rows = [
@@ -11087,20 +10606,6 @@ function TabMeasure({ job, mut, toast, onGoTakeoff }) {
       <MeasureImport toast={toast}
         onApply={(vals) => mut((j) => ({ ...j, measurements: { ...j.measurements, ...vals } }))} />
 
-      {/* The tracer lives in Roof takeoff, but this is where people come
-          looking to measure something, so say so here. */}
-      <Card style={{ marginTop: 12 }}>
-        <CardTitle>Measure it yourself</CardTitle>
-        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
-          Importing an EagleView or Roofr PDF above fills the facets in
-          automatically. Failing that, the <b>Roof takeoff</b> section below
-          works out squares, waste, materials and every linear quantity from
-          dimensions you key in.
-        </div>
-        <Btn kind="soft" style={{ width: "100%", marginTop: 11 }} onClick={() => onGoTakeoff && onGoTakeoff()}>
-          <Layers size={14} /> Open roof takeoff
-        </Btn>
-      </Card>
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
         <Btn kind="ghost" style={{ flex: 1 }} onClick={() => toast("Attach the measurement PDF under Files")}>
           <Upload size={15} /> Upload report
@@ -18586,14 +18091,19 @@ function useDbSync(st) {
 function NavBtn({ id, icon: Icon, label, badge = 0, active, onPress }) {
   return (
     <button onClick={() => onPress(id)} style={{
-      flex: 1, border: "none", background: "none", cursor: "pointer",
-      display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 0",
+      flex: 1, border: "none", background: "none", cursor: "pointer", position: "relative",
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 0 8px",
     }}>
-      <span style={{
-        position: "relative", display: "inline-grid", placeItems: "center",
-        width: 38, height: 26, borderRadius: 10,
-        background: active ? T.accentSoft : "transparent",
-      }}>
+      {/* Active state is a slim accent bar riding the top edge of the
+         strip, not a filled rounded-square behind the icon -- a plain
+         tab-strip indicator, not the icon-in-a-pill language shared by
+         most field-service nav bars. */}
+      <span aria-hidden="true" style={{
+        position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)",
+        width: active ? 22 : 0, height: 3, borderRadius: "0 0 3px 3px",
+        background: T.accent, transition: "width .15s ease",
+      }} />
+      <span style={{ position: "relative", display: "inline-grid", placeItems: "center", width: 34, height: 22 }}>
         {badge > 0 && (
           <span style={{
             position: "absolute", top: -5, right: -1, minWidth: 16, height: 16, borderRadius: 99,
@@ -18601,9 +18111,9 @@ function NavBtn({ id, icon: Icon, label, badge = 0, active, onPress }) {
             display: "grid", placeItems: "center", padding: "0 4px", zIndex: 1,
           }}>{badge}</span>
         )}
-        <Icon size={20} color={active ? T.accent : "#9CA3AF"} strokeWidth={active ? 2.4 : 2} />
+        <Icon size={21} color={active ? T.accent : "#9CA3AF"} strokeWidth={active ? 2.3 : 1.8} />
       </span>
-      <span style={{ fontSize: 11, fontWeight: active ? 700 : 500, color: active ? T.accent : "#9CA3AF" }}>{label}</span>
+      <span style={{ fontSize: 10.5, fontWeight: active ? 700 : 500, color: active ? T.accent : "#9CA3AF" }}>{label}</span>
     </button>
   );
 }
@@ -18701,7 +18211,27 @@ export default function SupremeCRM() {
   const [chatMsgs, setChatMsgs] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [calls, setCalls] = useState([]);
-  const [chatSeenCount, setChatSeenCount] = useState(0);
+  /* How many of `chatMsgs` this seat has already seen — drives both the
+     Inbox badge and the @mention badge under More. This used to live in
+     plain useState(0), which meant it forgot everything on every reload:
+     a phone backgrounding Safari, a PWA relaunch, even just refreshing
+     the tab put it back to zero and every message you'd already read
+     counted as unread again. Persisted per-user in localStorage so it
+     survives a reload; still resets to 0 for a genuinely new seat. */
+  const [chatSeenCount, setChatSeenCountRaw] = useState(0);
+  useEffect(() => {
+    if (!currentUser || !currentUser.id) return;
+    try {
+      const saved = window.localStorage.getItem(`ridgeline.chatSeen.${currentUser.id}`);
+      if (saved != null) setChatSeenCountRaw(Math.max(0, parseInt(saved, 10) || 0));
+    } catch { /* private browsing blocks storage; falls back to in-memory only */ }
+  }, [currentUser && currentUser.id]); // eslint-disable-line
+  const setChatSeenCount = (n) => {
+    setChatSeenCountRaw(n);
+    try {
+      if (currentUser && currentUser.id) window.localStorage.setItem(`ridgeline.chatSeen.${currentUser.id}`, String(n));
+    } catch { /* private browsing; not fatal */ }
+  };
   const [pwDone, setPwDone] = useState(false);
   const [changePwOpen, setChangePwOpen] = useState(false);
   const [apptTypes, setApptTypes] = useState([
@@ -19297,28 +18827,36 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         }}>{brandErr || syncErr}</div>
       )}
 
-      {/* Bottom navigation — four destinations plus a quick-add action.
-         Deliberately not a plain floating circle with a raised blue "+":
-         that specific shape (round FAB centered in a 5-icon bar) is the
-         single most common bottom-nav pattern in field-service apps and
-         reads as a direct copy of it. Squircle instead of circle (matches
-         the actual RoofStride mark's rounded-square language), sitting
-         closer to the bar instead of dramatically floating above it. */}
+      {/* Bottom navigation — five equal, flat tab buttons, all the same
+         height with no elevation. Earlier this had "New lead" as a
+         raised, oversized, drop-shadowed circle floating above the
+         strip — that exact shape (a round or squircle FAB centered in a
+         5-icon bar) is the single most common bottom-nav pattern among
+         field-service competitors (Roofr included) and reads as a
+         direct copy no matter what shape the button itself is. Removing
+         the elevation/shadow/oversizing entirely — not just swapping
+         circle for squircle — is what actually makes this bar look like
+         its own thing: "Add" is just a fifth tab with a filled accent
+         icon, flush with the other four. */}
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50,
         background: "#fff", borderTop: `1px solid ${S.line}`,
-        display: "flex", alignItems: "center", paddingBottom: "env(safe-area-inset-bottom)",
+        display: "flex", alignItems: "stretch", paddingBottom: "env(safe-area-inset-bottom)",
       }}>
         <NavBtn id="home" icon={Home} label="Home" active={nav === "home" && !openJob}
           onPress={(id) => { setNav(id); setOpenJobId(null); }} />
         <NavBtn id="jobs" icon={Briefcase} label="Jobs" active={nav === "jobs" && !openJob}
           onPress={(id) => { setNav(id); setOpenJobId(null); }} />
         <button onClick={() => { setLeadSeed(null); setNewLeadOpen(true); }} aria-label="New lead" style={{
-          border: "none", cursor: "pointer", background: T.accent, color: "#fff",
-          width: 46, height: 46, borderRadius: 15, display: "grid", placeItems: "center",
-          margin: "0 8px", transform: "translateY(-6px)", boxShadow: `0 4px 12px ${T.accent}55`,
-          flexShrink: 0,
-        }}><Plus size={22} /></button>
+          flex: 1, border: "none", background: "none", cursor: "pointer",
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "10px 0 8px",
+        }}>
+          <span style={{
+            width: 34, height: 22, borderRadius: 7, background: T.accent, color: "#fff",
+            display: "grid", placeItems: "center",
+          }}><Plus size={16} /></span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: T.accent }}>Add</span>
+        </button>
         <NavBtn id="inbox" icon={MessageCircle} label="Inbox" badge={Math.max(0, chatMsgs.length - chatSeenCount)}
           active={nav === "inbox" && !openJob} onPress={(id) => { setNav(id); setOpenJobId(null); }} />
         <NavBtn id="more" icon={Menu} label="More" badge={unreadMentions}

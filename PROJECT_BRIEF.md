@@ -751,6 +751,90 @@ only static assets and one string constant.
   dozens of screens) and needs to be worked through screen by screen rather
   than claimed done in one pass.
 
+## SESSION LOG — 2026-07-27, second pass (bug reports from live screenshots)
+Jacob sent screenshots of the live site flagging several things; the live
+site turned out to be running a stale build (see below), but the
+underlying issues were real in the source regardless.
+
+- **Roof takeoff removed completely**, per Jacob's explicit call — not
+  hidden, deleted: the `JOB_SECTIONS` entry, the render case, the "Open
+  roof takeoff" CTA on Measurements, and the whole `computeTakeoff`/
+  `TabTakeoff`/`slopeFactor`/`WASTE_BANDS`/etc. engine (~500 lines).
+  Confirmed nothing else in the app read `job.takeoff` or called
+  `computeTakeoff` before deleting. `build24`/`build25` (the takeoff
+  regression tests) are retired; `build35` asserts the removal instead.
+- **"BY STAGE" dashboard rows showing no stage name** (just a bar and a
+  count): `byStage` spreads a stage object (which has `.name`) but the row
+  read `{st.label}` — a field that has never existed on a stage. Different
+  bug from the Chip/flexbox issue fixed earlier, same "wrong field name,
+  rendered as blank" shape. Fixed to `{st.name}`.
+- **Unread badges (Inbox count, @mention count under More) never actually
+  cleared**: `chatSeenCount` lived in plain `useState(0)`, so a reload —
+  backgrounding Safari, a PWA relaunch, even just refreshing — reset it to
+  zero and every previously-read message counted as unread again. It looked
+  like notifications never cleared; they cleared for the session and then
+  forgot. Persisted per-user in localStorage now.
+- **Bottom nav still read as a copy of Roofr** even after the earlier
+  "squircle, closer to the bar" pass — because the real signature isn't the
+  shape, it's a raised, oversized, drop-shadowed center button floating
+  above an otherwise plain icon row, which is the single most common
+  pattern among field-service competitors regardless of whether the button
+  is round or square. Removed the elevation/shadow/oversizing entirely:
+  all five items (Home, Jobs, Add, Inbox, More) are now the same flat,
+  equal-height tab button, and the active-tab indicator changed from a
+  filled background pill to a slim accent bar along the top edge — a
+  materially different visual language, not a reskin of the same shape.
+- **Insurance code lookup by zip — already exists and is already live**,
+  not a placeholder: `InsuranceHub`'s Code lookup tab resolves a zip
+  through a hand-researched Ohio/Kentucky county → building-department
+  database first, and falls back to a real Geoapify geocoding call
+  (`geoLookupZip`) for anything not already on file, saving what it learns
+  so the database grows with use. Verified end-to-end for Jacob's actual
+  market (45402/Dayton — instant, full building-department contact info).
+  A zip outside that seeded list failed the live Geoapify call in this dev
+  sandbox specifically — this environment blocks outbound requests to
+  arbitrary external domains, so that failure could be the sandbox and not
+  the real thing; worth Jacob trying an out-of-market zip on the actual
+  deployed site to confirm the Geoapify key is reachable from production.
+- **Client portal security — fixed the previously-flagged anon-enumerable
+  read** (migrations 018/019), now that Jacob gave a standing go-ahead to
+  apply changes without asking each time. `portal_public_read` on
+  `crm_portal` was `revoked = false` for anon with no token check —
+  RLS controls which rows CAN come back, not what a query asks for, so
+  anyone holding the public anon key could skip the app's own token filter
+  and read every tenant's portal data directly from the REST endpoint.
+  Found the identical shape of bug one level down while fixing it:
+  `pmsg_update_customer` validated that the message row being updated had
+  a live token, but never that the caller supplied that token — so an
+  anonymous visitor could mark any tenant's portal messages read, not just
+  their own thread. Both closed by moving the token check into
+  security-definer functions (`portal_get_data`, `portal_get_messages`,
+  `portal_mark_customer_read`) that take the token as an explicit argument,
+  so the only rows ever reachable are the ones matching what the caller
+  actually passed in. Staff viewing the same thread from inside a job were
+  never affected — that path already used real tenant-scoped RLS and stays
+  on it. `build36` asserts the fix. **Caught and fixed my own mistake
+  mid-way**: migration 018's first version of the mark-read function had
+  the role/column pairing backwards; 019 corrects it before anything in
+  the client ever called it, so no bad data was written.
+- **New, separate finding, not fixed**: `crm_portal_msgs` has no anon
+  SELECT policy at all (by design, to avoid reopening the enumeration
+  hole) and Supabase Realtime enforces RLS on subscriptions — meaning a
+  homeowner's live portal chat almost certainly never received new
+  team replies in real time; they'd only see them on their next full page
+  load. Pre-existing, not something this session's changes touched either
+  way. Would need a proper design (likely Realtime's authorized/broadcast
+  channels) rather than a quick policy tweak — flagging rather than
+  guessing at a fix.
+- **The live deployed site (ridgeline-kappa.vercel.app) is stale.**
+  Screenshots Jacob sent show blue UI throughout (nav, buttons, pills);
+  `T.accent` has been `#0A9E98` (teal) since commit `51aa8a5`, which
+  `origin/main` has had since well before this session started. Something
+  between GitHub and Vercel isn't picking up pushes — worth checking the
+  Vercel project's Deployments tab for a failed build or a paused
+  auto-deploy, since no amount of further code fixes will be visible on
+  that URL until it redeploys from the current `main`.
+
 ## Honest limits (do not promise otherwise)
 - Google reviews cannot be auto-posted; no API exists. The compliant
   ask-first flow is built.
@@ -760,3 +844,5 @@ only static assets and one string constant.
 - Job edits sync on refresh, last-write-wins. No live field merging.
 - KY and IL insurance citations are unverified placeholders. Ohio's are
   verified.
+- Client portal live chat (customer side) does not update in real time —
+  see above; needs Realtime's authorized-channel support, not built yet.
