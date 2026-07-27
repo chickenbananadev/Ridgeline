@@ -132,7 +132,8 @@ function clickText(txt) {
 }
 const root = createRoot(document.getElementById("root"));
 act(() => { root.render(React.createElement(App)); });
-clickText("Sign in");
+clickText("Sign in"); // marketing page -> auth screen
+clickText("Sign in"); // auth screen -> demo account picker
 clickText("Jacob Henderson");
 check("focus list renders on home", /Needs your attention/.test(document.body.textContent)
   || true /* demo data may legitimately produce no focus rows; static check above covers wiring */);

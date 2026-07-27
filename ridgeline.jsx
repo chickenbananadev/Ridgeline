@@ -2644,8 +2644,274 @@ function SignaturePad({ open, onClose, title, onApply }) {
 /* ================================================================
    LOGIN
    ================================================================ */
-function Login({ brand, users, onLogin }) {
-  const [mode, setMode] = useState("login");
+/* ==================================================================
+   Marketing — the public site. Not a copy of any competitor's layout;
+   the section order (hero, feature-by-feature with real screenshots,
+   values, pricing, final CTA) is the standard shape most SaaS sites
+   converge on for good reason, filled in with RoofStride's own
+   content and its own actual screenshots — no stock photography, no
+   fabricated mockups.
+   ================================================================== */
+const MKT = { ink: "#20242A", teal: "#0A9E98", tealDark: "#087F7A", sub: "#5B6470", bg: "#F7F8FA", line: "#E5E7EB" };
+
+function MktNav({ onSignIn, onStartTrial }) {
+  return (
+    <div style={{
+      position: "sticky", top: 0, zIndex: 40, background: "rgba(255,255,255,.92)",
+      backdropFilter: "blur(8px)", borderBottom: `1px solid ${MKT.line}`,
+    }}>
+      <div style={{
+        maxWidth: 1100, margin: "0 auto", padding: "14px 20px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
+        <img src="/roofstride-logo-horizontal.png" alt={PRODUCT.name} style={{ height: 28, display: "block" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+          <button onClick={onSignIn} style={{
+            border: "none", background: "none", color: MKT.ink, fontWeight: 600,
+            fontSize: 14, cursor: "pointer", fontFamily: "inherit", padding: "8px 4px",
+          }}>Sign in</button>
+          <button onClick={onStartTrial} style={{
+            border: "none", background: MKT.teal, color: "#fff", fontWeight: 700,
+            fontSize: 14, cursor: "pointer", fontFamily: "inherit", padding: "10px 18px",
+            borderRadius: 9,
+          }}>Start free trial</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MktFeatureRow({ eyebrow, title, body, points, img, reverse }) {
+  return (
+    <div className="mkt-row" style={{
+      display: "flex", alignItems: "center", gap: 56, maxWidth: 1100, margin: "0 auto",
+      padding: "64px 20px", flexDirection: reverse ? "row-reverse" : "row",
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, marginBottom: 10, textTransform: "uppercase" }}>
+          {eyebrow}
+        </div>
+        <div style={{ fontSize: 30, fontWeight: 800, color: MKT.ink, lineHeight: 1.25, marginBottom: 14 }}>{title}</div>
+        <div style={{ fontSize: 16, color: MKT.sub, lineHeight: 1.6, marginBottom: 18 }}>{body}</div>
+        {points && (
+          <div>
+            {points.map((p, i) => (
+              <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "6px 0" }}>
+                <CheckCircle2 size={17} color={MKT.teal} style={{ flexShrink: 0, marginTop: 2 }} />
+                <div style={{ fontSize: 14.5, color: MKT.ink }}>{p}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div style={{ flexShrink: 0 }}>
+        <img src={img} alt={title} style={{
+          width: 260, borderRadius: 18, display: "block",
+          boxShadow: "0 20px 50px rgba(32,36,42,.18)", border: `1px solid ${MKT.line}`,
+        }} />
+      </div>
+    </div>
+  );
+}
+
+function Marketing({ onSignIn, onStartTrial }) {
+  const STRIDE = [
+    ["S", "Simplicity", "We turn complicated roofing workflows into clear, straightforward steps."],
+    ["T", "Transparency", "Clear information, honest communication, and no hidden surprises."],
+    ["R", "Responsibility", "We take ownership, solve problems, and follow through on our commitments."],
+    ["I", "Innovation", "We build practical technology around real roofing challenges — not unnecessary gimmicks."],
+    ["D", "Dependability", "Roofing doesn't stop when conditions get difficult. RoofStride stays reliable in the office and in the field."],
+    ["E", "Empowerment", "We give roofing professionals the visibility, tools, and control to operate with confidence."],
+  ];
+  return (
+    <div style={{ background: "#fff" }}>
+      <style>{`
+        @media (max-width: 760px) {
+          .mkt-row { flex-direction: column !important; padding: 40px 20px !important; gap: 32px !important; }
+          .mkt-row img { width: 100% !important; max-width: 320px; }
+          .mkt-hero-grid { flex-direction: column !important; text-align: center !important; }
+          .mkt-hero-grid .mkt-hero-copy { align-items: center !important; }
+          .mkt-stride-grid { grid-template-columns: 1fr !important; }
+          .mkt-hero-title { font-size: 34px !important; }
+        }
+      `}</style>
+
+      <MktNav onSignIn={onSignIn} onStartTrial={onStartTrial} />
+
+      {/* ---------- Hero ---------- */}
+      <div style={{ background: MKT.ink, color: "#fff", padding: "72px 20px 0" }}>
+        <div className="mkt-hero-grid" style={{
+          maxWidth: 1100, margin: "0 auto", display: "flex", alignItems: "center", gap: 48,
+        }}>
+          <div className="mkt-hero-copy" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+            <div style={{
+              fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal,
+              textTransform: "uppercase", marginBottom: 14,
+            }}>Roofing operations, one platform</div>
+            <div className="mkt-hero-title" style={{ fontSize: 46, fontWeight: 800, lineHeight: 1.15, marginBottom: 18 }}>
+              One Stride Ahead<br />of Every Job.
+            </div>
+            <div style={{ fontSize: 18, color: "rgba(255,255,255,.75)", lineHeight: 1.6, marginBottom: 8, maxWidth: 480 }}>
+              {PRODUCT.tagline}
+            </div>
+            <div style={{ fontSize: 15.5, color: "rgba(255,255,255,.6)", lineHeight: 1.6, marginBottom: 28, maxWidth: 480 }}>
+              Leads, jobs, production, finances, and communication — moving together in one clear workflow, from the first knock to the final invoice.
+            </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+              <button onClick={onStartTrial} style={{
+                border: "none", background: MKT.teal, color: "#fff", fontWeight: 700,
+                fontSize: 15.5, cursor: "pointer", fontFamily: "inherit", padding: "14px 26px", borderRadius: 10,
+              }}>Start your free trial</button>
+              <button onClick={onSignIn} style={{
+                border: "1.5px solid rgba(255,255,255,.3)", background: "transparent", color: "#fff",
+                fontWeight: 700, fontSize: 15.5, cursor: "pointer", fontFamily: "inherit",
+                padding: "14px 26px", borderRadius: 10,
+              }}>Sign in</button>
+            </div>
+            <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.55)" }}>
+              7-day free trial · ${PRODUCT.seatPrice.toFixed(2)}/seat/month after · Cancel anytime
+            </div>
+          </div>
+          <div style={{ flexShrink: 0, paddingBottom: 0 }}>
+            <img src="/marketing/shot-dashboard.png" alt="RoofStride dashboard" style={{
+              width: 280, borderRadius: "20px 20px 0 0", display: "block",
+              boxShadow: "0 30px 70px rgba(0,0,0,.4)", border: "1px solid rgba(255,255,255,.15)",
+              borderBottom: "none",
+            }} />
+          </div>
+        </div>
+      </div>
+
+      {/* ---------- Feature rows — every image below is a real screenshot of the running app ---------- */}
+      <MktFeatureRow
+        eyebrow="Pipeline"
+        title="Every job, every dollar, one board."
+        body="Twelve stages from lead to paid, with dollar values by stage and a focus list that ranks what actually needs attention today — with the reason printed next to it, not a black-box score."
+        points={["Board and list views", "Time-in-stage and last-touched on every card", "Ranked focus list with reasons, not just a number"]}
+        img="/marketing/shot-pipeline.png"
+      />
+      <div style={{ background: MKT.bg }}>
+        <MktFeatureRow
+          eyebrow="Estimating"
+          title="Catch what's missing before the adjuster does."
+          body="The supplement checker compares your inspection and measurements against the estimate itself, and flags documented conditions that aren't priced yet — with the exact evidence and code citation behind each one."
+          points={["Cites the measurement or checklist answer behind every finding", "IRC citations built in", "Stays silent when the estimate is already complete"]}
+          img="/marketing/shot-supplement-check.png"
+          reverse
+        />
+      </div>
+      <MktFeatureRow
+        eyebrow="Insurance & claims"
+        title="Every claim, tracked to the penny."
+        body="ACV, supplements, deductible, RCV holdback — tracked per job, not in a side spreadsheet, alongside the rest of the customer's file."
+        points={["Full job profile: contact, priority, tags, activity history", "Insurance claim values tracked alongside the job", "Notes with a full, unhideable audit trail"]}
+        img="/marketing/shot-job-detail.png"
+      />
+      <div style={{ background: MKT.bg }}>
+        <MktFeatureRow
+          eyebrow="Production"
+          title="Know who's on which roof, every day."
+          body="A day-first dispatch board built for a phone, not a spreadsheet — see the week's load at a glance, place a job on a crew in one sheet, and catch rain risk before a crew rolls out."
+          points={["Rain-risk flagged automatically on scheduled jobs", "One sheet to assign both crew and day", "Nothing scheduled falls through the backlog"]}
+          img="/marketing/shot-dispatch.png"
+          reverse
+        />
+      </div>
+      <MktFeatureRow
+        eyebrow="Financials"
+        title="Clear profitability, not a black box."
+        body="Signed revenue, gross margin, close rate, and receivables — by rep or company-wide — so you know what a job actually made, not just what it billed."
+        points={["Job-level profitability, not just totals", "Collections aging by customer", "QuickBooks-ready export"]}
+        img="/marketing/shot-performance.png"
+      />
+
+      {/* ---------- STRIDE values ---------- */}
+      <div style={{ background: MKT.ink, color: "#fff", padding: "72px 20px" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 44 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
+              What RoofStride stands for
+            </div>
+            <div style={{ fontSize: 30, fontWeight: 800 }}>The STRIDE standard</div>
+          </div>
+          <div className="mkt-stride-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 28 }}>
+            {STRIDE.map(([letter, name, body]) => (
+              <div key={letter} style={{
+                background: "rgba(255,255,255,.06)", borderRadius: 14, padding: "22px 20px",
+                border: "1px solid rgba(255,255,255,.1)",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                  <span style={{
+                    width: 34, height: 34, borderRadius: 9, background: MKT.teal, color: "#fff",
+                    display: "grid", placeItems: "center", fontWeight: 800, fontSize: 15, flexShrink: 0,
+                  }}>{letter}</span>
+                  <span style={{ fontSize: 16, fontWeight: 800 }}>{name}</span>
+                </div>
+                <div style={{ fontSize: 13.5, color: "rgba(255,255,255,.65)", lineHeight: 1.55 }}>{body}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ---------- Pricing ---------- */}
+      <div style={{ padding: "72px 20px", background: MKT.bg }}>
+        <div style={{ maxWidth: 480, margin: "0 auto", textAlign: "center" }}>
+          <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
+            Pricing
+          </div>
+          <div style={{ fontSize: 30, fontWeight: 800, color: MKT.ink, marginBottom: 30 }}>One plan. Every feature.</div>
+          <div style={{
+            background: "#fff", borderRadius: 20, padding: "36px 32px", border: `1px solid ${MKT.line}`,
+            boxShadow: "0 20px 50px rgba(32,36,42,.08)",
+          }}>
+            <div style={{ fontSize: 46, fontWeight: 800, color: MKT.ink }}>
+              ${PRODUCT.seatPrice.toFixed(2)}<span style={{ fontSize: 16, fontWeight: 600, color: MKT.sub }}>/seat/month</span>
+            </div>
+            <div style={{ fontSize: 14, color: MKT.sub, margin: "6px 0 24px" }}>
+              7-day free trial, card required. Cancel anytime before it ends and you won't be charged.
+            </div>
+            <button onClick={onStartTrial} style={{
+              width: "100%", border: "none", background: MKT.teal, color: "#fff", fontWeight: 700,
+              fontSize: 16, cursor: "pointer", fontFamily: "inherit", padding: "15px", borderRadius: 10,
+              marginBottom: 22,
+            }}>Start your free trial</button>
+            <div style={{ textAlign: "left" }}>
+              {["Full pipeline, estimating & contracts", "Dispatch, purchase orders & warranties",
+                "Insurance claims & code lookup", "Financials, commissions & QuickBooks export",
+                "Client portal & team chat", "Unlimited jobs, no per-job fees"].map((f, i) => (
+                <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "7px 0" }}>
+                  <CheckCircle2 size={16} color={MKT.teal} style={{ flexShrink: 0, marginTop: 2 }} />
+                  <div style={{ fontSize: 14, color: MKT.ink }}>{f}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ---------- Final CTA ---------- */}
+      <div style={{ background: MKT.teal, padding: "56px 20px", textAlign: "center" }}>
+        <div style={{ fontSize: 26, fontWeight: 800, color: "#fff", marginBottom: 18 }}>
+          Ready to run roofing operations with clarity?
+        </div>
+        <button onClick={onStartTrial} style={{
+          border: "none", background: "#fff", color: MKT.tealDark, fontWeight: 700,
+          fontSize: 16, cursor: "pointer", fontFamily: "inherit", padding: "15px 30px", borderRadius: 10,
+        }}>Start your free trial</button>
+      </div>
+
+      {/* ---------- Footer ---------- */}
+      <div style={{ background: MKT.ink, padding: "28px 20px", textAlign: "center" }}>
+        <img src="/roofstride-mark.png" alt="" style={{ height: 22, opacity: 0.7, margin: "0 auto 10px", display: "block" }} />
+        <div style={{ fontSize: 12.5, color: "rgba(255,255,255,.45)" }}>© {new Date().getFullYear()} {PRODUCT.name}</div>
+      </div>
+    </div>
+  );
+}
+
+function Login({ brand, users, onLogin, initialMode = "login", onBackToMarketing }) {
+  const [mode, setMode] = useState(initialMode);
   /* Sign-up fields. Kept separate from the sign-in fields so a
      half-typed company name does not leak into a login attempt. */
   const [suName, setSuName] = useState("");
@@ -2735,6 +3001,13 @@ function Login({ brand, users, onLogin }) {
       alignItems: "center", justifyContent: "center", padding: 24, position: "relative",
     }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
+        {onBackToMarketing && (
+          <button onClick={onBackToMarketing} style={{
+            border: "none", background: "none", color: S.sub, fontWeight: 600,
+            fontSize: 13, cursor: "pointer", padding: 0, marginBottom: 18,
+            display: "flex", alignItems: "center", gap: 5, fontFamily: "inherit",
+          }}><ChevronLeft size={15} /> Back to roofstride.com</button>
+        )}
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           {/* Login never renders once signed in — there is no legitimate
              tenant to show here, only whichever company happens to be
@@ -18199,6 +18472,12 @@ export default function SupremeCRM() {
     : "";
 
   const [currentUser, setCurrentUser] = useState(null);
+  /* Pre-auth entry point. A first-time visitor should land on the
+     marketing site, not a bare login form — "Sign in" and "Start free
+     trial" both drop into the existing Login component, just in
+     different modes. Once currentUser is set none of this matters. */
+  const [entry, setEntry] = useState("marketing");
+  const [authMode, setAuthMode] = useState("login");
   const [users, setUsers] = useState(SEED_USERS);
   const [booting, setBooting] = useState(liveAuth());
   const [authError, setAuthError] = useState("");
@@ -18611,9 +18890,18 @@ export default function SupremeCRM() {
     );
   }
   if (!currentUser) {
+    if (entry === "marketing") {
+      return (
+        <Marketing
+          onSignIn={() => { setAuthMode("login"); setEntry("auth"); }}
+          onStartTrial={() => { setAuthMode("signup"); setEntry("auth"); }}
+        />
+      );
+    }
     return (
       <>
-        <Login brand={brand} users={users} onLogin={setCurrentUser} />
+        <Login brand={brand} users={users} onLogin={setCurrentUser}
+          initialMode={authMode} onBackToMarketing={() => setEntry("marketing")} />
         {authError && (
           <div style={{
             position: "fixed", bottom: 20, left: 20, right: 20, maxWidth: 420, margin: "0 auto",

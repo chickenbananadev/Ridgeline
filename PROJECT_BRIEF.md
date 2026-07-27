@@ -296,6 +296,67 @@ corners). Updated: all PWA/favicon assets, `public/roofstride-logo-
 horizontal.png`, `public/roofstride-mark.png`, `manifest.json` theme_
 color, `index.html` meta theme-color, `DEFAULT_BRAND.primary`.
 
+## Public marketing landing page (this session)
+The app previously had no public site — visiting it showed a bare
+login form, even to someone who had never heard of RoofStride. Added
+a real pre-auth entry point: `entry` state (`"marketing" | "auth"`)
+defaults to `"marketing"`, showing the new `Marketing` component
+first. "Sign in" and "Start free trial" both route into the existing
+`Login` component (now accepts `initialMode` and `onBackToMarketing`),
+just in different modes. Recovery/invite links still bypass this
+entirely — those early-return before the entry check, unaffected.
+
+Content: hero with Jacob's actual headline ("One Stride Ahead of
+Every Job") and slogan, five feature sections each paired with a real
+screenshot, the STRIDE values (verbatim from Jacob), pricing ($49.99/
+seat, 7-day trial, card required — see note below), final CTA,
+footer. IA follows the standard SaaS-site shape (hero → features →
+values → pricing → CTA) without copying any competitor's actual
+layout, per Jacob's instruction.
+
+**Screenshots are real, not mockups.** This sandbox has `wkhtmltoimage`
+(a real rendering engine, already installed) and the Inter font. The
+capture technique: mount the actual app in the same jsdom harness the
+test suites already use, navigate with real clicks to a real screen,
+serialize the resulting DOM (100% inline styles in this app, so
+serialized HTML carries real pixel-accurate styling), then rasterize
+with wkhtmltoimage. Six shots landed in `public/marketing/`: dashboard,
+pipeline, job detail (insurance claim tracking), the supplement
+checker (real findings, real IRC citations), dispatch, and performance/
+profitability. For the job-detail page specifically (a long
+collapsible-sections scroll, not a tab strip) — extracting the target
+section's DOM node directly and rendering it in isolation worked far
+better than guessing a pixel crop offset into a 9000px page.
+
+**NOT built: real credit-card collection.** The pricing section's copy
+says "card required," per Jacob's request, but the actual trial signup
+form does not collect a card — that requires real Stripe integration
+(Stripe Checkout or Elements, a Stripe account, webhook handling for
+trial-end billing), none of which exists yet. Do not add a card input
+field to the signup form without wiring it to a real processor — a
+fake-looking card form that doesn't actually process anything is a
+trust/security problem, not a feature gap to shortcut.
+
+## A latent test-helper quirk worth knowing about
+`clickText` (used identically across ~30 test files) matches on
+`(tagName === "BUTTON" || e.onclick)`, and elements are walked in
+document order. In this specific jsdom + React 18 (`createRoot`)
+setup, the ROOT container itself reports a truthy `.onclick` (a jsdom
+quirk — this never happens in a real browser, where `.onclick` and
+React's `addEventListener`-based delegation are correctly
+independent). This means if a target button's text happens to be the
+very first text rendered inside some ancestor (all the way up to
+`#root`), the OUTER ancestor div can spuriously outrank the real
+button in the match, since it satisfies the `e.onclick` branch of the
+check before the loop ever reaches the actual `<button>`. Surfaced by
+the new "Back to roofstride.com" button (the first child in Login's
+render tree) in build31 — fixed there by requiring a strict
+BUTTON/A tagName match first, falling back to the looser check only
+after. The other ~30 test files still use the old pattern and are all
+currently passing, so this wasn't fixed globally — just worth knowing
+if a future button placed as the first child of a large container
+starts causing a confusing click-target mismatch in a test.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.

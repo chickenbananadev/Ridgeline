@@ -30,7 +30,8 @@ const bodyLen = () => document.body.textContent.length;
   const root = createRoot(document.getElementById("root"));
   act(() => { root.render(React.createElement(App)); });
   console.log("login screen:", bodyLen(), "chars");
-  clickText("Sign in");                 // demo mode -> account picker
+  clickText("Sign in");                 // marketing page -> auth screen
+  clickText("Sign in");                 // auth screen -> demo account picker
   console.log("account picker:", bodyLen());
   clickText("Jacob Henderson");         // login
   console.log("dashboard:", bodyLen());

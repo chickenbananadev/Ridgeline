@@ -57,6 +57,7 @@ function clickText(txt) {
 delete global.fetch;
 let root = createRoot(document.getElementById("root"));
 act(() => { root.render(React.createElement(App)); });
+clickText("Sign in"); // marketing page -> auth screen
 clickText("Sign in");
 clickText("Jacob Henderson");
 clickText("More");
@@ -68,6 +69,7 @@ global.fetch = () => Promise.reject(new Error("offline"));
 act(() => { root.unmount(); });
 root = createRoot(document.getElementById("root"));
 act(() => { root.render(React.createElement(App)); });
+clickText("Sign in"); // marketing page -> auth screen
 clickText("Sign in");
 clickText("Jacob Henderson");
 clickText("More");
@@ -88,6 +90,7 @@ global.fetch = () => Promise.resolve({
 act(() => { root.unmount(); });
 root = createRoot(document.getElementById("root"));
 act(() => { root.render(React.createElement(App)); });
+clickText("Sign in"); // marketing page -> auth screen
 clickText("Sign in");
 clickText("Jacob Henderson");
 clickText("More");

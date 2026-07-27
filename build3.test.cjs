@@ -47,7 +47,8 @@ function setSelect(selector, value) {
 (async () => {
   const root = createRoot(document.getElementById("root"));
   act(() => root.render(React.createElement(App)));
-  clickText("Sign in");
+  clickText("Sign in"); // marketing page -> auth screen
+  clickText("Sign in"); // auth screen -> demo account picker
   clickText("Jacob Henderson");
   clickText("Jobs");
   clickText("Roger Perry");

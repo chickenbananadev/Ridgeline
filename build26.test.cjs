@@ -89,7 +89,8 @@ function clickText(txt) {
   return true;
 }
 
-clickText("Sign in");
+clickText("Sign in"); // marketing page -> auth screen
+clickText("Sign in"); // auth screen -> demo account picker
 check("demo account picker reachable", clickText("Jacob Henderson"));
 check("More menu opens", clickText("More"));
 clickText("SETUP");

@@ -62,7 +62,8 @@ function clickFieldChoice(labelText, choiceText) {
   const root = createRoot(document.getElementById("root"));
   act(() => root.render(React.createElement(App)));
 
-  clickButton("Sign in");
+  clickButton("Sign in"); // marketing page -> auth screen
+  clickButton("Sign in"); // auth screen -> demo account picker
   clickButton("Jacob Henderson");
   clickButton("Jobs");
   clickButton("New");
