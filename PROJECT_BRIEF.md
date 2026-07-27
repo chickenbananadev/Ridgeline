@@ -1249,6 +1249,65 @@ identical label.
 
 All 40 suites pass.
 
+## Job detail menu cleanup: fewer sections, activity behind the clock, Quick Actions (this session)
+Jacob's feedback from screenshots of both RoofStride and Roofr's own
+quick-actions menu (for reference/comparison): too many top-level
+collapsible sections, Activity cluttering the page instead of living
+behind a clock icon like Roofr does, and no fast "quick actions" menu.
+
+**Financials/Payments/Invoice consolidated into one section.** They
+were three separate top-level collapsible rows; now one "Financials"
+row with an internal sub-tab strip (Costs & profit / Payments /
+Invoice). New `TabFinancialsCombined` wrapper — the three underlying
+components (`TabFinancials`, `TabPayments`, `TabInvoice`) are
+completely unchanged, just reached through one door instead of three.
+`JOB_SECTIONS` (the array driving the visible list) dropped from 21 to
+19 entries. Checked every other reference to the `payments`/`invoice`
+section ids before touching anything: `JOB_TABS`/`MONEY_TABS`/
+`JOB_TAB_GROUPS` are a vestigial parallel structure from before the
+collapsible-sections redesign — `JOB_TAB_GROUPS` turned out to be
+declared but never actually consumed anywhere (dead code, left alone);
+`MONEY_TABS` only gates an old, no-longer-rendered tab-strip variable,
+harmless to leave as-is. The two remaining "invoice" references (lines
+~1273, ~13384, ~8344) all belong to the CUSTOMER PORTAL's own separate
+document list — untouched, since Jacob's ask was about the staff job
+page, not what the homeowner sees.
+
+**Found a real, pre-existing bug while investigating Activity**: the
+code already had a comment saying "activity behind a clock, matching
+Roofr" and a button wired to `setActivityOpen(true)` opening a proper
+Activity Sheet — but the button's actual icon was `RefreshCw`, not a
+clock, so it visually read as a refresh button. Fixed by importing and
+using the real `Clock` icon. Also found and removed a fully redundant,
+always-visible "Activity on this job" Card sitting inline in Overview
+— the actual source of the clutter Jacob was seeing, showing the exact
+same data as the (correctly gated) Sheet, just permanently expanded.
+
+**New Quick Actions sheet**, modeled on Roofr's own quick-actions grid
+(a 2-column popup of common actions) but using RoofStride's real
+sections rather than copying Roofr's specific feature list: Estimate,
+Contract, Signatures, Materials, Work order, Financials, Photos,
+Attachments, Tasks, Messages. Each tile expands the target section and
+smooth-scrolls to it (`jumpToSection`, using a new `id={`jobsec-${id}`}`
+anchor added to each section's wrapper). Scoped deliberately to
+navigation rather than also auto-triggering each section's own
+"add new X" sub-flows — that would have meant threading several more
+props (appointments/calls state, used by the separate `JobQuickPanel`
+board-card quick-add) through `JobDetail`, a bigger lift than the
+core ask; flagged here as a reasonable follow-up if wanted.
+
+**Test-writing lessons from build41**: icon-only buttons (like the
+clock) have no text content at all, so the usual `clickText()` helper
+(which matches by visible text) can never find them — added a
+`clickAriaLabel()` helper for these. Also caught my own mistake mid-
+test: the Signatures section's collapsed-state HINT text ("Sign and
+countersign") only renders while the section is closed
+(`HINTS[id] && !isOpen`), so asserting for it as proof the section
+*opened* was backwards — switched to asserting on content that only
+renders once actually open ("Signature record").
+
+All 41 suites pass.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.

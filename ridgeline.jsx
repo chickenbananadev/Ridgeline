@@ -8,7 +8,7 @@ import {
   BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat, CloudRain,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
   Scale, Lightbulb, ExternalLink, Lock, Layers, Smile
-, Filter , Megaphone } from "lucide-react";
+, Filter , Megaphone, Clock, Zap } from "lucide-react";
 
 /* ================================================================
    BRANDING — single source of company identity. Everything company-
@@ -6363,8 +6363,6 @@ const JOB_SECTIONS = [
   ["tasks", "Tasks", CheckCircle2],
   ["files", "Attachments", Layers],
   ["financials", "Financials", DollarSign],
-  ["payments", "Payments", Receipt],
-  ["invoice", "Invoice", Receipt],
   ["messages", "Messages", MessageCircle],
   ["portal", "Client portal", Share2],
 ];
@@ -6385,6 +6383,15 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
      opens its own section too so the caller lands on real content. */
   const [open, setOpen] = useState(() => ({ overview: true, ...(openTab ? { [openTab]: true } : {}) }));
   const [activityOpen, setActivityOpen] = useState(false);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const jumpToSection = (id) => {
+    setOpen((o) => ({ ...o, [id]: true }));
+    setQuickActionsOpen(false);
+    setTimeout(() => {
+      const el = document.getElementById(`jobsec-${id}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  };
   useEffect(() => {
     if (openTab) { setTab(openTab); setOpen((o) => ({ ...o, [openTab]: true })); }
   }, [openTab, job.id]);
@@ -6419,12 +6426,19 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           </div>
           {/* Header actions in the shape Roofr uses: activity behind a
               clock, directions, then the primary quick-action row. */}
-          <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
+          <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end", flexWrap: "wrap" }}>
+            <button onClick={() => setQuickActionsOpen(true)} style={{
+              border: "none", background: T.primary, color: "#fff", borderRadius: 999,
+              padding: "0 16px", height: 38, fontSize: 13.5, fontWeight: 800, cursor: "pointer",
+              fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6,
+            }}>
+              <Zap size={15} /> Quick actions
+            </button>
             <button aria-label="Activity log" onClick={() => setActivityOpen(true)} style={{
               width: 38, height: 38, borderRadius: 999, border: "none", background: T.accentSoft,
               display: "grid", placeItems: "center", cursor: "pointer", color: T.accent,
             }}>
-              <RefreshCw size={17} />
+              <Clock size={17} />
             </button>
             {job.address && (
               <a href={directionsLink(job.address)} target="_blank" rel="noreferrer" aria-label="Directions" style={{
@@ -6497,6 +6511,32 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
         </div>
 
       </div>
+      <Sheet open={quickActionsOpen} onClose={() => setQuickActionsOpen(false)} title="Quick actions">
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {[
+            ["estimate", "Estimate", FileText],
+            ["contract", "Contract", PenLine],
+            ["signatures", "Signatures", PenLine],
+            ["materials", "Materials", Package],
+            ["workorder", "Work order", ClipboardList],
+            ["financials", "Financials", DollarSign],
+            ["photos", "Photos", Camera],
+            ["files", "Attachments", Layers],
+            ["tasks", "Tasks", CheckCircle2],
+            ["messages", "Messages", MessageCircle],
+          ].map(([id, label, Icon]) => (
+            <button key={id} onClick={() => jumpToSection(id)} style={{
+              display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8,
+              border: `1px solid ${S.line}`, background: "#fff", borderRadius: 12,
+              padding: "14px 12px", cursor: "pointer", fontFamily: "inherit", textAlign: "left",
+            }}>
+              <Icon size={19} color={T.accent} />
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{label}</span>
+            </button>
+          ))}
+        </div>
+      </Sheet>
+
       <Sheet open={activityOpen} onClose={() => setActivityOpen(false)} title="Activity">
         {(() => {
           const mine = (activity || []).filter((a) => a.jobId === job.id);
@@ -6552,9 +6592,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "messages": return <TabMessages job={job} mut={mut} toast={toast} brand={brand}
                 templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />;
               case "photos": return <TabPhotos job={job} mut={mut} toast={toast} ccToken={ccToken} />;
-              case "financials": return <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />;
-              case "payments": return <TabPayments job={job} mut={mut} toast={toast} />;
-              case "invoice": return <TabInvoice job={job} brand={brand} mut={mut} toast={toast} />;
+              case "financials": return <TabFinancialsCombined job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />;
               case "workorder": return <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
                 crews={crews} templates={templates} currentUser={currentUser} users={users} />;
               case "tasks": return <TabTasks job={job} mut={mut} toast={toast} />;
@@ -6582,7 +6620,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           return relevant.map(([id, label, Icon]) => {
             const isOpen = !!open[id];
             return (
-              <div key={id} style={{
+              <div key={id} id={`jobsec-${id}`} style={{
                 border: `1px solid ${S.line}`, borderRadius: 12, marginBottom: 10,
                 background: "#fff", overflow: "hidden",
               }}>
@@ -6914,22 +6952,6 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
             )}
           </div>
         ))}
-      </Card>
-
-      <Card style={{ marginBottom: 12 }}>
-        <CardTitle>Activity on this job</CardTitle>
-        {activity.filter((a) => a.jobId === job.id).length === 0 ? (
-          <div style={{ fontSize: 13.5, color: S.sub }}>Stage moves, notes, tasks, and messages on this job land here as they happen.</div>
-        ) : (
-          <div style={{ maxHeight: 250, overflowY: "auto", marginRight: -4, paddingRight: 4 }}>
-            {activity.filter((a) => a.jobId === job.id).slice(0, 60).map((a) => (
-              <div key={a.id} style={{ borderTop: `1px solid ${S.line}`, padding: "10px 0" }}>
-                <div style={{ fontSize: 13, lineHeight: 1.5 }}><b>{a.by}</b> {a.text}</div>
-                <div style={{ fontSize: 11.5, color: S.sub, marginTop: 3 }}>{a.at}</div>
-              </div>
-            ))}
-          </div>
-        )}
       </Card>
 
       <Card>
@@ -12467,6 +12489,35 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
       ))}
       <Btn kind="soft" small onClick={onAdd}><Plus size={13} /> Add</Btn>
     </Card>
+  );
+}
+
+/* Financials, Payments, and Invoice used to be three separate
+   top-level collapsible sections — all money-related, all one thing
+   conceptually, but presented as three rows a rep had to open one at
+   a time. Combined into one section with an internal sub-tab strip;
+   each sub-tab is still the exact same component as before (nothing
+   about TabFinancials/TabPayments/TabInvoice changed), just reached
+   through one door instead of three. */
+function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand }) {
+  const [sub, setSub] = useState("costs");
+  const SUBS = [["costs", "Costs & profit"], ["payments", "Payments"], ["invoice", "Invoice"]];
+  return (
+    <>
+      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        {SUBS.map(([id, label]) => (
+          <button key={id} onClick={() => setSub(id)} style={{
+            flex: 1, border: `1.5px solid ${sub === id ? T.accent : S.line}`,
+            background: sub === id ? T.accentSoft : "#fff", color: sub === id ? T.accent : S.ink,
+            borderRadius: 9, padding: "9px 4px", fontSize: 12.5, fontWeight: 700,
+            cursor: "pointer", fontFamily: "inherit",
+          }}>{label}</button>
+        ))}
+      </div>
+      {sub === "costs" && <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />}
+      {sub === "payments" && <TabPayments job={job} mut={mut} toast={toast} />}
+      {sub === "invoice" && <TabInvoice job={job} brand={brand} mut={mut} toast={toast} />}
+    </>
   );
 }
 
