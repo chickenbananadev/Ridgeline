@@ -913,6 +913,40 @@ untouched by this pass — verified via `git status`/`git diff --stat`
 showing only the 6 PNG files changed, zero lines of code. Full 38-suite
 gauntlet re-run and passing on the real repo afterward.
 
+## Board screenshot fuller pass (this session, follow-up)
+Jacob's screenshot showed the real gap: the board screenshot's visible
+columns (New lead, Appointment scheduled — the first 1-2 stages a
+mobile-width capture actually shows) still had just 1 card each. The
+previous round's 4 new jobs were all placed in LATER stages (Production/
+Deposit paid, for the dispatch fix) — correct for dispatch, but
+invisible in the board's own first-column crop, which explains why
+that screenshot looked unchanged despite the earlier regeneration
+being real.
+
+Same isolated-scratch-copy approach as before (built fresh, deleted
+after use — real seedJobs/SEED_CREWS untouched again). Added 8 more
+demo jobs this round: 2 in "New lead" (s1), 2 in "Appointment
+scheduled" (s2) — these are the ones that actually show up in the
+board screenshot's visible crop — plus 4 more in production stages
+against crews (kept the dispatch fix from last round intact in the
+same pass). All obviously fake names (Priya Kapoor, Devon Marsh,
+Latoya Freeman, Bryce Whitaker, Selena Okafor, Grant Feliciano, Wendy
+Ashcroft, Marcus Delgado), fake addresses.
+
+Verified directly in the captured HTML before shipping, not just
+assumed: "New lead (3)" and "Appointment scheduled (3)" (both were
+"(1)" before), "Active jobs: 14" on the dashboard (was 6, then 10).
+Applied the double-comma lesson from last time — checked the exact
+character at the array-insertion boundary before joining, rather than
+assuming it needed a leading comma.
+
+5 of 6 screenshots actually changed (verified via git diff --stat);
+shot-supplement-check.png came out byte-identical to the last commit,
+which makes sense — Selena Okafor's job used the same underlying
+template data as the job clicked last time, so the supplement
+findings text is the same. Real repo's source code untouched by this
+pass, same as before.
+
 ## Known-good debugging habits
 - **More → System check** first for any "not working" report. It tests
   the connection, every table, and whether writes are permitted.
