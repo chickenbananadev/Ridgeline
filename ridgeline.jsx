@@ -2774,6 +2774,7 @@ function Marketing({ onSignIn, onStartTrial }) {
           .mkt-stride-grid { grid-template-columns: 1fr !important; }
           .mkt-hero-title { font-size: 34px !important; }
           .mkt-footer-grid { grid-template-columns: 1fr 1fr !important; }
+          .mkt-panel-grid { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 480px) {
           .mkt-footer-grid { grid-template-columns: 1fr !important; }
@@ -2872,6 +2873,57 @@ function Marketing({ onSignIn, onStartTrial }) {
         points={["Job-level profitability, not just totals", "Collections aging by customer", "QuickBooks-ready export"]}
         img="/marketing/shot-performance.png"
       />
+
+      {/* ---------- Trust breaker — real team photography between the
+         product screenshots and the values grid, so the page isn't
+         wall-to-wall UI. ---------- */}
+      <Reveal style={{ position: "relative", overflow: "hidden" }}>
+        <img src="/marketing/photos/photo-team-board.jpg" alt="The RoofStride team planning a week's dispatch"
+          style={{ width: "100%", height: 360, objectFit: "cover", display: "block" }} />
+        <div style={{
+          position: "absolute", inset: 0, background: "linear-gradient(90deg, rgba(32,36,42,.82) 0%, rgba(32,36,42,.35) 55%, rgba(32,36,42,.05) 100%)",
+          display: "flex", alignItems: "center",
+        }}>
+          <div style={{ maxWidth: 1100, margin: "0 auto", padding: "0 20px", width: "100%" }}>
+            <div style={{ maxWidth: 420 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
+                Built by roofers, not a Silicon Valley guess
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: "#fff", lineHeight: 1.3 }}>
+                Every screen in this app was shaped by what actually happens between a knock on the door and a signed job.
+              </div>
+            </div>
+          </div>
+        </div>
+      </Reveal>
+
+      {/* ---------- A few more reasons, in the format sales reps already
+         hand customers — quick-hit panels rather than another full row
+         each. ---------- */}
+      <div style={{ padding: "64px 20px", background: "#fff" }}>
+        <Reveal style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 32 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
+              And more, day to day
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: MKT.ink }}>The parts that keep everyone moving</div>
+          </div>
+          <div className="mkt-panel-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+            {[
+              ["/marketing/photos/feat-follow-up-auto.jpg", "Automatic follow-ups so no lead goes quiet"],
+              ["/marketing/photos/feat-keep-crews-moving.jpg", "Dispatch that keeps every crew on schedule"],
+              ["/marketing/photos/feat-close-faster.jpg", "Proposals and e-signatures without the back-and-forth"],
+            ].map(([src, alt], i) => (
+              <Reveal key={src} delay={i * 80} y={18} style={{
+                borderRadius: 16, overflow: "hidden", border: `1px solid ${MKT.line}`,
+                boxShadow: "0 12px 30px rgba(32,36,42,.08)",
+              }}>
+                <img src={src} alt={alt} style={{ width: "100%", display: "block" }} />
+              </Reveal>
+            ))}
+          </div>
+        </Reveal>
+      </div>
 
       {/* ---------- STRIDE values ---------- */}
       <div id="values" style={{ background: MKT.ink, color: "#fff", padding: "72px 20px" }}>
