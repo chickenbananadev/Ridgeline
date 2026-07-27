@@ -6345,26 +6345,39 @@ const JOB_TABS = [
    labelled headers beats hunting sideways through tabs, and several
    can be open at once. Each renders exactly the component the tab
    did. */
+/* Ordered as the job is actually worked — Inspect → Sell → Claim →
+   Build → Money → Customer — instead of front-loading post-sale
+   sections. The 4th tuple element is the group; the accordion prints a
+   divider whenever the group changes, so the stack reads as a timeline.
+   Groups mirror JOB_TAB_GROUPS, extended to cover the three sell-side
+   sections (change orders, signatures, handoff) that never lived in the
+   old tab list. */
 const JOB_SECTIONS = [
-  ["overview", "Overview", ClipboardList],
-  ["claim", "Insurance claim", Shield],
-  ["handoff", "Sold & handoff", Share2],
-  ["changeorders", "Change orders", ScrollText],
-  ["signatures", "Signatures", PenLine],
-  ["checklist", "Inspection checklist", CheckCircle2],
-  ["ventilation", "Ventilation", Wrench],
-  ["measure", "Measurements", Package],
-  ["photos", "Photos", Camera],
-  ["estimate", "Estimate", FileText],
-  ["contract", "Contract", PenLine],
-  ["materials", "Materials", Package],
-  ["report", "Report", ScrollText],
-  ["workorder", "Work order", ClipboardList],
-  ["tasks", "Tasks", CheckCircle2],
-  ["files", "Attachments", Layers],
-  ["financials", "Financials", DollarSign],
-  ["messages", "Messages", MessageCircle],
-  ["portal", "Client portal", Share2],
+  // Inspect
+  ["overview", "Overview", ClipboardList, "Inspect"],
+  ["checklist", "Inspection checklist", CheckCircle2, "Inspect"],
+  ["ventilation", "Ventilation", Wrench, "Inspect"],
+  ["measure", "Measurements", Package, "Inspect"],
+  ["photos", "Photos", Camera, "Inspect"],
+  // Sell
+  ["estimate", "Estimate", FileText, "Sell"],
+  ["contract", "Contract", PenLine, "Sell"],
+  ["changeorders", "Change orders", ScrollText, "Sell"],
+  ["signatures", "Signatures", PenLine, "Sell"],
+  ["materials", "Materials", Package, "Sell"],
+  ["report", "Report", ScrollText, "Sell"],
+  // Claim (insurance jobs only — gated in the render filter)
+  ["claim", "Insurance claim", Shield, "Claim"],
+  // Build
+  ["workorder", "Work order", ClipboardList, "Build"],
+  ["handoff", "Sold & handoff", Share2, "Build"],
+  ["tasks", "Tasks", CheckCircle2, "Build"],
+  ["files", "Attachments", Layers, "Build"],
+  // Money
+  ["financials", "Financials", DollarSign, "Money"],
+  // Customer
+  ["messages", "Messages", MessageCircle, "Customer"],
+  ["portal", "Client portal", Share2, "Customer"],
 ];
 
 /* Retained: the tab groups still drive which sections a seat may see. */
@@ -6412,13 +6425,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
             right={
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <Chip tone="blue">{stage ? stage.name : "—"}</Chip>
-                {isAdmin && onDelete && (
-                  <button aria-label="Delete job" onClick={() => { setDelTyped(""); setDelOpen(true); }}
-                    style={{ border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
-                      width: 34, height: 34, display: "grid", placeItems: "center", cursor: "pointer", color: "#B3261E" }}>
-                    <Trash2 size={15} />
-                  </button>
-                )}
+                {/* Delete lives once, in the footer, behind a type-DELETE guard. */}
               </div>
             } />
           <div style={{ fontSize: 13, color: S.sub, margin: "8px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>
@@ -6440,14 +6447,8 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
             }}>
               <Clock size={17} />
             </button>
-            {job.address && (
-              <a href={directionsLink(job.address)} target="_blank" rel="noreferrer" aria-label="Directions" style={{
-                width: 38, height: 38, borderRadius: 999, background: T.accentSoft,
-                display: "grid", placeItems: "center", color: T.accent, textDecoration: "none",
-              }}>
-                <MapPin size={17} />
-              </a>
-            )}
+            {/* Directions lives in the Call·Text·Directions·Upload row below;
+                a second icon-only copy here was redundant. */}
             {(() => {
               /* The control is a real toggle, and says which way it will
                  go — a button permanently labelled "Expand all" reads as
@@ -6491,7 +6492,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
                   <Act href={tel ? `tel:${tel}` : null} icon={Phone} label="Call" disabled={!tel} />
                   <Act href={tel ? `sms:${tel}` : null} icon={MessageCircle} label="Text" disabled={!tel} />
                   <Act href={directionsLink(job.address)} icon={MapPin} label="Directions" disabled={!job.address} />
-                  <Act onClick={() => setTab("files")} icon={Upload} label="Upload" />
+                  <Act onClick={() => jumpToSection("files")} icon={Upload} label="Upload" />
                 </>
               );
             })()}
@@ -6617,7 +6618,26 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
             claim: "Carrier money and supplements",
             signatures: "Sign and countersign",
           };
-          return relevant.map(([id, label, Icon]) => {
+          /* Interleave a group divider before the first visible section
+             of each group, so the accordion reads Inspect → Sell → …
+             even after filtering hides some sections. */
+          const rows = [];
+          let lastGroup = null;
+          relevant.forEach((sec) => {
+            const group = sec[3];
+            if (group && group !== lastGroup) { rows.push({ divider: group }); lastGroup = group; }
+            rows.push({ sec });
+          });
+          return rows.map((row) => {
+            if (row.divider) {
+              return (
+                <div key={`grp-${row.divider}`} style={{
+                  fontSize: 11.5, fontWeight: 800, letterSpacing: ".09em", textTransform: "uppercase",
+                  color: S.sub, margin: "18px 4px 8px",
+                }}>{row.divider}</div>
+              );
+            }
+            const [id, label, Icon] = row.sec;
             const isOpen = !!open[id];
             return (
               <div key={id} id={`jobsec-${id}`} style={{
