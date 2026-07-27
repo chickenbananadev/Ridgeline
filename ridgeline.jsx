@@ -26,7 +26,7 @@ const PRODUCT = {
   tagline: "Built for Roofing. Made to Move.",
   seatPrice: 49.99,
   trialDays: 7,
-  supportEmail: "support@supremebuildinggroup.com",
+  supportEmail: "support@roofstride.com",
 };
 
 /* Neutral placeholder only — NOT Supreme's real data. This is what a

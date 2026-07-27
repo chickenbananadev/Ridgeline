@@ -627,6 +627,72 @@ comment saying it's already covered.
 7. Recommended next features: Stripe payments, then point-of-sale
    financing (Wisetack/GreenSky), then QuickBooks sync.
 
+## Marketing screenshots STILL had real PII — the build31 fix only caught the cosmetic bugs (this session)
+A fresh audit (Jacob asked for a full pass: "none of my info should be in the home
+page screenshots") found that the six `public/marketing/*.png` files were never
+actually wrong in the way the previous session's fix addressed (demo banner,
+off-center badges) — they were ALSO still running the real demo dataset when
+captured, which meant:
+- `shot-dashboard.png` said **"Welcome back, Jacob"** in giant text, plus
+  stale pre-teal blue icon colors and the old circular-FAB bottom nav — this
+  screenshot predated both the brand-color fix and the nav redesign and was
+  never regenerated after either.
+- `shot-pipeline.png` showed real-looking customer names and addresses
+  (Marcy Templeton / 44 Birch Row, Crystal Lake IL; Rob Kennard / 127 Market
+  Street) on the public, pre-auth marketing page.
+- `shot-job-detail.png` showed **"Jacob Henderson"** twice (assignee chip and
+  Sales team field) plus a real-looking customer name/address (Roger Perry,
+  810 South College Avenue).
+- All six were captured via the old jsdom+wkhtmltoimage pipeline, which no
+  longer exists in the repo (never committed — it was a throwaway script from
+  whichever session built build31).
+
+**Fixed differently this time**: rather than editing the shipped demo/seed
+data (`DEMO_JOBS`/`TEAM`, which Jacob's own team may reasonably use for
+internal training/demos and which stays as-is in the shipped app), captured
+fresh screenshots from a **sanitized scratch copy** — same code, same styling,
+demo names/addresses swapped for clearly generic ones (Alex Rivera, Jamie
+Novak, Sam Ellery, Casey Brooks, Robin Faust, Chris Delgado, Pat Sorensen, and
+generic Springfield/Vanceburg-style addresses) — using real Playwright/
+Chromium against the actual `vite preview` build rather than jsdom, which
+also means the new screenshots are pixel-accurate (no more CSS Grid
+`place-items` rendering bug to work around) and automatically reflect the
+current teal/charcoal brand and the redesigned bottom nav. The shipped app's
+real demo data is untouched; only the six PNGs changed.
+
+**Also found and fixed while sweeping for this**: `PRODUCT.supportEmail` was
+hardcoded to `support@supremebuildinggroup.com` — Jacob's own real business
+email, shown as the generic RoofStride product's help-desk contact to
+**every tenant**, not just Supreme. Same class of bug as the earlier
+PRODUCT-vs-brand leaks, just never checked because it's plain text, not a
+color or a placeholder. Now `support@roofstride.com`.
+
+All 35 suites still pass after both changes; nothing here touched app logic,
+only static assets and one string constant.
+
+## OUTSTANDING — found during this audit, NOT yet fixed (need Jacob's go-ahead)
+1. **`crm_portal.portal_public_read` is `using (revoked = false)` for
+   `anon` with no token check.** Anyone who has the public anon key (which
+   ships in every browser bundle) can currently run a raw REST query and
+   read every non-revoked portal row in the whole database — every tenant's
+   customer names, addresses, and job data. This is the exact issue already
+   flagged earlier in this doc as "OUTSTANDING SECURITY ISSUE — client
+   portal is enumerable," confirmed still true by direct policy inspection
+   via the Supabase MCP connector this session. Real fix: move portal reads
+   behind a security-definer function keyed by token, not a blanket
+   `anon`-readable policy.
+2. **Migrations 015 (multi-tenancy), 016 (crm_brand tenant_id), and 017
+   (crm_org tenant_id) have not been run** — confirmed via `list_tables`:
+   no table has a `tenant_id` column yet, and `crm_brand` already has 2 rows
+   under the old `id`-singleton scheme (meaning a second tenant has already
+   signed up and is sharing/at risk of clobbering Supreme's row right now,
+   under the exact mechanism this doc already described). This is live,
+   present risk, not hypothetical — every signed-in user of every tenant is
+   currently reading/writing the same `id=1` brand and org rows.
+3. Both of the above are database changes with real consequences for a
+   system already in use by more than one signed-up company. Flagged to
+   Jacob rather than applied automatically; his call on timing/order.
+
 ## Honest limits (do not promise otherwise)
 - Google reviews cannot be auto-posted; no API exists. The compliant
   ask-first flow is built.
