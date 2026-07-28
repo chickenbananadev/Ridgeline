@@ -2743,6 +2743,20 @@ var nowStamp = () => (/* @__PURE__ */ new Date()).toLocaleString(void 0, { month
 function estimateTotal(est) {
   return est.items.reduce((s, it) => s + num(it.qty) * num(it.price), 0);
 }
+function convertEstimateToContract(job) {
+  const est = job.estimate || {};
+  const con = job.contract || mkContract();
+  if (con.status === "Signed") return con;
+  return {
+    ...con,
+    number: con.number || `CON-${(/* @__PURE__ */ new Date()).getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
+    price: estimateTotal(est),
+    scope: con.scope || (est.scope || `Per accepted estimate ${est.number || ""}`.trim()),
+    items: (est.items || []).map((it) => ({ id: it.id || uid("ci"), desc: it.desc, qty: it.qty, unit: it.unit, price: num(it.price) })),
+    status: con.status === "Not started" || !con.status ? "Ready to sign" : con.status,
+    fromEstimate: est.number || true
+  };
+}
 function computeFin(fin) {
   const sum = (a) => a.reduce((s, x) => s + x.amt, 0);
   const materials = sum(fin.materials), labor = sum(fin.labor), other = sum(fin.other);
@@ -9603,7 +9617,7 @@ function SignConsent({ checked, onChange, what, accent = "#0A9E98" }) {
     ] })
   ] });
 }
-function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2 }) {
+function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2, estSelection = null }) {
   const [openDoc2, setOpenDoc] = (0, import_react.useState)(null);
   const [sig, setSig] = (0, import_react.useState)(null);
   const [consent, setConsent] = (0, import_react.useState)(false);
@@ -9631,14 +9645,15 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2 
     }
     setBusy(true);
     setErr("");
+    const snapshot = openDoc2.type === "estimate" && estSelection ? { ...openDoc2.snapshot, selection: estSelection, total: estSelection.total } : openDoc2.snapshot;
     const row = {
       id: uid("sig"),
       job_id: jobId,
       doc_type: openDoc2.type,
       doc_id: String(openDoc2.id || ""),
       doc_title: openDoc2.title,
-      doc_hash: docHash(openDoc2.snapshot),
-      doc_snapshot: openDoc2.snapshot,
+      doc_hash: docHash(snapshot),
+      doc_snapshot: snapshot,
       signer_role: "customer",
       signer_name: customer.name || "Customer",
       signer_email: customer.email || null,
@@ -10141,7 +10156,8 @@ function PublicPortal({ token }) {
             customer: d.customer || {},
             docs: d.signDocs || [],
             accent: prim,
-            brand: d
+            brand: d,
+            estSelection: estSel
           }
         )
       );
@@ -11821,7 +11837,25 @@ function TabSignatures({ job, mut, toast: toast2, currentUser, brand: brand2 }) 
     if (signing.doc_type === "contract") {
       mut((j) => ({ ...j, contract: { ...j.contract || {}, status: "Signed", signedAt: todayIso() } }));
     }
-    toast2("Countersigned");
+    if (signing.doc_type === "estimate") {
+      const sel = (signing.doc_snapshot || {}).selection || null;
+      mut((j) => {
+        let est = { ...j.estimate || {} };
+        if (sel) {
+          if (sel.tierId) est.selectedTier = sel.tierId;
+          if (Array.isArray(sel.upgradeIds)) {
+            est.upgrades = (est.upgrades || []).map((u) => ({ ...u, selected: sel.upgradeIds.includes(u.id) }));
+          }
+          est.items = applyEstimateSelection(est);
+        }
+        est.status = "Signed";
+        est.clientSig = est.clientSig || "signed";
+        est.sigAt = todayIso();
+        const withEst = { ...j, estimate: est };
+        return { ...withEst, contract: convertEstimateToContract(withEst) };
+      });
+    }
+    toast2(signing.doc_type === "estimate" ? "Estimate accepted \u2014 contract ready" : "Countersigned");
     setSigning(null);
     setSig(null);
     setConsent(false);
@@ -13561,10 +13595,21 @@ function TabContract({ job, brand: brand2, setBrand = () => {
           }
         )
       ] }),
-      !con.price && estTotal > 0 && !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { style: { ...linkBtn, marginBottom: 10 }, onClick: () => setCon({ price: estTotal }), children: [
-        "Use estimate total \u2014 ",
-        money(estTotal)
-      ] }),
+      estTotal > 0 && !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+        "button",
+        {
+          style: { ...linkBtn, marginBottom: 10 },
+          onClick: () => {
+            mut((j) => ({ ...j, contract: convertEstimateToContract(j) }));
+            toast2("Contract built from the estimate");
+          },
+          children: [
+            con.price ? "Rebuild from estimate" : "Build contract from estimate",
+            " \u2014 ",
+            money(estTotal)
+          ]
+        }
+      ),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, marginBottom: 7 }, children: "Deposit" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }, children: [["50%", 50], ["1/3", 33.33], ["25%", 25], ["10%", 10]].map(([label, pct]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(

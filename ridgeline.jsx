@@ -2135,6 +2135,24 @@ const nowStamp = () =>
 function estimateTotal(est) {
   return est.items.reduce((s, it) => s + num(it.qty) * num(it.price), 0);
 }
+/* Turn an accepted estimate into a contract: copy the total, the scope and the
+   accepted line items across as structured data (not a re-typed price). Invoice
+   and A/R then follow automatically via paymentsSummary, which reads the
+   contract price. Preserves an already-signed contract untouched. */
+function convertEstimateToContract(job) {
+  const est = job.estimate || {};
+  const con = job.contract || mkContract();
+  if (con.status === "Signed") return con;
+  return {
+    ...con,
+    number: con.number || `CON-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
+    price: estimateTotal(est),
+    scope: con.scope || (est.scope || `Per accepted estimate ${est.number || ""}`.trim()),
+    items: (est.items || []).map((it) => ({ id: it.id || uid("ci"), desc: it.desc, qty: it.qty, unit: it.unit, price: num(it.price) })),
+    status: con.status === "Not started" || !con.status ? "Ready to sign" : con.status,
+    fromEstimate: est.number || true,
+  };
+}
 function computeFin(fin) {
   const sum = (a) => a.reduce((s, x) => s + x.amt, 0);
   const materials = sum(fin.materials), labor = sum(fin.labor), other = sum(fin.other);
@@ -8223,7 +8241,7 @@ function SignConsent({ checked, onChange, what, accent = "#0A9E98" }) {
    signed. The signature row is written by the portal itself so the
    server stamps the time and IP; nothing about the timestamp comes
    from the customer's device. */
-function PortalSignCenter({ token, jobId, customer, docs, accent, brand }) {
+function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSelection = null }) {
   const [openDoc, setOpenDoc] = useState(null);
   const [sig, setSig] = useState(null);
   const [consent, setConsent] = useState(false);
@@ -8248,14 +8266,20 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand }) {
     const db = DB();
     if (!db) { setErr("No connection. Please try again in a moment."); return; }
     setBusy(true); setErr("");
+    /* Bind an estimate signature to the option the customer actually chose in
+       the proposal above, not the rep's default, so what they sign is what
+       they picked and the team can apply it on countersign. */
+    const snapshot = (openDoc.type === "estimate" && estSelection)
+      ? { ...openDoc.snapshot, selection: estSelection, total: estSelection.total }
+      : openDoc.snapshot;
     const row = {
       id: uid("sig"),
       job_id: jobId,
       doc_type: openDoc.type,
       doc_id: String(openDoc.id || ""),
       doc_title: openDoc.title,
-      doc_hash: docHash(openDoc.snapshot),
-      doc_snapshot: openDoc.snapshot,
+      doc_hash: docHash(snapshot),
+      doc_snapshot: snapshot,
       signer_role: "customer",
       signer_name: customer.name || "Customer",
       signer_email: customer.email || null,
@@ -8750,7 +8774,7 @@ function PublicPortal({ token }) {
 
           if (sid === "sign") return wrap(
             <PortalSignCenter token={token} jobId={d.jobId || null} customer={d.customer || {}}
-              docs={d.signDocs || []} accent={prim} brand={d} />
+              docs={d.signDocs || []} accent={prim} brand={d} estSelection={estSel} />
           );
 
           if (sid === "yourinfo") return wrap(
@@ -10477,7 +10501,28 @@ function TabSignatures({ job, mut, toast, currentUser, brand }) {
     if (signing.doc_type === "contract") {
       mut((j) => ({ ...j, contract: { ...(j.contract || {}), status: "Signed", signedAt: todayIso() } }));
     }
-    toast("Countersigned");
+    /* An accepted estimate applies the customer's chosen tier + add-ons
+       (recorded in the signature snapshot), flips the estimate to Signed, and
+       converts it into a contract ready to execute. */
+    if (signing.doc_type === "estimate") {
+      const sel = (signing.doc_snapshot || {}).selection || null;
+      mut((j) => {
+        let est = { ...(j.estimate || {}) };
+        if (sel) {
+          if (sel.tierId) est.selectedTier = sel.tierId;
+          if (Array.isArray(sel.upgradeIds)) {
+            est.upgrades = (est.upgrades || []).map((u) => ({ ...u, selected: sel.upgradeIds.includes(u.id) }));
+          }
+          est.items = applyEstimateSelection(est);
+        }
+        est.status = "Signed";
+        est.clientSig = est.clientSig || "signed";
+        est.sigAt = todayIso();
+        const withEst = { ...j, estimate: est };
+        return { ...withEst, contract: convertEstimateToContract(withEst) };
+      });
+    }
+    toast(signing.doc_type === "estimate" ? "Estimate accepted — contract ready" : "Countersigned");
     setSigning(null); setSig(null); setConsent(false);
     load();
   };
@@ -12173,9 +12218,10 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast }) {
           <input style={{ ...inputStyle, width: 130, textAlign: "right" }} value={con.price} disabled={locked}
             inputMode="decimal" onChange={(e) => setCon({ price: num(e.target.value) })} />
         </div>
-        {!con.price && estTotal > 0 && !locked && (
-          <button style={{ ...linkBtn, marginBottom: 10 }} onClick={() => setCon({ price: estTotal })}>
-            Use estimate total — {money(estTotal)}
+        {estTotal > 0 && !locked && (
+          <button style={{ ...linkBtn, marginBottom: 10 }}
+            onClick={() => { mut((j) => ({ ...j, contract: convertEstimateToContract(j) })); toast("Contract built from the estimate"); }}>
+            {con.price ? "Rebuild from estimate" : "Build contract from estimate"} — {money(estTotal)}
           </button>
         )}
         <div style={{ marginBottom: 10 }}>
