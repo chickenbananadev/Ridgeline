@@ -8055,7 +8055,10 @@ function buildPortalSnapshot(job, brand, token) {
            (jobs with no tiers) and as the fallback list. */
         const tiers = (est.tiers || []).map((t) => ({
           id: t.id, name: t.name,
-          items: (t.items || []).map((it) => ({ desc: it.desc, qty: it.qty, unit: it.unit, price: num(it.price) })),
+          items: (t.items || []).map((it) => ({
+            desc: it.desc, qty: it.qty, unit: it.unit, price: num(it.price),
+            description: it.description || "", showQty: it.showQty !== false, showUnitPrice: it.showUnitPrice !== false,
+          })),
           total: (t.items || []).reduce((a, it) => a + num(it.qty) * num(it.price), 0),
         }));
         const upgrades = (est.upgrades || []).map((u) => ({ id: u.id, desc: u.desc, price: num(u.price) }));
@@ -8605,6 +8608,24 @@ function PortalContactCard({ token, jobId, customer, accent }) {
    and toggles add-ons, and the total updates live. Falls back to a plain
    read-only list for estimates with no tiers configured. Reports the current
    selection up so it can travel into the e-sign step. */
+/* One estimate line as the homeowner sees it. Honors the per-line
+   visibility toggles set in the estimate editor: quantity and the line
+   price can each be hidden, and an optional plain-language description
+   shows under the item name. */
+function PortalEstLine({ it }) {
+  const showQty = it.showQty !== false;
+  const showPrice = it.showUnitPrice !== false;
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, padding: "7px 0", borderTop: `1px solid ${S.line}`, color: S.sub }}>
+      <span style={{ minWidth: 0 }}>
+        <span style={{ color: S.ink }}>{it.desc}{showQty && (it.qty || it.qty === 0) ? ` — ${it.qty} ${it.unit || ""}`.trimEnd() : ""}</span>
+        {it.description ? <span style={{ display: "block", fontSize: 12, color: S.sub, lineHeight: 1.45, marginTop: 2, whiteSpace: "pre-wrap" }}>{it.description}</span> : null}
+      </span>
+      {showPrice && <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{money(num(it.qty) * num(it.price))}</span>}
+    </div>
+  );
+}
+
 function PortalProposal({ estimate, accent, onSelect = () => {} }) {
   const tiers = estimate.tiers || [];
   const upgrades = estimate.upgrades || [];
@@ -8623,10 +8644,7 @@ function PortalProposal({ estimate, accent, onSelect = () => {} }) {
         <CardTitle right={<span style={{ fontWeight: 800 }}>{money(estimate.total)}</span>}>Your estimate</CardTitle>
         <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>{estimate.number} · {estimate.date}</div>
         {(estimate.items || []).map((it, i2) => (
-          <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13.5, padding: "7px 0", borderTop: `1px solid ${S.line}` }}>
-            <span>{it.desc} — {it.qty} {it.unit}</span>
-            <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{money(num(it.qty) * num(it.price))}</span>
-          </div>
+          <PortalEstLine key={i2} it={it} />
         ))}
       </Card>
     );
@@ -8668,10 +8686,7 @@ function PortalProposal({ estimate, accent, onSelect = () => {} }) {
       {tierObj && (
         <div style={{ marginBottom: upgrades.length ? 14 : 0 }}>
           {(tierObj.items || []).map((it, i2) => (
-            <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, padding: "6px 0", borderTop: `1px solid ${S.line}`, color: S.sub }}>
-              <span>{it.desc} — {it.qty} {it.unit}</span>
-              <span style={{ whiteSpace: "nowrap" }}>{money(num(it.qty) * num(it.price))}</span>
-            </div>
+            <PortalEstLine key={i2} it={it} />
           ))}
         </div>
       )}
@@ -11671,13 +11686,28 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
     const cost = num(it.cost), price = num(it.price);
     return price > 0 && cost > 0 ? (((price - cost) / price) * 100).toFixed(0) : null;
   };
+  /* Per-line margin/markup: typing a % recomputes that line's price from its
+     cost, so each item can carry its own profit. */
+  const setLineMargin = (id, val) => {
+    const it = items.find((x) => x.id === id); if (!it) return;
+    const cost = num(it.cost); if (cost <= 0) return;
+    const pct = num(val); const price = pct < 100 ? cost / (1 - pct / 100) : cost;
+    setItem(id, "price", Math.round(price * 100) / 100);
+  };
+  const setLineMarkup = (id, val) => {
+    const it = items.find((x) => x.id === id); if (!it) return;
+    const cost = num(it.cost); if (cost <= 0) return;
+    setItem(id, "price", Math.round(cost * (1 + num(val) / 100) * 100) / 100);
+  };
+  const showQty = (it) => it.showQty !== false;
+  const showUnit = (it) => it.showUnitPrice !== false;
   return (
     <>
       {items.length === 0 && <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>No line items yet.</div>}
       {items.map((it) => (
         <div key={it.id} style={{ borderBottom: `1px solid ${S.line}`, padding: "10px 0" }}>
           <input style={{ ...inputStyle, marginBottom: 8, fontWeight: 600 }} value={it.desc} disabled={locked}
-            onChange={(e) => setItem(it.id, "desc", e.target.value)} />
+            placeholder="Line item" onChange={(e) => setItem(it.id, "desc", e.target.value)} />
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input style={{ ...inputStyle, width: 84, textAlign: "right" }} value={it.qty} disabled={locked}
               inputMode="decimal" onChange={(e) => setItem(it.id, "qty", e.target.value)} />
@@ -11688,15 +11718,17 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
               inputMode="decimal" onChange={(e) => setItem(it.id, "price", e.target.value)} />
             <div style={{ marginLeft: "auto", fontWeight: 800, fontSize: 14 }}>{money(num(it.qty) * num(it.price))}</div>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
-            <span style={{ fontSize: 11.5, color: S.sub }}>Unit cost</span>
-            <input style={{ ...inputStyle, width: 92, textAlign: "right", padding: "7px 9px", fontSize: 13 }}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11.5, color: S.sub }}>Cost</span>
+            <input style={{ ...inputStyle, width: 84, textAlign: "right", padding: "7px 9px", fontSize: 13 }}
               value={it.cost ?? ""} disabled={locked} inputMode="decimal" placeholder="—"
               onChange={(e) => setItem(it.id, "cost", e.target.value)} />
+            <span style={{ fontSize: 11.5, color: S.sub }}>Margin</span>
+            <input style={{ ...inputStyle, width: 62, textAlign: "right", padding: "7px 9px", fontSize: 13 }}
+              value={lineMargin(it) ?? ""} disabled={locked || !(num(it.cost) > 0)} inputMode="decimal" placeholder="%"
+              onChange={(e) => setLineMargin(it.id, e.target.value)} />
             {lineMargin(it) != null && (
-              <Chip tone={num(lineMargin(it)) >= 30 ? "green" : num(lineMargin(it)) >= 15 ? "amber" : "red"}>
-                {lineMargin(it)}% margin
-              </Chip>
+              <Chip tone={num(lineMargin(it)) >= 30 ? "green" : num(lineMargin(it)) >= 15 ? "amber" : "red"}>{lineMargin(it)}%</Chip>
             )}
             {!locked && (
               <button onClick={() => setItems(items.filter((x) => x.id !== it.id))}
@@ -11705,6 +11737,26 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
               </button>
             )}
           </div>
+          {/* Optional customer-facing description */}
+          {it.description !== undefined ? (
+            <textarea style={{ ...inputStyle, minHeight: 44, marginTop: 8, fontSize: 13 }} value={it.description} disabled={locked}
+              placeholder="Description shown to the customer…" onChange={(e) => setItem(it.id, "description", e.target.value)} />
+          ) : (!locked && (
+            <button style={{ ...linkBtn, marginTop: 6, fontSize: 12 }} onClick={() => setItem(it.id, "description", "")}>+ Description</button>
+          ))}
+          {/* What the customer sees for this line */}
+          {!locked && (
+            <div style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, color: S.sub }}>Customer sees:</span>
+              {[["Qty", showQty(it), () => setItem(it.id, "showQty", !showQty(it))],
+                ["Unit price", showUnit(it), () => setItem(it.id, "showUnitPrice", !showUnit(it))]].map(([label, on, onClick]) => (
+                <button key={label} onClick={onClick} style={{
+                  border: `1px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : "#fff",
+                  color: on ? T.accent : S.sub, borderRadius: 999, padding: "3px 10px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                }}>{on ? "✓ " : ""}{label}</button>
+              ))}
+            </div>
+          )}
         </div>
       ))}
       {!locked && (
@@ -11799,16 +11851,18 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
   const applyPricing = () => {
     const pct = num(adjPct);
     if (!pct) { toast("Enter a percentage first"); return; }
-    setEst({
-      items: est.items.map((it) => {
-        const cost = num(it.cost);
-        const base = cost > 0 ? cost : num(it.price);
-        if (!base) return it;
-        const price = adjMode === "margin" ? (pct < 100 ? base / (1 - pct / 100) : base) : base * (1 + pct / 100);
-        return { ...it, price: +price.toFixed(2) };
-      }),
+    const reprice = (arr) => arr.map((it) => {
+      const cost = num(it.cost);
+      const base = cost > 0 ? cost : num(it.price);
+      if (!base) return it;
+      const price = adjMode === "margin" ? (pct < 100 ? base / (1 - pct / 100) : base) : base * (1 + pct / 100);
+      return { ...it, price: +price.toFixed(2) };
     });
-    toast(`${adjMode === "margin" ? "Margin" : "Markup"} of ${pct}% applied`);
+    /* Apply to the active tier when tiers are on — writing to the flattened
+       est.items would be discarded on the next recompute. */
+    if (tiersOn) setTierItems(tierTab, reprice(activeTierItems()));
+    else setEst({ items: reprice(est.items) });
+    toast(`${adjMode === "margin" ? "Margin" : "Markup"} of ${pct}% applied to ${tiersOn ? (est.tiers.find((t) => t.id === tierTab)?.name || "this tier") : "all lines"}`);
   };
   const lineMargin = (it) => {
     const cost = num(it.cost), price = num(it.price);
@@ -17062,8 +17116,19 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
     const r = new FileReader();
     r.onload = () => {
       const rows = parseSubSheet(String(r.result));
-      if (rows.length) { setF((prev) => ({ ...prev, rateCard: rows })); toast(`${rows.length} price rows loaded`); }
-      else toast("Couldn't read that sheet — needs an item column and a price column");
+      if (rows.length) {
+        setF((prev) => ({
+          ...prev,
+          rateCard: rows,
+          /* Keep the original sheet on the sub's file for reference — replace any
+             prior pricing-sheet doc so it stays current. */
+          docs: [
+            ...((prev.docs || []).filter((d) => d.type !== "Pricing sheet")),
+            { id: uid("cd"), name: file.name, at: new Date().toISOString().slice(0, 10), type: "Pricing sheet", expires: "", rows: rows.length },
+          ],
+        }));
+        toast(`${rows.length} price rows loaded — sheet kept on file`);
+      } else toast("Couldn't read that sheet — needs an item column and a price column");
     };
     r.readAsText(file);
     e.target.value = "";

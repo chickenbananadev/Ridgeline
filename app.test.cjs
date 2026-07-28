@@ -9388,7 +9388,15 @@ function buildPortalSnapshot(job, brand2, token) {
         const tiers = (est.tiers || []).map((t) => ({
           id: t.id,
           name: t.name,
-          items: (t.items || []).map((it) => ({ desc: it.desc, qty: it.qty, unit: it.unit, price: num(it.price) })),
+          items: (t.items || []).map((it) => ({
+            desc: it.desc,
+            qty: it.qty,
+            unit: it.unit,
+            price: num(it.price),
+            description: it.description || "",
+            showQty: it.showQty !== false,
+            showUnitPrice: it.showUnitPrice !== false
+          })),
           total: (t.items || []).reduce((a, it) => a + num(it.qty) * num(it.price), 0)
         }));
         const upgrades = (est.upgrades || []).map((u) => ({ id: u.id, desc: u.desc, price: num(u.price) }));
@@ -9923,6 +9931,20 @@ function PortalContactCard({ token, jobId, customer, accent }) {
     ] })
   ] });
 }
+function PortalEstLine({ it }) {
+  const showQty = it.showQty !== false;
+  const showPrice = it.showUnitPrice !== false;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, padding: "7px 0", borderTop: `1px solid ${S.line}`, color: S.sub }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { minWidth: 0 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.ink }, children: [
+        it.desc,
+        showQty && (it.qty || it.qty === 0) ? ` \u2014 ${it.qty} ${it.unit || ""}`.trimEnd() : ""
+      ] }),
+      it.description ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 12, color: S.sub, lineHeight: 1.45, marginTop: 2, whiteSpace: "pre-wrap" }, children: it.description }) : null
+    ] }),
+    showPrice && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 600, whiteSpace: "nowrap" }, children: money(num(it.qty) * num(it.price)) })
+  ] });
+}
 function PortalProposal({ estimate, accent, onSelect = () => {
 } }) {
   const tiers = estimate.tiers || [];
@@ -9943,16 +9965,7 @@ function PortalProposal({ estimate, accent, onSelect = () => {
         " \xB7 ",
         estimate.date
       ] }),
-      (estimate.items || []).map((it, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13.5, padding: "7px 0", borderTop: `1px solid ${S.line}` }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-          it.desc,
-          " \u2014 ",
-          it.qty,
-          " ",
-          it.unit
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 600, whiteSpace: "nowrap" }, children: money(num(it.qty) * num(it.price)) })
-      ] }, i2))
+      (estimate.items || []).map((it, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PortalEstLine, { it }, i2))
     ] });
   }
   const doc = estimate.doc || {};
@@ -9994,16 +10007,7 @@ function PortalProposal({ estimate, accent, onSelect = () => {
         ] })
       ] }, t.id);
     }) }),
-    tierObj && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginBottom: upgrades.length ? 14 : 0 }, children: (tierObj.items || []).map((it, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, padding: "6px 0", borderTop: `1px solid ${S.line}`, color: S.sub }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-        it.desc,
-        " \u2014 ",
-        it.qty,
-        " ",
-        it.unit
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { whiteSpace: "nowrap" }, children: money(num(it.qty) * num(it.price)) })
-    ] }, i2)) }),
+    tierObj && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginBottom: upgrades.length ? 14 : 0 }, children: (tierObj.items || []).map((it, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PortalEstLine, { it }, i2)) }),
     upgrades.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, marginBottom: 8 }, children: "Add-ons" }),
       upgrades.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${S.line}`, cursor: "pointer" }, children: [
@@ -12880,6 +12884,24 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
     const cost = num(it.cost), price = num(it.price);
     return price > 0 && cost > 0 ? ((price - cost) / price * 100).toFixed(0) : null;
   };
+  const setLineMargin = (id, val) => {
+    const it = items.find((x) => x.id === id);
+    if (!it) return;
+    const cost = num(it.cost);
+    if (cost <= 0) return;
+    const pct = num(val);
+    const price = pct < 100 ? cost / (1 - pct / 100) : cost;
+    setItem(id, "price", Math.round(price * 100) / 100);
+  };
+  const setLineMarkup = (id, val) => {
+    const it = items.find((x) => x.id === id);
+    if (!it) return;
+    const cost = num(it.cost);
+    if (cost <= 0) return;
+    setItem(id, "price", Math.round(cost * (1 + num(val) / 100) * 100) / 100);
+  };
+  const showQty = (it) => it.showQty !== false;
+  const showUnit = (it) => it.showUnitPrice !== false;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     items.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10 }, children: "No line items yet." }),
     items.map((it) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderBottom: `1px solid ${S.line}`, padding: "10px 0" }, children: [
@@ -12889,6 +12911,7 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
           style: { ...inputStyle, marginBottom: 8, fontWeight: 600 },
           value: it.desc,
           disabled: locked,
+          placeholder: "Line item",
           onChange: (e) => setItem(it.id, "desc", e.target.value)
         }
       ),
@@ -12925,12 +12948,12 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginLeft: "auto", fontWeight: 800, fontSize: 14 }, children: money(num(it.qty) * num(it.price)) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginTop: 6 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: "Unit cost" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginTop: 6, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: "Cost" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "input",
           {
-            style: { ...inputStyle, width: 92, textAlign: "right", padding: "7px 9px", fontSize: 13 },
+            style: { ...inputStyle, width: 84, textAlign: "right", padding: "7px 9px", fontSize: 13 },
             value: it.cost ?? "",
             disabled: locked,
             inputMode: "decimal",
@@ -12938,9 +12961,21 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
             onChange: (e) => setItem(it.id, "cost", e.target.value)
           }
         ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: "Margin" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            style: { ...inputStyle, width: 62, textAlign: "right", padding: "7px 9px", fontSize: 13 },
+            value: lineMargin(it) ?? "",
+            disabled: locked || !(num(it.cost) > 0),
+            inputMode: "decimal",
+            placeholder: "%",
+            onChange: (e) => setLineMargin(it.id, e.target.value)
+          }
+        ),
         lineMargin(it) != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: num(lineMargin(it)) >= 30 ? "green" : num(lineMargin(it)) >= 15 ? "amber" : "red", children: [
           lineMargin(it),
-          "% margin"
+          "%"
         ] }),
         !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "button",
@@ -12950,6 +12985,36 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
             children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" })
           }
         )
+      ] }),
+      it.description !== void 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "textarea",
+        {
+          style: { ...inputStyle, minHeight: 44, marginTop: 8, fontSize: 13 },
+          value: it.description,
+          disabled: locked,
+          placeholder: "Description shown to the customer\u2026",
+          onChange: (e) => setItem(it.id, "description", e.target.value)
+        }
+      ) : !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: { ...linkBtn, marginTop: 6, fontSize: 12 }, onClick: () => setItem(it.id, "description", ""), children: "+ Description" }),
+      !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 7, alignItems: "center", marginTop: 8, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11, color: S.sub }, children: "Customer sees:" }),
+        [
+          ["Qty", showQty(it), () => setItem(it.id, "showQty", !showQty(it))],
+          ["Unit price", showUnit(it), () => setItem(it.id, "showUnitPrice", !showUnit(it))]
+        ].map(([label, on, onClick]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick, style: {
+          border: `1px solid ${on ? T.accent : S.line}`,
+          background: on ? T.accentSoft : "#fff",
+          color: on ? T.accent : S.sub,
+          borderRadius: 999,
+          padding: "3px 10px",
+          fontSize: 11.5,
+          fontWeight: 700,
+          cursor: "pointer",
+          fontFamily: "inherit"
+        }, children: [
+          on ? "\u2713 " : "",
+          label
+        ] }, label))
       ] })
     ] }, it.id)),
     !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }, children: [
@@ -13059,16 +13124,16 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
       toast2("Enter a percentage first");
       return;
     }
-    setEst({
-      items: est.items.map((it) => {
-        const cost = num(it.cost);
-        const base = cost > 0 ? cost : num(it.price);
-        if (!base) return it;
-        const price = adjMode === "margin" ? pct < 100 ? base / (1 - pct / 100) : base : base * (1 + pct / 100);
-        return { ...it, price: +price.toFixed(2) };
-      })
+    const reprice = (arr) => arr.map((it) => {
+      const cost = num(it.cost);
+      const base = cost > 0 ? cost : num(it.price);
+      if (!base) return it;
+      const price = adjMode === "margin" ? pct < 100 ? base / (1 - pct / 100) : base : base * (1 + pct / 100);
+      return { ...it, price: +price.toFixed(2) };
     });
-    toast2(`${adjMode === "margin" ? "Margin" : "Markup"} of ${pct}% applied`);
+    if (tiersOn) setTierItems(tierTab, reprice(activeTierItems()));
+    else setEst({ items: reprice(est.items) });
+    toast2(`${adjMode === "margin" ? "Margin" : "Markup"} of ${pct}% applied to ${tiersOn ? est.tiers.find((t) => t.id === tierTab)?.name || "this tier" : "all lines"}`);
   };
   const lineMargin = (it) => {
     const cost = num(it.cost), price = num(it.price);
@@ -18920,8 +18985,17 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast: toast2
     r.onload = () => {
       const rows = parseSubSheet(String(r.result));
       if (rows.length) {
-        setF((prev) => ({ ...prev, rateCard: rows }));
-        toast2(`${rows.length} price rows loaded`);
+        setF((prev) => ({
+          ...prev,
+          rateCard: rows,
+          /* Keep the original sheet on the sub's file for reference — replace any
+             prior pricing-sheet doc so it stays current. */
+          docs: [
+            ...(prev.docs || []).filter((d) => d.type !== "Pricing sheet"),
+            { id: uid("cd"), name: file.name, at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), type: "Pricing sheet", expires: "", rows: rows.length }
+          ]
+        }));
+        toast2(`${rows.length} price rows loaded \u2014 sheet kept on file`);
       } else toast2("Couldn't read that sheet \u2014 needs an item column and a price column");
     };
     r.readAsText(file);
