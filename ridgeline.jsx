@@ -7545,6 +7545,30 @@ function workOrderDocHtml(job, brand, crew) {
   return out;
 }
 
+function subInvoiceDocHtml(job, brand, crew) {
+  const inv = job.subInvoice || { lines: [] };
+  const total = subInvoiceTotal(inv);
+  const pay = (crew && crew.payment) || {};
+  let out = `<div style="display:flex;justify-content:space-between;gap:20px">
+    <div><h2 style="margin-top:0">Subcontractor</h2>
+      <div><b>${esc(crew ? crew.name : "")}</b></div>
+      ${pay.payeeName ? `<div class="muted">Pay to ${esc(pay.payeeName)}</div>` : ""}
+      ${pay.method ? `<div class="muted">Via ${esc(pay.method)}${pay.accountRef ? ` · ${esc(pay.accountRef)}` : ""}</div>` : ""}
+    </div>
+    <div style="text-align:right">
+      <div><b>Sub invoice</b></div>
+      <div class="muted">${esc(job.name)}</div>
+      <div class="muted">${esc(job.address)}</div>
+      ${inv.poNumber ? `<div class="muted">PO ${esc(inv.poNumber)}</div>` : ""}
+      ${inv.terms ? `<div class="muted">Terms ${esc(inv.terms)}</div>` : ""}
+      ${inv.dueDate ? `<div class="muted">Due ${esc(inv.dueDate)}</div>` : ""}
+    </div>
+  </div>`;
+  out += lineTable((inv.lines || []).map((l) => ({ desc: esc(l.label) + (l.reimbursable ? " (reimbursable)" : ""), qty: l.qty, unit: l.unit, price: l.price })), {});
+  out += `<table style="margin-top:6px"><tbody><tr><td><b>Total due</b></td><td class="r"><b>${money(total)}</b></td></tr></tbody></table>`;
+  return out;
+}
+
 function contractDocHtml(job, brand) {
   const con = job.contract || {};
   const mode = con.depositMode || "pct";
@@ -13573,7 +13597,10 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
         <Field label="PO number"><input style={inputStyle} value={inv.poNumber || ""} onChange={(e) => setInv({ poNumber: e.target.value })} /></Field>
         <Field label="Terms"><input style={inputStyle} value={inv.terms || ""} onChange={(e) => setInv({ terms: e.target.value })} /></Field>
       </div>
-      <Btn kind="ghost" small style={{ marginTop: 10 }} onClick={postToCosts}><DollarSign size={13} /> Post {money(total)} to job costs</Btn>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+        <Btn kind="ghost" small onClick={postToCosts}><DollarSign size={13} /> Post {money(total)} to job costs</Btn>
+        <Btn kind="ghost" small onClick={() => openDoc(`Sub invoice — ${crew.name} — ${job.name}`, brand, subInvoiceDocHtml(job, brand, crew), toast)}><Printer size={13} /> Export / PDF</Btn>
+      </div>
 
       {docAlerts.length > 0 && (inv.status === "needs_review" || inv.status === "draft") && (
         <div style={{ marginTop: 12, background: "#FBEAE8", border: "1px solid #F0C4BE", borderRadius: 10, padding: "9px 12px", fontSize: 12.5, color: "#8A2A1E", lineHeight: 1.5 }}>
