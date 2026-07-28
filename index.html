@@ -4,8 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#20242A" />
-    <title>RoofStride</title>
-    <meta name="description" content="Built for Roofing. Made to Move." />
+    <title>RoofStride — Roofing CRM Built for Roofing. Made to Move.</title>
+    <meta name="description" content="RoofStride is the all-in-one roofing CRM: pipeline, estimates and proposals, insurance-claim and supplement tools, storm and code lookup, scheduling, and payments — built for roofing contractors." />
+    <meta name="robots" content="index,follow" />
+    <link rel="canonical" href="https://roofstride.com/" />
     <!-- Rich link preview (iMessage, Slack, social). The gray second line in
          iMessage is the domain itself and can't be replaced by meta — the
          tagline lives in the card image, title and description. -->
@@ -26,9 +28,72 @@
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
+    <!-- Structured data so search engines understand what RoofStride is and
+         how it's priced. Kept in sync with the PRODUCT constants in the app. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://roofstride.com/#org",
+          "name": "RoofStride",
+          "url": "https://roofstride.com/",
+          "slogan": "Built for Roofing. Made to Move.",
+          "logo": "https://roofstride.com/apple-touch-icon.png",
+          "email": "support@roofstride.com"
+        },
+        {
+          "@type": "SoftwareApplication",
+          "name": "RoofStride",
+          "applicationCategory": "BusinessApplication",
+          "operatingSystem": "Web, iOS, Android",
+          "description": "All-in-one roofing CRM for contractors: pipeline, estimates and proposals, insurance-claim and supplement tools, storm and building-code lookup, scheduling, and payments.",
+          "url": "https://roofstride.com/",
+          "publisher": { "@id": "https://roofstride.com/#org" },
+          "offers": [
+            {
+              "@type": "Offer",
+              "name": "Team plan",
+              "price": "49.99",
+              "priceCurrency": "USD",
+              "description": "Includes 3 seats; additional seats $14.99/mo each. 7-day free trial."
+            },
+            {
+              "@type": "Offer",
+              "name": "Unlimited plan",
+              "price": "169.99",
+              "priceCurrency": "USD",
+              "description": "Flat rate for up to 20 seats. 7-day free trial."
+            }
+          ]
+        }
+      ]
+    }
+    </script>
   </head>
   <body style="margin:0">
-    <div id="root"></div>
+    <div id="root">
+      <!-- Crawlable marketing content: real HTML so search engines and link
+           unfurlers index the copy even before the SPA mounts. React replaces
+           this entire subtree on load, so it never double-renders for users. -->
+      <main style="max-width:860px;margin:0 auto;padding:48px 24px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#20242A">
+        <h1 style="font-size:34px;line-height:1.15;margin:0 0 12px">RoofStride — the roofing CRM built for the field</h1>
+        <p style="font-size:18px;color:#5B6470;margin:0 0 24px">Built for Roofing. Made to Move. Run your whole roofing business — leads, estimates, insurance claims, crews, and payments — from one app on the truck or at the kitchen table.</p>
+        <h2 style="font-size:22px;margin:28px 0 10px">What RoofStride does</h2>
+        <ul style="font-size:16px;line-height:1.7;color:#374151;padding-left:20px;margin:0">
+          <li>Sales pipeline and job board for every roof from lead to paid</li>
+          <li>Estimates, customer-selectable option tiers, and signable proposals</li>
+          <li>Insurance-claim tools: supplement checker, depreciation tracking, and a claim assistant</li>
+          <li>Storm history and building-code lookup by address, with Municode links</li>
+          <li>Measurement import, material lists, work orders, and subcontractor pay</li>
+          <li>Scheduling, weather on every job, invoicing, and payment tracking</li>
+        </ul>
+        <h2 style="font-size:22px;margin:28px 0 10px">Pricing</h2>
+        <p style="font-size:16px;line-height:1.7;color:#374151;margin:0">Team plan $49.99/mo including 3 seats, extra seats $14.99/mo each. Unlimited plan $169.99/mo for up to 20 seats. Start with a 7-day free trial.</p>
+        <p style="font-size:16px;margin:28px 0 0"><a href="mailto:support@roofstride.com" style="color:#0A9E98;font-weight:600">Contact us</a> — support@roofstride.com</p>
+      </main>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
