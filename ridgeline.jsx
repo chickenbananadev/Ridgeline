@@ -9736,6 +9736,48 @@ function WeatherNow({ lat, lng, zip, style }) {
   );
 }
 
+/* Storm history for a date-of-loss lookup. Open-Meteo's Archive API (ERA5,
+   keyless, CORS-open) gives daily max wind GUSTS and precipitation for any
+   past date; hail is inferred from the WMO thunderstorm-with-hail codes
+   (96/99). Official corroboration is a one-tap link to the NOAA SPC storm
+   report for the chosen day. Cached per location+window. */
+const STORM_CACHE = new Map();
+async function fetchStormHistory(lat, lng, start, end) {
+  const key = `${weatherKey(lat, lng)}:${start}:${end}`;
+  if (STORM_CACHE.has(key)) return STORM_CACHE.get(key);
+  try {
+    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}` +
+      `&start_date=${start}&end_date=${end}` +
+      `&daily=wind_gusts_10m_max,wind_speed_10m_max,precipitation_sum,weather_code` +
+      `&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("archive");
+    const d = await res.json();
+    const days = (d.daily?.time || []).map((iso, i) => {
+      const gust = d.daily.wind_gusts_10m_max?.[i];
+      const code = d.daily.weather_code?.[i];
+      const precip = d.daily.precipitation_sum?.[i];
+      const hail = code === 96 || code === 99;
+      const damagingWind = gust != null && gust >= 45;
+      const storm = code === 95 || code === 96 || code === 99;
+      return {
+        date: iso, gust: gust != null ? Math.round(gust) : null,
+        precip: precip != null ? precip : null, code, hail, damagingWind, storm,
+      };
+    });
+    STORM_CACHE.set(key, days);
+    return days;
+  } catch (e) { return null; }
+}
+/* NOAA SPC storm-report page for a given ISO date (official corroboration). */
+function spcReportLink(iso) {
+  const yymmdd = iso.slice(2).replace(/-/g, "");
+  return `https://www.spc.noaa.gov/climo/reports/${yymmdd}_rpt.html`;
+}
+function stormSeverity(r) {
+  return (r.hail ? 3000 : 0) + (r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
+}
+
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded = false }) {
   /* Day-first, not a grid.
 
@@ -11117,6 +11159,73 @@ function TabSignatures({ job, mut, toast, currentUser, brand }) {
   );
 }
 
+/* Date-of-loss storm lookup. Pulls damaging-wind / hail / heavy-rain days for
+   the property over a window so the rep can pick the actual date of loss from
+   the weather record, then corroborate against the official NOAA SPC report. */
+function StormLookup({ job, dol, onPick, toast }) {
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const [start, setStart] = useState(() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return iso(d); });
+  const [end, setEnd] = useState(() => iso(new Date()));
+  const [rows, setRows] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+
+  const run = async () => {
+    setLoading(true); setErr(""); setRows(null);
+    let lat = job.lat ?? job.property?.lat, lng = job.lng ?? job.property?.lng;
+    if (lat == null || lng == null) { const g = await geocodeZip(job.zip); if (g) { lat = g.lat; lng = g.lng; } }
+    if (lat == null || lng == null) { setErr("No coordinates for this address yet — add a ZIP or pick the address from the map suggestions."); setLoading(false); return; }
+    const days = await fetchStormHistory(lat, lng, start, end);
+    if (!days) { setErr("Couldn't reach the weather archive. Check the connection and try again."); setLoading(false); return; }
+    const notable = days
+      .filter((r) => r.hail || r.damagingWind || r.storm || (r.precip != null && r.precip >= 0.75))
+      .sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1))
+      .slice(0, 24);
+    setRows(notable); setLoading(false);
+    if (!notable.length) toast && toast("No notable storm days in that window");
+  };
+
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle right={<Chip tone="blue">NOAA / Open-Meteo</Chip>}>Storm history — date of loss</CardTitle>
+      <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+        Pulls damaging-wind, hail and heavy-rain days for this address so you can set the date of loss from the record.
+        Wind gusts &amp; precip are ERA5 reanalysis; hail is inferred from thunderstorm-with-hail codes — confirm the
+        official NOAA storm report before filing.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }}>
+        <Field label="From"><input style={dateInputStyle} type="date" value={start} max={end} onChange={(e) => setStart(e.target.value)} /></Field>
+        <Field label="To"><input style={dateInputStyle} type="date" value={end} max={iso(new Date())} onChange={(e) => setEnd(e.target.value)} /></Field>
+        <Btn small onClick={run} disabled={loading} style={{ marginBottom: 12 }}>{loading ? "Looking…" : "Look up"}</Btn>
+      </div>
+      {err && <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 6 }}>{err}</div>}
+      {rows && rows.length > 0 && (
+        <div style={{ marginTop: 6 }}>
+          {rows.map((r) => {
+            const picked = r.date === dol;
+            return (
+              <div key={r.date} style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0", borderTop: `1px solid ${S.line}` }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{r.date}</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }}>
+                    {r.hail && <Chip tone="red">Hail likely</Chip>}
+                    {r.gust != null && <Chip tone={r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray"}>{r.gust} mph gusts</Chip>}
+                    {r.precip != null && r.precip >= 0.5 && <Chip tone="blue">{r.precip.toFixed(2)}″ rain</Chip>}
+                  </div>
+                </div>
+                <a href={spcReportLink(r.date)} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: T.accent, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }}>NOAA ↗</a>
+                <Btn kind={picked ? "green" : "soft"} small onClick={() => { onPick(r.date); toast && toast(`Date of loss set to ${r.date}`); }} style={{ flexShrink: 0 }}>
+                  {picked ? "✓ Set" : "Use"}
+                </Btn>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function TabClaim({ job, mut, toast, brand }) {
   const c = job.claim || {};
   const ins = job.insurance || {};
@@ -11290,6 +11399,8 @@ function TabClaim({ job, mut, toast, brand }) {
           </span>
         </label>
       </Card>
+
+      <StormLookup job={job} dol={c.dateOfLoss || ""} onPick={(d) => set("dateOfLoss")(d)} toast={toast} />
 
       {/* The money */}
       <Card style={{ marginTop: 12 }}>

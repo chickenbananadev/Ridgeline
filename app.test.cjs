@@ -11100,6 +11100,45 @@ function WeatherNow({ lat, lng, zip, style }) {
     wx.windMph >= 15 ? ` \xB7 ${wx.windMph} mph wind` : ""
   ] });
 }
+var STORM_CACHE = /* @__PURE__ */ new Map();
+async function fetchStormHistory(lat, lng, start, end) {
+  const key = `${weatherKey(lat, lng)}:${start}:${end}`;
+  if (STORM_CACHE.has(key)) return STORM_CACHE.get(key);
+  try {
+    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${start}&end_date=${end}&daily=wind_gusts_10m_max,wind_speed_10m_max,precipitation_sum,weather_code&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("archive");
+    const d = await res.json();
+    const days = (d.daily?.time || []).map((iso, i) => {
+      const gust = d.daily.wind_gusts_10m_max?.[i];
+      const code = d.daily.weather_code?.[i];
+      const precip = d.daily.precipitation_sum?.[i];
+      const hail = code === 96 || code === 99;
+      const damagingWind = gust != null && gust >= 45;
+      const storm = code === 95 || code === 96 || code === 99;
+      return {
+        date: iso,
+        gust: gust != null ? Math.round(gust) : null,
+        precip: precip != null ? precip : null,
+        code,
+        hail,
+        damagingWind,
+        storm
+      };
+    });
+    STORM_CACHE.set(key, days);
+    return days;
+  } catch (e) {
+    return null;
+  }
+}
+function spcReportLink(iso) {
+  const yymmdd = iso.slice(2).replace(/-/g, "");
+  return `https://www.spc.noaa.gov/climo/reports/${yymmdd}_rpt.html`;
+}
+function stormSeverity(r) {
+  return (r.hail ? 3e3 : 0) + (r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
+}
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast: toast2, embedded = false }) {
   const [day, setDay] = (0, import_react.useState)(() => todayIso());
   const [assigning, setAssigning] = (0, import_react.useState)(null);
@@ -12484,6 +12523,80 @@ function TabSignatures({ job, mut, toast: toast2, currentUser, brand: brand2 }) 
     )
   ] });
 }
+function StormLookup({ job, dol, onPick, toast: toast2 }) {
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const [start, setStart] = (0, import_react.useState)(() => {
+    const d = /* @__PURE__ */ new Date();
+    d.setFullYear(d.getFullYear() - 1);
+    return iso(d);
+  });
+  const [end, setEnd] = (0, import_react.useState)(() => iso(/* @__PURE__ */ new Date()));
+  const [rows, setRows] = (0, import_react.useState)(null);
+  const [loading, setLoading] = (0, import_react.useState)(false);
+  const [err, setErr] = (0, import_react.useState)("");
+  const run = async () => {
+    setLoading(true);
+    setErr("");
+    setRows(null);
+    let lat = job.lat ?? job.property?.lat, lng = job.lng ?? job.property?.lng;
+    if (lat == null || lng == null) {
+      const g = await geocodeZip(job.zip);
+      if (g) {
+        lat = g.lat;
+        lng = g.lng;
+      }
+    }
+    if (lat == null || lng == null) {
+      setErr("No coordinates for this address yet \u2014 add a ZIP or pick the address from the map suggestions.");
+      setLoading(false);
+      return;
+    }
+    const days = await fetchStormHistory(lat, lng, start, end);
+    if (!days) {
+      setErr("Couldn't reach the weather archive. Check the connection and try again.");
+      setLoading(false);
+      return;
+    }
+    const notable = days.filter((r) => r.hail || r.damagingWind || r.storm || r.precip != null && r.precip >= 0.75).sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1)).slice(0, 24);
+    setRows(notable);
+    setLoading(false);
+    if (!notable.length) toast2 && toast2("No notable storm days in that window");
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "NOAA / Open-Meteo" }), children: "Storm history \u2014 date of loss" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Pulls damaging-wind, hail and heavy-rain days for this address so you can set the date of loss from the record. Wind gusts & precip are ERA5 reanalysis; hail is inferred from thunderstorm-with-hail codes \u2014 confirm the official NOAA storm report before filing." }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "From", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: start, max: end, onChange: (e) => setStart(e.target.value) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "To", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: end, max: iso(/* @__PURE__ */ new Date()), onChange: (e) => setEnd(e.target.value) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, onClick: run, disabled: loading, style: { marginBottom: 12 }, children: loading ? "Looking\u2026" : "Look up" })
+    ] }),
+    err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginTop: 6 }, children: err }),
+    rows && rows.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 6 }, children: rows.map((r) => {
+      const picked = r.date === dol;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "center", padding: "9px 0", borderTop: `1px solid ${S.line}` }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: r.date }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }, children: [
+            r.hail && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "red", children: "Hail likely" }),
+            r.gust != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray", children: [
+              r.gust,
+              " mph gusts"
+            ] }),
+            r.precip != null && r.precip >= 0.5 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
+              r.precip.toFixed(2),
+              "\u2033 rain"
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: spcReportLink(r.date), target: "_blank", rel: "noreferrer", style: { fontSize: 11.5, color: T.accent, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }, children: "NOAA \u2197" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: picked ? "green" : "soft", small: true, onClick: () => {
+          onPick(r.date);
+          toast2 && toast2(`Date of loss set to ${r.date}`);
+        }, style: { flexShrink: 0 }, children: picked ? "\u2713 Set" : "Use" })
+      ] }, r.date);
+    }) })
+  ] });
+}
 function TabClaim({ job, mut, toast: toast2, brand: brand2 }) {
   const c = job.claim || {};
   const ins = job.insurance || {};
@@ -12625,6 +12738,7 @@ function TabClaim({ job, mut, toast: toast2, brand: brand2 }) {
         ] })
       ] })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StormLookup, { job, dol: c.dateOfLoss || "", onPick: (d) => set("dateOfLoss")(d), toast: toast2 }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Settlement" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
