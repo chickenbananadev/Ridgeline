@@ -3186,7 +3186,8 @@ function citeFor(state, topic) {
   const base = IRC_BASE[topic] || CODE_PROVISIONS.OH[topic];
   const adopt = STATE_CODE_ADOPTION[state];
   const label = adopt ? adopt.code : "the locally adopted IRC";
-  return { cite: `${base.cite} \u2014 per ${label}; verify edition${adopt && adopt.local ? " & local adoption" : ""}`, note: base.note, verified: false };
+  const verifyLine = `Per ${label}; verify edition${adopt && adopt.local ? " & local adoption" : ""}.`;
+  return { cite: base.cite, note: base.note ? `${base.note} ${verifyLine}` : verifyLine, verified: false };
 }
 function generateRoofingMaterials(m) {
   if (!num(m.squares)) return null;
@@ -3382,10 +3383,11 @@ function Chip({ children, tone = "gray" }) {
     fontWeight: 600,
     padding: "3px 10px",
     borderRadius: 999,
-    whiteSpace: "nowrap",
     display: "inline-block",
     alignSelf: "flex-start",
-    flexShrink: 0
+    maxWidth: "100%",
+    wordBreak: "break-word",
+    lineHeight: 1.35
   }, children });
 }
 function Btn({ children, kind = "primary", onClick, style, small, disabled, ...props }) {
@@ -9344,17 +9346,56 @@ ${bodyHtml}
 </body></html>`;
 }
 function openDoc(title, brand2, bodyHtml, toast2) {
+  const html = docShell(title, brand2, bodyHtml);
   try {
     const w = window.open("", "_blank");
-    if (!w) {
-      toast2 && toast2("Allow pop-ups for this site to open documents");
-      return false;
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+      return true;
     }
-    w.document.write(docShell(title, brand2, bodyHtml));
-    w.document.close();
+  } catch (e) {
+  }
+  try {
+    const frame = document.createElement("iframe");
+    frame.setAttribute("aria-hidden", "true");
+    frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;";
+    document.body.appendChild(frame);
+    const doc = frame.contentWindow && frame.contentWindow.document;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+      const done = () => {
+        try {
+          frame.contentWindow.focus();
+          frame.contentWindow.print();
+        } catch (e) {
+        }
+      };
+      setTimeout(done, 400);
+      setTimeout(() => {
+        try {
+          document.body.removeChild(frame);
+        } catch (e) {
+        }
+      }, 6e4);
+      toast2 && toast2("Opening the print sheet\u2026");
+      return true;
+    }
+    document.body.removeChild(frame);
+  } catch (e) {
+  }
+  try {
+    const blob = new Blob([html], { type: "text/html" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${String(title || "document").replace(/[^\w.-]+/g, "-")}.html`;
+    a.click();
+    toast2 && toast2("Downloaded the document \u2014 open it to print");
     return true;
   } catch (e) {
-    toast2 && toast2("Couldn't open the document window");
+    toast2 && toast2("Couldn't open the document");
     return false;
   }
 }

@@ -2491,7 +2491,11 @@ function citeFor(state, topic) {
   const base = IRC_BASE[topic] || CODE_PROVISIONS.OH[topic];
   const adopt = STATE_CODE_ADOPTION[state];
   const label = adopt ? adopt.code : "the locally adopted IRC";
-  return { cite: `${base.cite} — per ${label}; verify edition${adopt && adopt.local ? " & local adoption" : ""}`, note: base.note, verified: false };
+  /* Keep `cite` to the short IRC section so it fits the badge; the
+     adopted-code context and the verify reminder ride on `note` (the card
+     already shows a "verify locally" banner and the adopted code name). */
+  const verifyLine = `Per ${label}; verify edition${adopt && adopt.local ? " & local adoption" : ""}.`;
+  return { cite: base.cite, note: base.note ? `${base.note} ${verifyLine}` : verifyLine, verified: false };
 }
 
 /* Material list generator — quantities from measurements + waste. */
@@ -2745,8 +2749,8 @@ function Chip({ children, tone = "gray" }) {
   return (
     <span style={{
       background: t.bg, color: t.fg, fontSize: 12, fontWeight: 600,
-      padding: "3px 10px", borderRadius: 999, whiteSpace: "nowrap", display: "inline-block",
-      alignSelf: "flex-start", flexShrink: 0,
+      padding: "3px 10px", borderRadius: 999, display: "inline-block",
+      alignSelf: "flex-start", maxWidth: "100%", wordBreak: "break-word", lineHeight: 1.35,
     }}>{children}</span>
   );
 }
@@ -7888,14 +7892,44 @@ ${bodyHtml}
 }
 
 function openDoc(title, brand, bodyHtml, toast) {
+  const html = docShell(title, brand, bodyHtml);
+  /* 1) A new tab is best when the browser allows it. */
   try {
     const w = window.open("", "_blank");
-    if (!w) { toast && toast("Allow pop-ups for this site to open documents"); return false; }
-    w.document.write(docShell(title, brand, bodyHtml));
-    w.document.close();
+    if (w) { w.document.write(html); w.document.close(); return true; }
+  } catch (e) { /* fall through */ }
+  /* 2) iOS home-screen PWAs (display:standalone) return null from
+     window.open, so print from a hidden iframe instead — the document's
+     own toolbar has a Print button, and this triggers the native sheet. */
+  try {
+    const frame = document.createElement("iframe");
+    frame.setAttribute("aria-hidden", "true");
+    frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;";
+    document.body.appendChild(frame);
+    const doc = frame.contentWindow && frame.contentWindow.document;
+    if (doc) {
+      doc.open(); doc.write(html); doc.close();
+      const done = () => { try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (e) { /* ignore */ } };
+      // Give the iframe a tick to lay out before printing.
+      setTimeout(done, 400);
+      // Clean up after the print sheet has had time to open.
+      setTimeout(() => { try { document.body.removeChild(frame); } catch (e) { /* ignore */ } }, 60000);
+      toast && toast("Opening the print sheet…");
+      return true;
+    }
+    document.body.removeChild(frame);
+  } catch (e) { /* fall through */ }
+  /* 3) Last resort: hand back a downloadable HTML file. */
+  try {
+    const blob = new Blob([html], { type: "text/html" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${String(title || "document").replace(/[^\w.-]+/g, "-")}.html`;
+    a.click();
+    toast && toast("Downloaded the document — open it to print");
     return true;
   } catch (e) {
-    toast && toast("Couldn't open the document window");
+    toast && toast("Couldn't open the document");
     return false;
   }
 }
