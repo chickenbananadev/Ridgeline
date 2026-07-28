@@ -8,7 +8,7 @@ import {
   BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat, CloudRain,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
   Scale, Lightbulb, ExternalLink, Lock, Layers, Smile
-, Filter , Megaphone, Clock, Zap } from "lucide-react";
+, Filter , Megaphone, Clock, Zap, Sun, Moon } from "lucide-react";
 
 /* ================================================================
    BRANDING — single source of company identity. Everything company-
@@ -1343,10 +1343,10 @@ function mkEstimate(over = {}) {
     selectedTier: null,   // id of the active tier, or null = flat estimate (old behavior)
     upgrades: [],         // [{ id, desc, price, cost, selected }]
     concealed: [
-      { id: "c1", desc: "Roof decking replacement (7/16\" OSB)", unit: "per 4×8 sheet", price: 0 },
-      { id: "c2", desc: "Plank decking replacement", unit: "per LF", price: 0 },
-      { id: "c3", desc: "Rafter sistering / repair", unit: "per rafter", price: 0 },
-      { id: "c4", desc: "Fascia replacement", unit: "per LF", price: 0 },
+      { id: "c1", desc: "Roof decking replacement (7/16\" OSB)", unit: "per 4×8 sheet", price: 0, on: true },
+      { id: "c2", desc: "Plank decking replacement", unit: "per LF", price: 0, on: true },
+      { id: "c3", desc: "Rafter sistering / repair", unit: "per rafter", price: 0, on: true },
+      { id: "c4", desc: "Fascia replacement", unit: "per LF", price: 0, on: true },
     ],
     clientSig: null, sigAt: null, ...over,
   };
@@ -2042,7 +2042,7 @@ function resolveJurisdiction(zip) {
     codeName: codeNameForState(st), codeEdition: "Verify the adopted edition",
     adoption: adopt && adopt.local ? "Adopted locally — confirm the adopting jurisdiction." : "Confirm the current adopted edition and local amendments.",
     permit: "Confirm permit requirements with the local building department.",
-    sources: ["ICC"],
+    sources: ["ICC", "MUNICODE"],
   };
   return {
     zip: z, city: "", county: "", state: st,
@@ -2195,7 +2195,7 @@ function jurisdictionFromLookup(hit) {
       ? "Adopted locally — confirm the adopting municipality/county for this address."
       : "Confirm the current adopted edition and any local amendments.",
     permit: "Confirm permit requirements with the local building department.",
-    sources: ["ICC"],
+    sources: ["ICC", "MUNICODE"],
   };
   const dept = hit.dept;
   return {
@@ -2491,7 +2491,11 @@ function citeFor(state, topic) {
   const base = IRC_BASE[topic] || CODE_PROVISIONS.OH[topic];
   const adopt = STATE_CODE_ADOPTION[state];
   const label = adopt ? adopt.code : "the locally adopted IRC";
-  return { cite: `${base.cite} — per ${label}; verify edition${adopt && adopt.local ? " & local adoption" : ""}`, note: base.note, verified: false };
+  /* Keep `cite` to the short IRC section so it fits the badge; the
+     adopted-code context and the verify reminder ride on `note` (the card
+     already shows a "verify locally" banner and the adopted code name). */
+  const verifyLine = `Per ${label}; verify edition${adopt && adopt.local ? " & local adoption" : ""}.`;
+  return { cite: base.cite, note: base.note ? `${base.note} ${verifyLine}` : verifyLine, verified: false };
 }
 
 /* Material list generator — quantities from measurements + waste. */
@@ -2667,7 +2671,11 @@ const toProfile = (u) => ({
 /* ================================================================
    SHARED UI
    ================================================================ */
-const S = { ink: "#111827", sub: "#6B7280", line: "#E5E7EB", bg: "#F7F8FA", soft: "#F3F4F6" };
+/* Neutral tokens resolve to CSS variables (defined in index.html) so a
+   dark/light switch is a single data-theme flip on <html> — every S.* read
+   and every captured style const (inputStyle etc.) repaints via the cascade,
+   with no re-render. `card` is the surface white that darkens in dark mode. */
+const S = { ink: "var(--rl-ink)", sub: "var(--rl-sub)", line: "var(--rl-line)", bg: "var(--rl-bg)", soft: "var(--rl-soft)", card: "var(--rl-card)" };
 /* Live theme. The root component copies brand colors in on every render,
    and because inline styles read these properties at render time, a color
    change in Branding repaints the whole app immediately. */
@@ -2706,7 +2714,7 @@ function DonutChart({ data, size = 132, thickness = 18, centerLabel, centerValue
         background: gradient, flexShrink: 0,
       }}>
         <div style={{
-          position: "absolute", inset: thickness, borderRadius: "50%", background: "#fff",
+          position: "absolute", inset: thickness, borderRadius: "50%", background: S.card,
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
         }}>
           {centerValue != null && <div style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>{centerValue}</div>}
@@ -2745,8 +2753,8 @@ function Chip({ children, tone = "gray" }) {
   return (
     <span style={{
       background: t.bg, color: t.fg, fontSize: 12, fontWeight: 600,
-      padding: "3px 10px", borderRadius: 999, whiteSpace: "nowrap", display: "inline-block",
-      alignSelf: "flex-start", flexShrink: 0,
+      padding: "3px 10px", borderRadius: 999, display: "inline-block",
+      alignSelf: "flex-start", maxWidth: "100%", wordBreak: "break-word", lineHeight: 1.35,
     }}>{children}</span>
   );
 }
@@ -2762,9 +2770,9 @@ function Btn({ children, kind = "primary", onClick, style, small, disabled, ...p
   const kinds = {
     primary: { background: T.accent, color: "#fff" },
     dark: { background: T.primary, color: "#fff" },
-    ghost: { background: "#fff", color: S.ink, border: `1px solid ${S.line}` },
+    ghost: { background: S.card, color: S.ink, border: `1px solid ${S.line}` },
     soft: { background: T.accentSoft, color: T.accent },
-    danger: { background: "#fff", color: "#B42318", border: `1px solid ${S.line}` },
+    danger: { background: S.card, color: "#B42318", border: `1px solid ${S.line}` },
     green: { background: "#177245", color: "#fff" },
   };
   return (
@@ -2785,7 +2793,7 @@ function Field({ label, children, hint }) {
 }
 const inputStyle = {
   width: "100%", boxSizing: "border-box", padding: "11px 13px", fontSize: 15,
-  border: `1px solid ${S.line}`, borderRadius: 10, background: "#fff", color: S.ink, outline: "none",
+  border: `1px solid ${S.line}`, borderRadius: 10, background: S.card, color: S.ink, outline: "none",
   fontFamily: "inherit",
 };
 const selStyle = { ...inputStyle, appearance: "auto" };
@@ -2799,7 +2807,7 @@ const dateInputStyle = {
 
 function Card({ children, style, pad = 18, onClick }) {
   return (
-    <div onClick={onClick} style={{ background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }}>
+    <div onClick={onClick} style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }}>
       {children}
     </div>
   );
@@ -2850,9 +2858,39 @@ function SourceLink({ srcId }) {
     <a href={s.url} target="_blank" rel="noreferrer" style={{
       display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none",
       border: `1px solid ${S.line}`, borderRadius: 999, padding: "6px 12px",
-      fontSize: 12.5, fontWeight: 700, color: T.accent, background: "#fff", marginTop: 8, marginRight: 8,
+      fontSize: 12.5, fontWeight: 700, color: T.accent, background: S.card, marginTop: 8, marginRight: 8,
     }}>
       <ExternalLink size={13} /> {s.name}
+    </a>
+  );
+}
+
+/* Municode hosts most municipal codes of ordinances. Their URLs are
+   library.municode.com/<state-abbr>/<city-slug>; with no city we land on
+   the state index so the rep can pick the municipality. Slugs are lower-
+   case with underscores for spaces (e.g. "Forest Park" -> forest_park). */
+function municodeUrl(state, city) {
+  const st = String(state || "").trim().toLowerCase();
+  if (!/^[a-z]{2}$/.test(st)) return SOURCES.MUNICODE.url;
+  const slug = String(city || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return slug ? `https://library.municode.com/${st}/${slug}` : `https://library.municode.com/${st}`;
+}
+/* No free nationwide building-department directory exists, so we hand the
+   rep a scoped web search that lands on the right office nearly every time.
+   Honest assist, not a database. */
+function deptSearchUrl(city, state) {
+  const q = [city, state, "building department permits phone"].filter(Boolean).join(" ");
+  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+}
+/* A pill link that matches SourceLink's look but points anywhere. */
+function AssistLink({ href, children }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" style={{
+      display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none",
+      border: `1px solid ${S.line}`, borderRadius: 999, padding: "6px 12px",
+      fontSize: 12.5, fontWeight: 700, color: T.accent, background: S.card, marginTop: 8, marginRight: 8,
+    }}>
+      <ExternalLink size={13} /> {children}
     </a>
   );
 }
@@ -2924,7 +2962,7 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
       {open && items.length > 0 && (
         <div style={{
           position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 30,
-          background: "#fff", border: `1px solid ${S.line}`, borderRadius: 12,
+          background: S.card, border: `1px solid ${S.line}`, borderRadius: 12,
           boxShadow: "0 10px 28px rgba(17,24,39,.14)", overflow: "hidden", maxHeight: 260, overflowY: "auto",
         }}>
           {items.map((it, i) => (
@@ -2955,16 +2993,23 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
   );
 }
 
-function Sheet({ open, onClose, title, children, footer, wide, tall }) {
+function Sheet({ open, onClose, title, children, footer, wide, tall, center = true }) {
   if (!open) return null;
+  /* Dialogs float centered by default (pass center={false} for a bottom sheet).
+     `center` renders a floating, vertically-centered dialog (rounded on all
+     sides, insets from the screen edges) instead of the default bottom sheet
+     that's anchored to the bottom edge. */
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 60, background: "rgba(17,24,39,.45)",
-      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      display: "flex", alignItems: center ? "center" : "flex-end", justifyContent: "center",
+      padding: center ? 20 : 0, boxSizing: "border-box",
     }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
-        background: "#fff", width: "100%", maxWidth: wide ? 760 : 560, maxHeight: "90vh", minHeight: tall ? "55vh" : undefined,
-        borderRadius: "18px 18px 0 0", display: "flex", flexDirection: "column",
+        background: S.card, width: "100%", maxWidth: wide ? 760 : 560,
+        maxHeight: center ? "82vh" : "90vh", minHeight: tall ? "55vh" : undefined,
+        borderRadius: center ? 18 : "18px 18px 0 0", display: "flex", flexDirection: "column",
+        boxShadow: center ? "0 24px 60px rgba(17,24,39,.28)" : undefined,
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 12px" }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: S.ink }}>{title}</div>
@@ -3059,7 +3104,7 @@ function SignaturePad({ open, onClose, title, onApply }) {
         onTouchStart={start} onTouchMove={move} onTouchEnd={end}
         style={{
           width: "100%", height: 190, border: `1.5px dashed ${S.line}`, borderRadius: 12,
-          touchAction: "none", background: "#fff", display: "block",
+          touchAction: "none", background: S.card, display: "block",
         }}
       />
     </Sheet>
@@ -3286,7 +3331,7 @@ function Marketing({ onSignIn, onStartTrial }) {
     ["E", "Empowerment", "We give roofing professionals the visibility, tools, and control to operate with confidence.", "stride-empowerment.jpg"],
   ];
   return (
-    <div id="top" style={{ background: "#fff" }}>
+    <div id="top" style={{ background: S.card }}>
       <style>{`
         @media (max-width: 760px) {
           .mkt-row { flex-direction: column !important; padding: 40px 20px !important; gap: 32px !important; }
@@ -3437,7 +3482,7 @@ function Marketing({ onSignIn, onStartTrial }) {
       {/* ---------- A few more reasons, in the format sales reps already
          hand customers — quick-hit panels rather than another full row
          each. ---------- */}
-      <div style={{ padding: "64px 20px", background: "#fff" }}>
+      <div style={{ padding: "64px 20px", background: S.card }}>
         <Reveal style={{ maxWidth: 1100, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 32 }}>
             <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
@@ -3516,7 +3561,7 @@ function Marketing({ onSignIn, onStartTrial }) {
           </div>
           <div className="mkt-pricing-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, textAlign: "left", marginBottom: 28 }}>
             <div style={{
-              background: "#fff", borderRadius: 20, padding: "30px 26px", border: `1px solid ${MKT.line}`,
+              background: S.card, borderRadius: 20, padding: "30px 26px", border: `1px solid ${MKT.line}`,
               boxShadow: "0 20px 50px rgba(32,36,42,.06)",
             }}>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: MKT.sub, marginBottom: 6 }}>Pay per seat</div>
@@ -3554,7 +3599,7 @@ function Marketing({ onSignIn, onStartTrial }) {
             </div>
           </div>
           <div style={{
-            background: "#fff", borderRadius: 16, padding: "22px 24px", border: `1px solid ${MKT.line}`, textAlign: "left",
+            background: S.card, borderRadius: 16, padding: "22px 24px", border: `1px solid ${MKT.line}`, textAlign: "left",
           }}>
             <div style={{ fontSize: 13, color: MKT.sub, marginBottom: 14 }}>
               7-day free trial, card required. Cancel anytime before it ends and you won't be charged. Every plan includes:
@@ -3574,7 +3619,7 @@ function Marketing({ onSignIn, onStartTrial }) {
       </div>
 
       {/* ---------- FAQ ---------- */}
-      <div id="faq" style={{ padding: "72px 20px", background: "#fff" }}>
+      <div id="faq" style={{ padding: "72px 20px", background: S.card }}>
         <Reveal style={{ maxWidth: 760, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 32 }}>
             <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
@@ -3607,7 +3652,7 @@ function Marketing({ onSignIn, onStartTrial }) {
             Ready to run roofing operations with clarity?
           </div>
           <button onClick={onStartTrial} style={{
-            border: "none", background: "#fff", color: MKT.tealDark, fontWeight: 700,
+            border: "none", background: S.card, color: MKT.tealDark, fontWeight: 700,
             fontSize: 16, cursor: "pointer", fontFamily: "inherit", padding: "15px 30px", borderRadius: 10,
           }}>Start your free trial</button>
         </Reveal>
@@ -3723,7 +3768,7 @@ function Login({ brand, users, onLogin, initialMode = "login", selectedPlan = "p
       <div style={{ minHeight: "100vh", background: brand.primary, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
         <div style={{ width: "100%", maxWidth: 420 }}>
           <div style={{ textAlign: "center", marginBottom: 22 }}>
-            <div style={{ width: 56, height: 56, borderRadius: 14, background: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+            <div style={{ width: 56, height: 56, borderRadius: 14, background: S.card, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
               <Shield size={28} color={brand.primary} />
             </div>
             <div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>{brand.company}</div>
@@ -3763,7 +3808,7 @@ function Login({ brand, users, onLogin, initialMode = "login", selectedPlan = "p
 
   return (
     <div style={{
-      minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column",
+      minHeight: "100vh", background: S.card, display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center", padding: 24, position: "relative",
     }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
@@ -3822,7 +3867,7 @@ function Login({ brand, users, onLogin, initialMode = "login", selectedPlan = "p
                   New company? Try {PRODUCT.name} free for {PRODUCT.trialDays} days — no card.
                 </div>
                 <button onClick={() => { setErr(""); setMode("signup"); }} style={{
-                  border: `1.5px solid ${T.accent}`, background: "#fff", color: T.accent,
+                  border: `1.5px solid ${T.accent}`, background: S.card, color: T.accent,
                   fontWeight: 700, fontSize: 14, cursor: "pointer", borderRadius: 10,
                   padding: "10px 18px",
                 }}>Create an account</button>
@@ -4157,7 +4202,7 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         ].map(([label, Icon, fn]) => (
           <button key={label} onClick={fn} style={{
             flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
-            border: `1px solid ${S.line}`, background: "#fff", borderRadius: 12,
+            border: `1px solid ${S.line}`, background: S.card, borderRadius: 12,
             padding: "11px 0", cursor: "pointer", color: T.accent, fontSize: 11.5, fontWeight: 700,
             fontFamily: "inherit",
           }}>
@@ -5121,7 +5166,7 @@ function SubHeader({ title, onBack, right }) {
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <button onClick={onBack} style={{
-          border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
+          border: `1px solid ${S.line}`, background: S.card, borderRadius: 999,
           width: 36, height: 36, display: "grid", placeItems: "center", cursor: "pointer",
         }}><ChevronLeft size={18} /></button>
         <div style={{ fontSize: 22, fontWeight: 800, color: S.ink }}>{title}</div>
@@ -5630,10 +5675,10 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
 
                 {/* Call / Text */}
                 <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                  <a href={vTel ? telHref(vJob.phone) : undefined} style={{ ...actLink, background: "#fff", color: S.ink, ...(vTel ? {} : off) }}>
+                  <a href={vTel ? telHref(vJob.phone) : undefined} style={{ ...actLink, background: S.card, color: S.ink, ...(vTel ? {} : off) }}>
                     <Phone size={15} /> Call
                   </a>
-                  <a href={vTel ? smsHref(vJob.phone) : undefined} style={{ ...actLink, background: "#fff", color: S.ink, ...(vTel ? {} : off) }}>
+                  <a href={vTel ? smsHref(vJob.phone) : undefined} style={{ ...actLink, background: S.card, color: S.ink, ...(vTel ? {} : off) }}>
                     <MessageCircle size={15} /> Text
                   </a>
                 </div>
@@ -5646,7 +5691,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
                     return (
                       <a key={p.id} href={addr ? p.link(addr) : undefined} target="_blank" rel="noreferrer"
                         onClick={() => { setMapPref(p.id); setMapPrefState(p.id); }}
-                        style={{ ...actLink, flex: "1 1 30%", ...(on ? { background: T.accent, color: "#fff", border: "1px solid transparent" } : { background: "#fff", color: S.ink }), ...(addr ? {} : off) }}>
+                        style={{ ...actLink, flex: "1 1 30%", ...(on ? { background: T.accent, color: "#fff", border: "1px solid transparent" } : { background: S.card, color: S.ink }), ...(addr ? {} : off) }}>
                         <MapPin size={14} /> {p.name}
                       </a>
                     );
@@ -5712,7 +5757,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
                     };
                     const first = String(jb.name || "").split(" ")[0];
                     return (
-                      <div style={{ background: "#fff", border: `1px solid ${S.line}`, borderRadius: 9, padding: "9px 11px", marginTop: 8 }}>
+                      <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 9, padding: "9px 11px", marginTop: 8 }}>
                         <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".05em", color: S.sub, marginBottom: 4 }}>
                           {notifyNow ? "THEY WILL RECEIVE" : "DAY BEFORE"}
                         </div>
@@ -6542,7 +6587,7 @@ function WorkflowEditor({ open, onClose, stages, setStages }) {
     </Sheet>
   );
 }
-const arrowBtn = { border: "1px solid #E5E7EB", background: "#fff", borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14 };
+const arrowBtn = { border: "1px solid #E5E7EB", background: S.card, borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14 };
 
 function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppointments, calls, setCalls, currentUser, toast, onLog, apptTypes }) {
   const [mode, setMode] = useState("note");
@@ -6701,7 +6746,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       onDragStart={() => (dragJob.current = job.id)}
       onClick={() => onOpenJob(job.id)}
       style={{
-        background: "#fff", border: `1px solid ${S.line}`, borderRadius: 12,
+        background: S.card, border: `1px solid ${S.line}`, borderRadius: 12,
         padding: 14, marginBottom: 10, cursor: "pointer",
       }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
@@ -6768,7 +6813,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
             <button key={s.id}
               onClick={() => { onMoveStage(job.id, s.id); setMoveMenuFor(null); }}
               style={{
-                border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
+                border: `1px solid ${S.line}`, background: S.card, borderRadius: 999,
                 padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", color: S.ink,
               }}>{s.name}</button>
           ))}
@@ -6779,7 +6824,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
 
   return (
     <div style={{ paddingBottom: 100 }}>
-      <div style={{ padding: "18px 16px 0", background: "#fff" }}>
+      <div style={{ padding: "18px 16px 0", background: S.card }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>Jobs</div>
@@ -6822,7 +6867,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
           <div style={{ position: "relative" }}>
             <Btn small kind="soft" onClick={() => setBulkMenu(bulkMenu === "stage" ? null : "stage")}>Move to…</Btn>
             {bulkMenu === "stage" && (
-              <div style={{ position: "absolute", top: "110%", left: 0, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }}>
+              <div style={{ position: "absolute", top: "110%", left: 0, background: S.card, border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }}>
                 {stages.map((st) => (
                   <button key={st.id} onClick={() => { selected.forEach((id) => onMoveStage(id, st.id)); clearSel(); }}
                     style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", padding: "10px 14px", fontSize: 13.5, color: S.ink, cursor: "pointer", fontFamily: "inherit" }}>{st.name}</button>
@@ -6833,7 +6878,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
           <div style={{ position: "relative" }}>
             <Btn small kind="soft" onClick={() => setBulkMenu(bulkMenu === "assign" ? null : "assign")}>Assign…</Btn>
             {bulkMenu === "assign" && (
-              <div style={{ position: "absolute", top: "110%", left: 0, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }}>
+              <div style={{ position: "absolute", top: "110%", left: 0, background: S.card, border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }}>
                 {assigneeOptions.map((nm) => (
                   <button key={nm} onClick={() => { onBulkUpdate([...selected], { assignee: nm }); clearSel(); }}
                     style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", padding: "10px 14px", fontSize: 13.5, color: S.ink, cursor: "pointer", fontFamily: "inherit" }}>{nm}</button>
@@ -6903,7 +6948,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
           )}
           {filtered.map((j) => selecting ? (
             <div key={j.id} onClick={() => toggleSel(j.id)} style={{
-              display: "flex", alignItems: "center", gap: 12, background: "#fff", cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 12, background: S.card, cursor: "pointer",
               border: `1px solid ${selected.has(j.id) ? T.accent : S.line}`, borderRadius: 12, padding: 14, marginBottom: 10,
             }}>
               <span style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, border: `2px solid ${selected.has(j.id) ? T.accent : S.line}`, background: selected.has(j.id) ? T.accent : "#fff", display: "grid", placeItems: "center" }}>
@@ -6993,7 +7038,7 @@ const JOB_TAB_GROUPS = [
 ];
 
 function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [], ccToken = null,
-  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null, features = {}, onOpenCodeLookup = () => {}, priceList = [] }) {
+  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null, features = {}, onOpenCodeLookup = () => {}, priceList = [], docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {} }) {
   const [tab, setTab] = useState(openTab || "overview");
   /* Every section starts collapsed so the job opens as a clean, scannable
      stack; the rep expands what they need. A deep link still opens its own
@@ -7023,7 +7068,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
   const juris = jurisdictionForZip(job.zip);
   return (
     <div style={{ background: S.bg, minHeight: "100vh", paddingBottom: 110 }}>
-      <div style={{ background: "#fff", borderBottom: `1px solid ${S.line}` }}>
+      <div style={{ background: S.card, borderBottom: `1px solid ${S.line}` }}>
         <div style={{ padding: "16px 16px 0" }}>
           <SubHeader title={job.name} onBack={onBack}
             right={
@@ -7131,7 +7176,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           ].map(([id, label, Icon]) => (
             <button key={id} onClick={() => jumpToSection(id)} style={{
               display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8,
-              border: `1px solid ${S.line}`, background: "#fff", borderRadius: 12,
+              border: `1px solid ${S.line}`, background: S.card, borderRadius: 12,
               padding: "14px 12px", cursor: "pointer", fontFamily: "inherit", textAlign: "left",
             }}>
               <Icon size={19} color={T.accent} />
@@ -7141,7 +7186,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
         </div>
       </Sheet>
 
-      <Sheet open={activityOpen} onClose={() => setActivityOpen(false)} title="Activity">
+      <Sheet open={activityOpen} onClose={() => setActivityOpen(false)} title="Activity" center>
         {(() => {
           const mine = (activity || []).filter((a) => a.jobId === job.id);
           if (!mine.length) return <div style={{ fontSize: 13.5, color: S.sub }}>Nothing logged on this job yet.</div>;
@@ -7190,9 +7235,11 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
               case "materials": return <TabMaterials job={job} mut={mut} toast={toast} />;
               case "estimate": return <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
-                estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} priceList={priceList} />;
+                estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} priceList={priceList}
+                docTemplates={docTemplates} setDocTemplates={setDocTemplates} />;
               case "contract": return (<>
-                <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast} />
+                <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast}
+                  docTemplates={docTemplates} setDocTemplates={setDocTemplates} />
                 {/* Countersign queue + signature audit trail live with the
                     contract now, not in a separate section. */}
                 <TabSignatures job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />
@@ -7249,7 +7296,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
             return (
               <div key={id} id={`jobsec-${id}`} style={{
                 border: `1px solid ${S.line}`, borderRadius: 12, marginBottom: 10,
-                background: "#fff", overflow: "hidden",
+                background: S.card, overflow: "hidden",
               }}>
                 <button onClick={() => setOpen((o) => ({ ...o, [id]: !o[id] }))} style={{
                   display: "flex", alignItems: "center", gap: 11, width: "100%",
@@ -7862,7 +7909,7 @@ function docShell(title, brand, bodyHtml) {
   .foot { margin-top: 26px; padding-top: 12px; border-top: 1px solid #E5E7EB;
           font-size: 10.5px; color: #9CA3AF; text-align: center; }
   .cover { text-align: center; padding: 40px 0 30px; page-break-after: always; }
-  .cover img.hero { width: 100%; border-radius: 12px; margin-bottom: 26px; }
+  .cover img.hero { width: 100%; height: 4.8in; object-fit: cover; border-radius: 12px; margin-bottom: 26px; }
   @media print { .noprint { display: none !important; } body { padding: 0; } }
   .bar { position: sticky; top: 0; background: #111827; color: #fff; padding: 11px 14px;
          display: flex; gap: 10px; align-items: center; margin: -22px -22px 20px; }
@@ -7888,14 +7935,44 @@ ${bodyHtml}
 }
 
 function openDoc(title, brand, bodyHtml, toast) {
+  const html = docShell(title, brand, bodyHtml);
+  /* 1) A new tab is best when the browser allows it. */
   try {
     const w = window.open("", "_blank");
-    if (!w) { toast && toast("Allow pop-ups for this site to open documents"); return false; }
-    w.document.write(docShell(title, brand, bodyHtml));
-    w.document.close();
+    if (w) { w.document.write(html); w.document.close(); return true; }
+  } catch (e) { /* fall through */ }
+  /* 2) iOS home-screen PWAs (display:standalone) return null from
+     window.open, so print from a hidden iframe instead — the document's
+     own toolbar has a Print button, and this triggers the native sheet. */
+  try {
+    const frame = document.createElement("iframe");
+    frame.setAttribute("aria-hidden", "true");
+    frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;";
+    document.body.appendChild(frame);
+    const doc = frame.contentWindow && frame.contentWindow.document;
+    if (doc) {
+      doc.open(); doc.write(html); doc.close();
+      const done = () => { try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (e) { /* ignore */ } };
+      // Give the iframe a tick to lay out before printing.
+      setTimeout(done, 400);
+      // Clean up after the print sheet has had time to open.
+      setTimeout(() => { try { document.body.removeChild(frame); } catch (e) { /* ignore */ } }, 60000);
+      toast && toast("Opening the print sheet…");
+      return true;
+    }
+    document.body.removeChild(frame);
+  } catch (e) { /* fall through */ }
+  /* 3) Last resort: hand back a downloadable HTML file. */
+  try {
+    const blob = new Blob([html], { type: "text/html" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${String(title || "document").replace(/[^\w.-]+/g, "-")}.html`;
+    a.click();
+    toast && toast("Downloaded the document — open it to print");
     return true;
   } catch (e) {
-    toast && toast("Couldn't open the document window");
+    toast && toast("Couldn't open the document");
     return false;
   }
 }
@@ -7949,6 +8026,18 @@ function normalizeProposalDoc(doc) {
     notes: d.notes || "",
     terms: d.terms || "",
   };
+}
+
+/* The concealed-condition rows the rep checked on, as a small unit-price
+   table for the estimate/contract. Blank when nothing is selected. */
+function concealedTableHtml(est) {
+  const rows = ((est && est.concealed) || []).filter((c) => c.on !== false && String(c.desc || "").trim());
+  if (!rows.length) return "";
+  return `<h2>Concealed conditions — unit pricing</h2>` +
+    `<div class="muted" style="margin-bottom:8px">Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented.</div>` +
+    `<table><thead><tr><th>Condition</th><th>Unit</th><th class="r">Price</th></tr></thead><tbody>` +
+    rows.map((c) => `<tr><td>${esc(c.desc)}</td><td>${esc(c.unit || "")}</td><td class="r">${num(c.price) ? money(num(c.price)) : "—"}</td></tr>`).join("") +
+    `</tbody></table>`;
 }
 
 function estimateDocHtml(job, brand) {
@@ -8006,6 +8095,7 @@ function estimateDocHtml(job, brand) {
       out += `<iframe src="${b.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe>`;
     }
   }
+  out += concealedTableHtml(est);
   out += `<div class="sig">
     <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
     <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative</div></div>
@@ -8114,6 +8204,15 @@ function contractDocHtml(job, brand) {
     <div class="tot"><span>Due at signing${mode === "pct" ? ` (${con.depositPct}%)` : ""}</span><span>${money(deposit)}</span></div>
     <div class="tot grand"><span>Due on substantial completion</span><span>${money((con.price || 0) - deposit)}</span></div>`;
   if (con.terms) out += `<h2>Terms &amp; conditions</h2><div class="muted">${esc(con.terms)}</div>`;
+  out += concealedTableHtml(job.estimate);
+  /* Uploaded contract attachments — signed T&C, addenda, filled PDF forms —
+     embedded so they travel with the printed/portal contract. */
+  for (const a of con.attachments || []) {
+    if (a && a.dataUrl) {
+      out += `<h2>${esc(a.name || "Attachment")}</h2>`;
+      out += `<iframe src="${a.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe>`;
+    }
+  }
   out += `<div class="sig">
     <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
     <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative / date</div></div>
@@ -8802,7 +8901,7 @@ function SignatureField({ label = "Sign here", value, onChange, accent = "#0A9E9
             onTouchStart={start} onTouchMove={move} onTouchEnd={end}
             style={{
               width: "100%", height: 150, border: "1.5px dashed #C7CBD1", borderRadius: 11,
-              background: "#fff", touchAction: "none", display: "block", cursor: "crosshair",
+              background: S.card, touchAction: "none", display: "block", cursor: "crosshair",
             }} />
           {!value && (
             <div style={{
@@ -8816,7 +8915,7 @@ function SignatureField({ label = "Sign here", value, onChange, accent = "#0A9E9
           <input
             style={{
               width: "100%", boxSizing: "border-box", padding: "14px 13px", fontSize: 26,
-              border: "1.5px dashed #C7CBD1", borderRadius: 11, background: "#fff",
+              border: "1.5px dashed #C7CBD1", borderRadius: 11, background: S.card,
               color: "#101828", outline: "none", fontFamily: font, textAlign: "center",
             }}
             value={typed} placeholder="Type your full name"
@@ -9018,7 +9117,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
         {openDoc && (
           <div>
             {/* What they are agreeing to, in full, above the signature. */}
-            <div style={{ border: `1px solid ${S.line}`, borderRadius: 11, padding: 14, marginBottom: 14, background: "#fff" }}>
+            <div style={{ border: `1px solid ${S.line}`, borderRadius: 11, padding: 14, marginBottom: 14, background: S.card }}>
               {(openDoc.lines || []).map((l, i2) => (
                 <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5, padding: "6px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }}>
                   <span style={{ color: S.ink }}>{l.label}</span>
@@ -9522,7 +9621,7 @@ function CheckoutReturnScreen({ sessionId, onDone }) {
     return () => { alive = false; };
   }, [sessionId]);
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff", padding: 24 }}>
+    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: S.card, padding: 24 }}>
       <div style={{ textAlign: "center", maxWidth: 360 }}>
         {err ? (
           <>
@@ -9655,20 +9754,24 @@ function SystemCheck({ currentUser, onBack }) {
           out.push({ label: human, ok: false, detail: String((e && e.message) || e) });
         }
       }
-      /* Write test against a throwaway row. Each run picks a fresh random
-         id rather than the old shared id=99 — with tenant-scoped RLS,
-         a fixed shared id meant only the FIRST tenant to ever run this
-         check could write it; every other company would see a false
-         "write blocked" here even though their real data saves fine. */
-      const probeId = 1000 + Math.floor(Math.random() * 2000000000);
+      /* Non-destructive write test. The real save path (useBrandSync) upserts
+         the tenant's own crm_brand row on tenant_id; mirror that exactly here
+         so the probe exercises the same RLS path. Touching only updated_at via
+         ON CONFLICT (tenant_id) leaves the row's data (logo/colors/company)
+         untouched. The old raw insert set a random id but no tenant_id — a
+         trigger stamped the tenant, and any company that had ever saved
+         branding then collided on crm_brand_tenant_id_key, producing a false
+         "write blocked" even though their settings save fine. */
       try {
-        const { error } = await db.from("crm_brand").insert({ id: probeId, data: { _probe: Date.now() }, updated_at: new Date().toISOString() });
+        const write = (currentUser && currentUser.tenantId)
+          ? db.from("crm_brand").upsert({ tenant_id: currentUser.tenantId, updated_at: new Date().toISOString() }, { onConflict: "tenant_id" })
+          : db.from("crm_brand").upsert({ id: 1, updated_at: new Date().toISOString() }, { onConflict: "id" });
+        const { error } = await write;
         out.push({
           label: "Can save settings",
           ok: !error,
           detail: error ? `Write blocked: ${error.message}` : "Write succeeded",
         });
-        if (!error) await db.from("crm_brand").delete().eq("id", probeId);
       } catch (e) {
         out.push({ label: "Can save settings", ok: false, detail: String((e && e.message) || e) });
       }
@@ -10103,16 +10206,56 @@ async function fetchStormHistory(lat, lng, start, end) {
       const gust = d.daily.wind_gusts_10m_max?.[i];
       const code = d.daily.weather_code?.[i];
       const precip = d.daily.precipitation_sum?.[i];
-      const hail = code === 96 || code === 99;
-      const damagingWind = gust != null && gust >= 45;
+      const hail = code === 96 || code === 99;      // possible hail from WMO code
+      const g = gust != null ? Math.round(gust) : null;
+      /* Roofing-relevant wind bands: 45+ is a high-wind flag, 58+ is the NWS
+         severe/"damaging" threshold. Always keep the gust value so it shows. */
+      const highWind = g != null && g >= 45;
+      const damagingWind = g != null && g >= 58;
       const storm = code === 95 || code === 96 || code === 99;
       return {
-        date: iso, gust: gust != null ? Math.round(gust) : null,
-        precip: precip != null ? precip : null, code, hail, damagingWind, storm,
+        date: iso, gust: g, precip: precip != null ? precip : null, code,
+        hail, highWind, damagingWind, storm,
+        hailIn: null, reportWind: null, reports: null, // filled by enrichStormDay
       };
     });
     STORM_CACHE.set(key, days);
     return days;
+  } catch (e) { return null; }
+}
+/* Best-effort official corroboration: the Iowa Environmental Mesonet mirrors
+   NOAA Local Storm Reports as CORS-open GeoJSON. For a single day we pull the
+   national LSR set and keep the HAIL / wind reports within ~35 mi of the
+   point, returning the largest hail size (inches) and peak measured/estimated
+   wind (mph). Fails quiet — the code-based flags still stand on their own. */
+const LSR_CACHE = new Map();
+async function enrichStormDay(lat, lng, iso) {
+  const key = `${weatherKey(lat, lng)}:${iso}`;
+  if (LSR_CACHE.has(key)) return LSR_CACHE.get(key);
+  try {
+    const sts = `${iso}T00:00Z`;
+    const nextIso = new Date(new Date(iso + "T00:00Z").getTime() + 864e5).toISOString().slice(0, 10);
+    const ets = `${nextIso}T00:00Z`;
+    const url = `https://mesonet.agron.iastate.edu/geojson/lsr.geojson?sts=${sts}&ets=${ets}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("lsr");
+    const gj = await res.json();
+    let hailIn = null, windMph = null, count = 0;
+    for (const f of gj.features || []) {
+      const c = f.geometry && f.geometry.coordinates;
+      if (!c) continue;
+      const [flng, flat] = c;
+      if (Math.abs(flat - lat) > 0.5 || Math.abs(flng - lng) > 0.6) continue;
+      const p = f.properties || {};
+      const type = String(p.type || "").toUpperCase();
+      const mag = parseFloat(p.magnitude);
+      if (type.includes("HAIL") && !isNaN(mag)) { hailIn = Math.max(hailIn ?? 0, mag); count++; }
+      else if (type.includes("WND") && !isNaN(mag)) { windMph = Math.max(windMph ?? 0, mag); count++; }
+      else if (type.includes("TORNADO")) count++;
+    }
+    const out = { hailIn, reportWind: windMph, count };
+    LSR_CACHE.set(key, out);
+    return out;
   } catch (e) { return null; }
 }
 /* NOAA SPC storm-report page for a given ISO date (official corroboration). */
@@ -10121,7 +10264,8 @@ function spcReportLink(iso) {
   return `https://www.spc.noaa.gov/climo/reports/${yymmdd}_rpt.html`;
 }
 function stormSeverity(r) {
-  return (r.hail ? 3000 : 0) + (r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
+  return (r.hailIn ? 4000 + r.hailIn * 500 : r.hail ? 3000 : 0)
+    + (r.reportWind || r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
 }
 
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded = false }) {
@@ -11452,7 +11596,7 @@ function TabSignatures({ job, mut, toast, currentUser, brand }) {
               </Chip>
             </div>
 
-            <div style={{ background: "#fff", border: `1px solid ${S.line}`, borderRadius: 9, padding: "8px 10px", marginTop: 9 }}>
+            <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 9, padding: "8px 10px", marginTop: 9 }}>
               <SignatureMark sig={r} height={44} />
             </div>
 
@@ -11505,6 +11649,46 @@ function TabSignatures({ job, mut, toast, currentUser, brand }) {
   );
 }
 
+/* Standalone storm scout — no job attached. A rep door-knocking or scouting a
+   neighborhood types any address, and the same StormLookup engine reports the
+   hail/high-wind days over the window. Feeds the pitch, not a claim. */
+function StormScout({ toast }) {
+  const [addr, setAddr] = useState("");
+  const [loc, setLoc] = useState(null); // { lat, lng, zip, label }
+  const [dol, setDol] = useState("");
+  return (
+    <div style={{ marginTop: 14 }}>
+      <Card>
+        <CardTitle right={<Chip tone="blue">Door-knock</Chip>}>Storm scout</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Type any address to see the hail and high-wind days on record there — useful
+          when you're canvassing a neighborhood after a storm and haven't created a job yet.
+        </div>
+        <Field label="Address or ZIP">
+          <AddressAutocomplete value={addr} onChange={setAddr}
+            placeholder="123 Main St, or a ZIP"
+            onPick={(it) => {
+              setAddr(it.formatted || it.street || addr);
+              setLoc({ lat: it.lat, lng: it.lng, zip: it.postcode || it.zip || "", label: it.formatted || it.street || "" });
+            }} />
+        </Field>
+        {!loc && /^\s*\d{5}\s*$/.test(addr) && (
+          <Btn small kind="soft" style={{ marginTop: 2 }} onClick={async () => {
+            const g = await geocodeZip(addr.trim());
+            if (g) setLoc({ lat: g.lat, lng: g.lng, zip: addr.trim(), label: addr.trim() });
+            else toast && toast("Couldn't locate that ZIP");
+          }}>Use ZIP {addr.trim()}</Btn>
+        )}
+      </Card>
+      {loc && (
+        <StormLookup
+          job={{ lat: loc.lat, lng: loc.lng, zip: loc.zip, address: loc.label }}
+          dol={dol} onPick={setDol} toast={toast} />
+      )}
+    </div>
+  );
+}
+
 /* Date-of-loss storm lookup. Pulls damaging-wind / hail / heavy-rain days for
    the property over a window so the rep can pick the actual date of loss from
    the weather record, then corroborate against the official NOAA SPC report. */
@@ -11524,20 +11708,29 @@ function StormLookup({ job, dol, onPick, toast }) {
     const days = await fetchStormHistory(lat, lng, start, end);
     if (!days) { setErr("Couldn't reach the weather archive. Check the connection and try again."); setLoading(false); return; }
     const notable = days
-      .filter((r) => r.hail || r.damagingWind || r.storm || (r.precip != null && r.precip >= 0.75))
+      .filter((r) => r.hail || r.highWind || r.storm || (r.precip != null && r.precip >= 0.75))
       .sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1))
       .slice(0, 24);
     setRows(notable); setLoading(false);
-    if (!notable.length) toast && toast("No notable storm days in that window");
+    if (!notable.length) { toast && toast("No notable storm days in that window"); return; }
+    /* Enrich the strongest candidates with official NOAA/IEM storm reports so
+       real hail size and measured wind show where they exist. Best-effort and
+       progressive — each day updates its row as its report comes back. */
+    notable.slice(0, 8).forEach(async (r) => {
+      const info = await enrichStormDay(lat, lng, r.date);
+      if (!info) return;
+      setRows((prev) => prev && prev.map((x) => x.date === r.date
+        ? { ...x, hailIn: info.hailIn, reportWind: info.reportWind, reports: info.count } : x));
+    });
   };
 
   return (
     <Card style={{ marginTop: 12 }}>
       <CardTitle right={<Chip tone="blue">NOAA / Open-Meteo</Chip>}>Storm history — date of loss</CardTitle>
       <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
-        Pulls damaging-wind, hail and heavy-rain days for this address so you can set the date of loss from the record.
-        Wind gusts &amp; precip are ERA5 reanalysis; hail is inferred from thunderstorm-with-hail codes — confirm the
-        official NOAA storm report before filing.
+        Pulls high-wind, hail and heavy-rain days for this address so you can set the date of loss from the record.
+        Gusts &amp; precip are ERA5 reanalysis; the strongest days are cross-checked against official NOAA storm reports,
+        so where a report exists you'll see the measured hail size and peak wind. Confirm the NOAA report before filing.
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }}>
         <Field label="From"><input style={dateInputStyle} type="date" value={start} max={end} onChange={(e) => setStart(e.target.value)} /></Field>
@@ -11554,8 +11747,14 @@ function StormLookup({ job, dol, onPick, toast }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{r.date}</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }}>
-                    {r.hail && <Chip tone="red">Hail likely</Chip>}
-                    {r.gust != null && <Chip tone={r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray"}>{r.gust} mph gusts</Chip>}
+                    {r.hailIn != null
+                      ? <Chip tone="red">Hail — {r.hailIn.toFixed(2).replace(/\.?0+$/, "")}″ (NOAA)</Chip>
+                      : r.hail && <Chip tone="amber">Hail possible</Chip>}
+                    {r.reportWind != null
+                      ? <Chip tone={r.reportWind >= 58 ? "red" : "amber"}>{r.reportWind >= 58 ? "Damaging wind" : "High wind"} — {Math.round(r.reportWind)} mph (NOAA)</Chip>
+                      : r.gust != null && <Chip tone={r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray"}>
+                          {r.gust >= 58 ? "Damaging wind" : r.gust >= 45 ? "High wind" : "Gusts"} — {r.gust} mph
+                        </Chip>}
                     {r.precip != null && r.precip >= 0.5 && <Chip tone="blue">{r.precip.toFixed(2)}″ rain</Chip>}
                   </div>
                 </div>
@@ -12227,6 +12426,165 @@ async function extractPdfText(file) {
   return text;
 }
 
+/* Render every page of a PDF to a PNG data URL with pdf.js, at a scale that
+   keeps text crisp on screen. Returns [{ dataUrl, w, h }] in page order. */
+async function renderPdfPages(buf, scale = 1.4) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf");
+  const workerSrc = (await import("pdfjs-dist/legacy/build/pdf.worker.min.js?url")).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+  const doc = await pdfjs.getDocument({ data: buf }).promise;
+  const out = [];
+  const pages = Math.min(doc.numPages, 12);
+  for (let i = 1; i <= pages; i++) {
+    const page = await doc.getPage(i);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    out.push({ dataUrl: canvas.toDataURL("image/png"), w: viewport.width, h: viewport.height });
+  }
+  return out;
+}
+function bytesToDataUrl(bytes, mime) {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return `data:${mime};base64,${btoa(bin)}`;
+}
+
+/* True PDF form-filler. Upload a PDF (a carrier form, a T&C, a permit
+   application), render it, tap to drop text or ✓ fields anywhere on the page,
+   type, then export a real filled PDF with the text embedded via pdf-lib. The
+   exported PDF is handed back through onExport(name, dataUrl). */
+function PdfFiller({ open, onClose, onExport }) {
+  const [buf, setBuf] = useState(null);      // original bytes (ArrayBuffer) for pdf-lib
+  const [name, setName] = useState("");
+  const [pages, setPages] = useState(null);  // [{dataUrl,w,h}]
+  const [fields, setFields] = useState([]);  // [{id,page,xPct,yPct,text,size,type}]
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [mode, setMode] = useState("text");  // "text" | "check"
+
+  const reset = () => { setBuf(null); setName(""); setPages(null); setFields([]); setErr(""); };
+  const pillStyle = (active) => ({
+    border: `1.5px solid ${active ? T.accent : S.line}`, background: active ? T.accentSoft : "#fff",
+    color: active ? T.accent : S.ink, borderRadius: 999, padding: "6px 13px",
+    fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+  });
+
+  const load = async (file) => {
+    if (!file) return;
+    setBusy(true); setErr(""); setFields([]);
+    try {
+      const ab = await file.arrayBuffer();
+      setBuf(ab.slice(0));
+      setName(file.name.replace(/\.pdf$/i, "") + " — filled.pdf");
+      const rendered = await renderPdfPages(ab.slice(0));
+      if (!rendered.length) throw new Error("empty");
+      setPages(rendered);
+    } catch (e) { setErr("Couldn't open that PDF. Try another file."); }
+    setBusy(false);
+  };
+
+  const addField = (pageIdx, e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xPct = (e.clientX - rect.left) / rect.width;
+    const yPct = (e.clientY - rect.top) / rect.height;
+    setFields((f) => [...f, { id: uid("fld"), page: pageIdx, xPct, yPct, text: mode === "check" ? "X" : "", size: 12, type: mode }]);
+  };
+  const setField = (id, patch) => setFields((f) => f.map((x) => x.id === id ? { ...x, ...patch } : x));
+  const delField = (id) => setFields((f) => f.filter((x) => x.id !== id));
+
+  const exportPdf = async () => {
+    if (!buf) return;
+    setBusy(true); setErr("");
+    try {
+      const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+      const pdf = await PDFDocument.load(buf);
+      const font = await pdf.embedFont(StandardFonts.Helvetica);
+      const pdfPages = pdf.getPages();
+      for (const f of fields) {
+        const page = pdfPages[f.page];
+        if (!page || !String(f.text).trim()) continue;
+        const { width, height } = page.getSize();
+        const size = f.size || 12;
+        const x = f.xPct * width;
+        const y = height - f.yPct * height - size; // canvas y is top-down; PDF y is bottom-up
+        page.drawText(String(f.text), { x, y, size, font, color: rgb(0.05, 0.05, 0.05) });
+      }
+      const bytes = await pdf.save();
+      onExport(name || "filled.pdf", bytesToDataUrl(bytes, "application/pdf"));
+      reset(); onClose();
+    } catch (e) { setErr("Couldn't build the filled PDF."); }
+    setBusy(false);
+  };
+
+  return (
+    <Sheet open={open} onClose={() => { reset(); onClose(); }} title="Fill a PDF form" tall>
+      {!pages ? (
+        <div>
+          <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 12 }}>
+            Upload any PDF — a carrier form, a permit application, a terms sheet — then tap to place
+            text and checkmarks on it. Export a real filled PDF that attaches straight to the contract.
+          </div>
+          <label style={{
+            display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer",
+            border: `1px solid ${S.line}`, borderRadius: 10, padding: "10px 16px", fontWeight: 600, color: S.ink,
+          }}>
+            <Upload size={15} /> {busy ? "Opening…" : "Choose PDF"}
+            <input type="file" accept="application/pdf" style={{ display: "none" }}
+              onChange={(e) => { load(e.target.files && e.target.files[0]); e.target.value = ""; }} />
+          </label>
+          {err && <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 10 }}>{err}</div>}
+        </div>
+      ) : (
+        <div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontSize: 12, color: S.sub, fontWeight: 700 }}>Tap the page to add:</span>
+            <button type="button" onClick={() => setMode("text")} style={pillStyle(mode === "text")}>Text</button>
+            <button type="button" onClick={() => setMode("check")} style={pillStyle(mode === "check")}>✓ Check</button>
+            <span style={{ marginLeft: "auto", fontSize: 12, color: S.sub }}>{fields.length} field{fields.length === 1 ? "" : "s"}</span>
+          </div>
+          <div style={{ maxHeight: "52vh", overflowY: "auto", background: S.soft, borderRadius: 10, padding: 8 }}>
+            {pages.map((pg, i) => (
+              <div key={i} onClick={(e) => addField(i, e)} style={{
+                position: "relative", margin: "0 auto 12px", width: "100%", maxWidth: pg.w,
+                cursor: "crosshair", boxShadow: "0 1px 6px rgba(0,0,0,.12)",
+              }}>
+                <img src={pg.dataUrl} alt={`Page ${i + 1}`} style={{ width: "100%", display: "block", borderRadius: 6 }} draggable={false} />
+                {fields.filter((f) => f.page === i).map((f) => (
+                  <div key={f.id} onClick={(e) => e.stopPropagation()} style={{
+                    position: "absolute", left: `${f.xPct * 100}%`, top: `${f.yPct * 100}%`,
+                    transform: "translateY(-2px)", display: "flex", alignItems: "center", gap: 2,
+                  }}>
+                    <input value={f.text} onChange={(e) => setField(f.id, { text: e.target.value })}
+                      placeholder={f.type === "check" ? "X" : "text"} autoFocus
+                      style={{
+                        font: "600 13px sans-serif", color: "#111", background: "rgba(255,255,120,.55)",
+                        border: "1px solid #C9A400", borderRadius: 3, padding: "1px 3px",
+                        width: f.type === "check" ? 26 : Math.max(46, (f.text.length + 2) * 8),
+                      }} />
+                    <button type="button" onClick={() => delField(f.id)} title="Remove"
+                      style={{ border: "none", background: "rgba(180,35,24,.9)", color: "#fff", borderRadius: 3, cursor: "pointer", fontSize: 10, lineHeight: 1, padding: "2px 4px" }}>×</button>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+          {err && <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 10 }}>{err}</div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={reset}>Start over</Btn>
+            <Btn style={{ flex: 2 }} onClick={exportPdf} disabled={busy || !fields.some((f) => String(f.text).trim())}>
+              {busy ? "Building…" : "Export filled PDF"}
+            </Btn>
+          </div>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
 function MeasureImport({ onApply, toast }) {
   const [busy, setBusy] = useState(false);
   const [found, setFound] = useState(null);
@@ -12774,9 +13132,12 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
    cleanly and nothing here breaks the flattened items every other reader
    depends on.
    ================================================================ */
-function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClose }) {
+function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClose, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {} }) {
   const doc = normalizeProposalDoc(est.doc);
   const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
+  /* Notes/terms template helpers, matching the estimate tab. */
+  const setDocTpl = (kind) => (list) => setDocTemplates({ ...docTemplates, [kind]: list });
+  const appendText = (cur, body) => (cur && cur.trim()) ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
   const blocks = doc.blocks || {};
   const [mode, setMode] = useState("build"); // build | preview
   const [addOpen, setAddOpen] = useState(false);
@@ -12839,7 +13200,7 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
       <input ref={coverRef} type="file" accept="image/*" onChange={onCover} style={{ display: "none" }} />
       <input ref={pdfRef} type="file" accept="application/pdf" onChange={onPdf} style={{ display: "none" }} />
       {/* Page header */}
-      <div style={{ position: "sticky", top: 0, zIndex: 2, background: "#fff", borderBottom: `1px solid ${S.line}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 2, background: S.card, borderBottom: `1px solid ${S.line}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
         <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", padding: 6, display: "flex" }}><ChevronLeft size={22} color={S.ink} /></button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: S.ink }}>Proposal builder</div>
@@ -12860,20 +13221,27 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
       <div style={{ padding: "14px 16px 120px" }}>
         {mode === "build" ? (
           <>
-            {/* Template style */}
+            {/* Cover layout — visual chooser */}
             <Card>
-              <CardTitle>Template style</CardTitle>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {PROPOSAL_STYLES.map((s) => (
-                  <button key={s.id} onClick={() => !locked && setDoc({ style: s.id })} disabled={locked} style={{
-                    flex: "1 1 30%", minWidth: 96, textAlign: "left", cursor: locked ? "default" : "pointer", fontFamily: "inherit",
-                    border: `2px solid ${doc.style === s.id ? T.accent : S.line}`, background: doc.style === s.id ? T.accentSoft : "#fff",
-                    borderRadius: 12, padding: "11px 12px",
-                  }}>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: S.ink }}>{s.name}</div>
-                    <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2 }}>{s.blurb}</div>
-                  </button>
-                ))}
+              <CardTitle>Cover layout</CardTitle>
+              <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+                Pick how the cover page looks. Add a home photo below and it fills the layout — no oversized images.
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))", gap: 10 }}>
+                {PROPOSAL_STYLES.map((s) => {
+                  const on = doc.style === s.id;
+                  return (
+                    <button key={s.id} onClick={() => !locked && setDoc({ style: s.id })} disabled={locked} style={{
+                      textAlign: "left", cursor: locked ? "default" : "pointer", fontFamily: "inherit",
+                      border: `2px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : S.card,
+                      borderRadius: 12, padding: 8,
+                    }}>
+                      <CoverThumb style={s.id} accent={T.accent} primary={T.primary} />
+                      <div style={{ fontSize: 12.5, fontWeight: 800, color: S.ink, marginTop: 7 }}>{s.name}</div>
+                      <div style={{ fontSize: 10.5, color: S.sub, marginTop: 1, lineHeight: 1.35 }}>{s.blurb}</div>
+                    </button>
+                  );
+                })}
               </div>
             </Card>
 
@@ -12912,12 +13280,20 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
                     </div>
                   )}
                   {sec === "notes" && (
-                    <textarea style={{ ...inputStyle, minHeight: 60, marginTop: 8, resize: "vertical", fontFamily: "inherit" }} value={doc.notes} disabled={locked}
-                      onChange={(e) => setDoc({ notes: e.target.value })} placeholder="Color selections, access notes, exclusions…" />
+                    <div style={{ marginTop: 8 }}>
+                      <TemplateBar label="Notes" list={docTemplates.notes} setList={setDocTpl("notes")} value={doc.notes} locked={locked}
+                        onApply={(body) => setDoc({ notes: appendText(doc.notes, body) })} />
+                      <textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical", fontFamily: "inherit" }} value={doc.notes} disabled={locked}
+                        onChange={(e) => setDoc({ notes: e.target.value })} placeholder="Color selections, access notes, exclusions…" />
+                    </div>
                   )}
                   {sec === "terms" && (
-                    <textarea style={{ ...inputStyle, minHeight: 90, marginTop: 8, resize: "vertical", fontFamily: "inherit" }} value={doc.terms} disabled={locked}
-                      onChange={(e) => setDoc({ terms: e.target.value })} placeholder="Payment terms, warranty, change orders…" />
+                    <div style={{ marginTop: 8 }}>
+                      <TemplateBar label="Terms" list={docTemplates.terms} setList={setDocTpl("terms")} value={doc.terms} locked={locked}
+                        onApply={(body) => setDoc({ terms: appendText(doc.terms, body) })} />
+                      <textarea style={{ ...inputStyle, minHeight: 90, resize: "vertical", fontFamily: "inherit" }} value={doc.terms} disabled={locked}
+                        onChange={(e) => setDoc({ terms: e.target.value })} placeholder="Payment terms, warranty, change orders…" />
+                    </div>
                   )}
                   {blocks[sec] && blocks[sec].type === "text" && (
                     <div style={{ marginTop: 8 }}>
@@ -12956,6 +13332,54 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
 /* Live, on-screen render of the proposal the customer will receive —
    honors the chosen style, the section order, custom sections/PDFs, and
    each line's Qty / Unit-price visibility. */
+/* A tiny visual mock of each cover layout for the chooser — a stand-in photo
+   area, a title bar and a couple of text lines arranged per style, so a rep
+   picks a look by sight rather than by name. */
+function CoverThumb({ style, accent, primary }) {
+  const photo = "linear-gradient(135deg,#9AA6B2,#5B6470)";
+  const line = (w, c = "#C7CBD1") => ({ height: 4, width: w, borderRadius: 2, background: c, marginTop: 4 });
+  const box = { width: "100%", height: 78, borderRadius: 6, overflow: "hidden", border: "1px solid #E5E7EB", background: "#fff" };
+  if (style === "photo") {
+    return (
+      <div style={{ ...box, position: "relative", background: photo }}>
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 30, background: "linear-gradient(transparent,rgba(0,0,0,.75))", padding: 6, boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+          <div style={{ ...line(30, "#fff"), marginTop: 0 }} />
+          <div style={line(20, "rgba(255,255,255,.7)")} />
+        </div>
+      </div>
+    );
+  }
+  if (style === "bold") {
+    return (
+      <div style={{ ...box, background: primary, padding: 8, boxSizing: "border-box" }}>
+        <div style={{ height: 22, borderRadius: 3, background: photo, marginBottom: 6 }} />
+        <div style={{ ...line(34, "#fff"), marginTop: 0 }} />
+        <div style={line(24, "rgba(255,255,255,.55)")} />
+      </div>
+    );
+  }
+  if (style === "minimal") {
+    return (
+      <div style={{ ...box, padding: 8, boxSizing: "border-box" }}>
+        <div style={{ ...line(16, accent), marginTop: 0 }} />
+        <div style={line(30, "#3F4650")} />
+        <div style={line(22)} />
+        <div style={{ height: 18, borderRadius: 3, background: photo, marginTop: 8 }} />
+      </div>
+    );
+  }
+  /* classic — photo band on top, title + lines below */
+  return (
+    <div style={{ ...box }}>
+      <div style={{ height: 40, background: photo }} />
+      <div style={{ padding: 8 }}>
+        <div style={{ ...line(32, "#3F4650"), marginTop: 0 }} />
+        <div style={line(24)} />
+      </div>
+    </div>
+  );
+}
+
 function ProposalPreview({ job, brand, est, doc, total }) {
   const blocks = doc.blocks || {};
   const style = doc.style || "classic";
@@ -12966,7 +13390,7 @@ function ProposalPreview({ job, brand, est, doc, total }) {
     : style === "minimal" ? { padding: "6px 2px" } : { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" };
   const onDark = style === "bold";
   return (
-    <div style={{ background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }}>
+    <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }}>
       {doc.sections.map((sec) => {
         if (sec === "cover" && photoHero) return (
           <div key={sec} style={{ marginBottom: 16, position: "relative", borderRadius: 14, overflow: "hidden", minHeight: 300, background: `#111 url(${JSON.stringify(doc.coverImage)}) center/cover no-repeat` }}>
@@ -12982,7 +13406,7 @@ function ProposalPreview({ job, brand, est, doc, total }) {
         );
         if (sec === "cover") return (
           <div key={sec} style={{ marginBottom: 16, ...coverWrap }}>
-            {doc.coverImage && <img src={doc.coverImage} alt="" style={{ width: "100%", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 }} />}
+            {doc.coverImage && <img src={doc.coverImage} alt="" style={{ width: "100%", height: 400, objectFit: "cover", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 }} />}
             <div style={{ padding: style === "bold" ? 0 : (style === "minimal" ? "10px 0" : 16) }}>
               {brand.logo && !onDark
                 ? <img src={brand.logo} alt="" style={{ height: 34, objectFit: "contain", marginBottom: 8, display: "block" }} />
@@ -13038,7 +13462,58 @@ function ProposalPreview({ job, brand, est, doc, total }) {
   );
 }
 
-function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {}, priceList = [] }) {
+/* A compact template control for a long-form text field. Shows the saved
+   templates for one kind (notes / terms / scope) as insertable chips, and a
+   "Save current" affordance with inline naming. onApply receives the chosen
+   body; the caller decides whether to replace or append. */
+function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState("");
+  const save = () => {
+    const body = String(value || "").trim();
+    const nm = name.trim();
+    if (!body || !nm) return;
+    setList([...list.filter((t) => t.name.toLowerCase() !== nm.toLowerCase()), { id: uid("tpl"), name: nm, body }]);
+    setName(""); setNaming(false);
+  };
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 8 }}>
+      <span style={{ fontSize: 11.5, color: S.sub, fontWeight: 700 }}>{label} templates:</span>
+      {list.length === 0 && !naming && <span style={{ fontSize: 12, color: S.sub }}>none saved</span>}
+      {list.map((t) => (
+        <span key={t.id} style={{ display: "inline-flex", alignItems: "center", border: `1px solid ${S.line}`, borderRadius: 999, overflow: "hidden" }}>
+          <button type="button" onClick={() => onApply(t.body)} disabled={locked} style={{
+            border: "none", background: S.card, color: T.accent, fontSize: 12, fontWeight: 700,
+            padding: "5px 10px", cursor: locked ? "not-allowed" : "pointer", fontFamily: "inherit",
+          }}>{t.name}</button>
+          {!locked && (
+            <button type="button" onClick={() => setList(list.filter((x) => x.id !== t.id))} title="Delete template" style={{
+              border: "none", borderLeft: `1px solid ${S.line}`, background: S.card, color: "#B42318",
+              padding: "5px 8px", cursor: "pointer", fontSize: 12, lineHeight: 1,
+            }}>×</button>
+          )}
+        </span>
+      ))}
+      {!locked && (naming ? (
+        <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+          <input autoFocus style={{ ...inputStyle, height: 30, width: 150, fontSize: 12.5 }} value={name}
+            placeholder="Template name" onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } if (e.key === "Escape") { setNaming(false); setName(""); } }} />
+          <Btn small onClick={save} disabled={!name.trim() || !String(value || "").trim()}>Save</Btn>
+          <button type="button" onClick={() => { setNaming(false); setName(""); }} style={{ border: "none", background: "none", color: S.sub, cursor: "pointer", fontSize: 12 }}>Cancel</button>
+        </span>
+      ) : (
+        <button type="button" onClick={() => setNaming(true)} disabled={!String(value || "").trim()} style={{
+          border: `1px dashed ${S.line}`, background: S.card, color: String(value || "").trim() ? T.accent : S.sub,
+          borderRadius: 999, padding: "5px 10px", fontSize: 12, fontWeight: 700,
+          cursor: String(value || "").trim() ? "pointer" : "not-allowed", fontFamily: "inherit",
+        }}>+ Save current</button>
+      ))}
+    </div>
+  );
+}
+
+function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {}, priceList = [], docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {} }) {
   /* job.estimate for any REAL job created before tiers/upgrades
      existed has neither field at all (undefined, not []) — this
      JSONB blob is exactly what was last saved, and mkEstimate()'s
@@ -13086,6 +13561,17 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
   const setUpgrade = (id, k, v) => recompute({ upgrades: est.upgrades.map((u) => (u.id === id ? { ...u, [k]: v } : u)) });
   const toggleUpgrade = (id, checked) => recompute({ upgrades: est.upgrades.map((u) => (u.id === id ? { ...u, selected: checked } : u)) });
   const removeUpgrade = (id) => recompute({ upgrades: est.upgrades.filter((u) => u.id !== id) });
+  /* Concealed conditions: pick which pre-agreed unit prices are associated
+     with this job, toggle them on/off, and add custom ones. Only toggled-on
+     rows print on the estimate/contract. */
+  const setConcealed = (id, k, v) => setEst({ concealed: est.concealed.map((x) => x.id === id ? { ...x, [k]: v } : x) });
+  const toggleConcealed = (id, on) => setConcealed(id, "on", on);
+  const addConcealed = () => setEst({ concealed: [...est.concealed, { id: uid("cc"), desc: "", unit: "per unit", price: 0, on: true, custom: true }] });
+  const removeConcealed = (id) => setEst({ concealed: est.concealed.filter((x) => x.id !== id) });
+  /* Notes/terms/scope templates: setter per kind, and an insert that appends
+     to any existing text rather than clobbering it. */
+  const setDocTpl = (kind) => (list) => setDocTemplates({ ...docTemplates, [kind]: list });
+  const appendText = (cur, body) => (cur && cur.trim()) ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
 
   const [adjMode, setAdjMode] = useState("margin");
   const [adjPct, setAdjPct] = useState("");
@@ -13240,14 +13726,41 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Btn kind="soft" small onClick={() => setBuilderOpen(true)}>Open builder</Btn>}>Proposal document</CardTitle>
-        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
-          Opens the full-page proposal builder: pick a template style, add and reorder sections, write custom
-          sections, attach PDFs, and control what pricing the customer sees — then preview and export.
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Pick a cover layout below, or tap Open builder for the full editor — add and reorder sections, write custom
+          sections, attach PDFs, and control what pricing the customer sees, then preview and export.
         </div>
+        {(() => {
+          const pdoc = normalizeProposalDoc(est.doc);
+          const setStyle = (id) => setEst({ doc: { ...pdoc, style: id } });
+          return (
+            <>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: S.sub, letterSpacing: 0.3, marginBottom: 8 }}>COVER LAYOUT</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))", gap: 10 }}>
+                {PROPOSAL_STYLES.map((s) => {
+                  const on = pdoc.style === s.id;
+                  return (
+                    <button key={s.id} onClick={() => !locked && setStyle(s.id)} disabled={locked} style={{
+                      textAlign: "left", cursor: locked ? "default" : "pointer", fontFamily: "inherit",
+                      border: `2px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : S.card,
+                      borderRadius: 12, padding: 8,
+                    }}>
+                      <CoverThumb style={s.id} accent={T.accent} primary={T.primary} />
+                      <div style={{ fontSize: 12.5, fontWeight: 800, color: S.ink, marginTop: 7 }}>{s.name}</div>
+                      <div style={{ fontSize: 10.5, color: S.sub, marginTop: 1, lineHeight: 1.35 }}>{s.blurb}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          );
+        })()}
       </Card>
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Scope of work</CardTitle>
+        <TemplateBar label="Scope" list={docTemplates.scope} setList={setDocTpl("scope")} value={est.scope} locked={locked}
+          onApply={(body) => setEst({ scope: appendText(est.scope, body) })} />
         <textarea style={{ ...inputStyle, minHeight: 110 }} disabled={locked} value={est.scope}
           onChange={(e) => setEst({ scope: e.target.value })}
           placeholder="Describe the work — tear-off, dry-in, install, flashings, cleanup…" />
@@ -13331,17 +13844,44 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
 
         <CardTitle>Concealed conditions — unit pricing</CardTitle>
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>
-          Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented.
+          Pre-agreed pricing for conditions found after tear-off. Check the ones that apply to
+          this roof and set the price — only the checked rows print on the estimate and contract.
+          Billed as change orders only when found and documented.
         </div>
-        {est.concealed.map((c) => (
-          <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-            <div style={{ flex: 1, fontSize: 13, color: S.ink }}>{c.desc} <span style={{ color: S.sub }}>({c.unit})</span></div>
-            <span style={{ color: S.sub, fontSize: 13 }}>$</span>
-            <input style={{ ...inputStyle, width: 90, textAlign: "right" }} value={c.price} disabled={locked}
-              inputMode="decimal"
-              onChange={(e) => setEst({ concealed: est.concealed.map((x) => x.id === c.id ? { ...x, price: e.target.value } : x) })} />
-          </div>
-        ))}
+        {est.concealed.map((c) => {
+          const on = c.on !== false;
+          return (
+            <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+              <input type="checkbox" checked={on} disabled={locked} style={{ width: 18, height: 18, accentColor: T.accent, flexShrink: 0 }}
+                onChange={(e) => toggleConcealed(c.id, e.target.checked)} />
+              {c.custom ? (
+                <>
+                  <input style={{ ...inputStyle, flex: 1, opacity: on ? 1 : 0.55 }} value={c.desc} disabled={locked}
+                    placeholder="Condition (e.g. chimney flashing rebuild)"
+                    onChange={(e) => setConcealed(c.id, "desc", e.target.value)} />
+                  <input style={{ ...inputStyle, width: 92, fontSize: 12.5, opacity: on ? 1 : 0.55 }} value={c.unit} disabled={locked}
+                    placeholder="per unit" onChange={(e) => setConcealed(c.id, "unit", e.target.value)} />
+                </>
+              ) : (
+                <div style={{ flex: 1, fontSize: 13, color: S.ink, opacity: on ? 1 : 0.55 }}>{c.desc} <span style={{ color: S.sub }}>({c.unit})</span></div>
+              )}
+              <span style={{ color: S.sub, fontSize: 13 }}>$</span>
+              <input style={{ ...inputStyle, width: 82, textAlign: "right", opacity: on ? 1 : 0.55 }} value={c.price} disabled={locked}
+                inputMode="decimal"
+                onChange={(e) => setConcealed(c.id, "price", e.target.value)} />
+              {!locked && c.custom && (
+                <button onClick={() => removeConcealed(c.id)} style={{ border: "none", background: "none", cursor: "pointer" }}>
+                  <Trash2 size={15} color="#B42318" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {!locked && (
+          <Btn kind="soft" small style={{ marginTop: 6 }} onClick={addConcealed}>
+            <Plus size={14} /> Add custom condition
+          </Btn>
+        )}
       </Card>
 
       <Card style={{ marginTop: 12 }}>
@@ -13464,18 +14004,31 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
 
       {builderOpen && (
         <ProposalBuilder job={job} brand={brand} est={est} setEst={setEst} locked={locked}
-          toast={toast} total={total} onClose={() => setBuilderOpen(false)} />
+          toast={toast} total={total} onClose={() => setBuilderOpen(false)}
+          docTemplates={docTemplates} setDocTemplates={setDocTemplates} />
       )}
     </>
   );
 }
 
 /* ---------- Contract ---------- */
-function TabContract({ job, brand, setBrand = () => {}, mut, toast }) {
+function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {} }) {
   const con = job.contract;
   const [sigFor, setSigFor] = useState(null); // "client" | "contractor"
+  const [fillerOpen, setFillerOpen] = useState(false);
   const locked = con.status === "Signed";
   const setCon = (patch) => mut((j) => ({ ...j, contract: { ...j.contract, ...patch } }));
+  const setDocTpl = (kind) => (list) => setDocTemplates({ ...docTemplates, [kind]: list });
+  const appendText = (cur, body) => (cur && cur.trim()) ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
+  /* Upload T&C / addenda / filled-PDF forms onto the contract; they embed in
+     the printed and portal contract via contractDocHtml. */
+  const addAttachment = (file) => {
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => setCon({ attachments: [...(con.attachments || []), { id: uid("att"), name: file.name, dataUrl: String(r.result) }] });
+    r.readAsDataURL(file);
+  };
+  const removeAttachment = (id) => setCon({ attachments: (con.attachments || []).filter((a) => a.id !== id) });
   const estTotal = estimateTotal(job.estimate);
   const depositMode = con.depositMode || "pct";
   const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
@@ -13573,6 +14126,8 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast }) {
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Terms</CardTitle>
+        <TemplateBar label="Terms" list={docTemplates.terms} setList={setDocTpl("terms")} value={con.terms} locked={locked}
+          onApply={(body) => setCon({ terms: appendText(con.terms, body) })} />
         <textarea style={{ ...inputStyle, minHeight: 130, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.6 }}
           value={con.terms} disabled={locked} onChange={(e) => setCon({ terms: e.target.value })} />
         {!locked && (
@@ -13586,6 +14141,40 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast }) {
           </div>
         )}
       </Card>
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={<Chip tone="gray">{(con.attachments || []).length} on file</Chip>}>Attachments — T&amp;C, addenda, filled forms</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Upload a signed terms &amp; conditions PDF, an addendum, or a filled PDF form. Attachments
+          embed in the printed and portal contract. Use the PDF filler below to complete a blank form first.
+        </div>
+        {(con.attachments || []).map((a) => (
+          <div key={a.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
+            <FileText size={15} color={T.accent} style={{ flexShrink: 0 }} />
+            <a href={a.dataUrl} target="_blank" rel="noreferrer" style={{ flex: 1, minWidth: 0, fontSize: 13, color: S.ink, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</a>
+            {!locked && (
+              <button onClick={() => removeAttachment(a.id)} style={{ border: "none", background: "none", cursor: "pointer" }}>
+                <Trash2 size={15} color="#B42318" />
+              </button>
+            )}
+          </div>
+        ))}
+        {!locked && (
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            <label style={{
+              cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+              border: `1px solid ${S.line}`, borderRadius: 10, padding: "7px 12px",
+              fontSize: 13, fontWeight: 600, color: S.ink, background: S.card,
+            }}>
+              <Upload size={14} /> Upload PDF
+              <input type="file" accept="application/pdf" style={{ display: "none" }}
+                onChange={(e) => { addAttachment(e.target.files && e.target.files[0]); e.target.value = ""; }} />
+            </label>
+            <Btn kind="soft" small onClick={() => setFillerOpen(true)}><PenLine size={14} /> Fill a PDF form</Btn>
+          </div>
+        )}
+      </Card>
+      <PdfFiller open={fillerOpen} onClose={() => setFillerOpen(false)}
+        onExport={(name, dataUrl) => { setCon({ attachments: [...(con.attachments || []), { id: uid("att"), name, dataUrl }] }); toast("Filled PDF attached to the contract"); }} />
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Signatures</CardTitle>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
@@ -13819,10 +14408,31 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
       return;
     }
 
+    /* Email goes through the rep's own connected Gmail via the gmail-send
+       function. If it isn't connected (or the function isn't deployed) the
+       message is saved to the thread instead of silently vanishing. */
     const myGmail = (integrations.gmailByUser || {})[currentUser.id] || { connected: false };
-    record(myGmail.connected ? "Sent" : "Queued — no provider connected");
+    const auth = AUTH();
+    if (myGmail.connected && auth && auth.sendGmail) {
+      setSending(true);
+      try {
+        await auth.sendGmail({ to: addr, subject, body });
+        record("Sent");
+        setCompose(null);
+        toast(`Email sent${myGmail.email ? ` from ${myGmail.email}` : ""}`);
+      } catch (e) {
+        const m = (e && e.message) || "Could not send";
+        const notSetUp = /not configured|Function not found|Failed to send a request|non-2xx|isn't connected/i.test(m);
+        record(notSetUp ? "Queued — email not set up yet" : `Failed — ${m}`);
+        toast(notSetUp ? "Email sending isn't deployed yet — saved to the thread" : `Gmail: ${m}`);
+        setCompose(null);
+      }
+      setSending(false);
+      return;
+    }
+    record("Queued — no provider connected");
     setCompose(null);
-    toast(myGmail.connected ? "Message sent" : "Saved to thread — connect a provider to deliver");
+    toast("Saved to thread — connect your Gmail to deliver");
   };
 
   const available = templates.filter((t) => t.kind === compose);
@@ -13905,7 +14515,7 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
             <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
               {available.map((t) => (
                 <button key={t.id} type="button" onClick={() => applyTemplate(t)} style={{
-                  border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
+                  border: `1px solid ${S.line}`, background: S.card, borderRadius: 999,
                   padding: "7px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", color: S.ink,
                 }}>{t.name} <span style={{ color: S.sub }}>· {t.audience}</span></button>
               ))}
@@ -13998,10 +14608,10 @@ function CompanyCamJobCard({ job, mut, toast, ccToken }) {
       )}
       {err && <Callout label="CompanyCam" tone="red">{err}</Callout>}
       {cors && (
-        <Callout label="Your browser blocked the request" tone="amber">
-          CompanyCam did not send the cross-origin headers a browser needs to
-          call it directly. This needs a small Edge Function to relay the
-          calls server-side — say the word and I will write it.
+        <Callout label="Needs the CompanyCam relay" tone="amber">
+          CompanyCam doesn't send the cross-origin headers a browser needs to
+          call it directly. Deploy the <b>companycam-proxy</b> Edge Function
+          (see DEPLOY.md) and this connects.
         </Callout>
       )}
     </Card>
@@ -15466,12 +16076,12 @@ function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "" }) {
                 {sub && <div style={{ fontSize: 12, color: S.sub }}>{sub}</div>}
               </div>
               <button aria-label={`Move ${label} up`} disabled={idx === 0} onClick={() => move(-1)}
-                style={{ border: `1px solid ${S.line}`, background: "#fff", borderRadius: 7, width: 28, height: 28,
+                style={{ border: `1px solid ${S.line}`, background: S.card, borderRadius: 7, width: 28, height: 28,
                   display: "grid", placeItems: "center", cursor: idx === 0 ? "default" : "pointer", opacity: idx === 0 ? 0.3 : 1 }}>
                 <ChevronUp size={13} />
               </button>
               <button aria-label={`Move ${label} down`} disabled={idx === arr.length - 1} onClick={() => move(1)}
-                style={{ border: `1px solid ${S.line}`, background: "#fff", borderRadius: 7, width: 28, height: 28,
+                style={{ border: `1px solid ${S.line}`, background: S.card, borderRadius: 7, width: 28, height: 28,
                   display: "grid", placeItems: "center", cursor: idx === arr.length - 1 ? "default" : "pointer", opacity: idx === arr.length - 1 ? 0.3 : 1 }}>
                 <ChevronDown size={13} />
               </button>
@@ -15479,7 +16089,7 @@ function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "" }) {
                 width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer", flexShrink: 0,
                 background: on ? T.accent : "#D6D9DE", position: "relative", transition: "background .15s",
               }}>
-                <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" }} />
+                <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: S.card, transition: "left .15s" }} />
               </button>
             </div>
           );
@@ -15918,7 +16528,7 @@ function ClaimAssistant() {
         <Card style={{ marginTop: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", marginBottom: 8 }}>TRY ASKING</div>
           {SUGGESTIONS.map((s) => (
-            <button key={s} onClick={() => ask(s)} style={{ display: "block", width: "100%", textAlign: "left", border: `1px solid ${S.line}`, background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 8, fontSize: 13, color: S.ink, cursor: "pointer", fontFamily: "inherit", lineHeight: 1.4 }}>{s}</button>
+            <button key={s} onClick={() => ask(s)} style={{ display: "block", width: "100%", textAlign: "left", border: `1px solid ${S.line}`, background: S.card, borderRadius: 10, padding: "10px 12px", marginBottom: 8, fontSize: 13, color: S.ink, cursor: "pointer", fontFamily: "inherit", lineHeight: 1.4 }}>{s}</button>
           ))}
         </Card>
       )}
@@ -15985,7 +16595,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
   }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
 
   /* One index across codes, terms and supplement triggers, so a rep
      types what they half-remember rather than guessing which tab it
@@ -16026,6 +16636,8 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
       </div>
 
       {tab === "ask" && <ClaimAssistant />}
+
+      {tab === "storm" && <StormScout toast={toast} />}
 
       {tab === "search" && (
         <div style={{ marginTop: 14 }}>
@@ -16367,7 +16979,11 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                 <KV k="Permits" v={juris.permit} />
                 {juris.sources && (
                   <div style={{ marginTop: 8 }}>
-                    {juris.sources.map((sid) => <SourceLink key={sid} srcId={sid} />)}
+                    {juris.sources.map((sid) => sid === "MUNICODE"
+                      ? <AssistLink key={sid} href={municodeUrl(juris.state, juris.city)}>
+                          Municode — {juris.city ? `${juris.city}, ${juris.state}` : `${juris.state} ordinances`}
+                        </AssistLink>
+                      : <SourceLink key={sid} srcId={sid} />)}
                   </div>
                 )}
                 {!juris.verified && juris.precision === "market" && juris.needsContact && (
@@ -16413,17 +17029,29 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                       <Btn style={{ flex: 1 }} disabled={!deptForm.office.trim()}
                         onClick={() => { onSaveDept(juris.zip, deptForm); setEditDept(false); }}>Save</Btn>
                     </div>
+                    <div style={{ marginTop: 4 }}>
+                      <AssistLink href={deptSearchUrl(juris.city, juris.state)}>Find building department</AssistLink>
+                      <AssistLink href={municodeUrl(juris.state, juris.city)}>Municode ordinances</AssistLink>
+                    </div>
                     <div style={{ fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
-                      Saved against this ZIP for the whole company, so nobody has
-                      to look it up twice.
+                      Assisted lookup — no free nationwide directory exists, so these
+                      open a scoped search and the municipal code. Confirm the office,
+                      then Save it against this ZIP for the whole company so nobody
+                      has to look it up twice.
                     </div>
                   </>
                 ) : juris.needsContact ? (
-                  <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
-                    Not on file yet. Rather than print a number that might be
-                    wrong, this stays blank until someone confirms it — a dead
-                    line on a permit call costs more than an empty field.
-                  </div>
+                  <>
+                    <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
+                      Not on file yet. Rather than print a number that might be
+                      wrong, this stays blank until someone confirms it — a dead
+                      line on a permit call costs more than an empty field.
+                    </div>
+                    <div style={{ marginTop: 6 }}>
+                      <AssistLink href={deptSearchUrl(juris.city, juris.state)}>Find building department</AssistLink>
+                      <AssistLink href={municodeUrl(juris.state, juris.city)}>Municode ordinances</AssistLink>
+                    </div>
+                  </>
                 ) : (
                   <>
                     <KV k="Office" v={juris.inspector.office || "—"} />
@@ -16507,7 +17135,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                 const Icon = sec.icon;
                 return (
                   <button key={sec.id} onClick={() => setResourcePage(sec.id)} style={{
-                    textAlign: "left", background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14,
+                    textAlign: "left", background: S.card, border: `1px solid ${S.line}`, borderRadius: 14,
                     padding: 16, cursor: "pointer", display: "flex", flexDirection: "column", gap: 8,
                   }}>
                     <div style={{ width: 36, height: 36, borderRadius: 10, background: T.accentSoft, display: "grid", placeItems: "center" }}>
@@ -16710,7 +17338,7 @@ function Toggle({ on, onClick }) {
       width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer",
       background: on ? T.accent : "#D6D9DE", position: "relative", flexShrink: 0,
     }}>
-      <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" }} />
+      <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: S.card, transition: "left .15s" }} />
     </button>
   );
 }
@@ -17187,7 +17815,7 @@ function EmojiPicker({ onPick, onClose }) {
     : (EMOJI_GROUPS.find(([g]) => g === group) || EMOJI_GROUPS[0])[1];
   return (
     <div style={{
-      border: `1px solid ${S.line}`, borderRadius: 12, background: "#fff",
+      border: `1px solid ${S.line}`, borderRadius: 12, background: S.card,
       boxShadow: "0 8px 24px rgba(16,24,40,.12)", padding: 10, marginBottom: 8,
     }}>
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
@@ -17391,7 +18019,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
 
                 {j && (
                   <button onClick={(e) => { e.stopPropagation(); onOpenJob(j.id); }} style={{
-                    marginTop: 6, border: `1px solid ${S.line}`, background: "#fff",
+                    marginTop: 6, border: `1px solid ${S.line}`, background: S.card,
                     borderLeft: `3px solid ${T.accent}`, borderRadius: 7, padding: "7px 10px",
                     fontSize: 12.5, cursor: "pointer", display: "flex", gap: 7, alignItems: "center",
                     color: S.ink, fontFamily: "inherit", textAlign: "left",
@@ -17428,17 +18056,17 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
                   }}>
                     {CHAT_EMOJI.map((e2) => (
                       <button key={e2} onClick={() => toggleReaction(m.id, e2)} style={{
-                        border: `1px solid ${S.line}`, background: "#fff", borderRadius: 8,
+                        border: `1px solid ${S.line}`, background: S.card, borderRadius: 8,
                         width: 32, height: 32, fontSize: 16, cursor: "pointer", lineHeight: 1,
                       }}>{e2}</button>
                     ))}
                     <button onClick={() => setReactFor(reactFor === m.id ? null : m.id)} aria-label="More reactions" style={{
-                      border: `1px solid ${S.line}`, background: "#fff", borderRadius: 8,
+                      border: `1px solid ${S.line}`, background: S.card, borderRadius: 8,
                       width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center", color: S.sub,
                     }}><Plus size={14} /></button>
                     {canEdit(m) && (
                       <button onClick={() => { setEditing({ id: m.id, text: m.text }); setActionsFor(null); }} style={{
-                        border: `1px solid ${S.line}`, background: "#fff", borderRadius: 8,
+                        border: `1px solid ${S.line}`, background: S.card, borderRadius: 8,
                         height: 32, padding: "0 10px", cursor: "pointer", fontSize: 12, fontWeight: 700,
                         color: S.ink, display: "flex", gap: 5, alignItems: "center", fontFamily: "inherit",
                       }}><Pencil size={12} /> Edit</button>
@@ -17475,10 +18103,10 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
            keeps the composer in the same visual spot regardless of how
            much is above it, matching the standalone layout used
            elsewhere in the app. */
-        position: "fixed", left: 0, right: 0, bottom: 86, background: "#fff",
+        position: "fixed", left: 0, right: 0, bottom: 86, background: S.card,
         borderTop: `1px solid ${S.line}`, padding: "10px 16px", zIndex: 40,
       } : {
-        position: "fixed", left: 0, right: 0, bottom: 86, background: "#fff",
+        position: "fixed", left: 0, right: 0, bottom: 86, background: S.card,
         borderTop: `1px solid ${S.line}`, padding: "10px 16px",
       }}>
         {tagged && (
@@ -17493,7 +18121,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
             onClose={() => setEmojiOpen(false)} />
         )}
         {/* Composer as one bordered box, with its tools inside it. */}
-        <div style={{ border: `1px solid ${S.line}`, borderRadius: 12, background: "#fff", overflow: "hidden" }}>
+        <div style={{ border: `1px solid ${S.line}`, borderRadius: 12, background: S.card, overflow: "hidden" }}>
           <textarea ref={inputRef} rows={1}
             style={{
               width: "100%", boxSizing: "border-box", border: "none", outline: "none",
@@ -17757,7 +18385,7 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
         <Field label="Logo" hint="Shows on the login screen, the loading screen, and document headers. PNG with a transparent background works best.">
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             {brand.logo ? (
-              <img src={brand.logo} alt="Company logo" style={{ height: 56, maxWidth: 160, objectFit: "contain", borderRadius: 8, border: `1px solid ${S.line}`, padding: 4, background: "#fff" }} />
+              <img src={brand.logo} alt="Company logo" style={{ height: 56, maxWidth: 160, objectFit: "contain", borderRadius: 8, border: `1px solid ${S.line}`, padding: 4, background: S.card }} />
             ) : (
               <div style={{ width: 56, height: 56, borderRadius: 14, background: T.primary, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }}>{brand.short}</div>
             )}
@@ -17807,7 +18435,7 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
                 width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer",
                 background: on ? T.accent : "#D6D9DE", position: "relative",
               }}>
-                <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" }} />
+                <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: S.card, transition: "left .15s" }} />
               </button>
             </div>
           );
@@ -18352,7 +18980,7 @@ function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {MERGE_FIELDS.map(([token, label]) => (
             <button key={token} type="button" title={label} onClick={() => insertField(token)} style={{
-              border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
+              border: `1px solid ${S.line}`, background: S.card, borderRadius: 999,
               padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer", color: T.accent,
             }}>{token}</button>
           ))}
@@ -18662,6 +19290,35 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
 const CC_API = "https://api.companycam.com/v2";
 
 async function ccFetch(token, path, opts = {}) {
+  /* When a Supabase backend is present, route through the companycam-proxy
+     Edge Function — a direct browser call to api.companycam.com is CORS-
+     blocked. The proxy always answers 200 and carries CompanyCam's real
+     status in the payload so we can still tell a bad token from a 404. */
+  const sb = typeof window !== "undefined" ? window.__SUPABASE__ : null;
+  if (sb && sb.functions) {
+    const { data, error } = await sb.functions.invoke("companycam-proxy", {
+      body: {
+        token, path, method: opts.method || "GET",
+        payload: opts.body ? (() => { try { return JSON.parse(opts.body); } catch { return opts.body; } })() : undefined,
+      },
+    });
+    if (error) {
+      const msg = (error && error.message) || "";
+      /* Proxy not deployed yet — flag it like a CORS block so the UI names
+         the same fix. */
+      if (/not found|Failed to send|FunctionsFetch|404|Failed to fetch/i.test(msg)) {
+        const err = new Error("blocked"); err.cors = true; throw err;
+      }
+      throw new Error(msg || "CompanyCam proxy error");
+    }
+    const status = data && data.status;
+    if (status === 401 || status === 403) throw new Error("That token was rejected by CompanyCam.");
+    if (data && data.error) throw new Error(data.error);
+    if (status != null && (status < 200 || status >= 300)) throw new Error("CompanyCam returned " + status + ".");
+    if (status === 204) return null;
+    return data ? data.body : null;
+  }
+  /* No backend (demo / local) — direct call, which may be CORS-blocked. */
   let res;
   try {
     res = await fetch(CC_API + path, {
@@ -18746,6 +19403,126 @@ async function ccSaveToken(userId, value) {
   } catch (e) { return false; }
 }
 
+/* Per-seat calendar-subscription token, stored beside the CompanyCam token in
+   crm_user_integrations. The calendar-feed Edge Function maps this token back
+   to the seat and streams the tenant's appointments as .ics. */
+function newCalToken() {
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, "");
+  } catch (e) { /* fall through */ }
+  return (uid("cal") + uid("cal") + uid("cal")).replace(/[^a-z0-9]/gi, "");
+}
+async function calLoadToken(userId) {
+  const db = DB();
+  if (!db || !userId) return null;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    return (data && data.data && data.data.calendarToken) || null;
+  } catch (e) { return null; }
+}
+async function calSaveToken(userId, value) {
+  const db = DB();
+  if (!db || !userId) return false;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    const next = { ...((data && data.data) || {}), calendarToken: value };
+    const { error } = await db.from("crm_user_integrations")
+      .upsert({ user_id: userId, data: next, updated_at: new Date().toISOString() });
+    return !error;
+  } catch (e) { return false; }
+}
+/* Build the subscribe URL from the project's functions hostname. */
+function calFeedUrl(token, scheme = "https") {
+  const sb = typeof window !== "undefined" ? window.__SUPABASE__ : null;
+  const base = sb && sb.supabaseUrl;
+  if (!base) return null;
+  const m = String(base).match(/https:\/\/([^.]+)\.supabase\.co/);
+  const host = m ? `${m[1]}.functions.supabase.co` : null;
+  if (!host) return null;
+  return `${scheme}://${host}/calendar-feed?token=${encodeURIComponent(token)}`;
+}
+
+/* "Sync to your phone" — enables the per-seat calendar feed and shows the
+   subscribe links for Apple and Google Calendar. */
+function CalendarSync({ currentUser, toast }) {
+  const [token, setToken] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    if (!currentUser || !liveAuth()) { setLoaded(true); return; }
+    calLoadToken(currentUser.id).then((t) => { if (alive) { setToken(t); setLoaded(true); } });
+    return () => { alive = false; };
+  }, [currentUser && currentUser.id]);
+
+  const enable = async () => {
+    setBusy(true);
+    const t = newCalToken();
+    const okSaved = await calSaveToken(currentUser.id, t);
+    setBusy(false);
+    if (okSaved) { setToken(t); toast("Calendar sync enabled"); }
+    else toast("Couldn't enable sync — try again once you're online");
+  };
+  const rotate = async () => {
+    setBusy(true);
+    const t = newCalToken();
+    const okSaved = await calSaveToken(currentUser.id, t);
+    setBusy(false);
+    if (okSaved) { setToken(t); toast("Old link revoked — resubscribe with the new one"); }
+  };
+
+  const https = token && calFeedUrl(token, "https");
+  const webcal = token && calFeedUrl(token, "webcal");
+  const googleAdd = https && `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(webcal || https)}`;
+
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle right={token ? <Chip tone="green">On</Chip> : <Chip tone="gray">Off</Chip>}>
+        Calendar sync — iPhone &amp; Google
+      </CardTitle>
+      <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 10 }}>
+        Subscribe your phone's calendar to your RoofStride appointments. It's read-only and updates
+        on its own (about hourly) — reschedule in the app and the calendar follows. Anyone with the
+        link can see your appointments, so keep it private.
+      </div>
+      {!liveAuth() ? (
+        <Callout label="Needs the backend">Connect Supabase to generate your personal calendar link.</Callout>
+      ) : !loaded ? (
+        <div style={{ fontSize: 13, color: S.sub }}>Checking…</div>
+      ) : !token ? (
+        <Btn onClick={enable} disabled={busy}><CalIcon size={15} /> {busy ? "Enabling…" : "Enable calendar sync"}</Btn>
+      ) : !https ? (
+        <Callout label="Almost there" tone="amber">
+          Sync is enabled, but the calendar-feed function isn't deployed yet. See DEPLOY.md
+          (<code>supabase functions deploy calendar-feed --no-verify-jwt</code>).
+        </Callout>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <a href={webcal} style={{ textDecoration: "none" }}>
+              <Btn kind="soft" small><CalIcon size={14} /> Add to Apple Calendar</Btn>
+            </a>
+            <a href={googleAdd} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+              <Btn kind="soft" small><CalIcon size={14} /> Add to Google Calendar</Btn>
+            </a>
+            <Btn kind="ghost" small onClick={() => { try { navigator.clipboard.writeText(https); toast("Link copied"); } catch { toast("Copy this link manually"); } }}>
+              Copy link
+            </Btn>
+          </div>
+          <div style={{ marginTop: 10, fontSize: 11.5, color: S.sub, wordBreak: "break-all", background: S.soft, borderRadius: 8, padding: "8px 10px" }}>{https}</div>
+          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
+            On iPhone the Apple button opens Settings to add the subscription. On Google, paste the
+            link under Other calendars → From URL if the button doesn't prompt.
+          </div>
+          <button onClick={rotate} disabled={busy} style={{ ...linkBtn, marginTop: 10, color: "#B42318" }}>
+            Revoke &amp; make a new link
+          </button>
+        </>
+      )}
+    </Card>
+  );
+}
+
 function CompanyCamConnect({ onConnect }) {
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
@@ -18778,12 +19555,12 @@ function CompanyCamConnect({ onConnect }) {
       </div>
       {err && <Callout label="CompanyCam rejected that" tone="red">{err}</Callout>}
       {cors && (
-        <Callout label="Your browser blocked the request" tone="amber">
-          The token may be perfectly good — CompanyCam did not send the
-          cross-origin headers a browser needs to call it directly from a
-          web app. This one needs a small Edge Function to relay the calls
-          from the server side. Tell me and I will write it; it is the same
-          shape as the Twilio one.
+        <Callout label="Needs the CompanyCam relay" tone="amber">
+          The token may be perfectly good — CompanyCam doesn't send the
+          cross-origin headers a browser needs to call it directly, so the app
+          routes through a small server relay. Deploy the <b>companycam-proxy</b>
+          Edge Function (see DEPLOY.md) and this connects. It's the same shape
+          as the Twilio one.
         </Callout>
       )}
     </div>
@@ -18818,7 +19595,7 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
               the thread intact. Every rep connects their own — there's no shared company sender.
             </div>
             <Btn kind="danger" small style={{ marginTop: 12 }}
-              onClick={() => { setMyGmail({ connected: false }); toast("Gmail disconnected"); }}>
+              onClick={async () => { const a = AUTH(); if (a && a.gmailDisconnect) { try { await a.gmailDisconnect(); } catch (e) { /* ignore */ } } setMyGmail({ connected: false }); toast("Gmail disconnected"); }}>
               Disconnect
             </Btn>
           </>
@@ -18837,14 +19614,19 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
               <div style={{ marginBottom: 5 }}><b>1.</b> Go to console.cloud.google.com and create a project named {PRODUCT.name}.</div>
               <div style={{ marginBottom: 5 }}><b>2.</b> APIs &amp; Services → Library → search "Gmail API" → Enable.</div>
               <div style={{ marginBottom: 5 }}><b>3.</b> OAuth consent screen → choose Internal if you use Google Workspace (recommended — no Google review needed), otherwise External. Fill in the app name and your support email.</div>
-              <div style={{ marginBottom: 5 }}><b>4.</b> Credentials → Create credentials → OAuth client ID → Web application. Under Authorized redirect URIs, add this app's address followed by <b>/auth/gmail</b>.</div>
-              <div style={{ marginBottom: 5 }}><b>5.</b> Copy the Client ID and Client Secret, then send them over so the token-exchange function can be deployed. The secret must live on the server — never in the app.</div>
+              <div style={{ marginBottom: 5 }}><b>4.</b> Credentials → Create credentials → OAuth client ID → Web application. Under Authorized redirect URIs, add this app's address with a trailing slash (e.g. <b>https://roofstride.com/</b>).</div>
+              <div style={{ marginBottom: 5 }}><b>5.</b> Set <b>VITE_GOOGLE_CLIENT_ID</b> in Vercel to the Client ID, and the Client Secret as a Supabase secret (<b>GOOGLE_CLIENT_SECRET</b>); deploy <b>gmail-oauth</b> and <b>gmail-send</b>. See DEPLOY.md. The secret must live on the server — never in the app.</div>
               <div style={{ fontWeight: 800, fontSize: 12.5, color: S.sub, margin: "12px 0 6px" }}>THEN, EACH REP</div>
               <div style={{ marginBottom: 5 }}><b>6.</b> Open this screen and tap Connect my Gmail.</div>
               <div style={{ marginBottom: 5 }}><b>7.</b> Pick your work Google account and approve the "send email on your behalf" permission.</div>
               <div>That's it — customer emails then send from your address and replies land in your own inbox.</div>
             </div>
-            <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => setConnecting("gmail")}>
+            <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => {
+              const a = AUTH();
+              if (!a || !a.gmailConnect) { toast("Connect isn't available in demo mode"); return; }
+              try { a.gmailConnect(); }
+              catch (e) { toast(e && e.message ? e.message : "Gmail sending isn't configured yet — see DEPLOY.md"); }
+            }}>
               <Mail size={15} /> Connect my Gmail
             </Btn>
           </>
@@ -18998,6 +19780,8 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           </span>
         </label>
       </Card>
+
+      <CalendarSync currentUser={currentUser} toast={toast} />
 
       {/* Google Business Profile — scaffold. Storing the Place ID and marking
           the connection is done here; actually pulling live posted reviews to
@@ -19305,12 +20089,47 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
 
   const [saving, setSaving] = useState(false);
   const [seatErr, setSeatErr] = useState("");
+  const [billingBusy, setBillingBusy] = useState(false);
+
+  /* Read the tenant's plan so we can show and enforce the seat allowance. */
+  const [tenant, setTenant] = useState(null);
+  useEffect(() => {
+    const auth = AUTH();
+    if (!auth || !auth.myTenant) return;
+    let alive = true;
+    auth.myTenant().then((t) => { if (alive) setTenant(t); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const activeCount = users.filter((u) => u.active).length;
+  const plan = tenant && tenant.plan;
+  /* Per-seat: base seats plus any extra paid seats. Unlimited: flat cap. */
+  const seatsIncluded = tenant
+    ? (plan === "unlimited" ? PRODUCT.unlimitedSeatCap : PRODUCT.baseSeats + (tenant.seats_paid || 0))
+    : null;
+  const atLimit = seatsIncluded != null && activeCount >= seatsIncluded;
+
+  const manageBilling = async () => {
+    const auth = AUTH();
+    if (!auth || !auth.manageBilling) { toast("Billing portal isn't available yet — contact support@roofstride.com"); return; }
+    setBillingBusy(true);
+    try { await auth.manageBilling(); }
+    catch (e) { toast(e && e.message ? e.message : "Couldn't open the billing portal"); }
+    setBillingBusy(false);
+  };
 
   const save = async () => {
     const auth = AUTH();
     setSeatErr(""); setSaving(true);
     try {
       if (editing === "new") {
+        /* Enforce the plan's seat allowance before creating a billable seat. */
+        if (atLimit) {
+          setSeatErr(plan === "unlimited"
+            ? `Your Unlimited plan covers up to ${seatsIncluded} seats and all ${activeCount} are in use. Deactivate a seat or contact support to raise the cap.`
+            : `Your plan includes ${seatsIncluded} seat${seatsIncluded === 1 ? "" : "s"} and all are in use. Add a seat to your subscription in Manage billing, then invite this person.`);
+          setSaving(false);
+          return;
+        }
         if (auth) {
           const payload = {
             name: f.name.trim(), email: f.email.trim(), role: f.role,
@@ -19414,10 +20233,39 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
           {!liveAuth() && " Demo mode — no backend connected, so invites are not actually sent."}
         </div>
         <div style={{ display: "flex", gap: 16, marginTop: 12 }}>
-          <div><div style={{ fontSize: 20, fontWeight: 800 }}>{users.filter((u) => u.active).length}</div><div style={{ fontSize: 12, color: S.sub }}>Active seats</div></div>
+          <div><div style={{ fontSize: 20, fontWeight: 800 }}>{activeCount}</div><div style={{ fontSize: 12, color: S.sub }}>Active seats</div></div>
           <div><div style={{ fontSize: 20, fontWeight: 800 }}>{users.filter((u) => !u.active).length}</div><div style={{ fontSize: 12, color: S.sub }}>Deactivated</div></div>
+          {seatsIncluded != null && (
+            <div><div style={{ fontSize: 20, fontWeight: 800, color: atLimit ? "#B42318" : S.ink }}>{activeCount} / {seatsIncluded}</div><div style={{ fontSize: 12, color: S.sub }}>Seats used</div></div>
+          )}
         </div>
       </Card>
+
+      {tenant && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={<Chip tone={tenant.status === "active" ? "green" : tenant.status === "past_due" || tenant.status === "canceled" ? "red" : "amber"}>
+            {tenant.status === "trialing" ? `Trial${tenant.days_left != null ? ` — ${tenant.days_left}d left` : ""}` : (tenant.status || "—")}
+          </Chip>}>Subscription</CardTitle>
+          <KV k="Plan" v={plan === "unlimited" ? `Unlimited — up to ${PRODUCT.unlimitedSeatCap} seats` : `Team — ${PRODUCT.baseSeats} seats + ${tenant.seats_paid || 0} added`} />
+          <KV k="Seats" v={`${activeCount} used of ${seatsIncluded} included`} />
+          {atLimit && (
+            <Callout label="Seat limit reached" tone="amber">
+              {plan === "unlimited"
+                ? "Every seat on your plan is in use. Deactivate one to free it up, or contact support to raise the cap."
+                : "Add a seat to your subscription in Manage billing, then invite the new person."}
+            </Callout>
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            <Btn kind="soft" small onClick={manageBilling} disabled={billingBusy}>
+              {billingBusy ? "Opening…" : "Manage billing"}
+            </Btn>
+          </div>
+          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
+            Manage billing opens the secure Stripe portal to change your plan, add or remove seats,
+            update your card, or cancel. It's the only place a subscription can be changed.
+          </div>
+        </Card>
+      )}
 
       {users.map((u) => {
         const assigned = jobs.filter((j) => j.assignee === u.name).length;
@@ -20588,7 +21436,7 @@ function HelpDesk({ onBack, brand }) {
   );
 }
 
-function MoreMenu({ onNav, onLogout, brand, currentUser }) {
+function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setTheme = () => {} }) {
   const admin = currentUser && currentUser.role === "admin";
   const groups = [
     ["Schedule & production", [
@@ -20657,6 +21505,23 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
       <div style={{ margin: "12px 0 4px" }}>
         <input style={inputStyle} value={q} onChange={(e) => setQ(e.target.value)}
           placeholder="Search settings and screens" />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, background: S.card, border: `1px solid ${S.line}`, borderRadius: 12, padding: "10px 12px", marginBottom: 4 }}>
+        {theme === "dark" ? <Moon size={17} color={S.sub} /> : <Sun size={17} color={S.sub} />}
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>Appearance</div>
+          <div style={{ fontSize: 12, color: S.sub }}>{theme === "dark" ? "Dark" : "Light"} mode</div>
+        </div>
+        <div style={{ display: "flex", background: S.soft, borderRadius: 999, padding: 3 }}>
+          {[["light", "Light"], ["dark", "Dark"]].map(([id, label]) => (
+            <button key={id} onClick={() => setTheme(id)} style={{
+              border: "none", cursor: "pointer", borderRadius: 999, padding: "6px 14px",
+              fontSize: 12.5, fontWeight: 700, fontFamily: "inherit",
+              background: theme === id ? T.accent : "transparent",
+              color: theme === id ? "#fff" : S.sub,
+            }}>{label}</button>
+          ))}
+        </div>
       </div>
       {matches && (
         <Card pad={0} style={{ overflow: "hidden", marginTop: 8 }}>
@@ -21228,7 +22093,10 @@ export default function SupremeCRM() {
      runs before any auth state is considered. */
   const portalToken = typeof window !== "undefined"
     ? new URLSearchParams(window.location.search).get("portal") : null;
-  if (portalToken) return <PublicPortal token={portalToken} />;
+  /* The homeowner-facing portal always renders light, regardless of the rep's
+     app theme — data-theme="light" re-defines the CSS neutral variables to
+     their light values for this subtree. */
+  if (portalToken) return <div data-theme="light" style={{ background: S.bg, minHeight: "100vh" }}><PublicPortal token={portalToken} /></div>;
 
   /* Password reset: Supabase sends the user back with either
      ?recovery=1 or a #type=recovery fragment. Either way we show the
@@ -21314,6 +22182,10 @@ export default function SupremeCRM() {
   ]);
   const [appointments, setAppointments] = useState([]);
   const [estimateTemplates, setEstimateTemplates] = useState([]);
+  /* Saved reusable text for the three long-form fields — special notes,
+     terms & conditions, and scope of work. Each kind is a list of
+     { id, name, body }; a picker on each editor inserts one. */
+  const [docTemplates, setDocTemplates] = useState({ notes: [], terms: [], scope: [] });
   const [activity, setActivity] = useState([]);
   const [chatMsgs, setChatMsgs] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
@@ -21381,6 +22253,23 @@ export default function SupremeCRM() {
   useEffect(() => {
     try { localStorage.setItem("rl_board_view", boardView); } catch (e) { /* private mode */ }
   }, [boardView]);
+  /* Dark/light appearance. Follows the OS until the user picks one, then the
+     choice persists on the device. Flipping data-theme on <html> repaints the
+     whole app via the CSS variables in index.html. */
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem("rl_theme")
+        || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    } catch (e) { return "light"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("rl_theme", theme); } catch (e) { /* private mode */ }
+    try {
+      document.documentElement.dataset.theme = theme;
+      const m = document.querySelector('meta[name="theme-color"]');
+      if (m) m.setAttribute("content", theme === "dark" ? "#0F1216" : "#20242A");
+    } catch (e) { /* non-browser test env */ }
+  }, [theme]);
   const [leadSeed, setLeadSeed] = useState(null);
   const [qt, setQt] = useState({ jobId: "", label: "", due: "", time: "" });
   const [toastMsg, setToastMsg] = useState("");
@@ -21425,9 +22314,9 @@ export default function SupremeCRM() {
   };
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
-    announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates,
+    announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, docTemplates,
     priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate,
     features, security, jurisContacts, learnedJuris, version: 1,
   });
@@ -21439,6 +22328,7 @@ export default function SupremeCRM() {
     if (d.apptTypes) setApptTypes(d.apptTypes);
     if (d.templates) setTemplates(d.templates);
     if (d.estimateTemplates) setEstimateTemplates(d.estimateTemplates);
+    if (d.docTemplates) setDocTemplates({ notes: [], terms: [], scope: [], ...d.docTemplates });
     if (d.priceList) setPriceList(d.priceList);
     if (d.companyDocs) setCompanyDocs(d.companyDocs);
     if (d.crews) setCrews(d.crews);
@@ -21526,6 +22416,28 @@ export default function SupremeCRM() {
   }, [chatMsgs]);
 
   const toast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(""), 2200); };
+
+  /* Finish the Gmail OAuth handshake when Google redirects back with
+     ?state=gmail&code=... — exchange the code, mark the seat connected, and
+     clean the URL. Runs once when a code is present. */
+  const gmailCbDone = useRef(false);
+  useEffect(() => {
+    if (gmailCbDone.current || typeof window === "undefined") return;
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get("state") !== "gmail" || !qs.get("code")) return;
+    gmailCbDone.current = true;
+    const code = qs.get("code");
+    const a = AUTH();
+    const clean = () => { try { window.history.replaceState({}, "", window.location.pathname); } catch { /* ignore */ } };
+    if (!a || !a.gmailExchange || !currentUser) { clean(); return; }
+    a.gmailExchange(code).then((res) => {
+      setIntegrations((prev) => ({
+        ...prev,
+        gmailByUser: { ...(prev.gmailByUser || {}), [currentUser.id]: { connected: true, email: (res && res.email) || "", at: new Date().toISOString().slice(0, 10) } },
+      }));
+      toast(res && res.email ? `Gmail connected — sending as ${res.email}` : "Gmail connected");
+    }).catch((e) => toast(e && e.message ? e.message : "Couldn't connect Gmail")).finally(clean);
+  }, [currentUser && currentUser.id]); // eslint-disable-line
 
   const applyJob = (id, fn) => setJobs((prev) => prev.map((j) => (j.id === id ? { ...fn(j), updated: "just now", touchedAt: Date.now() } : j)));
   /* Callable both ways: mutJob(id)(fn) and mutJob(id, fn). */
@@ -21703,7 +22615,7 @@ export default function SupremeCRM() {
   }
   if (booting || (liveAuth() && currentUser && !hydrated)) {
     return (
-      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff" }}>
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: S.card }}>
         <div style={{ textAlign: "center" }}>
           {brand.logo ? (
             <img src={brand.logo} alt={brand.company} style={{ height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" }} />
@@ -21788,7 +22700,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} setBrand={setBrand}
           onLog={logAct} leadSources={leadSources} activity={activity} ccToken={ccToken}
           onDelete={isAdmin ? deleteJobs : null} openTab={jobOpenTab} features={features}
-          onOpenCodeLookup={openCodeLookup} priceList={priceList} />
+          onOpenCodeLookup={openCodeLookup} priceList={priceList}
+          docTemplates={docTemplates} setDocTemplates={setDocTemplates} />
       ) : nav === "home" ? (
         <>
           {liveDb() && jobs.length === 0 && (
@@ -21843,7 +22756,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           if (id === "insurance:codes") { setCodeSeed({ tab: "codes" }); return setNav("insurance"); }
           if (id === "insurance:resources") { setCodeSeed({ tab: "resources" }); return setNav("insurance"); }
           return setNav(id);
-        }} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
+        }} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} theme={theme} setTheme={setTheme} />
       ) : nav === "insurance" ? (
         <InsuranceHub jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} toast={toast}
           onSaveDept={(zip, dept) => {
@@ -21975,7 +22888,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
          icon, flush with the other four. */}
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50,
-        background: "#fff", borderTop: `1px solid ${S.line}`,
+        background: S.card, borderTop: `1px solid ${S.line}`,
         display: "flex", alignItems: "stretch", paddingBottom: "env(safe-area-inset-bottom)",
       }}>
         <NavBtn id="home" icon={Home} label="Home" active={nav === "home" && !openJob}

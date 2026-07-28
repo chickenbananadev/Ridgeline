@@ -1,0 +1,14 @@
+# Supabase Edge Function config.
+#
+# Most functions require a valid Supabase JWT (the app is signed in when it
+# calls them). Two are public by necessity and opt out of JWT verification:
+#
+#   calendar-feed  — calendar apps (Apple/Google) subscribe to a URL and
+#                    can't send an auth header; access is gated by a per-seat
+#                    secret token in the URL instead.
+#
+# When deploying from the CLI, the equivalent flag is --no-verify-jwt, e.g.
+#   supabase functions deploy calendar-feed --no-verify-jwt
+
+[functions.calendar-feed]
+verify_jwt = false

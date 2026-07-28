@@ -45,8 +45,7 @@ ok(src.includes("let JURIS_OVERRIDES"), "office overrides exist");
 ok(src.includes("function setJurisOverrides"), "overrides can be set");
 ok(src.includes("jurisContacts"), "contacts persist in company settings");
 ok(src.includes("Saved for the whole company"), "saving is shared, not personal");
-ok(src.includes("a dead line on a permit call costs more than an empty field")
-  || src.includes("dead\n                    line on a permit call costs more than an empty field"),
+ok(/a dead\s+line on a permit call costs more than an empty field/.test(src),
   "the blank-contact decision is explained");
 
 /* --- researched departments --- */

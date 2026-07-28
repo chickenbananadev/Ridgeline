@@ -31,7 +31,7 @@
     "test:build21": "node build21.test.cjs",
     "test:build22": "node build22.test.cjs",
     "test:build23": "node build23.test.cjs",
-    "bundle:test": "npx esbuild ridgeline.jsx --loader:.jsx=jsx --jsx=automatic --bundle --external:react --external:react-dom --external:lucide-react --external:pdfjs-dist/* --format=cjs --outfile=app.test.cjs",
+    "bundle:test": "npx esbuild ridgeline.jsx --loader:.jsx=jsx --jsx=automatic --bundle --external:react --external:react-dom --external:lucide-react --external:pdfjs-dist/* --external:pdf-lib --format=cjs --outfile=app.test.cjs",
     "test:build26": "node build26.test.cjs",
     "test:build27": "node build27.test.cjs",
     "test:build28": "node build28.test.cjs",
@@ -47,11 +47,13 @@
     "test:build38": "node build38.test.cjs",
     "test:build39": "node build39.test.cjs",
     "test:build40": "node build40.test.cjs",
-    "test:build41": "node build41.test.cjs"
+    "test:build41": "node build41.test.cjs",
+    "test:build46": "node build46.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "lucide-react": "^0.383.0",
+    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^3.11.174",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

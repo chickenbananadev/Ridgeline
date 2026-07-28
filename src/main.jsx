@@ -8,6 +8,17 @@ import App from "../ridgeline.jsx";
    preview sandboxes that don't evaluate it as an ES module. */
 window.__GEOAPIFY_KEY__ = import.meta.env.VITE_GEOAPIFY_KEY || "";
 window.__PROPERTY_KEY__ = import.meta.env.VITE_PROPERTY_KEY || "";
+/* Google OAuth client ID for per-rep Gmail sending. The matching client
+   SECRET lives only in the gmail-oauth / gmail-send Edge Functions. */
+window.__GOOGLE_CLIENT_ID__ = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+
+/* Apply the saved theme before React mounts so there's no flash of the wrong
+   appearance. With no saved choice we leave data-theme unset and let the CSS
+   prefers-color-scheme rule pick, matching the app's first-run default. */
+try {
+  const saved = localStorage.getItem("rl_theme");
+  if (saved === "dark" || saved === "light") document.documentElement.dataset.theme = saved;
+} catch (e) { /* private mode / SSR */ }
 
 const url = import.meta.env.VITE_SUPABASE_URL;
 const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -116,6 +127,67 @@ if (url && anon) {
       if (error) throw error;
       if (!data?.url) throw new Error("Stripe did not return a checkout link.");
       window.location.href = data.url;
+    },
+    /* Opens the Stripe Billing Portal for the current tenant so the owner can
+       change plan, add/remove seats, update the card, or cancel. Requires the
+       create-portal-session Edge Function (see DEPLOY.md). */
+    async manageBilling() {
+      const { data, error } = await supabase.functions.invoke("create-portal-session", {
+        body: { return_url: window.location.origin + "/" },
+      });
+      if (error) throw new Error(error.message || "Couldn't open the billing portal");
+      if (!data?.url) throw new Error("Billing portal isn't configured yet.");
+      window.location.href = data.url;
+    },
+    /* ---- Per-rep Gmail sending ---- */
+    /* Redirect the browser to Google's consent screen. Comes back to the app
+       root with ?state=gmail&code=..., which the app hands to gmailExchange. */
+    gmailConnect() {
+      const clientId = window.__GOOGLE_CLIENT_ID__;
+      if (!clientId) throw new Error("Gmail sending isn't configured (VITE_GOOGLE_CLIENT_ID missing).");
+      const redirectUri = window.location.origin + "/";
+      const params = new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: "https://www.googleapis.com/auth/gmail.send",
+        access_type: "offline",
+        prompt: "consent",
+        state: "gmail",
+      });
+      window.location.href = "https://accounts.google.com/o/oauth2/v2/auth?" + params.toString();
+    },
+    async gmailExchange(code) {
+      const { data, error } = await supabase.functions.invoke("gmail-oauth", {
+        body: { code, redirect_uri: window.location.origin + "/" },
+      });
+      if (error) throw new Error(error.message || "Couldn't finish connecting Gmail");
+      if (data?.error) throw new Error(data.error);
+      return data;
+    },
+    async gmailDisconnect() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from("crm_user_integrations").select("data").eq("user_id", user.id).maybeSingle();
+      const next = { ...((data && data.data) || {}) };
+      delete next.gmail;
+      await supabase.from("crm_user_integrations").upsert({ user_id: user.id, data: next, updated_at: new Date().toISOString() });
+    },
+    async gmailStatus() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase.from("crm_user_integrations").select("data").eq("user_id", user.id).maybeSingle();
+      return (data && data.data && data.data.gmail) || null;
+    },
+    async sendGmail({ to, subject, body }) {
+      const { data, error } = await supabase.functions.invoke("gmail-send", { body: { to, subject, body } });
+      if (error) {
+        let detail = error.message || "Could not send";
+        try { const ctx = await error.context?.json?.(); if (ctx && ctx.error) detail = ctx.error; } catch { /* keep */ }
+        throw new Error(detail);
+      }
+      if (data && data.error) throw new Error(data.error);
+      return data;
     },
     /* Called once, when the browser lands back on the app with
        ?checkout=success&session_id=... in the URL. */

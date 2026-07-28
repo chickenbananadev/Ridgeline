@@ -38,7 +38,7 @@ for (const f of requiredIcons) {
 }
 
 /* ---- static: index.html wiring ---- */
-check("title is RoofStride, not stale Ridgeline text", indexHtml.includes("<title>RoofStride</title>"));
+check("title is RoofStride, not stale Ridgeline text", /<title>RoofStride[^<]*<\/title>/.test(indexHtml));
 check("no leftover Ridgeline string in index.html", !/Ridgeline/.test(indexHtml));
 check("favicon links present", /rel="icon"/.test(indexHtml) && /favicon-32x32\.png/.test(indexHtml));
 check("apple-touch-icon linked", /rel="apple-touch-icon"/.test(indexHtml) && /apple-touch-icon\.png/.test(indexHtml));

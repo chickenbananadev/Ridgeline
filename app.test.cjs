@@ -1760,10 +1760,10 @@ function mkEstimate(over = {}) {
     upgrades: [],
     // [{ id, desc, price, cost, selected }]
     concealed: [
-      { id: "c1", desc: 'Roof decking replacement (7/16" OSB)', unit: "per 4\xD78 sheet", price: 0 },
-      { id: "c2", desc: "Plank decking replacement", unit: "per LF", price: 0 },
-      { id: "c3", desc: "Rafter sistering / repair", unit: "per rafter", price: 0 },
-      { id: "c4", desc: "Fascia replacement", unit: "per LF", price: 0 }
+      { id: "c1", desc: 'Roof decking replacement (7/16" OSB)', unit: "per 4\xD78 sheet", price: 0, on: true },
+      { id: "c2", desc: "Plank decking replacement", unit: "per LF", price: 0, on: true },
+      { id: "c3", desc: "Rafter sistering / repair", unit: "per rafter", price: 0, on: true },
+      { id: "c4", desc: "Fascia replacement", unit: "per LF", price: 0, on: true }
     ],
     clientSig: null,
     sigAt: null,
@@ -2733,7 +2733,7 @@ function resolveJurisdiction(zip) {
     codeEdition: "Verify the adopted edition",
     adoption: adopt && adopt.local ? "Adopted locally \u2014 confirm the adopting jurisdiction." : "Confirm the current adopted edition and local amendments.",
     permit: "Confirm permit requirements with the local building department.",
-    sources: ["ICC"]
+    sources: ["ICC", "MUNICODE"]
   };
   return {
     zip: z,
@@ -2870,7 +2870,7 @@ function jurisdictionFromLookup(hit) {
     codeEdition: "Verify the adopted edition",
     adoption: adopt && adopt.local ? "Adopted locally \u2014 confirm the adopting municipality/county for this address." : "Confirm the current adopted edition and any local amendments.",
     permit: "Confirm permit requirements with the local building department.",
-    sources: ["ICC"]
+    sources: ["ICC", "MUNICODE"]
   };
   const dept = hit.dept;
   return {
@@ -3186,7 +3186,8 @@ function citeFor(state, topic) {
   const base = IRC_BASE[topic] || CODE_PROVISIONS.OH[topic];
   const adopt = STATE_CODE_ADOPTION[state];
   const label = adopt ? adopt.code : "the locally adopted IRC";
-  return { cite: `${base.cite} \u2014 per ${label}; verify edition${adopt && adopt.local ? " & local adoption" : ""}`, note: base.note, verified: false };
+  const verifyLine = `Per ${label}; verify edition${adopt && adopt.local ? " & local adoption" : ""}.`;
+  return { cite: base.cite, note: base.note ? `${base.note} ${verifyLine}` : verifyLine, verified: false };
 }
 function generateRoofingMaterials(m) {
   if (!num(m.squares)) return null;
@@ -3308,7 +3309,7 @@ var toProfile = (u) => ({
   commission_rate: u.commissionRate ?? 60,
   active: u.active
 });
-var S = { ink: "#111827", sub: "#6B7280", line: "#E5E7EB", bg: "#F7F8FA", soft: "#F3F4F6" };
+var S = { ink: "var(--rl-ink)", sub: "var(--rl-sub)", line: "var(--rl-line)", bg: "var(--rl-bg)", soft: "var(--rl-soft)", card: "var(--rl-card)" };
 var T = { primary: "#20242A", accent: "#0A9E98", accentSoft: "#E3F5F4" };
 function softOf(hex) {
   try {
@@ -3342,7 +3343,7 @@ function DonutChart({ data, size = 132, thickness = 18, centerLabel, centerValue
       position: "absolute",
       inset: thickness,
       borderRadius: "50%",
-      background: "#fff",
+      background: S.card,
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
@@ -3382,10 +3383,11 @@ function Chip({ children, tone = "gray" }) {
     fontWeight: 600,
     padding: "3px 10px",
     borderRadius: 999,
-    whiteSpace: "nowrap",
     display: "inline-block",
     alignSelf: "flex-start",
-    flexShrink: 0
+    maxWidth: "100%",
+    wordBreak: "break-word",
+    lineHeight: 1.35
   }, children });
 }
 function Btn({ children, kind = "primary", onClick, style, small, disabled, ...props }) {
@@ -3405,9 +3407,9 @@ function Btn({ children, kind = "primary", onClick, style, small, disabled, ...p
   const kinds = {
     primary: { background: T.accent, color: "#fff" },
     dark: { background: T.primary, color: "#fff" },
-    ghost: { background: "#fff", color: S.ink, border: `1px solid ${S.line}` },
+    ghost: { background: S.card, color: S.ink, border: `1px solid ${S.line}` },
     soft: { background: T.accentSoft, color: T.accent },
-    danger: { background: "#fff", color: "#B42318", border: `1px solid ${S.line}` },
+    danger: { background: S.card, color: "#B42318", border: `1px solid ${S.line}` },
     green: { background: "#177245", color: "#fff" }
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { ...props, disabled, onClick: disabled ? void 0 : onClick, style: { ...base, ...kinds[kind], ...style }, children });
@@ -3426,7 +3428,7 @@ var inputStyle = {
   fontSize: 15,
   border: `1px solid ${S.line}`,
   borderRadius: 10,
-  background: "#fff",
+  background: S.card,
   color: S.ink,
   outline: "none",
   fontFamily: "inherit"
@@ -3443,7 +3445,7 @@ var dateInputStyle = {
   minWidth: 0
 };
 function Card({ children, style, pad = 18, onClick }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { onClick, style: { background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }, children });
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { onClick, style: { background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }, children });
 }
 function CardTitle({ children, right }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }, children: [
@@ -3486,13 +3488,44 @@ function SourceLink({ srcId }) {
     fontSize: 12.5,
     fontWeight: 700,
     color: T.accent,
-    background: "#fff",
+    background: S.card,
     marginTop: 8,
     marginRight: 8
   }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ExternalLink, { size: 13 }),
     " ",
     s.name
+  ] });
+}
+function municodeUrl(state, city) {
+  const st = String(state || "").trim().toLowerCase();
+  if (!/^[a-z]{2}$/.test(st)) return SOURCES.MUNICODE.url;
+  const slug = String(city || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return slug ? `https://library.municode.com/${st}/${slug}` : `https://library.municode.com/${st}`;
+}
+function deptSearchUrl(city, state) {
+  const q = [city, state, "building department permits phone"].filter(Boolean).join(" ");
+  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+}
+function AssistLink({ href, children }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href, target: "_blank", rel: "noreferrer", style: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    textDecoration: "none",
+    border: `1px solid ${S.line}`,
+    borderRadius: 999,
+    padding: "6px 12px",
+    fontSize: 12.5,
+    fontWeight: 700,
+    color: T.accent,
+    background: S.card,
+    marginTop: 8,
+    marginRight: 8
+  }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ExternalLink, { size: 13 }),
+    " ",
+    children
   ] });
 }
 function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
@@ -3573,7 +3606,7 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
       left: 0,
       right: 0,
       zIndex: 30,
-      background: "#fff",
+      background: S.card,
       border: `1px solid ${S.line}`,
       borderRadius: 12,
       boxShadow: "0 10px 28px rgba(17,24,39,.14)",
@@ -3611,7 +3644,7 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
     )) })
   ] });
 }
-function Sheet({ open, onClose, title, children, footer, wide, tall }) {
+function Sheet({ open, onClose, title, children, footer, wide, tall, center = true }) {
   if (!open) return null;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
     position: "fixed",
@@ -3619,17 +3652,20 @@ function Sheet({ open, onClose, title, children, footer, wide, tall }) {
     zIndex: 60,
     background: "rgba(17,24,39,.45)",
     display: "flex",
-    alignItems: "flex-end",
-    justifyContent: "center"
+    alignItems: center ? "center" : "flex-end",
+    justifyContent: "center",
+    padding: center ? 20 : 0,
+    boxSizing: "border-box"
   }, onClick: onClose, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { onClick: (e) => e.stopPropagation(), style: {
-    background: "#fff",
+    background: S.card,
     width: "100%",
     maxWidth: wide ? 760 : 560,
-    maxHeight: "90vh",
+    maxHeight: center ? "82vh" : "90vh",
     minHeight: tall ? "55vh" : void 0,
-    borderRadius: "18px 18px 0 0",
+    borderRadius: center ? 18 : "18px 18px 0 0",
     display: "flex",
-    flexDirection: "column"
+    flexDirection: "column",
+    boxShadow: center ? "0 24px 60px rgba(17,24,39,.28)" : void 0
   }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 12px" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 700, color: S.ink }, children: title }),
@@ -3748,7 +3784,7 @@ function SignaturePad({ open, onClose, title, onApply }) {
               border: `1.5px dashed ${S.line}`,
               borderRadius: 12,
               touchAction: "none",
-              background: "#fff",
+              background: S.card,
               display: "block"
             }
           }
@@ -3922,7 +3958,7 @@ function Marketing({ onSignIn, onStartTrial }) {
     ["D", "Dependability", "Roofing doesn't stop when conditions get difficult. RoofStride stays reliable in the office and in the field.", "stride-dependability.jpg"],
     ["E", "Empowerment", "We give roofing professionals the visibility, tools, and control to operate with confidence.", "stride-empowerment.jpg"]
   ];
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { id: "top", style: { background: "#fff" }, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { id: "top", style: { background: S.card }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("style", { children: `
         @media (max-width: 760px) {
           .mkt-row { flex-direction: column !important; padding: 40px 20px !important; gap: 32px !important; }
@@ -4097,7 +4133,7 @@ function Marketing({ onSignIn, onStartTrial }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: MKT_DISPLAY_FONT, fontSize: 24, fontWeight: 700, color: "#fff", lineHeight: 1.28, letterSpacing: -0.2 }, children: "Every screen in this app was shaped by what actually happens between a knock on the door and a signed job." })
       ] }) }) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "64px 20px", background: "#fff" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Reveal, { style: { maxWidth: 1100, margin: "0 auto" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "64px 20px", background: S.card }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Reveal, { style: { maxWidth: 1100, margin: "0 auto" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center", marginBottom: 32 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }, children: "And more, day to day" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: MKT_DISPLAY_FONT, fontSize: 27, fontWeight: 700, color: MKT.ink, letterSpacing: -0.2 }, children: "The parts that keep everyone moving" })
@@ -4160,7 +4196,7 @@ function Marketing({ onSignIn, onStartTrial }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, color: MKT.sub, marginBottom: 34, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }, children: "No feature gates, no tiers to unlock \u2014 the only choice is how you'd rather pay for seats." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "mkt-pricing-grid", style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, textAlign: "left", marginBottom: 28 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
-          background: "#fff",
+          background: S.card,
           borderRadius: 20,
           padding: "30px 26px",
           border: `1px solid ${MKT.line}`,
@@ -4238,7 +4274,7 @@ function Marketing({ onSignIn, onStartTrial }) {
         ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
-        background: "#fff",
+        background: S.card,
         borderRadius: 16,
         padding: "22px 24px",
         border: `1px solid ${MKT.line}`,
@@ -4258,7 +4294,7 @@ function Marketing({ onSignIn, onStartTrial }) {
         ] }, i)) })
       ] })
     ] }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { id: "faq", style: { padding: "72px 20px", background: "#fff" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Reveal, { style: { maxWidth: 760, margin: "0 auto" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { id: "faq", style: { padding: "72px 20px", background: S.card }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Reveal, { style: { maxWidth: 760, margin: "0 auto" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center", marginBottom: 32 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }, children: "Questions" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: MKT_DISPLAY_FONT, fontSize: 30, fontWeight: 700, color: MKT.ink, letterSpacing: -0.3 }, children: "Straight answers" })
@@ -4290,7 +4326,7 @@ function Marketing({ onSignIn, onStartTrial }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: MKT_DISPLAY_FONT, fontSize: 27, fontWeight: 700, color: "#fff", marginBottom: 18, letterSpacing: -0.2 }, children: "Ready to run roofing operations with clarity?" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onStartTrial, style: {
         border: "none",
-        background: "#fff",
+        background: S.card,
         color: MKT.tealDark,
         fontWeight: 700,
         fontSize: 16,
@@ -4426,7 +4462,7 @@ function Login({ brand: brand2, users, onLogin, initialMode = "login", selectedP
   if (!live && mode === "account") {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", background: brand2.primary, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "100%", maxWidth: 420 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center", marginBottom: 22 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Shield, { size: 28, color: brand2.primary }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: S.card, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Shield, { size: 28, color: brand2.primary }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800, color: "#fff" }, children: brand2.company }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 4 }, children: brand2.slogan })
       ] }),
@@ -4471,7 +4507,7 @@ function Login({ brand: brand2, users, onLogin, initialMode = "login", selectedP
   }
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
     minHeight: "100vh",
-    background: "#fff",
+    background: S.card,
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
@@ -4594,7 +4630,7 @@ function Login({ brand: brand2, users, onLogin, initialMode = "login", selectedP
             setMode("signup");
           }, style: {
             border: `1.5px solid ${T.accent}`,
-            background: "#fff",
+            background: S.card,
             color: T.accent,
             fontWeight: 700,
             fontSize: 14,
@@ -5001,7 +5037,7 @@ function Dashboard({
       alignItems: "center",
       gap: 5,
       border: `1px solid ${S.line}`,
-      background: "#fff",
+      background: S.card,
       borderRadius: 12,
       padding: "11px 0",
       cursor: "pointer",
@@ -6018,7 +6054,7 @@ function SubHeader({ title, onBack, right }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onBack, style: {
         border: `1px solid ${S.line}`,
-        background: "#fff",
+        background: S.card,
         borderRadius: 999,
         width: 36,
         height: 36,
@@ -6585,11 +6621,11 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
             (vAp.assignedTo || vJob?.assignee) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Assigned to", v: vAp.assignedTo || vJob.assignee }),
             vAp.notes && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, lineHeight: 1.5, marginTop: 8, whiteSpace: "pre-wrap" }, children: vAp.notes }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 14 }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: vTel ? telHref(vJob.phone) : void 0, style: { ...actLink, background: "#fff", color: S.ink, ...vTel ? {} : off }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: vTel ? telHref(vJob.phone) : void 0, style: { ...actLink, background: S.card, color: S.ink, ...vTel ? {} : off }, children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Phone, { size: 15 }),
                 " Call"
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: vTel ? smsHref(vJob.phone) : void 0, style: { ...actLink, background: "#fff", color: S.ink, ...vTel ? {} : off }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: vTel ? smsHref(vJob.phone) : void 0, style: { ...actLink, background: S.card, color: S.ink, ...vTel ? {} : off }, children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MessageCircle, { size: 15 }),
                 " Text"
               ] })
@@ -6607,7 +6643,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
                     setMapPref(p.id);
                     setMapPrefState(p.id);
                   },
-                  style: { ...actLink, flex: "1 1 30%", ...on ? { background: T.accent, color: "#fff", border: "1px solid transparent" } : { background: "#fff", color: S.ink }, ...addr ? {} : off },
+                  style: { ...actLink, flex: "1 1 30%", ...on ? { background: T.accent, color: "#fff", border: "1px solid transparent" } : { background: S.card, color: S.ink }, ...addr ? {} : off },
                   children: [
                     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 14 }),
                     " ",
@@ -6701,7 +6737,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
                   type: String(f.type || "appointment").toLowerCase()
                 };
                 const first = String(jb.name || "").split(" ")[0];
-                return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: "#fff", border: `1px solid ${S.line}`, borderRadius: 9, padding: "9px 11px", marginTop: 8 }, children: [
+                return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.card, border: `1px solid ${S.line}`, borderRadius: 9, padding: "9px 11px", marginTop: 8 }, children: [
                   /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, fontWeight: 800, letterSpacing: ".05em", color: S.sub, marginBottom: 4 }, children: notifyNow ? "THEY WILL RECEIVE" : "DAY BEFORE" }),
                   /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.ink, lineHeight: 1.5 }, children: [
                     "Hi ",
@@ -7654,7 +7690,7 @@ function WorkflowEditor({ open, onClose, stages, setStages }) {
     }
   );
 }
-var arrowBtn = { border: "1px solid #E5E7EB", background: "#fff", borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14 };
+var arrowBtn = { border: "1px solid #E5E7EB", background: S.card, borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14 };
 function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppointments, calls, setCalls, currentUser, toast: toast2, onLog, apptTypes }) {
   const [mode, setMode] = (0, import_react.useState)("note");
   const [note, setNote] = (0, import_react.useState)("");
@@ -7878,7 +7914,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       onDragStart: () => dragJob.current = job.id,
       onClick: () => onOpenJob(job.id),
       style: {
-        background: "#fff",
+        background: S.card,
         border: `1px solid ${S.line}`,
         borderRadius: 12,
         padding: 14,
@@ -7998,7 +8034,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
             },
             style: {
               border: `1px solid ${S.line}`,
-              background: "#fff",
+              background: S.card,
               borderRadius: 999,
               padding: "6px 10px",
               fontSize: 12,
@@ -8014,7 +8050,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
     }
   );
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { paddingBottom: 100 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "18px 16px 0", background: "#fff" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "18px 16px 0", background: S.card }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 24, fontWeight: 800, color: S.ink }, children: "Jobs" }),
@@ -8084,7 +8120,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "relative" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "soft", onClick: () => setBulkMenu(bulkMenu === "stage" ? null : "stage"), children: "Move to\u2026" }),
-        bulkMenu === "stage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", top: "110%", left: 0, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }, children: stages.map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        bulkMenu === "stage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", top: "110%", left: 0, background: S.card, border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }, children: stages.map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "button",
           {
             onClick: () => {
@@ -8099,7 +8135,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "relative" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "soft", onClick: () => setBulkMenu(bulkMenu === "assign" ? null : "assign"), children: "Assign\u2026" }),
-        bulkMenu === "assign" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", top: "110%", left: 0, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }, children: assigneeOptions.map((nm) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        bulkMenu === "assign" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", top: "110%", left: 0, background: S.card, border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }, children: assigneeOptions.map((nm) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "button",
           {
             onClick: () => {
@@ -8206,7 +8242,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
         display: "flex",
         alignItems: "center",
         gap: 12,
-        background: "#fff",
+        background: S.card,
         cursor: "pointer",
         border: `1px solid ${selected.has(j.id) ? T.accent : S.line}`,
         borderRadius: 12,
@@ -8315,7 +8351,10 @@ function JobDetail({
   features = {},
   onOpenCodeLookup = () => {
   },
-  priceList = []
+  priceList = [],
+  docTemplates = { notes: [], terms: [], scope: [] },
+  setDocTemplates = () => {
+  }
 }) {
   const [tab, setTab] = (0, import_react.useState)(openTab || "overview");
   const [open, setOpen] = (0, import_react.useState)(() => openTab ? { [openTab]: true } : {});
@@ -8345,7 +8384,7 @@ function JobDetail({
   const stage = stages.find((s) => s.id === job.stageId);
   const juris = jurisdictionForZip(job.zip);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.bg, minHeight: "100vh", paddingBottom: 110 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: "#fff", borderBottom: `1px solid ${S.line}` }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 0" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: S.card, borderBottom: `1px solid ${S.line}` }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 0" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         SubHeader,
         {
@@ -8477,7 +8516,7 @@ function JobDetail({
       alignItems: "flex-start",
       gap: 8,
       border: `1px solid ${S.line}`,
-      background: "#fff",
+      background: S.card,
       borderRadius: 12,
       padding: "14px 12px",
       cursor: "pointer",
@@ -8487,7 +8526,7 @@ function JobDetail({
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, { size: 19, color: T.accent }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: label })
     ] }, id)) }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: activityOpen, onClose: () => setActivityOpen(false), title: "Activity", children: (() => {
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: activityOpen, onClose: () => setActivityOpen(false), title: "Activity", center: true, children: (() => {
       const mine = (activity || []).filter((a) => a.jobId === job.id);
       if (!mine.length) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "Nothing logged on this job yet." });
       return mine.map((a, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "10px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }, children: [
@@ -8606,12 +8645,25 @@ function JobDetail({
                   toast: toast2,
                   estimateTemplates,
                   setEstimateTemplates,
-                  priceList
+                  priceList,
+                  docTemplates,
+                  setDocTemplates
                 }
               );
             case "contract":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabContract, { job, brand: brand2, setBrand, mut, toast: toast2 }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  TabContract,
+                  {
+                    job,
+                    brand: brand2,
+                    setBrand,
+                    mut,
+                    toast: toast2,
+                    docTemplates,
+                    setDocTemplates
+                  }
+                ),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabSignatures, { job, mut, toast: toast2, currentUser, brand: brand2 })
               ] });
             case "report":
@@ -8705,7 +8757,7 @@ function JobDetail({
             border: `1px solid ${S.line}`,
             borderRadius: 12,
             marginBottom: 10,
-            background: "#fff",
+            background: S.card,
             overflow: "hidden"
           }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setOpen((o) => ({ ...o, [id]: !o[id] })), style: {
@@ -9319,7 +9371,7 @@ function docShell(title, brand2, bodyHtml) {
   .foot { margin-top: 26px; padding-top: 12px; border-top: 1px solid #E5E7EB;
           font-size: 10.5px; color: #9CA3AF; text-align: center; }
   .cover { text-align: center; padding: 40px 0 30px; page-break-after: always; }
-  .cover img.hero { width: 100%; border-radius: 12px; margin-bottom: 26px; }
+  .cover img.hero { width: 100%; height: 4.8in; object-fit: cover; border-radius: 12px; margin-bottom: 26px; }
   @media print { .noprint { display: none !important; } body { padding: 0; } }
   .bar { position: sticky; top: 0; background: #111827; color: #fff; padding: 11px 14px;
          display: flex; gap: 10px; align-items: center; margin: -22px -22px 20px; }
@@ -9344,17 +9396,56 @@ ${bodyHtml}
 </body></html>`;
 }
 function openDoc(title, brand2, bodyHtml, toast2) {
+  const html = docShell(title, brand2, bodyHtml);
   try {
     const w = window.open("", "_blank");
-    if (!w) {
-      toast2 && toast2("Allow pop-ups for this site to open documents");
-      return false;
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+      return true;
     }
-    w.document.write(docShell(title, brand2, bodyHtml));
-    w.document.close();
+  } catch (e) {
+  }
+  try {
+    const frame = document.createElement("iframe");
+    frame.setAttribute("aria-hidden", "true");
+    frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;";
+    document.body.appendChild(frame);
+    const doc = frame.contentWindow && frame.contentWindow.document;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+      const done = () => {
+        try {
+          frame.contentWindow.focus();
+          frame.contentWindow.print();
+        } catch (e) {
+        }
+      };
+      setTimeout(done, 400);
+      setTimeout(() => {
+        try {
+          document.body.removeChild(frame);
+        } catch (e) {
+        }
+      }, 6e4);
+      toast2 && toast2("Opening the print sheet\u2026");
+      return true;
+    }
+    document.body.removeChild(frame);
+  } catch (e) {
+  }
+  try {
+    const blob = new Blob([html], { type: "text/html" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${String(title || "document").replace(/[^\w.-]+/g, "-")}.html`;
+    a.click();
+    toast2 && toast2("Downloaded the document \u2014 open it to print");
     return true;
   } catch (e) {
-    toast2 && toast2("Couldn't open the document window");
+    toast2 && toast2("Couldn't open the document");
     return false;
   }
 }
@@ -9393,6 +9484,11 @@ function normalizeProposalDoc(doc) {
     notes: d.notes || "",
     terms: d.terms || ""
   };
+}
+function concealedTableHtml(est) {
+  const rows = (est && est.concealed || []).filter((c) => c.on !== false && String(c.desc || "").trim());
+  if (!rows.length) return "";
+  return `<h2>Concealed conditions \u2014 unit pricing</h2><div class="muted" style="margin-bottom:8px">Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented.</div><table><thead><tr><th>Condition</th><th>Unit</th><th class="r">Price</th></tr></thead><tbody>` + rows.map((c) => `<tr><td>${esc(c.desc)}</td><td>${esc(c.unit || "")}</td><td class="r">${num(c.price) ? money(num(c.price)) : "\u2014"}</td></tr>`).join("") + `</tbody></table>`;
 }
 function estimateDocHtml(job, brand2) {
   const est = job.estimate;
@@ -9444,6 +9540,7 @@ function estimateDocHtml(job, brand2) {
       out += `<iframe src="${b.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe>`;
     }
   }
+  out += concealedTableHtml(est);
   out += `<div class="sig">
     <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
     <div><div class="sigline"></div><div class="siglbl">${esc(brand2.company)} representative</div></div>
@@ -9553,6 +9650,13 @@ function contractDocHtml(job, brand2) {
     <div class="tot"><span>Due at signing${mode === "pct" ? ` (${con.depositPct}%)` : ""}</span><span>${money(deposit)}</span></div>
     <div class="tot grand"><span>Due on substantial completion</span><span>${money((con.price || 0) - deposit)}</span></div>`;
   if (con.terms) out += `<h2>Terms &amp; conditions</h2><div class="muted">${esc(con.terms)}</div>`;
+  out += concealedTableHtml(job.estimate);
+  for (const a of con.attachments || []) {
+    if (a && a.dataUrl) {
+      out += `<h2>${esc(a.name || "Attachment")}</h2>`;
+      out += `<iframe src="${a.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe>`;
+    }
+  }
   out += `<div class="sig">
     <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
     <div><div class="sigline"></div><div class="siglbl">${esc(brand2.company)} representative / date</div></div>
@@ -10233,7 +10337,7 @@ function SignatureField({ label = "Sign here", value, onChange, accent = "#0A9E9
             height: 150,
             border: "1.5px dashed #C7CBD1",
             borderRadius: 11,
-            background: "#fff",
+            background: S.card,
             touchAction: "none",
             display: "block",
             cursor: "crosshair"
@@ -10260,7 +10364,7 @@ function SignatureField({ label = "Sign here", value, onChange, accent = "#0A9E9
             fontSize: 26,
             border: "1.5px dashed #C7CBD1",
             borderRadius: 11,
-            background: "#fff",
+            background: S.card,
             color: "#101828",
             outline: "none",
             fontFamily: font,
@@ -10472,7 +10576,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
           )
         ] }),
         children: openDoc2 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 11, padding: 14, marginBottom: 14, background: "#fff" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 11, padding: 14, marginBottom: 14, background: S.card }, children: [
             (openDoc2.lines || []).map((l, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5, padding: "6px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.ink }, children: l.label }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.ink, fontWeight: 600, whiteSpace: "nowrap" }, children: l.value })
@@ -10950,7 +11054,7 @@ function CheckoutReturnScreen({ sessionId, onDone }) {
       alive = false;
     };
   }, [sessionId]);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff", padding: 24 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { textAlign: "center", maxWidth: 360 }, children: err ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", background: S.card, padding: 24 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { textAlign: "center", maxWidth: 360 }, children: err ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 16, fontWeight: 700, color: S.ink, marginBottom: 8 }, children: "Something didn't go through" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.5, marginBottom: 16 }, children: err }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub }, children: [
@@ -11095,15 +11199,14 @@ function SystemCheck({ currentUser, onBack }) {
           out.push({ label: human, ok: false, detail: String(e && e.message || e) });
         }
       }
-      const probeId = 1e3 + Math.floor(Math.random() * 2e9);
       try {
-        const { error } = await db.from("crm_brand").insert({ id: probeId, data: { _probe: Date.now() }, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+        const write = currentUser && currentUser.tenantId ? db.from("crm_brand").upsert({ tenant_id: currentUser.tenantId, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "tenant_id" }) : db.from("crm_brand").upsert({ id: 1, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "id" });
+        const { error } = await write;
         out.push({
           label: "Can save settings",
           ok: !error,
           detail: error ? `Write blocked: ${error.message}` : "Write succeeded"
         });
-        if (!error) await db.from("crm_brand").delete().eq("id", probeId);
       } catch (e) {
         out.push({ label: "Can save settings", ok: false, detail: String(e && e.message || e) });
       }
@@ -11498,20 +11601,63 @@ async function fetchStormHistory(lat, lng, start, end) {
       const code = d.daily.weather_code?.[i];
       const precip = d.daily.precipitation_sum?.[i];
       const hail = code === 96 || code === 99;
-      const damagingWind = gust != null && gust >= 45;
+      const g = gust != null ? Math.round(gust) : null;
+      const highWind = g != null && g >= 45;
+      const damagingWind = g != null && g >= 58;
       const storm = code === 95 || code === 96 || code === 99;
       return {
         date: iso,
-        gust: gust != null ? Math.round(gust) : null,
+        gust: g,
         precip: precip != null ? precip : null,
         code,
         hail,
+        highWind,
         damagingWind,
-        storm
+        storm,
+        hailIn: null,
+        reportWind: null,
+        reports: null
+        // filled by enrichStormDay
       };
     });
     STORM_CACHE.set(key, days);
     return days;
+  } catch (e) {
+    return null;
+  }
+}
+var LSR_CACHE = /* @__PURE__ */ new Map();
+async function enrichStormDay(lat, lng, iso) {
+  const key = `${weatherKey(lat, lng)}:${iso}`;
+  if (LSR_CACHE.has(key)) return LSR_CACHE.get(key);
+  try {
+    const sts = `${iso}T00:00Z`;
+    const nextIso = new Date((/* @__PURE__ */ new Date(iso + "T00:00Z")).getTime() + 864e5).toISOString().slice(0, 10);
+    const ets = `${nextIso}T00:00Z`;
+    const url = `https://mesonet.agron.iastate.edu/geojson/lsr.geojson?sts=${sts}&ets=${ets}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("lsr");
+    const gj = await res.json();
+    let hailIn = null, windMph = null, count = 0;
+    for (const f of gj.features || []) {
+      const c = f.geometry && f.geometry.coordinates;
+      if (!c) continue;
+      const [flng, flat] = c;
+      if (Math.abs(flat - lat) > 0.5 || Math.abs(flng - lng) > 0.6) continue;
+      const p = f.properties || {};
+      const type = String(p.type || "").toUpperCase();
+      const mag = parseFloat(p.magnitude);
+      if (type.includes("HAIL") && !isNaN(mag)) {
+        hailIn = Math.max(hailIn ?? 0, mag);
+        count++;
+      } else if (type.includes("WND") && !isNaN(mag)) {
+        windMph = Math.max(windMph ?? 0, mag);
+        count++;
+      } else if (type.includes("TORNADO")) count++;
+    }
+    const out = { hailIn, reportWind: windMph, count };
+    LSR_CACHE.set(key, out);
+    return out;
   } catch (e) {
     return null;
   }
@@ -11521,7 +11667,7 @@ function spcReportLink(iso) {
   return `https://www.spc.noaa.gov/climo/reports/${yymmdd}_rpt.html`;
 }
 function stormSeverity(r) {
-  return (r.hail ? 3e3 : 0) + (r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
+  return (r.hailIn ? 4e3 + r.hailIn * 500 : r.hail ? 3e3 : 0) + (r.reportWind || r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
 }
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast: toast2, embedded = false }) {
   const [day, setDay] = (0, import_react.useState)(() => todayIso());
@@ -12849,7 +12995,7 @@ function TabSignatures({ job, mut, toast: toast2, currentUser, brand: brand2 }) 
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: r.voided_at ? "red" : r.signer_role === "customer" ? "blue" : "green", children: r.voided_at ? "Voided" : r.signer_role === "customer" ? "Signed" : "Countersigned" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: "#fff", border: `1px solid ${S.line}`, borderRadius: 9, padding: "8px 10px", marginTop: 9 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SignatureMark, { sig: r, height: 44 }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: S.card, border: `1px solid ${S.line}`, borderRadius: 9, padding: "8px 10px", marginTop: 9 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SignatureMark, { sig: r, height: 44 }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 9, fontSize: 11.5, color: S.sub, lineHeight: 1.6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
             "Signed ",
@@ -12907,6 +13053,46 @@ function TabSignatures({ job, mut, toast: toast2, currentUser, brand: brand2 }) 
     )
   ] });
 }
+function StormScout({ toast: toast2 }) {
+  const [addr, setAddr] = (0, import_react.useState)("");
+  const [loc, setLoc] = (0, import_react.useState)(null);
+  const [dol, setDol] = (0, import_react.useState)("");
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "Door-knock" }), children: "Storm scout" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Type any address to see the hail and high-wind days on record there \u2014 useful when you're canvassing a neighborhood after a storm and haven't created a job yet." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Address or ZIP", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        AddressAutocomplete,
+        {
+          value: addr,
+          onChange: setAddr,
+          placeholder: "123 Main St, or a ZIP",
+          onPick: (it) => {
+            setAddr(it.formatted || it.street || addr);
+            setLoc({ lat: it.lat, lng: it.lng, zip: it.postcode || it.zip || "", label: it.formatted || it.street || "" });
+          }
+        }
+      ) }),
+      !loc && /^\s*\d{5}\s*$/.test(addr) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", style: { marginTop: 2 }, onClick: async () => {
+        const g = await geocodeZip(addr.trim());
+        if (g) setLoc({ lat: g.lat, lng: g.lng, zip: addr.trim(), label: addr.trim() });
+        else toast2 && toast2("Couldn't locate that ZIP");
+      }, children: [
+        "Use ZIP ",
+        addr.trim()
+      ] })
+    ] }),
+    loc && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      StormLookup,
+      {
+        job: { lat: loc.lat, lng: loc.lng, zip: loc.zip, address: loc.label },
+        dol,
+        onPick: setDol,
+        toast: toast2
+      }
+    )
+  ] });
+}
 function StormLookup({ job, dol, onPick, toast: toast2 }) {
   const iso = (d) => d.toISOString().slice(0, 10);
   const [start, setStart] = (0, import_react.useState)(() => {
@@ -12941,14 +13127,22 @@ function StormLookup({ job, dol, onPick, toast: toast2 }) {
       setLoading(false);
       return;
     }
-    const notable = days.filter((r) => r.hail || r.damagingWind || r.storm || r.precip != null && r.precip >= 0.75).sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1)).slice(0, 24);
+    const notable = days.filter((r) => r.hail || r.highWind || r.storm || r.precip != null && r.precip >= 0.75).sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1)).slice(0, 24);
     setRows(notable);
     setLoading(false);
-    if (!notable.length) toast2 && toast2("No notable storm days in that window");
+    if (!notable.length) {
+      toast2 && toast2("No notable storm days in that window");
+      return;
+    }
+    notable.slice(0, 8).forEach(async (r) => {
+      const info = await enrichStormDay(lat, lng, r.date);
+      if (!info) return;
+      setRows((prev) => prev && prev.map((x) => x.date === r.date ? { ...x, hailIn: info.hailIn, reportWind: info.reportWind, reports: info.count } : x));
+    });
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "NOAA / Open-Meteo" }), children: "Storm history \u2014 date of loss" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Pulls damaging-wind, hail and heavy-rain days for this address so you can set the date of loss from the record. Wind gusts & precip are ERA5 reanalysis; hail is inferred from thunderstorm-with-hail codes \u2014 confirm the official NOAA storm report before filing." }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Pulls high-wind, hail and heavy-rain days for this address so you can set the date of loss from the record. Gusts & precip are ERA5 reanalysis; the strongest days are cross-checked against official NOAA storm reports, so where a report exists you'll see the measured hail size and peak wind. Confirm the NOAA report before filing." }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "From", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: start, max: end, onChange: (e) => setStart(e.target.value) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "To", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: end, max: iso(/* @__PURE__ */ new Date()), onChange: (e) => setEnd(e.target.value) }) }),
@@ -12961,10 +13155,21 @@ function StormLookup({ job, dol, onPick, toast: toast2 }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: r.date }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }, children: [
-            r.hail && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "red", children: "Hail likely" }),
-            r.gust != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray", children: [
+            r.hailIn != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "red", children: [
+              "Hail \u2014 ",
+              r.hailIn.toFixed(2).replace(/\.?0+$/, ""),
+              "\u2033 (NOAA)"
+            ] }) : r.hail && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "Hail possible" }),
+            r.reportWind != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.reportWind >= 58 ? "red" : "amber", children: [
+              r.reportWind >= 58 ? "Damaging wind" : "High wind",
+              " \u2014 ",
+              Math.round(r.reportWind),
+              " mph (NOAA)"
+            ] }) : r.gust != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray", children: [
+              r.gust >= 58 ? "Damaging wind" : r.gust >= 45 ? "High wind" : "Gusts",
+              " \u2014 ",
               r.gust,
-              " mph gusts"
+              " mph"
             ] }),
             r.precip != null && r.precip >= 0.5 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
               r.precip.toFixed(2),
@@ -13539,6 +13744,208 @@ async function extractPdfText(file) {
     text += content.items.map((it) => it.str).join(" ") + "\n";
   }
   return text;
+}
+async function renderPdfPages(buf, scale = 1.4) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf");
+  const workerSrc = (await import("pdfjs-dist/legacy/build/pdf.worker.min.js?url")).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+  const doc = await pdfjs.getDocument({ data: buf }).promise;
+  const out = [];
+  const pages = Math.min(doc.numPages, 12);
+  for (let i = 1; i <= pages; i++) {
+    const page = await doc.getPage(i);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    out.push({ dataUrl: canvas.toDataURL("image/png"), w: viewport.width, h: viewport.height });
+  }
+  return out;
+}
+function bytesToDataUrl(bytes, mime) {
+  let bin = "";
+  const chunk = 32768;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return `data:${mime};base64,${btoa(bin)}`;
+}
+function PdfFiller({ open, onClose, onExport }) {
+  const [buf, setBuf] = (0, import_react.useState)(null);
+  const [name, setName] = (0, import_react.useState)("");
+  const [pages, setPages] = (0, import_react.useState)(null);
+  const [fields, setFields] = (0, import_react.useState)([]);
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const [err, setErr] = (0, import_react.useState)("");
+  const [mode, setMode] = (0, import_react.useState)("text");
+  const reset = () => {
+    setBuf(null);
+    setName("");
+    setPages(null);
+    setFields([]);
+    setErr("");
+  };
+  const pillStyle = (active) => ({
+    border: `1.5px solid ${active ? T.accent : S.line}`,
+    background: active ? T.accentSoft : "#fff",
+    color: active ? T.accent : S.ink,
+    borderRadius: 999,
+    padding: "6px 13px",
+    fontSize: 12.5,
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "inherit"
+  });
+  const load = async (file) => {
+    if (!file) return;
+    setBusy(true);
+    setErr("");
+    setFields([]);
+    try {
+      const ab = await file.arrayBuffer();
+      setBuf(ab.slice(0));
+      setName(file.name.replace(/\.pdf$/i, "") + " \u2014 filled.pdf");
+      const rendered = await renderPdfPages(ab.slice(0));
+      if (!rendered.length) throw new Error("empty");
+      setPages(rendered);
+    } catch (e) {
+      setErr("Couldn't open that PDF. Try another file.");
+    }
+    setBusy(false);
+  };
+  const addField = (pageIdx, e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xPct = (e.clientX - rect.left) / rect.width;
+    const yPct = (e.clientY - rect.top) / rect.height;
+    setFields((f) => [...f, { id: uid("fld"), page: pageIdx, xPct, yPct, text: mode === "check" ? "X" : "", size: 12, type: mode }]);
+  };
+  const setField = (id, patch) => setFields((f) => f.map((x) => x.id === id ? { ...x, ...patch } : x));
+  const delField = (id) => setFields((f) => f.filter((x) => x.id !== id));
+  const exportPdf = async () => {
+    if (!buf) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+      const pdf = await PDFDocument.load(buf);
+      const font = await pdf.embedFont(StandardFonts.Helvetica);
+      const pdfPages = pdf.getPages();
+      for (const f of fields) {
+        const page = pdfPages[f.page];
+        if (!page || !String(f.text).trim()) continue;
+        const { width, height } = page.getSize();
+        const size = f.size || 12;
+        const x = f.xPct * width;
+        const y = height - f.yPct * height - size;
+        page.drawText(String(f.text), { x, y, size, font, color: rgb(0.05, 0.05, 0.05) });
+      }
+      const bytes = await pdf.save();
+      onExport(name || "filled.pdf", bytesToDataUrl(bytes, "application/pdf"));
+      reset();
+      onClose();
+    } catch (e) {
+      setErr("Couldn't build the filled PDF.");
+    }
+    setBusy(false);
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open, onClose: () => {
+    reset();
+    onClose();
+  }, title: "Fill a PDF form", tall: true, children: !pages ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 12 }, children: "Upload any PDF \u2014 a carrier form, a permit application, a terms sheet \u2014 then tap to place text and checkmarks on it. Export a real filled PDF that attaches straight to the contract." }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 8,
+      cursor: "pointer",
+      border: `1px solid ${S.line}`,
+      borderRadius: 10,
+      padding: "10px 16px",
+      fontWeight: 600,
+      color: S.ink
+    }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 15 }),
+      " ",
+      busy ? "Opening\u2026" : "Choose PDF",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          type: "file",
+          accept: "application/pdf",
+          style: { display: "none" },
+          onChange: (e) => {
+            load(e.target.files && e.target.files[0]);
+            e.target.value = "";
+          }
+        }
+      )
+    ] }),
+    err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginTop: 10 }, children: err })
+  ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub, fontWeight: 700 }, children: "Tap the page to add:" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => setMode("text"), style: pillStyle(mode === "text"), children: "Text" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => setMode("check"), style: pillStyle(mode === "check"), children: "\u2713 Check" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { marginLeft: "auto", fontSize: 12, color: S.sub }, children: [
+        fields.length,
+        " field",
+        fields.length === 1 ? "" : "s"
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { maxHeight: "52vh", overflowY: "auto", background: S.soft, borderRadius: 10, padding: 8 }, children: pages.map((pg, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { onClick: (e) => addField(i, e), style: {
+      position: "relative",
+      margin: "0 auto 12px",
+      width: "100%",
+      maxWidth: pg.w,
+      cursor: "crosshair",
+      boxShadow: "0 1px 6px rgba(0,0,0,.12)"
+    }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: pg.dataUrl, alt: `Page ${i + 1}`, style: { width: "100%", display: "block", borderRadius: 6 }, draggable: false }),
+      fields.filter((f) => f.page === i).map((f) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { onClick: (e) => e.stopPropagation(), style: {
+        position: "absolute",
+        left: `${f.xPct * 100}%`,
+        top: `${f.yPct * 100}%`,
+        transform: "translateY(-2px)",
+        display: "flex",
+        alignItems: "center",
+        gap: 2
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            value: f.text,
+            onChange: (e) => setField(f.id, { text: e.target.value }),
+            placeholder: f.type === "check" ? "X" : "text",
+            autoFocus: true,
+            style: {
+              font: "600 13px sans-serif",
+              color: "#111",
+              background: "rgba(255,255,120,.55)",
+              border: "1px solid #C9A400",
+              borderRadius: 3,
+              padding: "1px 3px",
+              width: f.type === "check" ? 26 : Math.max(46, (f.text.length + 2) * 8)
+            }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            type: "button",
+            onClick: () => delField(f.id),
+            title: "Remove",
+            style: { border: "none", background: "rgba(180,35,24,.9)", color: "#fff", borderRadius: 3, cursor: "pointer", fontSize: 10, lineHeight: 1, padding: "2px 4px" },
+            children: "\xD7"
+          }
+        )
+      ] }, f.id))
+    ] }, i)) }),
+    err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginTop: 10 }, children: err }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: reset, children: "Start over" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 2 }, onClick: exportPdf, disabled: busy || !fields.some((f) => String(f.text).trim()), children: busy ? "Building\u2026" : "Export filled PDF" })
+    ] })
+  ] }) });
 }
 function MeasureImport({ onApply, toast: toast2 }) {
   const [busy, setBusy] = (0, import_react.useState)(false);
@@ -14189,9 +14596,12 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
     ] })
   ] });
 }
-function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast2, total, onClose }) {
+function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast2, total, onClose, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
+} }) {
   const doc = normalizeProposalDoc(est.doc);
   const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
+  const setDocTpl = (kind) => (list) => setDocTemplates({ ...docTemplates, [kind]: list });
+  const appendText = (cur, body) => cur && cur.trim() ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
   const blocks = doc.blocks || {};
   const [mode, setMode] = (0, import_react.useState)("build");
   const [addOpen, setAddOpen] = (0, import_react.useState)(false);
@@ -14264,7 +14674,7 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "fixed", inset: 0, background: S.bg, zIndex: 60, overflowY: "auto", WebkitOverflowScrolling: "touch" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: coverRef, type: "file", accept: "image/*", onChange: onCover, style: { display: "none" } }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: pdfRef, type: "file", accept: "application/pdf", onChange: onPdf, style: { display: "none" } }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "sticky", top: 0, zIndex: 2, background: "#fff", borderBottom: `1px solid ${S.line}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "sticky", top: 0, zIndex: 2, background: S.card, borderBottom: `1px solid ${S.line}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onClose, style: { border: "none", background: "none", cursor: "pointer", padding: 6, display: "flex" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronLeft, { size: 22, color: S.ink }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 16, fontWeight: 800, color: S.ink }, children: "Proposal builder" }),
@@ -14293,21 +14703,24 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast
     }, children: label }, id)) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "14px 16px 120px" }, children: mode === "build" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Template style" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: PROPOSAL_STYLES.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => !locked && setDoc({ style: s.id }), disabled: locked, style: {
-          flex: "1 1 30%",
-          minWidth: 96,
-          textAlign: "left",
-          cursor: locked ? "default" : "pointer",
-          fontFamily: "inherit",
-          border: `2px solid ${doc.style === s.id ? T.accent : S.line}`,
-          background: doc.style === s.id ? T.accentSoft : "#fff",
-          borderRadius: 12,
-          padding: "11px 12px"
-        }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 800, color: S.ink }, children: s.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 2 }, children: s.blurb })
-        ] }, s.id)) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Cover layout" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Pick how the cover page looks. Add a home photo below and it fills the layout \u2014 no oversized images." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))", gap: 10 }, children: PROPOSAL_STYLES.map((s) => {
+          const on = doc.style === s.id;
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => !locked && setDoc({ style: s.id }), disabled: locked, style: {
+            textAlign: "left",
+            cursor: locked ? "default" : "pointer",
+            fontFamily: "inherit",
+            border: `2px solid ${on ? T.accent : S.line}`,
+            background: on ? T.accentSoft : S.card,
+            borderRadius: 12,
+            padding: 8
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CoverThumb, { style: s.id, accent: T.accent, primary: T.primary }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 800, color: S.ink, marginTop: 7 }, children: s.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, marginTop: 1, lineHeight: 1.35 }, children: s.blurb })
+          ] }, s.id);
+        }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => setAddOpen(true), children: [
@@ -14345,26 +14758,52 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast
               doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setDoc({ coverImage: null }), children: "Remove" })
             ] })
           ] }),
-          sec === "notes" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "textarea",
-            {
-              style: { ...inputStyle, minHeight: 60, marginTop: 8, resize: "vertical", fontFamily: "inherit" },
-              value: doc.notes,
-              disabled: locked,
-              onChange: (e) => setDoc({ notes: e.target.value }),
-              placeholder: "Color selections, access notes, exclusions\u2026"
-            }
-          ),
-          sec === "terms" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "textarea",
-            {
-              style: { ...inputStyle, minHeight: 90, marginTop: 8, resize: "vertical", fontFamily: "inherit" },
-              value: doc.terms,
-              disabled: locked,
-              onChange: (e) => setDoc({ terms: e.target.value }),
-              placeholder: "Payment terms, warranty, change orders\u2026"
-            }
-          ),
+          sec === "notes" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              TemplateBar,
+              {
+                label: "Notes",
+                list: docTemplates.notes,
+                setList: setDocTpl("notes"),
+                value: doc.notes,
+                locked,
+                onApply: (body) => setDoc({ notes: appendText(doc.notes, body) })
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "textarea",
+              {
+                style: { ...inputStyle, minHeight: 60, resize: "vertical", fontFamily: "inherit" },
+                value: doc.notes,
+                disabled: locked,
+                onChange: (e) => setDoc({ notes: e.target.value }),
+                placeholder: "Color selections, access notes, exclusions\u2026"
+              }
+            )
+          ] }),
+          sec === "terms" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              TemplateBar,
+              {
+                label: "Terms",
+                list: docTemplates.terms,
+                setList: setDocTpl("terms"),
+                value: doc.terms,
+                locked,
+                onApply: (body) => setDoc({ terms: appendText(doc.terms, body) })
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "textarea",
+              {
+                style: { ...inputStyle, minHeight: 90, resize: "vertical", fontFamily: "inherit" },
+                value: doc.terms,
+                disabled: locked,
+                onChange: (e) => setDoc({ terms: e.target.value }),
+                placeholder: "Payment terms, warranty, change orders\u2026"
+              }
+            )
+          ] }),
           blocks[sec] && blocks[sec].type === "text" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 8 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
               "input",
@@ -14402,6 +14841,39 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast
     ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProposalPreview, { job, brand: brand2, est, doc, total }) })
   ] });
 }
+function CoverThumb({ style, accent, primary }) {
+  const photo = "linear-gradient(135deg,#9AA6B2,#5B6470)";
+  const line = (w, c = "#C7CBD1") => ({ height: 4, width: w, borderRadius: 2, background: c, marginTop: 4 });
+  const box = { width: "100%", height: 78, borderRadius: 6, overflow: "hidden", border: "1px solid #E5E7EB", background: "#fff" };
+  if (style === "photo") {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { ...box, position: "relative", background: photo }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "absolute", left: 0, right: 0, bottom: 0, height: 30, background: "linear-gradient(transparent,rgba(0,0,0,.75))", padding: 6, boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "flex-end" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { ...line(30, "#fff"), marginTop: 0 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: line(20, "rgba(255,255,255,.7)") })
+    ] }) });
+  }
+  if (style === "bold") {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { ...box, background: primary, padding: 8, boxSizing: "border-box" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 22, borderRadius: 3, background: photo, marginBottom: 6 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { ...line(34, "#fff"), marginTop: 0 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: line(24, "rgba(255,255,255,.55)") })
+    ] });
+  }
+  if (style === "minimal") {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { ...box, padding: 8, boxSizing: "border-box" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { ...line(16, accent), marginTop: 0 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: line(30, "#3F4650") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: line(22) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 18, borderRadius: 3, background: photo, marginTop: 8 } })
+    ] });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { ...box }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 40, background: photo } }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: 8 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { ...line(32, "#3F4650"), marginTop: 0 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: line(24) })
+    ] })
+  ] });
+}
 function ProposalPreview({ job, brand: brand2, est, doc, total }) {
   const blocks = doc.blocks || {};
   const style = doc.style || "classic";
@@ -14409,7 +14881,7 @@ function ProposalPreview({ job, brand: brand2, est, doc, total }) {
   const photoHero = style === "photo" && doc.coverImage;
   const coverWrap = style === "bold" ? { background: T.primary, color: "#fff", padding: 22, borderRadius: 14 } : style === "minimal" ? { padding: "6px 2px" } : { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" };
   const onDark = style === "bold";
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }, children: doc.sections.map((sec) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }, children: doc.sections.map((sec) => {
     if (sec === "cover" && photoHero) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginBottom: 16, position: "relative", borderRadius: 14, overflow: "hidden", minHeight: 300, background: `#111 url(${JSON.stringify(doc.coverImage)}) center/cover no-repeat` }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "absolute", left: 0, right: 0, bottom: 0, padding: 18, background: "linear-gradient(transparent, rgba(0,0,0,.78))", color: "#fff" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800 }, children: title }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 10, fontSize: 13.5 }, children: [
@@ -14426,7 +14898,7 @@ function ProposalPreview({ job, brand: brand2, est, doc, total }) {
       ] })
     ] }) }, sec);
     if (sec === "cover") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16, ...coverWrap }, children: [
-      doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "", style: { width: "100%", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 } }),
+      doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "", style: { width: "100%", height: 400, objectFit: "cover", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 } }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: style === "bold" ? 0 : style === "minimal" ? "10px 0" : 16 }, children: [
         brand2.logo && !onDark ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "", style: { height: 34, objectFit: "contain", marginBottom: 8, display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontWeight: 800, fontSize: 17, marginBottom: 4, color: onDark ? "#fff" : S.ink }, children: brand2.company }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800, color: onDark ? "#fff" : brand2.primary }, children: title }),
@@ -14474,8 +14946,87 @@ function ProposalPreview({ job, brand: brand2, est, doc, total }) {
     return null;
   }) });
 }
+function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
+  const [naming, setNaming] = (0, import_react.useState)(false);
+  const [name, setName] = (0, import_react.useState)("");
+  const save = () => {
+    const body = String(value || "").trim();
+    const nm = name.trim();
+    if (!body || !nm) return;
+    setList([...list.filter((t) => t.name.toLowerCase() !== nm.toLowerCase()), { id: uid("tpl"), name: nm, body }]);
+    setName("");
+    setNaming(false);
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 8 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11.5, color: S.sub, fontWeight: 700 }, children: [
+      label,
+      " templates:"
+    ] }),
+    list.length === 0 && !naming && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub }, children: "none saved" }),
+    list.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", border: `1px solid ${S.line}`, borderRadius: 999, overflow: "hidden" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => onApply(t.body), disabled: locked, style: {
+        border: "none",
+        background: S.card,
+        color: T.accent,
+        fontSize: 12,
+        fontWeight: 700,
+        padding: "5px 10px",
+        cursor: locked ? "not-allowed" : "pointer",
+        fontFamily: "inherit"
+      }, children: t.name }),
+      !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => setList(list.filter((x) => x.id !== t.id)), title: "Delete template", style: {
+        border: "none",
+        borderLeft: `1px solid ${S.line}`,
+        background: S.card,
+        color: "#B42318",
+        padding: "5px 8px",
+        cursor: "pointer",
+        fontSize: 12,
+        lineHeight: 1
+      }, children: "\xD7" })
+    ] }, t.id)),
+    !locked && (naming ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", gap: 6, alignItems: "center" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          autoFocus: true,
+          style: { ...inputStyle, height: 30, width: 150, fontSize: 12.5 },
+          value: name,
+          placeholder: "Template name",
+          onChange: (e) => setName(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              save();
+            }
+            if (e.key === "Escape") {
+              setNaming(false);
+              setName("");
+            }
+          }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, onClick: save, disabled: !name.trim() || !String(value || "").trim(), children: "Save" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => {
+        setNaming(false);
+        setName("");
+      }, style: { border: "none", background: "none", color: S.sub, cursor: "pointer", fontSize: 12 }, children: "Cancel" })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => setNaming(true), disabled: !String(value || "").trim(), style: {
+      border: `1px dashed ${S.line}`,
+      background: S.card,
+      color: String(value || "").trim() ? T.accent : S.sub,
+      borderRadius: 999,
+      padding: "5px 10px",
+      fontSize: 12,
+      fontWeight: 700,
+      cursor: String(value || "").trim() ? "pointer" : "not-allowed",
+      fontFamily: "inherit"
+    }, children: "+ Save current" }))
+  ] });
+}
 function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates = [], setEstimateTemplates = () => {
-}, priceList = [] }) {
+}, priceList = [], docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
+} }) {
   const est = { ...job.estimate, tiers: job.estimate.tiers || [], upgrades: job.estimate.upgrades || [] };
   const [sigOpen, setSigOpen] = (0, import_react.useState)(false);
   const locked = est.status === "Signed";
@@ -14511,6 +15062,12 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
   const setUpgrade = (id, k, v) => recompute({ upgrades: est.upgrades.map((u) => u.id === id ? { ...u, [k]: v } : u) });
   const toggleUpgrade = (id, checked) => recompute({ upgrades: est.upgrades.map((u) => u.id === id ? { ...u, selected: checked } : u) });
   const removeUpgrade = (id) => recompute({ upgrades: est.upgrades.filter((u) => u.id !== id) });
+  const setConcealed = (id, k, v) => setEst({ concealed: est.concealed.map((x) => x.id === id ? { ...x, [k]: v } : x) });
+  const toggleConcealed = (id, on) => setConcealed(id, "on", on);
+  const addConcealed = () => setEst({ concealed: [...est.concealed, { id: uid("cc"), desc: "", unit: "per unit", price: 0, on: true, custom: true }] });
+  const removeConcealed = (id) => setEst({ concealed: est.concealed.filter((x) => x.id !== id) });
+  const setDocTpl = (kind) => (list) => setDocTemplates({ ...docTemplates, [kind]: list });
+  const appendText = (cur, body) => cur && cur.trim() ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
   const [adjMode, setAdjMode] = (0, import_react.useState)("margin");
   const [adjPct, setAdjPct] = (0, import_react.useState)("");
   const applyPricing = () => {
@@ -14643,10 +15200,44 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "soft", small: true, onClick: () => setBuilderOpen(true), children: "Open builder" }), children: "Proposal document" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: "Opens the full-page proposal builder: pick a template style, add and reorder sections, write custom sections, attach PDFs, and control what pricing the customer sees \u2014 then preview and export." })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Pick a cover layout below, or tap Open builder for the full editor \u2014 add and reorder sections, write custom sections, attach PDFs, and control what pricing the customer sees, then preview and export." }),
+      (() => {
+        const pdoc = normalizeProposalDoc(est.doc);
+        const setStyle = (id) => setEst({ doc: { ...pdoc, style: id } });
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 800, color: S.sub, letterSpacing: 0.3, marginBottom: 8 }, children: "COVER LAYOUT" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))", gap: 10 }, children: PROPOSAL_STYLES.map((s) => {
+            const on = pdoc.style === s.id;
+            return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => !locked && setStyle(s.id), disabled: locked, style: {
+              textAlign: "left",
+              cursor: locked ? "default" : "pointer",
+              fontFamily: "inherit",
+              border: `2px solid ${on ? T.accent : S.line}`,
+              background: on ? T.accentSoft : S.card,
+              borderRadius: 12,
+              padding: 8
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CoverThumb, { style: s.id, accent: T.accent, primary: T.primary }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 800, color: S.ink, marginTop: 7 }, children: s.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, marginTop: 1, lineHeight: 1.35 }, children: s.blurb })
+            ] }, s.id);
+          }) })
+        ] });
+      })()
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Scope of work" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        TemplateBar,
+        {
+          label: "Scope",
+          list: docTemplates.scope,
+          setList: setDocTpl("scope"),
+          value: est.scope,
+          locked,
+          onApply: (body) => setEst({ scope: appendText(est.scope, body) })
+        }
+      ),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "textarea",
         {
@@ -14727,29 +15318,68 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Concealed conditions \u2014 unit pricing" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10 }, children: "Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented." }),
-      est.concealed.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, fontSize: 13, color: S.ink }, children: [
-          c.desc,
-          " ",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub }, children: [
-            "(",
-            c.unit,
-            ")"
-          ] })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
-          {
-            style: { ...inputStyle, width: 90, textAlign: "right" },
-            value: c.price,
-            disabled: locked,
-            inputMode: "decimal",
-            onChange: (e) => setEst({ concealed: est.concealed.map((x) => x.id === c.id ? { ...x, price: e.target.value } : x) })
-          }
-        )
-      ] }, c.id))
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10 }, children: "Pre-agreed pricing for conditions found after tear-off. Check the ones that apply to this roof and set the price \u2014 only the checked rows print on the estimate and contract. Billed as change orders only when found and documented." }),
+      est.concealed.map((c) => {
+        const on = c.on !== false;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              type: "checkbox",
+              checked: on,
+              disabled: locked,
+              style: { width: 18, height: 18, accentColor: T.accent, flexShrink: 0 },
+              onChange: (e) => toggleConcealed(c.id, e.target.checked)
+            }
+          ),
+          c.custom ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: { ...inputStyle, flex: 1, opacity: on ? 1 : 0.55 },
+                value: c.desc,
+                disabled: locked,
+                placeholder: "Condition (e.g. chimney flashing rebuild)",
+                onChange: (e) => setConcealed(c.id, "desc", e.target.value)
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: { ...inputStyle, width: 92, fontSize: 12.5, opacity: on ? 1 : 0.55 },
+                value: c.unit,
+                disabled: locked,
+                placeholder: "per unit",
+                onChange: (e) => setConcealed(c.id, "unit", e.target.value)
+              }
+            )
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, fontSize: 13, color: S.ink, opacity: on ? 1 : 0.55 }, children: [
+            c.desc,
+            " ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub }, children: [
+              "(",
+              c.unit,
+              ")"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: { ...inputStyle, width: 82, textAlign: "right", opacity: on ? 1 : 0.55 },
+              value: c.price,
+              disabled: locked,
+              inputMode: "decimal",
+              onChange: (e) => setConcealed(c.id, "price", e.target.value)
+            }
+          ),
+          !locked && c.custom && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeConcealed(c.id), style: { border: "none", background: "none", cursor: "pointer" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
+        ] }, c.id);
+      }),
+      !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { marginTop: 6 }, onClick: addConcealed, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }),
+        " Add custom condition"
+      ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Acceptance" }),
@@ -14927,17 +15557,30 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
         locked,
         toast: toast2,
         total,
-        onClose: () => setBuilderOpen(false)
+        onClose: () => setBuilderOpen(false),
+        docTemplates,
+        setDocTemplates
       }
     )
   ] });
 }
 function TabContract({ job, brand: brand2, setBrand = () => {
-}, mut, toast: toast2 }) {
+}, mut, toast: toast2, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
+} }) {
   const con = job.contract;
   const [sigFor, setSigFor] = (0, import_react.useState)(null);
+  const [fillerOpen, setFillerOpen] = (0, import_react.useState)(false);
   const locked = con.status === "Signed";
   const setCon = (patch) => mut((j) => ({ ...j, contract: { ...j.contract, ...patch } }));
+  const setDocTpl = (kind) => (list) => setDocTemplates({ ...docTemplates, [kind]: list });
+  const appendText = (cur, body) => cur && cur.trim() ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
+  const addAttachment = (file) => {
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => setCon({ attachments: [...con.attachments || [], { id: uid("att"), name: file.name, dataUrl: String(r.result) }] });
+    r.readAsDataURL(file);
+  };
+  const removeAttachment = (id) => setCon({ attachments: (con.attachments || []).filter((a) => a.id !== id) });
   const estTotal = estimateTotal(job.estimate);
   const depositMode = con.depositMode || "pct";
   const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
@@ -15096,6 +15739,17 @@ function TabContract({ job, brand: brand2, setBrand = () => {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Terms" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        TemplateBar,
+        {
+          label: "Terms",
+          list: docTemplates.terms,
+          setList: setDocTpl("terms"),
+          value: con.terms,
+          locked,
+          onApply: (body) => setCon({ terms: appendText(con.terms, body) })
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "textarea",
         {
           style: { ...inputStyle, minHeight: 130, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.6 },
@@ -15112,6 +15766,63 @@ function TabContract({ job, brand: brand2, setBrand = () => {
         brand2.contractTerms && brand2.contractTerms !== con.terms && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => setCon({ terms: brand2.contractTerms }), children: "Load company default" })
       ] })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "gray", children: [
+        (con.attachments || []).length,
+        " on file"
+      ] }), children: "Attachments \u2014 T&C, addenda, filled forms" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Upload a signed terms & conditions PDF, an addendum, or a filled PDF form. Attachments embed in the printed and portal contract. Use the PDF filler below to complete a blank form first." }),
+      (con.attachments || []).map((a) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", padding: "8px 0", borderTop: `1px solid ${S.line}` }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.FileText, { size: 15, color: T.accent, style: { flexShrink: 0 } }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: a.dataUrl, target: "_blank", rel: "noreferrer", style: { flex: 1, minWidth: 0, fontSize: 13, color: S.ink, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: a.name }),
+        !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeAttachment(a.id), style: { border: "none", background: "none", cursor: "pointer" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
+      ] }, a.id)),
+      !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: {
+          cursor: "pointer",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          border: `1px solid ${S.line}`,
+          borderRadius: 10,
+          padding: "7px 12px",
+          fontSize: 13,
+          fontWeight: 600,
+          color: S.ink,
+          background: S.card
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 14 }),
+          " Upload PDF",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              type: "file",
+              accept: "application/pdf",
+              style: { display: "none" },
+              onChange: (e) => {
+                addAttachment(e.target.files && e.target.files[0]);
+                e.target.value = "";
+              }
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => setFillerOpen(true), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.PenLine, { size: 14 }),
+          " Fill a PDF form"
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      PdfFiller,
+      {
+        open: fillerOpen,
+        onClose: () => setFillerOpen(false),
+        onExport: (name, dataUrl) => {
+          setCon({ attachments: [...con.attachments || [], { id: uid("att"), name, dataUrl }] });
+          toast2("Filled PDF attached to the contract");
+        }
+      }
+    ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Signatures" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 14, flexWrap: "wrap" }, children: [
@@ -15352,11 +16063,11 @@ function TabMessages({ job, mut, toast: toast2, brand: brand2, templates, crews,
       }]
     }));
     if (compose === "sms") {
-      const auth = AUTH();
-      if (auth && auth.sendSms) {
+      const auth2 = AUTH();
+      if (auth2 && auth2.sendSms) {
         setSending(true);
         try {
-          await auth.sendSms({ to: addr, body, jobId: job.id });
+          await auth2.sendSms({ to: addr, body, jobId: job.id });
           record("Sent");
           setCompose(null);
           toast2("Text sent");
@@ -15376,9 +16087,27 @@ function TabMessages({ job, mut, toast: toast2, brand: brand2, templates, crews,
       return;
     }
     const myGmail = (integrations.gmailByUser || {})[currentUser.id] || { connected: false };
-    record(myGmail.connected ? "Sent" : "Queued \u2014 no provider connected");
+    const auth = AUTH();
+    if (myGmail.connected && auth && auth.sendGmail) {
+      setSending(true);
+      try {
+        await auth.sendGmail({ to: addr, subject, body });
+        record("Sent");
+        setCompose(null);
+        toast2(`Email sent${myGmail.email ? ` from ${myGmail.email}` : ""}`);
+      } catch (e) {
+        const m = e && e.message || "Could not send";
+        const notSetUp = /not configured|Function not found|Failed to send a request|non-2xx|isn't connected/i.test(m);
+        record(notSetUp ? "Queued \u2014 email not set up yet" : `Failed \u2014 ${m}`);
+        toast2(notSetUp ? "Email sending isn't deployed yet \u2014 saved to the thread" : `Gmail: ${m}`);
+        setCompose(null);
+      }
+      setSending(false);
+      return;
+    }
+    record("Queued \u2014 no provider connected");
     setCompose(null);
-    toast2(myGmail.connected ? "Message sent" : "Saved to thread \u2014 connect a provider to deliver");
+    toast2("Saved to thread \u2014 connect your Gmail to deliver");
   };
   const available = templates.filter((t) => t.kind === compose);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -15459,7 +16188,7 @@ function TabMessages({ job, mut, toast: toast2, brand: brand2, templates, crews,
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: T.primary, margin: "8px 0" }, children: "START FROM A TEMPLATE" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }, children: available.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { type: "button", onClick: () => applyTemplate(t), style: {
               border: `1px solid ${S.line}`,
-              background: "#fff",
+              background: S.card,
               borderRadius: 999,
               padding: "7px 12px",
               fontSize: 12.5,
@@ -15571,7 +16300,11 @@ function CompanyCamJobCard({ job, mut, toast: toast2, ccToken }) {
       )
     ] }),
     err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "CompanyCam", tone: "red", children: err }),
-    cors && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Your browser blocked the request", tone: "amber", children: "CompanyCam did not send the cross-origin headers a browser needs to call it directly. This needs a small Edge Function to relay the calls server-side \u2014 say the word and I will write it." })
+    cors && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Needs the CompanyCam relay", tone: "amber", children: [
+      "CompanyCam doesn't send the cross-origin headers a browser needs to call it directly. Deploy the ",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "companycam-proxy" }),
+      " Edge Function (see DEPLOY.md) and this connects."
+    ] })
   ] });
 }
 function TabPhotos({ job, mut, toast: toast2, ccToken }) {
@@ -17281,7 +18014,7 @@ function TabPortal({ job, brand: brand2, mut, toast: toast2, currentUser, stageL
               onClick: () => move(-1),
               style: {
                 border: `1px solid ${S.line}`,
-                background: "#fff",
+                background: S.card,
                 borderRadius: 7,
                 width: 28,
                 height: 28,
@@ -17301,7 +18034,7 @@ function TabPortal({ job, brand: brand2, mut, toast: toast2, currentUser, stageL
               onClick: () => move(1),
               style: {
                 border: `1px solid ${S.line}`,
-                background: "#fff",
+                background: S.card,
                 borderRadius: 7,
                 width: 28,
                 height: 28,
@@ -17323,7 +18056,7 @@ function TabPortal({ job, brand: brand2, mut, toast: toast2, currentUser, stageL
             background: on ? T.accent : "#D6D9DE",
             position: "relative",
             transition: "background .15s"
-          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" } }) })
+          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: S.card, transition: "left .15s" } }) })
         ] }, sid);
       }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -17727,7 +18460,7 @@ function ClaimAssistant() {
     ] }),
     msgs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", marginBottom: 8 }, children: "TRY ASKING" }),
-      SUGGESTIONS.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => ask(s), style: { display: "block", width: "100%", textAlign: "left", border: `1px solid ${S.line}`, background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 8, fontSize: 13, color: S.ink, cursor: "pointer", fontFamily: "inherit", lineHeight: 1.4 }, children: s }, s))
+      SUGGESTIONS.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => ask(s), style: { display: "block", width: "100%", textAlign: "left", border: `1px solid ${S.line}`, background: S.card, borderRadius: 10, padding: "10px 12px", marginBottom: 8, fontSize: 13, color: S.ink, cursor: "pointer", fontFamily: "inherit", lineHeight: 1.4 }, children: s }, s))
     ] }),
     msgs.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { ref: scrollRef, style: { marginTop: 12, maxHeight: "56vh", overflowY: "auto" }, children: [
       msgs.map((m, i) => m.role === "user" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", margin: "8px 0" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: T.accent, color: "#fff", borderRadius: "14px 14px 3px 14px", padding: "9px 13px", fontSize: 13.5, maxWidth: "85%", lineHeight: 1.45 }, children: m.text }) }, i) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { margin: "8px 0" }, children: [
@@ -17786,7 +18519,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2, onSaveDept = () 
   }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
   const kbHits = (() => {
     const q = kbQ.trim().toLowerCase();
     if (!q) return null;
@@ -17821,6 +18554,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2, onSaveDept = () 
       color: tab === id ? "#fff" : S.ink
     }, children: label }, id)) }),
     tab === "ask" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimAssistant, {}),
+    tab === "storm" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StormScout, { toast: toast2 }),
     tab === "search" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "input",
@@ -18166,7 +18900,10 @@ Authority: ${c.cite}`;
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Edition", v: juris.codeEdition }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Adoption", v: juris.adoption }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Permits", v: juris.permit }),
-          juris.sources && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8 }, children: juris.sources.map((sid) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SourceLink, { srcId: sid }, sid)) }),
+          juris.sources && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8 }, children: juris.sources.map((sid) => sid === "MUNICODE" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(AssistLink, { href: municodeUrl(juris.state, juris.city), children: [
+            "Municode \u2014 ",
+            juris.city ? `${juris.city}, ${juris.state}` : `${juris.state} ordinances`
+          ] }, sid) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SourceLink, { srcId: sid }, sid)) }),
           !juris.verified && juris.precision === "market" && juris.needsContact && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "City and county confirmed; office not yet on file", children: "Ohio and Kentucky both run statewide residential codes, so the code basis above is right for this address. What is missing is which building department issues the permit \u2014 add it below the first time you call them and it is saved for everyone." }),
           !juris.verified && juris.precision !== "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Before field use", children: "Open the official source above, confirm the adopted edition and local amendments, and have the office mark this jurisdiction verified with a date and initials." })
         ] }),
@@ -18220,8 +18957,18 @@ Authority: ${c.cite}`;
                 }
               )
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: "Saved against this ZIP for the whole company, so nobody has to look it up twice." })
-          ] }) : juris.needsContact ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55 }, children: "Not on file yet. Rather than print a number that might be wrong, this stays blank until someone confirms it \u2014 a dead line on a permit call costs more than an empty field." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 4 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistLink, { href: deptSearchUrl(juris.city, juris.state), children: "Find building department" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistLink, { href: municodeUrl(juris.state, juris.city), children: "Municode ordinances" })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: "Assisted lookup \u2014 no free nationwide directory exists, so these open a scoped search and the municipal code. Confirm the office, then Save it against this ZIP for the whole company so nobody has to look it up twice." })
+          ] }) : juris.needsContact ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55 }, children: "Not on file yet. Rather than print a number that might be wrong, this stays blank until someone confirms it \u2014 a dead line on a permit call costs more than an empty field." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 6 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistLink, { href: deptSearchUrl(juris.city, juris.state), children: "Find building department" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistLink, { href: municodeUrl(juris.state, juris.city), children: "Municode ordinances" })
+            ] })
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Office", v: juris.inspector.office || "\u2014" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Phone", v: juris.inspector.phone ? fmtPhone(juris.inspector.phone) : "\u2014" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Address", v: juris.inspector.address || "\u2014" }),
@@ -18284,7 +19031,7 @@ Authority: ${c.cite}`;
       const Icon = sec.icon;
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setResourcePage(sec.id), style: {
         textAlign: "left",
-        background: "#fff",
+        background: S.card,
         border: `1px solid ${S.line}`,
         borderRadius: 14,
         padding: 16,
@@ -18460,7 +19207,7 @@ function Toggle({ on, onClick }) {
     background: on ? T.accent : "#D6D9DE",
     position: "relative",
     flexShrink: 0
-  }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" } }) });
+  }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: S.card, transition: "left .15s" } }) });
 }
 var REVIEW_STEPS = [
   {
@@ -18900,7 +19647,7 @@ function EmojiPicker({ onPick, onClose }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
     border: `1px solid ${S.line}`,
     borderRadius: 12,
-    background: "#fff",
+    background: S.card,
     boxShadow: "0 8px 24px rgba(16,24,40,.12)",
     padding: 10,
     marginBottom: 8
@@ -19111,7 +19858,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
                 }, style: {
                   marginTop: 6,
                   border: `1px solid ${S.line}`,
-                  background: "#fff",
+                  background: S.card,
                   borderLeft: `3px solid ${T.accent}`,
                   borderRadius: 7,
                   padding: "7px 10px",
@@ -19170,7 +19917,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
                 }, children: [
                   CHAT_EMOJI.map((e2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => toggleReaction(m.id, e2), style: {
                     border: `1px solid ${S.line}`,
-                    background: "#fff",
+                    background: S.card,
                     borderRadius: 8,
                     width: 32,
                     height: 32,
@@ -19180,7 +19927,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
                   }, children: e2 }, e2)),
                   /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setReactFor(reactFor === m.id ? null : m.id), "aria-label": "More reactions", style: {
                     border: `1px solid ${S.line}`,
-                    background: "#fff",
+                    background: S.card,
                     borderRadius: 8,
                     width: 32,
                     height: 32,
@@ -19194,7 +19941,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
                     setActionsFor(null);
                   }, style: {
                     border: `1px solid ${S.line}`,
-                    background: "#fff",
+                    background: S.card,
                     borderRadius: 8,
                     height: 32,
                     padding: "0 10px",
@@ -19251,7 +19998,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
       left: 0,
       right: 0,
       bottom: 86,
-      background: "#fff",
+      background: S.card,
       borderTop: `1px solid ${S.line}`,
       padding: "10px 16px",
       zIndex: 40
@@ -19260,7 +20007,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
       left: 0,
       right: 0,
       bottom: 86,
-      background: "#fff",
+      background: S.card,
       borderTop: `1px solid ${S.line}`,
       padding: "10px 16px"
     }, children: [
@@ -19279,7 +20026,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
           onClose: () => setEmojiOpen(false)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 12, background: "#fff", overflow: "hidden" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 12, background: S.card, overflow: "hidden" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "textarea",
           {
@@ -19681,7 +20428,7 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast: toast2, brandE
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 14 }, children: "One place for company identity. Login, documents, the client portal, and review messages all read from here \u2014 colors repaint the whole app the moment you change them." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Logo", hint: "Shows on the login screen, the loading screen, and document headers. PNG with a transparent background works best.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 14 }, children: [
-        brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "Company logo", style: { height: 56, maxWidth: 160, objectFit: "contain", borderRadius: 8, border: `1px solid ${S.line}`, padding: 4, background: "#fff" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: T.primary, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }, children: brand2.short }),
+        brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "Company logo", style: { height: 56, maxWidth: 160, objectFit: "contain", borderRadius: 8, border: `1px solid ${S.line}`, padding: 4, background: S.card } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: T.primary, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }, children: brand2.short }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => logoRef.current && logoRef.current.click(), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
@@ -19734,7 +20481,7 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast: toast2, brandE
             cursor: "pointer",
             background: on ? T.accent : "#D6D9DE",
             position: "relative"
-          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" } }) })
+          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: S.card, transition: "left .15s" } }) })
         ] }, k);
       })
     ] }),
@@ -20336,7 +21083,7 @@ function TemplateManager({ templates, setTemplates, currentUser, onBack, toast: 
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: T.primary, marginBottom: 8 }, children: "INSERT A MERGE FIELD" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 }, children: MERGE_FIELDS.map(([token, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", title: label, onClick: () => insertField(token), style: {
             border: `1px solid ${S.line}`,
-            background: "#fff",
+            background: S.card,
             borderRadius: 999,
             padding: "6px 11px",
             fontSize: 12,
@@ -20728,6 +21475,38 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast: toast2
 }
 var CC_API = "https://api.companycam.com/v2";
 async function ccFetch(token, path, opts = {}) {
+  const sb = typeof window !== "undefined" ? window.__SUPABASE__ : null;
+  if (sb && sb.functions) {
+    const { data, error } = await sb.functions.invoke("companycam-proxy", {
+      body: {
+        token,
+        path,
+        method: opts.method || "GET",
+        payload: opts.body ? (() => {
+          try {
+            return JSON.parse(opts.body);
+          } catch {
+            return opts.body;
+          }
+        })() : void 0
+      }
+    });
+    if (error) {
+      const msg = error && error.message || "";
+      if (/not found|Failed to send|FunctionsFetch|404|Failed to fetch/i.test(msg)) {
+        const err = new Error("blocked");
+        err.cors = true;
+        throw err;
+      }
+      throw new Error(msg || "CompanyCam proxy error");
+    }
+    const status = data && data.status;
+    if (status === 401 || status === 403) throw new Error("That token was rejected by CompanyCam.");
+    if (data && data.error) throw new Error(data.error);
+    if (status != null && (status < 200 || status >= 300)) throw new Error("CompanyCam returned " + status + ".");
+    if (status === 204) return null;
+    return data ? data.body : null;
+  }
   let res;
   try {
     res = await fetch(CC_API + path, {
@@ -20804,6 +21583,123 @@ async function ccSaveToken(userId, value) {
     return false;
   }
 }
+function newCalToken() {
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, "");
+  } catch (e) {
+  }
+  return (uid("cal") + uid("cal") + uid("cal")).replace(/[^a-z0-9]/gi, "");
+}
+async function calLoadToken(userId) {
+  const db = DB();
+  if (!db || !userId) return null;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    return data && data.data && data.data.calendarToken || null;
+  } catch (e) {
+    return null;
+  }
+}
+async function calSaveToken(userId, value) {
+  const db = DB();
+  if (!db || !userId) return false;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    const next = { ...data && data.data || {}, calendarToken: value };
+    const { error } = await db.from("crm_user_integrations").upsert({ user_id: userId, data: next, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+    return !error;
+  } catch (e) {
+    return false;
+  }
+}
+function calFeedUrl(token, scheme = "https") {
+  const sb = typeof window !== "undefined" ? window.__SUPABASE__ : null;
+  const base = sb && sb.supabaseUrl;
+  if (!base) return null;
+  const m = String(base).match(/https:\/\/([^.]+)\.supabase\.co/);
+  const host = m ? `${m[1]}.functions.supabase.co` : null;
+  if (!host) return null;
+  return `${scheme}://${host}/calendar-feed?token=${encodeURIComponent(token)}`;
+}
+function CalendarSync({ currentUser, toast: toast2 }) {
+  const [token, setToken] = (0, import_react.useState)(null);
+  const [loaded, setLoaded] = (0, import_react.useState)(false);
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  (0, import_react.useEffect)(() => {
+    let alive = true;
+    if (!currentUser || !liveAuth()) {
+      setLoaded(true);
+      return;
+    }
+    calLoadToken(currentUser.id).then((t) => {
+      if (alive) {
+        setToken(t);
+        setLoaded(true);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [currentUser && currentUser.id]);
+  const enable = async () => {
+    setBusy(true);
+    const t = newCalToken();
+    const okSaved = await calSaveToken(currentUser.id, t);
+    setBusy(false);
+    if (okSaved) {
+      setToken(t);
+      toast2("Calendar sync enabled");
+    } else toast2("Couldn't enable sync \u2014 try again once you're online");
+  };
+  const rotate = async () => {
+    setBusy(true);
+    const t = newCalToken();
+    const okSaved = await calSaveToken(currentUser.id, t);
+    setBusy(false);
+    if (okSaved) {
+      setToken(t);
+      toast2("Old link revoked \u2014 resubscribe with the new one");
+    }
+  };
+  const https = token && calFeedUrl(token, "https");
+  const webcal = token && calFeedUrl(token, "webcal");
+  const googleAdd = https && `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(webcal || https)}`;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: token ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "On" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Off" }), children: "Calendar sync \u2014 iPhone & Google" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 10 }, children: "Subscribe your phone's calendar to your RoofStride appointments. It's read-only and updates on its own (about hourly) \u2014 reschedule in the app and the calendar follows. Anyone with the link can see your appointments, so keep it private." }),
+    !liveAuth() ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Needs the backend", children: "Connect Supabase to generate your personal calendar link." }) : !loaded ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "Checking\u2026" }) : !token ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { onClick: enable, disabled: busy, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Calendar, { size: 15 }),
+      " ",
+      busy ? "Enabling\u2026" : "Enable calendar sync"
+    ] }) : !https ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Almost there", tone: "amber", children: [
+      "Sync is enabled, but the calendar-feed function isn't deployed yet. See DEPLOY.md (",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "supabase functions deploy calendar-feed --no-verify-jwt" }),
+      ")."
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: webcal, style: { textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Calendar, { size: 14 }),
+          " Add to Apple Calendar"
+        ] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: googleAdd, target: "_blank", rel: "noreferrer", style: { textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Calendar, { size: 14 }),
+          " Add to Google Calendar"
+        ] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => {
+          try {
+            navigator.clipboard.writeText(https);
+            toast2("Link copied");
+          } catch {
+            toast2("Copy this link manually");
+          }
+        }, children: "Copy link" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 10, fontSize: 11.5, color: S.sub, wordBreak: "break-all", background: S.soft, borderRadius: 8, padding: "8px 10px" }, children: https }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: "On iPhone the Apple button opens Settings to add the subscription. On Google, paste the link under Other calendars \u2192 From URL if the button doesn't prompt." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: rotate, disabled: busy, style: { ...linkBtn, marginTop: 10, color: "#B42318" }, children: "Revoke & make a new link" })
+    ] })
+  ] });
+}
 function CompanyCamConnect({ onConnect }) {
   const [token, setToken] = (0, import_react.useState)("");
   const [busy, setBusy] = (0, import_react.useState)(false);
@@ -20841,7 +21737,11 @@ function CompanyCamConnect({ onConnect }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, disabled: !token.trim() || busy, onClick: connect, children: busy ? "Checking\u2026" : "Connect" })
     ] }),
     err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "CompanyCam rejected that", tone: "red", children: err }),
-    cors && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Your browser blocked the request", tone: "amber", children: "The token may be perfectly good \u2014 CompanyCam did not send the cross-origin headers a browser needs to call it directly from a web app. This one needs a small Edge Function to relay the calls from the server side. Tell me and I will write it; it is the same shape as the Twilio one." })
+    cors && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Needs the CompanyCam relay", tone: "amber", children: [
+      "The token may be perfectly good \u2014 CompanyCam doesn't send the cross-origin headers a browser needs to call it directly, so the app routes through a small server relay. Deploy the ",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "companycam-proxy" }),
+      "Edge Function (see DEPLOY.md) and this connects. It's the same shape as the Twilio one."
+    ] })
   ] });
 }
 function Integrations({ integrations, setIntegrations, currentUser, users = [], onBack, toast: toast2, ccAutoCreate = true, setCcAutoCreate = () => {
@@ -20867,7 +21767,14 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
             kind: "danger",
             small: true,
             style: { marginTop: 12 },
-            onClick: () => {
+            onClick: async () => {
+              const a = AUTH();
+              if (a && a.gmailDisconnect) {
+                try {
+                  await a.gmailDisconnect();
+                } catch (e) {
+                }
+              }
               setMyGmail({ connected: false });
               toast2("Gmail disconnected");
             },
@@ -20895,13 +21802,21 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 5 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "4." }),
-            " Credentials \u2192 Create credentials \u2192 OAuth client ID \u2192 Web application. Under Authorized redirect URIs, add this app's address followed by ",
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "/auth/gmail" }),
-            "."
+            " Credentials \u2192 Create credentials \u2192 OAuth client ID \u2192 Web application. Under Authorized redirect URIs, add this app's address with a trailing slash (e.g. ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "https://roofstride.com/" }),
+            ")."
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 5 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "5." }),
-            " Copy the Client ID and Client Secret, then send them over so the token-exchange function can be deployed. The secret must live on the server \u2014 never in the app."
+            " Set ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "VITE_GOOGLE_CLIENT_ID" }),
+            " in Vercel to the Client ID, and the Client Secret as a Supabase secret (",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "GOOGLE_CLIENT_SECRET" }),
+            "); deploy ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "gmail-oauth" }),
+            " and ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "gmail-send" }),
+            ". See DEPLOY.md. The secret must live on the server \u2014 never in the app."
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontWeight: 800, fontSize: 12.5, color: S.sub, margin: "12px 0 6px" }, children: "THEN, EACH REP" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 5 }, children: [
@@ -20914,7 +21829,18 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: "That's it \u2014 customer emails then send from your address and replies land in your own inbox." })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%", marginTop: 12 }, onClick: () => setConnecting("gmail"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%", marginTop: 12 }, onClick: () => {
+          const a = AUTH();
+          if (!a || !a.gmailConnect) {
+            toast2("Connect isn't available in demo mode");
+            return;
+          }
+          try {
+            a.gmailConnect();
+          } catch (e) {
+            toast2(e && e.message ? e.message : "Gmail sending isn't configured yet \u2014 see DEPLOY.md");
+          }
+        }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Mail, { size: 15 }),
           " Connect my Gmail"
         ] })
@@ -21041,6 +21967,7 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
         ] })
       ] })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CalendarSync, { currentUser, toast: toast2 }),
     (() => {
       const g = integrations.googleReviews || {};
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
@@ -21372,12 +22299,49 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast: toast2
   const valid = f.name.trim() && /\S+@\S+\.\S+/.test(f.email.trim()) && !emailTaken;
   const [saving, setSaving] = (0, import_react.useState)(false);
   const [seatErr, setSeatErr] = (0, import_react.useState)("");
+  const [billingBusy, setBillingBusy] = (0, import_react.useState)(false);
+  const [tenant, setTenant] = (0, import_react.useState)(null);
+  (0, import_react.useEffect)(() => {
+    const auth = AUTH();
+    if (!auth || !auth.myTenant) return;
+    let alive = true;
+    auth.myTenant().then((t) => {
+      if (alive) setTenant(t);
+    }).catch(() => {
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const activeCount = users.filter((u) => u.active).length;
+  const plan = tenant && tenant.plan;
+  const seatsIncluded = tenant ? plan === "unlimited" ? PRODUCT.unlimitedSeatCap : PRODUCT.baseSeats + (tenant.seats_paid || 0) : null;
+  const atLimit = seatsIncluded != null && activeCount >= seatsIncluded;
+  const manageBilling = async () => {
+    const auth = AUTH();
+    if (!auth || !auth.manageBilling) {
+      toast2("Billing portal isn't available yet \u2014 contact support@roofstride.com");
+      return;
+    }
+    setBillingBusy(true);
+    try {
+      await auth.manageBilling();
+    } catch (e) {
+      toast2(e && e.message ? e.message : "Couldn't open the billing portal");
+    }
+    setBillingBusy(false);
+  };
   const save = async () => {
     const auth = AUTH();
     setSeatErr("");
     setSaving(true);
     try {
       if (editing === "new") {
+        if (atLimit) {
+          setSeatErr(plan === "unlimited" ? `Your Unlimited plan covers up to ${seatsIncluded} seats and all ${activeCount} are in use. Deactivate a seat or contact support to raise the cap.` : `Your plan includes ${seatsIncluded} seat${seatsIncluded === 1 ? "" : "s"} and all are in use. Add a seat to your subscription in Manage billing, then invite this person.`);
+          setSaving(false);
+          return;
+        }
         if (auth) {
           const payload = {
             name: f.name.trim(),
@@ -21480,14 +22444,30 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast: toast2
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 16, marginTop: 12 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800 }, children: users.filter((u) => u.active).length }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800 }, children: activeCount }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: "Active seats" })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800 }, children: users.filter((u) => !u.active).length }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: "Deactivated" })
+        ] }),
+        seatsIncluded != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 20, fontWeight: 800, color: atLimit ? "#B42318" : S.ink }, children: [
+            activeCount,
+            " / ",
+            seatsIncluded
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: "Seats used" })
         ] })
       ] })
+    ] }),
+    tenant && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: tenant.status === "active" ? "green" : tenant.status === "past_due" || tenant.status === "canceled" ? "red" : "amber", children: tenant.status === "trialing" ? `Trial${tenant.days_left != null ? ` \u2014 ${tenant.days_left}d left` : ""}` : tenant.status || "\u2014" }), children: "Subscription" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Plan", v: plan === "unlimited" ? `Unlimited \u2014 up to ${PRODUCT.unlimitedSeatCap} seats` : `Team \u2014 ${PRODUCT.baseSeats} seats + ${tenant.seats_paid || 0} added` }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Seats", v: `${activeCount} used of ${seatsIncluded} included` }),
+      atLimit && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Seat limit reached", tone: "amber", children: plan === "unlimited" ? "Every seat on your plan is in use. Deactivate one to free it up, or contact support to raise the cap." : "Add a seat to your subscription in Manage billing, then invite the new person." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "soft", small: true, onClick: manageBilling, disabled: billingBusy, children: billingBusy ? "Opening\u2026" : "Manage billing" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: "Manage billing opens the secure Stripe portal to change your plan, add or remove seats, update your card, or cancel. It's the only place a subscription can be changed." })
     ] }),
     users.map((u) => {
       const assigned = jobs.filter((j) => j.assignee === u.name).length;
@@ -22690,7 +23670,8 @@ function HelpDesk({ onBack, brand: brand2 }) {
     })
   ] });
 }
-function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
+function MoreMenu({ onNav, onLogout, brand: brand2, currentUser, theme = "light", setTheme = () => {
+} }) {
   const admin = currentUser && currentUser.role === "admin";
   const groups = [
     ["Schedule & production", [
@@ -22757,6 +23738,27 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
         placeholder: "Search settings and screens"
       }
     ) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, background: S.card, border: `1px solid ${S.line}`, borderRadius: 12, padding: "10px 12px", marginBottom: 4 }, children: [
+      theme === "dark" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Moon, { size: 17, color: S.sub }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Sun, { size: 17, color: S.sub }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, color: S.ink }, children: "Appearance" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub }, children: [
+          theme === "dark" ? "Dark" : "Light",
+          " mode"
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", background: S.soft, borderRadius: 999, padding: 3 }, children: [["light", "Light"], ["dark", "Dark"]].map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setTheme(id), style: {
+        border: "none",
+        cursor: "pointer",
+        borderRadius: 999,
+        padding: "6px 14px",
+        fontSize: 12.5,
+        fontWeight: 700,
+        fontFamily: "inherit",
+        background: theme === id ? T.accent : "transparent",
+        color: theme === id ? "#fff" : S.sub
+      }, children: label }, id)) })
+    ] }),
     matches && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 0, style: { overflow: "hidden", marginTop: 8 }, children: [
       matches.map(([id, Icon, label, sub], i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onNav(id), style: {
         display: "flex",
@@ -23309,7 +24311,7 @@ function NavBtn({ id, icon: Icon, label, badge = 0, active, onPress }) {
 }
 function SupremeCRM() {
   const portalToken = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("portal") : null;
-  if (portalToken) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PublicPortal, { token: portalToken });
+  if (portalToken) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { "data-theme": "light", style: { background: S.bg, minHeight: "100vh" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PublicPortal, { token: portalToken }) });
   const authFlow = (() => {
     if (typeof window === "undefined") return null;
     const qs = new URLSearchParams(window.location.search);
@@ -23377,6 +24379,7 @@ function SupremeCRM() {
   ]);
   const [appointments, setAppointments] = (0, import_react.useState)([]);
   const [estimateTemplates, setEstimateTemplates] = (0, import_react.useState)([]);
+  const [docTemplates, setDocTemplates] = (0, import_react.useState)({ notes: [], terms: [], scope: [] });
   const [activity, setActivity] = (0, import_react.useState)([]);
   const [chatMsgs, setChatMsgs] = (0, import_react.useState)([]);
   const [announcements, setAnnouncements] = (0, import_react.useState)([]);
@@ -23444,6 +24447,25 @@ function SupremeCRM() {
     } catch (e) {
     }
   }, [boardView]);
+  const [theme, setTheme] = (0, import_react.useState)(() => {
+    try {
+      return localStorage.getItem("rl_theme") || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    } catch (e) {
+      return "light";
+    }
+  });
+  (0, import_react.useEffect)(() => {
+    try {
+      localStorage.setItem("rl_theme", theme);
+    } catch (e) {
+    }
+    try {
+      document.documentElement.dataset.theme = theme;
+      const m = document.querySelector('meta[name="theme-color"]');
+      if (m) m.setAttribute("content", theme === "dark" ? "#0F1216" : "#20242A");
+    } catch (e) {
+    }
+  }, [theme]);
   const [leadSeed, setLeadSeed] = (0, import_react.useState)(null);
   const [qt, setQt] = (0, import_react.useState)({ jobId: "", label: "", due: "", time: "" });
   const [toastMsg, setToastMsg] = (0, import_react.useState)("");
@@ -23480,7 +24502,7 @@ function SupremeCRM() {
       setNav("home");
     }
   };
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
     announcements,
     calls,
@@ -23489,6 +24511,7 @@ function SupremeCRM() {
     apptTypes,
     templates,
     estimateTemplates,
+    docTemplates,
     priceList,
     companyDocs,
     crews,
@@ -23510,6 +24533,7 @@ function SupremeCRM() {
     if (d.apptTypes) setApptTypes(d.apptTypes);
     if (d.templates) setTemplates(d.templates);
     if (d.estimateTemplates) setEstimateTemplates(d.estimateTemplates);
+    if (d.docTemplates) setDocTemplates({ notes: [], terms: [], scope: [], ...d.docTemplates });
     if (d.priceList) setPriceList(d.priceList);
     if (d.companyDocs) setCompanyDocs(d.companyDocs);
     if (d.crews) setCrews(d.crews);
@@ -23600,6 +24624,32 @@ function SupremeCRM() {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 2200);
   };
+  const gmailCbDone = (0, import_react.useRef)(false);
+  (0, import_react.useEffect)(() => {
+    if (gmailCbDone.current || typeof window === "undefined") return;
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get("state") !== "gmail" || !qs.get("code")) return;
+    gmailCbDone.current = true;
+    const code = qs.get("code");
+    const a = AUTH();
+    const clean = () => {
+      try {
+        window.history.replaceState({}, "", window.location.pathname);
+      } catch {
+      }
+    };
+    if (!a || !a.gmailExchange || !currentUser) {
+      clean();
+      return;
+    }
+    a.gmailExchange(code).then((res) => {
+      setIntegrations((prev) => ({
+        ...prev,
+        gmailByUser: { ...prev.gmailByUser || {}, [currentUser.id]: { connected: true, email: res && res.email || "", at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) } }
+      }));
+      toast2(res && res.email ? `Gmail connected \u2014 sending as ${res.email}` : "Gmail connected");
+    }).catch((e) => toast2(e && e.message ? e.message : "Couldn't connect Gmail")).finally(clean);
+  }, [currentUser && currentUser.id]);
   const applyJob = (id, fn) => setJobs((prev) => prev.map((j) => j.id === id ? { ...fn(j), updated: "just now", touchedAt: Date.now() } : j));
   const mutJob = (id, fn) => fn ? applyJob(id, fn) : (f2) => applyJob(id, f2);
   const moveStage = (jobId, stageId) => {
@@ -23809,7 +24859,7 @@ function SupremeCRM() {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PasswordSetScreen, { brand: brand2, mode: "change", toast: toast2, onDone: () => setChangePwOpen(false) });
   }
   if (booting || liveAuth() && currentUser && !hydrated) {
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center" }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", background: S.card }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center" }, children: [
       brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: brand2.company, style: { height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
         width: 56,
         height: 56,
@@ -23942,7 +24992,9 @@ function SupremeCRM() {
         openTab: jobOpenTab,
         features,
         onOpenCodeLookup: openCodeLookup,
-        priceList
+        priceList,
+        docTemplates,
+        setDocTemplates
       }
     ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       liveDb() && jobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { margin: "14px 16px 0", background: "#EAF6EE", border: "1px solid #CDE8D6", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "#177245", lineHeight: 1.5 }, children: "Fresh database \u2014 no demo customers here. Everything you create now saves for real. Have a Roofr export? More \u2192 Import jobs pulls your whole pipeline in." }),
@@ -24056,7 +25108,7 @@ function SupremeCRM() {
         }
       }
       setCurrentUser(null);
-    }, currentUser: liveUser }) : nav === "insurance" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    }, currentUser: liveUser, theme, setTheme }) : nav === "insurance" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       InsuranceHub,
       {
         jobs,
@@ -24332,7 +25384,7 @@ function SupremeCRM() {
       left: 0,
       right: 0,
       zIndex: 50,
-      background: "#fff",
+      background: S.card,
       borderTop: `1px solid ${S.line}`,
       display: "flex",
       alignItems: "stretch",
