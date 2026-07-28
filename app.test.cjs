@@ -8752,12 +8752,13 @@ var esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g,
 function lineTable(items, opts = {}) {
   const rows = items.map((it) => {
     const showQty = !opts.honorLine || it.showQty !== false;
-    const showPrice = !opts.hidePrice && (!opts.honorLine || it.showUnitPrice !== false);
+    const showUnit = !opts.honorLine || it.showUnitPrice !== false;
+    const showLine = !opts.honorLine || it.showLineTotal !== false;
     const descCell = `<td>${esc(it.desc)}${opts.honorLine && it.description ? `<div class="muted" style="font-size:12px;margin-top:2px">${esc(it.description)}</div>` : ""}</td>`;
     return `<tr>
       ${descCell}
       <td class="r">${showQty ? `${esc(it.qty)} ${esc(it.unit || "")}` : ""}</td>
-      ${opts.hidePrice ? "" : showPrice ? `<td class="r">${money(num(it.price))}</td><td class="r">${money(num(it.qty) * num(it.price))}</td>` : `<td class="r"></td><td class="r"></td>`}
+      ${opts.hidePrice ? "" : `<td class="r">${showUnit ? money(num(it.price)) : ""}</td><td class="r">${showLine ? money(num(it.qty) * num(it.price)) : ""}</td>`}
     </tr>`;
   }).join("");
   return `<table><thead><tr>
@@ -8766,14 +8767,16 @@ function lineTable(items, opts = {}) {
   </tr></thead><tbody>${rows}</tbody></table>`;
 }
 var PROPOSAL_STYLES = [
-  { id: "classic", name: "Classic", blurb: "Clean and traditional" },
-  { id: "bold", name: "Bold", blurb: "Big color banner" },
+  { id: "classic", name: "Classic", blurb: "Clean, photo above a title" },
+  { id: "bold", name: "Bold", blurb: "Full color banner" },
+  { id: "photo", name: "Photo hero", blurb: "House photo fills the page" },
   { id: "minimal", name: "Minimal", blurb: "Understated, lots of white" }
 ];
 function normalizeProposalDoc(doc) {
   const d = doc || {};
   return {
     style: d.style || "classic",
+    title: d.title || "Roofing Proposal",
     sections: Array.isArray(d.sections) && d.sections.length ? d.sections : ["cover", "items", "notes", "terms"],
     blocks: d.blocks || {},
     coverImage: d.coverImage || null,
@@ -8788,18 +8791,30 @@ function estimateDocHtml(job, brand2) {
   const secs = doc.sections || ["cover", "items", "notes", "terms"];
   const blocks = doc.blocks || {};
   const style = doc.style || "classic";
-  const coverStyle = style === "bold" ? `background:${brand2.primary};color:#fff;padding:26px;border-radius:14px` : style === "minimal" ? "padding:8px 0" : "";
-  const coverInk = style === "bold" ? "#fff" : brand2.primary;
+  const title = esc(doc.title || "Roofing Proposal");
   let out = "";
   for (const sec of secs) {
     if (sec === "cover") {
-      out += `<div class="cover" style="${coverStyle}">
-        ${doc.coverImage ? `<img class="hero" src="${doc.coverImage}" alt="">` : ""}
-        <div style="font-size:${style === "bold" ? 30 : 26}px;font-weight:800;color:${coverInk}">Roofing Proposal</div>
-        <div style="margin-top:18px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
-        <div class="muted" style="font-size:13px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(job.address)}</div>
-        <div class="muted" style="margin-top:14px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(est.number || "")} \xB7 ${esc(est.date || "")}</div>
-      </div>`;
+      if (style === "photo" && doc.coverImage) {
+        out += `<div class="cover" style="position:relative;border-radius:14px;overflow:hidden;min-height:420px;background:#111 url('${doc.coverImage}') center/cover no-repeat">
+          <div style="position:absolute;left:0;right:0;bottom:0;padding:26px;background:linear-gradient(transparent,rgba(0,0,0,.78));color:#fff">
+            <div style="font-size:30px;font-weight:800">${title}</div>
+            <div style="margin-top:14px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
+            <div style="font-size:13px;color:rgba(255,255,255,.85)">${esc(job.address)}</div>
+            <div style="margin-top:12px;color:rgba(255,255,255,.85)">${esc(est.number || "")} \xB7 ${esc(est.date || "")}</div>
+          </div>
+        </div>`;
+      } else {
+        const coverStyle = style === "bold" ? `background:${brand2.primary};color:#fff;padding:26px;border-radius:14px` : style === "minimal" ? "padding:8px 0" : "";
+        const coverInk = style === "bold" ? "#fff" : brand2.primary;
+        out += `<div class="cover" style="${coverStyle}">
+          ${doc.coverImage ? `<img class="hero" src="${doc.coverImage}" alt="">` : ""}
+          <div style="font-size:${style === "bold" ? 30 : 26}px;font-weight:800;color:${coverInk}">${title}</div>
+          <div style="margin-top:18px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
+          <div class="muted" style="font-size:13px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(job.address)}</div>
+          <div class="muted" style="margin-top:14px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(est.number || "")} \xB7 ${esc(est.date || "")}</div>
+        </div>`;
+      }
     }
     if (sec === "items") {
       out += `<h2>Scope of work</h2>`;
@@ -9429,7 +9444,8 @@ function buildPortalSnapshot(job, brand2, token) {
             price: num(it.price),
             description: it.description || "",
             showQty: it.showQty !== false,
-            showUnitPrice: it.showUnitPrice !== false
+            showUnitPrice: it.showUnitPrice !== false,
+            showLineTotal: it.showLineTotal !== false
           })),
           total: (t.items || []).reduce((a, it) => a + num(it.qty) * num(it.price), 0)
         }));
@@ -9447,7 +9463,7 @@ function buildPortalSnapshot(job, brand2, token) {
             const nd = normalizeProposalDoc(est.doc);
             const custom = nd.sections.map((s) => nd.blocks[s]).filter((b) => b && b.type === "text" && (b.title || b.body)).map((b) => ({ title: b.title || "", body: b.body || "" }));
             const attachments = nd.sections.map((s) => nd.blocks[s]).filter((b) => b && b.type === "pdf").map((b) => ({ name: b.name || "Attachment" }));
-            return { coverImage: nd.coverImage, notes: nd.notes, terms: nd.terms, style: nd.style, custom, attachments };
+            return { coverImage: nd.coverImage, notes: nd.notes, terms: nd.terms, style: nd.style, title: nd.title, custom, attachments };
           })() : null
         };
       })() : null,
@@ -9972,7 +9988,7 @@ function PortalContactCard({ token, jobId, customer, accent }) {
 }
 function PortalEstLine({ it }) {
   const showQty = it.showQty !== false;
-  const showPrice = it.showUnitPrice !== false;
+  const showLine = it.showLineTotal !== false;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, padding: "7px 0", borderTop: `1px solid ${S.line}`, color: S.sub }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { minWidth: 0 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.ink }, children: [
@@ -9981,7 +9997,7 @@ function PortalEstLine({ it }) {
       ] }),
       it.description ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 12, color: S.sub, lineHeight: 1.45, marginTop: 2, whiteSpace: "pre-wrap" }, children: it.description }) : null
     ] }),
-    showPrice && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 600, whiteSpace: "nowrap" }, children: money(num(it.qty) * num(it.price)) })
+    showLine && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 600, whiteSpace: "nowrap" }, children: money(num(it.qty) * num(it.price)) })
   ] });
 }
 function PortalProposal({ estimate, accent, onSelect = () => {
@@ -9998,7 +10014,7 @@ function PortalProposal({ estimate, accent, onSelect = () => {
   }, [tier, ups]);
   if (!tiers.length) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800 }, children: money(estimate.total) }), children: "Your estimate" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800 }, children: money(estimate.total) }), children: estimate.doc && estimate.doc.title || "Your estimate" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8 }, children: [
         estimate.number,
         " \xB7 ",
@@ -10010,6 +10026,7 @@ function PortalProposal({ estimate, accent, onSelect = () => {
   const doc = estimate.doc || {};
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
     doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "", style: { width: "100%", borderRadius: 10, marginBottom: 12, display: "block", objectFit: "cover", maxHeight: 200 } }),
+    doc.title && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 18, fontWeight: 800, color: S.ink, marginBottom: 4 }, children: doc.title }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800 }, children: money(total) }), children: "Choose your option" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 10 }, children: [
       estimate.number,
@@ -12953,6 +12970,7 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
   };
   const showQty = (it) => it.showQty !== false;
   const showUnit = (it) => it.showUnitPrice !== false;
+  const showLine = (it) => it.showLineTotal !== false;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     items.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10 }, children: "No line items yet." }),
     items.map((it) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderBottom: `1px solid ${S.line}`, padding: "10px 0" }, children: [
@@ -13051,7 +13069,8 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11, color: S.sub }, children: "Customer sees:" }),
         [
           ["Qty", showQty(it), () => setItem(it.id, "showQty", !showQty(it))],
-          ["Unit price", showUnit(it), () => setItem(it.id, "showUnitPrice", !showUnit(it))]
+          ["Unit price", showUnit(it), () => setItem(it.id, "showUnitPrice", !showUnit(it))],
+          ["Line price", showLine(it), () => setItem(it.id, "showLineTotal", !showLine(it))]
         ].map(([label, on, onClick]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick, style: {
           border: `1px solid ${on ? T.accent : S.line}`,
           background: on ? T.accentSoft : "#fff",
@@ -13265,12 +13284,23 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast
             !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeSection(sec), style: { border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
           ] }),
           sec === "cover" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 8, paddingLeft: 24 }, children: [
-            doc.coverImage ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "Cover", style: { width: "100%", borderRadius: 10, marginBottom: 8, maxHeight: 160, objectFit: "cover", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8 }, children: "No photo yet \u2014 the house photo works great here." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginBottom: 4 }, children: "Document title (what the customer sees at the top)" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: { ...inputStyle, marginBottom: 10, fontWeight: 700 },
+                value: doc.title,
+                disabled: locked,
+                placeholder: "Roofing Proposal",
+                onChange: (e) => setDoc({ title: e.target.value })
+              }
+            ),
+            doc.coverImage ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "Cover", style: { width: "100%", borderRadius: 10, marginBottom: 8, maxHeight: 160, objectFit: "cover", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8 }, children: 'No photo of the home yet \u2014 add one; the "Photo hero" style fills the cover with it.' }),
             !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => coverRef.current && coverRef.current.click(), children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
                 " ",
-                doc.coverImage ? "Replace" : "Add photo"
+                doc.coverImage ? "Replace home photo" : "Add home photo"
               ] }),
               doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setDoc({ coverImage: null }), children: "Remove" })
             ] })
@@ -13335,14 +13365,31 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast
 function ProposalPreview({ job, brand: brand2, est, doc, total }) {
   const blocks = doc.blocks || {};
   const style = doc.style || "classic";
+  const title = doc.title || "Roofing Proposal";
+  const photoHero = style === "photo" && doc.coverImage;
   const coverWrap = style === "bold" ? { background: T.primary, color: "#fff", padding: 22, borderRadius: 14 } : style === "minimal" ? { padding: "6px 2px" } : { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" };
   const onDark = style === "bold";
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }, children: doc.sections.map((sec) => {
+    if (sec === "cover" && photoHero) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginBottom: 16, position: "relative", borderRadius: 14, overflow: "hidden", minHeight: 300, background: `#111 url(${JSON.stringify(doc.coverImage)}) center/cover no-repeat` }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "absolute", left: 0, right: 0, bottom: 0, padding: 18, background: "linear-gradient(transparent, rgba(0,0,0,.78))", color: "#fff" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800 }, children: title }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 10, fontSize: 13.5 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontWeight: 700 }, children: [
+          "Prepared for ",
+          job.name
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { opacity: 0.85 }, children: job.address }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { opacity: 0.85, marginTop: 4 }, children: [
+          est.number,
+          " \xB7 ",
+          est.date
+        ] })
+      ] })
+    ] }) }, sec);
     if (sec === "cover") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16, ...coverWrap }, children: [
       doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "", style: { width: "100%", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 } }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: style === "bold" ? 0 : style === "minimal" ? "10px 0" : 16 }, children: [
         brand2.logo && !onDark ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "", style: { height: 34, objectFit: "contain", marginBottom: 8, display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontWeight: 800, fontSize: 17, marginBottom: 4, color: onDark ? "#fff" : S.ink }, children: brand2.company }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800, color: onDark ? "#fff" : brand2.primary }, children: "Roofing Proposal" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800, color: onDark ? "#fff" : brand2.primary }, children: title }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12, fontSize: 13.5, color: onDark ? "rgba(255,255,255,.9)" : S.ink }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontWeight: 700 }, children: [
             "Prepared for ",

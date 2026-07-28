@@ -7457,12 +7457,13 @@ function lineTable(items, opts = {}) {
      proposal hides exactly what the rep chose to hide. */
   const rows = items.map((it) => {
     const showQty = !opts.honorLine || it.showQty !== false;
-    const showPrice = !opts.hidePrice && (!opts.honorLine || it.showUnitPrice !== false);
+    const showUnit = !opts.honorLine || it.showUnitPrice !== false;
+    const showLine = !opts.honorLine || it.showLineTotal !== false;
     const descCell = `<td>${esc(it.desc)}${opts.honorLine && it.description ? `<div class="muted" style="font-size:12px;margin-top:2px">${esc(it.description)}</div>` : ""}</td>`;
     return `<tr>
       ${descCell}
       <td class="r">${showQty ? `${esc(it.qty)} ${esc(it.unit || "")}` : ""}</td>
-      ${opts.hidePrice ? "" : (showPrice ? `<td class="r">${money(num(it.price))}</td><td class="r">${money(num(it.qty) * num(it.price))}</td>` : `<td class="r"></td><td class="r"></td>`)}
+      ${opts.hidePrice ? "" : `<td class="r">${showUnit ? money(num(it.price)) : ""}</td><td class="r">${showLine ? money(num(it.qty) * num(it.price)) : ""}</td>`}
     </tr>`;
   }).join("");
   return `<table><thead><tr>
@@ -7475,8 +7476,9 @@ function lineTable(items, opts = {}) {
    light treatment of the cover/heading; the body stays legible and printable.
    Additive — an estimate with no doc.style falls back to "classic". */
 const PROPOSAL_STYLES = [
-  { id: "classic", name: "Classic", blurb: "Clean and traditional" },
-  { id: "bold", name: "Bold", blurb: "Big color banner" },
+  { id: "classic", name: "Classic", blurb: "Clean, photo above a title" },
+  { id: "bold", name: "Bold", blurb: "Full color banner" },
+  { id: "photo", name: "Photo hero", blurb: "House photo fills the page" },
   { id: "minimal", name: "Minimal", blurb: "Understated, lots of white" },
 ];
 /* Read any estimate's doc into the richer proposal shape without mutating
@@ -7488,6 +7490,7 @@ function normalizeProposalDoc(doc) {
   const d = doc || {};
   return {
     style: d.style || "classic",
+    title: d.title || "Roofing Proposal",
     sections: Array.isArray(d.sections) && d.sections.length ? d.sections : ["cover", "items", "notes", "terms"],
     blocks: d.blocks || {},
     coverImage: d.coverImage || null,
@@ -7503,20 +7506,34 @@ function estimateDocHtml(job, brand) {
   const secs = doc.sections || ["cover", "items", "notes", "terms"];
   const blocks = doc.blocks || {};
   const style = doc.style || "classic";
-  const coverStyle = style === "bold"
-    ? `background:${brand.primary};color:#fff;padding:26px;border-radius:14px`
-    : style === "minimal" ? "padding:8px 0" : "";
-  const coverInk = style === "bold" ? "#fff" : brand.primary;
+  const title = esc((doc.title || "Roofing Proposal"));
   let out = "";
   for (const sec of secs) {
     if (sec === "cover") {
-      out += `<div class="cover" style="${coverStyle}">
-        ${doc.coverImage ? `<img class="hero" src="${doc.coverImage}" alt="">` : ""}
-        <div style="font-size:${style === "bold" ? 30 : 26}px;font-weight:800;color:${coverInk}">Roofing Proposal</div>
-        <div style="margin-top:18px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
-        <div class="muted" style="font-size:13px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(job.address)}</div>
-        <div class="muted" style="margin-top:14px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(est.number || "")} · ${esc(est.date || "")}</div>
-      </div>`;
+      if (style === "photo" && doc.coverImage) {
+        /* Photo hero: the house photo fills the page with the title and
+           customer info laid over a dark gradient at the bottom. */
+        out += `<div class="cover" style="position:relative;border-radius:14px;overflow:hidden;min-height:420px;background:#111 url('${doc.coverImage}') center/cover no-repeat">
+          <div style="position:absolute;left:0;right:0;bottom:0;padding:26px;background:linear-gradient(transparent,rgba(0,0,0,.78));color:#fff">
+            <div style="font-size:30px;font-weight:800">${title}</div>
+            <div style="margin-top:14px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
+            <div style="font-size:13px;color:rgba(255,255,255,.85)">${esc(job.address)}</div>
+            <div style="margin-top:12px;color:rgba(255,255,255,.85)">${esc(est.number || "")} · ${esc(est.date || "")}</div>
+          </div>
+        </div>`;
+      } else {
+        const coverStyle = style === "bold"
+          ? `background:${brand.primary};color:#fff;padding:26px;border-radius:14px`
+          : style === "minimal" ? "padding:8px 0" : "";
+        const coverInk = style === "bold" ? "#fff" : brand.primary;
+        out += `<div class="cover" style="${coverStyle}">
+          ${doc.coverImage ? `<img class="hero" src="${doc.coverImage}" alt="">` : ""}
+          <div style="font-size:${style === "bold" ? 30 : 26}px;font-weight:800;color:${coverInk}">${title}</div>
+          <div style="margin-top:18px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
+          <div class="muted" style="font-size:13px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(job.address)}</div>
+          <div class="muted" style="margin-top:14px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(est.number || "")} · ${esc(est.date || "")}</div>
+        </div>`;
+      }
     }
     if (sec === "items") {
       out += `<h2>Scope of work</h2>`;
@@ -8117,7 +8134,8 @@ function buildPortalSnapshot(job, brand, token) {
           id: t.id, name: t.name,
           items: (t.items || []).map((it) => ({
             desc: it.desc, qty: it.qty, unit: it.unit, price: num(it.price),
-            description: it.description || "", showQty: it.showQty !== false, showUnitPrice: it.showUnitPrice !== false,
+            description: it.description || "", showQty: it.showQty !== false,
+            showUnitPrice: it.showUnitPrice !== false, showLineTotal: it.showLineTotal !== false,
           })),
           total: (t.items || []).reduce((a, it) => a + num(it.qty) * num(it.price), 0),
         }));
@@ -8139,7 +8157,7 @@ function buildPortalSnapshot(job, brand, token) {
               .map((s) => nd.blocks[s])
               .filter((b) => b && b.type === "pdf")
               .map((b) => ({ name: b.name || "Attachment" }));
-            return { coverImage: nd.coverImage, notes: nd.notes, terms: nd.terms, style: nd.style, custom, attachments };
+            return { coverImage: nd.coverImage, notes: nd.notes, terms: nd.terms, style: nd.style, title: nd.title, custom, attachments };
           })() : null,
         };
       })() : null,
@@ -8688,14 +8706,14 @@ function PortalContactCard({ token, jobId, customer, accent }) {
    shows under the item name. */
 function PortalEstLine({ it }) {
   const showQty = it.showQty !== false;
-  const showPrice = it.showUnitPrice !== false;
+  const showLine = it.showLineTotal !== false; // the line's amount (turn off to show only the total)
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, padding: "7px 0", borderTop: `1px solid ${S.line}`, color: S.sub }}>
       <span style={{ minWidth: 0 }}>
         <span style={{ color: S.ink }}>{it.desc}{showQty && (it.qty || it.qty === 0) ? ` — ${it.qty} ${it.unit || ""}`.trimEnd() : ""}</span>
         {it.description ? <span style={{ display: "block", fontSize: 12, color: S.sub, lineHeight: 1.45, marginTop: 2, whiteSpace: "pre-wrap" }}>{it.description}</span> : null}
       </span>
-      {showPrice && <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{money(num(it.qty) * num(it.price))}</span>}
+      {showLine && <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{money(num(it.qty) * num(it.price))}</span>}
     </div>
   );
 }
@@ -8715,7 +8733,7 @@ function PortalProposal({ estimate, accent, onSelect = () => {} }) {
   if (!tiers.length) {
     return (
       <Card>
-        <CardTitle right={<span style={{ fontWeight: 800 }}>{money(estimate.total)}</span>}>Your estimate</CardTitle>
+        <CardTitle right={<span style={{ fontWeight: 800 }}>{money(estimate.total)}</span>}>{(estimate.doc && estimate.doc.title) || "Your estimate"}</CardTitle>
         <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>{estimate.number} · {estimate.date}</div>
         {(estimate.items || []).map((it, i2) => (
           <PortalEstLine key={i2} it={it} />
@@ -8730,6 +8748,7 @@ function PortalProposal({ estimate, accent, onSelect = () => {} }) {
       {doc.coverImage && (
         <img src={doc.coverImage} alt="" style={{ width: "100%", borderRadius: 10, marginBottom: 12, display: "block", objectFit: "cover", maxHeight: 200 }} />
       )}
+      {doc.title && <div style={{ fontSize: 18, fontWeight: 800, color: S.ink, marginBottom: 4 }}>{doc.title}</div>}
       <CardTitle right={<span style={{ fontWeight: 800 }}>{money(total)}</span>}>Choose your option</CardTitle>
       <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10 }}>{estimate.number}{estimate.date ? ` · ${estimate.date}` : ""}</div>
       {estimate.scope && <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }}>{estimate.scope}</div>}
@@ -11793,6 +11812,7 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
   };
   const showQty = (it) => it.showQty !== false;
   const showUnit = (it) => it.showUnitPrice !== false;
+  const showLine = (it) => it.showLineTotal !== false;
   return (
     <>
       {items.length === 0 && <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>No line items yet.</div>}
@@ -11836,12 +11856,14 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
           ) : (!locked && (
             <button style={{ ...linkBtn, marginTop: 6, fontSize: 12 }} onClick={() => setItem(it.id, "description", "")}>+ Description</button>
           ))}
-          {/* What the customer sees for this line */}
+          {/* What the customer sees for this line — each can be hidden so you
+             can show, say, only the scope with pricing rolled into the total. */}
           {!locked && (
             <div style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, color: S.sub }}>Customer sees:</span>
               {[["Qty", showQty(it), () => setItem(it.id, "showQty", !showQty(it))],
-                ["Unit price", showUnit(it), () => setItem(it.id, "showUnitPrice", !showUnit(it))]].map(([label, on, onClick]) => (
+                ["Unit price", showUnit(it), () => setItem(it.id, "showUnitPrice", !showUnit(it))],
+                ["Line price", showLine(it), () => setItem(it.id, "showLineTotal", !showLine(it))]].map(([label, on, onClick]) => (
                 <button key={label} onClick={onClick} style={{
                   border: `1px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : "#fff",
                   color: on ? T.accent : S.sub, borderRadius: 999, padding: "3px 10px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
@@ -12024,12 +12046,15 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
                   {/* Inline editors */}
                   {sec === "cover" && (
                     <div style={{ marginTop: 8, paddingLeft: 24 }}>
+                      <div style={{ fontSize: 11.5, color: S.sub, marginBottom: 4 }}>Document title (what the customer sees at the top)</div>
+                      <input style={{ ...inputStyle, marginBottom: 10, fontWeight: 700 }} value={doc.title} disabled={locked}
+                        placeholder="Roofing Proposal" onChange={(e) => setDoc({ title: e.target.value })} />
                       {doc.coverImage
                         ? <img src={doc.coverImage} alt="Cover" style={{ width: "100%", borderRadius: 10, marginBottom: 8, maxHeight: 160, objectFit: "cover", display: "block" }} />
-                        : <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>No photo yet — the house photo works great here.</div>}
+                        : <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>No photo of the home yet — add one; the "Photo hero" style fills the cover with it.</div>}
                       {!locked && (
                         <div style={{ display: "flex", gap: 8 }}>
-                          <Btn kind="ghost" small onClick={() => coverRef.current && coverRef.current.click()}><Upload size={13} /> {doc.coverImage ? "Replace" : "Add photo"}</Btn>
+                          <Btn kind="ghost" small onClick={() => coverRef.current && coverRef.current.click()}><Upload size={13} /> {doc.coverImage ? "Replace home photo" : "Add home photo"}</Btn>
                           {doc.coverImage && <Btn kind="danger" small onClick={() => setDoc({ coverImage: null })}>Remove</Btn>}
                         </div>
                       )}
@@ -12083,6 +12108,8 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
 function ProposalPreview({ job, brand, est, doc, total }) {
   const blocks = doc.blocks || {};
   const style = doc.style || "classic";
+  const title = doc.title || "Roofing Proposal";
+  const photoHero = style === "photo" && doc.coverImage;
   const coverWrap = style === "bold"
     ? { background: T.primary, color: "#fff", padding: 22, borderRadius: 14 }
     : style === "minimal" ? { padding: "6px 2px" } : { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" };
@@ -12090,6 +12117,18 @@ function ProposalPreview({ job, brand, est, doc, total }) {
   return (
     <div style={{ background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }}>
       {doc.sections.map((sec) => {
+        if (sec === "cover" && photoHero) return (
+          <div key={sec} style={{ marginBottom: 16, position: "relative", borderRadius: 14, overflow: "hidden", minHeight: 300, background: `#111 url(${JSON.stringify(doc.coverImage)}) center/cover no-repeat` }}>
+            <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: 18, background: "linear-gradient(transparent, rgba(0,0,0,.78))", color: "#fff" }}>
+              <div style={{ fontSize: 22, fontWeight: 800 }}>{title}</div>
+              <div style={{ marginTop: 10, fontSize: 13.5 }}>
+                <div style={{ fontWeight: 700 }}>Prepared for {job.name}</div>
+                <div style={{ opacity: 0.85 }}>{job.address}</div>
+                <div style={{ opacity: 0.85, marginTop: 4 }}>{est.number} · {est.date}</div>
+              </div>
+            </div>
+          </div>
+        );
         if (sec === "cover") return (
           <div key={sec} style={{ marginBottom: 16, ...coverWrap }}>
             {doc.coverImage && <img src={doc.coverImage} alt="" style={{ width: "100%", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 }} />}
@@ -12097,7 +12136,7 @@ function ProposalPreview({ job, brand, est, doc, total }) {
               {brand.logo && !onDark
                 ? <img src={brand.logo} alt="" style={{ height: 34, objectFit: "contain", marginBottom: 8, display: "block" }} />
                 : <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 4, color: onDark ? "#fff" : S.ink }}>{brand.company}</div>}
-              <div style={{ fontSize: 22, fontWeight: 800, color: onDark ? "#fff" : brand.primary }}>Roofing Proposal</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: onDark ? "#fff" : brand.primary }}>{title}</div>
               <div style={{ marginTop: 12, fontSize: 13.5, color: onDark ? "rgba(255,255,255,.9)" : S.ink }}>
                 <div style={{ fontWeight: 700 }}>Prepared for {job.name}</div>
                 <div style={{ opacity: 0.85 }}>{job.address}</div>
