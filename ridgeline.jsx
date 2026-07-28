@@ -5447,6 +5447,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
                 </div>
                 {vJob ? <KV k="Customer" v={vJob.name} /> : <div style={{ fontSize: 13, color: S.sub, marginBottom: 8 }}>No linked job on this appointment.</div>}
                 {addr && <KV k="Address" v={addr} />}
+                {vJob && <div style={{ marginTop: 6 }}><WeatherNow lat={vJob.lat ?? vJob.property?.lat} lng={vJob.lng ?? vJob.property?.lng} zip={vJob.zip} /></div>}
                 {(vAp.assignedTo || vJob?.assignee) && <KV k="Assigned to" v={vAp.assignedTo || vJob.assignee} />}
                 {vAp.notes && <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.5, marginTop: 8, whiteSpace: "pre-wrap" }}>{vAp.notes}</div>}
 
@@ -7333,6 +7334,7 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="slate">{job.zip}</Chip>}>Site location</CardTitle>
         <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.5 }}>{job.address}</div>
+        <div style={{ marginTop: 8 }}><WeatherNow lat={job.lat ?? job.property?.lat} lng={job.lng ?? job.property?.lng} zip={job.zip} /></div>
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
           <a href={mapLinkForAddress(job.address)} target="_blank" rel="noreferrer" style={{ flex: 1, textDecoration: "none" }}>
             <Btn kind="ghost" small style={{ width: "100%" }}><MapPin size={13} /> View map</Btn>
@@ -9642,6 +9644,95 @@ function RainChip({ w }) {
       background: "#FDECEC", color: "#B42318", fontSize: 11, fontWeight: 800,
       padding: "3px 7px", borderRadius: 999,
     }}><CloudRain size={11} /> {w.pop}% rain</span>
+  );
+}
+
+/* Current conditions (temp + sky + wind) from Open-Meteo — keyless, browser-side.
+   Cached ~30 min per rounded location, separate from the daily rain cache. */
+const CURRENT_WX_CACHE = new Map();
+const CURRENT_WX_MS = 30 * 60 * 1000;
+async function fetchCurrentWeatherFor(lat, lng) {
+  const key = weatherKey(lat, lng);
+  const c = CURRENT_WX_CACHE.get(key);
+  if (c && Date.now() - c.at < CURRENT_WX_MS) return c.cur;
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
+      `&current=temperature_2m,weather_code,wind_speed_10m,is_day&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("wx");
+    const d = await res.json();
+    const cur = d.current ? {
+      tempF: Math.round(d.current.temperature_2m), code: d.current.weather_code,
+      windMph: Math.round(d.current.wind_speed_10m), isDay: d.current.is_day !== 0,
+    } : null;
+    CURRENT_WX_CACHE.set(key, { at: Date.now(), cur });
+    return cur;
+  } catch (e) { return null; }
+}
+
+/* ZIP -> coords via Zippopotam.us (keyless, CORS-open) so weather works even
+   when a job was created without map coordinates. Cached for the session. */
+const ZIP_GEO_CACHE = new Map();
+async function geocodeZip(zip) {
+  const z = String(zip || "").trim().slice(0, 5);
+  if (!/^\d{5}$/.test(z)) return null;
+  if (ZIP_GEO_CACHE.has(z)) return ZIP_GEO_CACHE.get(z);
+  try {
+    const res = await fetch(`https://api.zippopotam.us/us/${z}`);
+    if (!res.ok) throw new Error("zip");
+    const d = await res.json();
+    const p = (d.places || [])[0];
+    const out = p ? { lat: parseFloat(p.latitude), lng: parseFloat(p.longitude) } : null;
+    ZIP_GEO_CACHE.set(z, out);
+    return out;
+  } catch (e) { ZIP_GEO_CACHE.set(z, null); return null; }
+}
+
+/* WMO weather code -> short label + emoji. */
+function wmoLabel(code) {
+  const c = Number(code);
+  if (c === 0) return { t: "Clear", e: "☀️" };
+  if (c <= 2) return { t: "Partly cloudy", e: "⛅" };
+  if (c === 3) return { t: "Overcast", e: "☁️" };
+  if (c >= 45 && c <= 48) return { t: "Fog", e: "🌫️" };
+  if (c >= 51 && c <= 57) return { t: "Drizzle", e: "🌦️" };
+  if (c >= 61 && c <= 67) return { t: "Rain", e: "🌧️" };
+  if (c >= 71 && c <= 77) return { t: "Snow", e: "❄️" };
+  if (c >= 80 && c <= 82) return { t: "Showers", e: "🌦️" };
+  if (c >= 85 && c <= 86) return { t: "Snow showers", e: "🌨️" };
+  if (c >= 95) return { t: "Thunderstorm", e: "⛈️" };
+  return { t: "", e: "🌡️" };
+}
+
+/* Resolve coordinates (direct, or via ZIP) and fetch current conditions. */
+function useCurrentWeather({ lat, lng, zip }) {
+  const [wx, setWx] = useState(null);
+  const key = `${lat ?? ""}:${lng ?? ""}:${zip ?? ""}`;
+  useEffect(() => {
+    let dead = false;
+    (async () => {
+      let la = lat, ln = lng;
+      if (la == null || ln == null) { const g = await geocodeZip(zip); if (g) { la = g.lat; ln = g.lng; } }
+      if (la == null || ln == null) { setWx(null); return; }
+      const cur = await fetchCurrentWeatherFor(la, ln);
+      if (!dead) setWx(cur);
+    })();
+    return () => { dead = true; };
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return wx;
+}
+
+/* Compact current-weather line for a job/appointment location. Renders
+   nothing until (and unless) conditions resolve, so it never blocks a view. */
+function WeatherNow({ lat, lng, zip, style }) {
+  const wx = useCurrentWeather({ lat, lng, zip });
+  if (!wx) return null;
+  const l = wmoLabel(wx.code);
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.sub, ...style }}>
+      <span style={{ fontSize: 14 }}>{l.e}</span>
+      <b style={{ color: S.ink }}>{wx.tempF}°</b>{l.t ? ` ${l.t}` : ""}{wx.windMph >= 15 ? ` · ${wx.windMph} mph wind` : ""}
+    </span>
   );
 }
 

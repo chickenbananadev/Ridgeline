@@ -6413,6 +6413,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
             ] }),
             vJob ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Customer", v: vJob.name }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 8 }, children: "No linked job on this appointment." }),
             addr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Address", v: addr }),
+            vJob && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 6 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WeatherNow, { lat: vJob.lat ?? vJob.property?.lat, lng: vJob.lng ?? vJob.property?.lng, zip: vJob.zip }) }),
             (vAp.assignedTo || vJob?.assignee) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Assigned to", v: vAp.assignedTo || vJob.assignee }),
             vAp.notes && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, lineHeight: 1.5, marginTop: 8, whiteSpace: "pre-wrap" }, children: vAp.notes }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 14 }, children: [
@@ -8785,6 +8786,7 @@ function TabOverview({ job, juris, mut, toast: toast2, reviewSettings, brand: br
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "slate", children: job.zip }), children: "Site location" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.ink, lineHeight: 1.5 }, children: job.address }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(WeatherNow, { lat: job.lat ?? job.property?.lat, lng: job.lng ?? job.property?.lng, zip: job.zip }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: mapLinkForAddress(job.address), target: "_blank", rel: "noreferrer", style: { flex: 1, textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { width: "100%" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 13 }),
@@ -11000,6 +11002,102 @@ function RainChip({ w }) {
     " ",
     w.pop,
     "% rain"
+  ] });
+}
+var CURRENT_WX_CACHE = /* @__PURE__ */ new Map();
+var CURRENT_WX_MS = 30 * 60 * 1e3;
+async function fetchCurrentWeatherFor(lat, lng) {
+  const key = weatherKey(lat, lng);
+  const c = CURRENT_WX_CACHE.get(key);
+  if (c && Date.now() - c.at < CURRENT_WX_MS) return c.cur;
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weather_code,wind_speed_10m,is_day&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("wx");
+    const d = await res.json();
+    const cur = d.current ? {
+      tempF: Math.round(d.current.temperature_2m),
+      code: d.current.weather_code,
+      windMph: Math.round(d.current.wind_speed_10m),
+      isDay: d.current.is_day !== 0
+    } : null;
+    CURRENT_WX_CACHE.set(key, { at: Date.now(), cur });
+    return cur;
+  } catch (e) {
+    return null;
+  }
+}
+var ZIP_GEO_CACHE = /* @__PURE__ */ new Map();
+async function geocodeZip(zip) {
+  const z = String(zip || "").trim().slice(0, 5);
+  if (!/^\d{5}$/.test(z)) return null;
+  if (ZIP_GEO_CACHE.has(z)) return ZIP_GEO_CACHE.get(z);
+  try {
+    const res = await fetch(`https://api.zippopotam.us/us/${z}`);
+    if (!res.ok) throw new Error("zip");
+    const d = await res.json();
+    const p = (d.places || [])[0];
+    const out = p ? { lat: parseFloat(p.latitude), lng: parseFloat(p.longitude) } : null;
+    ZIP_GEO_CACHE.set(z, out);
+    return out;
+  } catch (e) {
+    ZIP_GEO_CACHE.set(z, null);
+    return null;
+  }
+}
+function wmoLabel(code) {
+  const c = Number(code);
+  if (c === 0) return { t: "Clear", e: "\u2600\uFE0F" };
+  if (c <= 2) return { t: "Partly cloudy", e: "\u26C5" };
+  if (c === 3) return { t: "Overcast", e: "\u2601\uFE0F" };
+  if (c >= 45 && c <= 48) return { t: "Fog", e: "\u{1F32B}\uFE0F" };
+  if (c >= 51 && c <= 57) return { t: "Drizzle", e: "\u{1F326}\uFE0F" };
+  if (c >= 61 && c <= 67) return { t: "Rain", e: "\u{1F327}\uFE0F" };
+  if (c >= 71 && c <= 77) return { t: "Snow", e: "\u2744\uFE0F" };
+  if (c >= 80 && c <= 82) return { t: "Showers", e: "\u{1F326}\uFE0F" };
+  if (c >= 85 && c <= 86) return { t: "Snow showers", e: "\u{1F328}\uFE0F" };
+  if (c >= 95) return { t: "Thunderstorm", e: "\u26C8\uFE0F" };
+  return { t: "", e: "\u{1F321}\uFE0F" };
+}
+function useCurrentWeather({ lat, lng, zip }) {
+  const [wx, setWx] = (0, import_react.useState)(null);
+  const key = `${lat ?? ""}:${lng ?? ""}:${zip ?? ""}`;
+  (0, import_react.useEffect)(() => {
+    let dead = false;
+    (async () => {
+      let la = lat, ln = lng;
+      if (la == null || ln == null) {
+        const g = await geocodeZip(zip);
+        if (g) {
+          la = g.lat;
+          ln = g.lng;
+        }
+      }
+      if (la == null || ln == null) {
+        setWx(null);
+        return;
+      }
+      const cur = await fetchCurrentWeatherFor(la, ln);
+      if (!dead) setWx(cur);
+    })();
+    return () => {
+      dead = true;
+    };
+  }, [key]);
+  return wx;
+}
+function WeatherNow({ lat, lng, zip, style }) {
+  const wx = useCurrentWeather({ lat, lng, zip });
+  if (!wx) return null;
+  const l = wmoLabel(wx.code);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.sub, ...style }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14 }, children: l.e }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("b", { style: { color: S.ink }, children: [
+      wx.tempF,
+      "\xB0"
+    ] }),
+    l.t ? ` ${l.t}` : "",
+    wx.windMph >= 15 ? ` \xB7 ${wx.windMph} mph wind` : ""
   ] });
 }
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast: toast2, embedded = false }) {
