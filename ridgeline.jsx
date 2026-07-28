@@ -2367,16 +2367,21 @@ function installedSquares(mats) {
    kept as a flat add-on. */
 function subCodeFor(text) {
   const s = String(text || "").toLowerCase();
-  if (/steep|pitch/.test(s)) return "steep_per_square";
-  if (/tear|layer|rip/.test(s)) return "tearoff_per_square";
+  /* Order matters: a base install line often names a pitch range
+     ("install, 2/12 to 8/12 pitch") — it must NOT be read as a steep
+     charge. Match the explicit steep/mansard and tear-off wording first,
+     then the base install, then a bare "steep/pitch" as a last resort. */
+  if (/mansard|steep\s*charge/.test(s)) return "steep_per_square";
+  if (/additional layer|layer removal|tear|\brip\b/.test(s)) return "tearoff_per_square";
   if (/(3|three|3\+).*stor/.test(s)) return "story_3";
   if (/(2|two|second).*stor/.test(s)) return "story_2";
-  if (/chimney|flash/.test(s)) {
-    if (/small|sm\b/.test(s)) return "chimney_small";
-    if (/large|lg\b|lrg/.test(s)) return "chimney_large";
+  if (/chimney/.test(s)) {
+    if (/small/.test(s)) return "chimney_small";
+    if (/large/.test(s)) return "chimney_large";
     return "chimney_medium";
   }
-  if (/install|per\s*sq|square|field|labor|base/.test(s)) return "per_square";
+  if (/install/.test(s) && /(shingle|roof)/.test(s)) return "per_square";
+  if (/steep|pitch/.test(s)) return "steep_per_square";
   return null;
 }
 const SUB_RATE_LABELS = {
@@ -16816,16 +16821,20 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
     };
     const head = split(rows0[0]).map((h) => h.toLowerCase().replace(/[^a-z]/g, ""));
     const idx = (names) => { for (const n of names) { const k = head.indexOf(n); if (k >= 0) return k; } return -1; };
-    const cItem = idx(["item", "description", "service", "name", "type", "line"]);
+    const cItem = idx(["labortype", "labor", "item", "description", "service", "name", "type", "line"]);
     const cPrice = idx(["price", "rate", "cost", "amount", "persquare", "persq", "unitprice"]);
     const cUnit = idx(["unit", "uom", "per"]);
+    const cCat = idx(["category", "group", "section"]);
+    const cNotes = idx(["notes", "note", "comment", "comments"]);
     if (cItem < 0 || cPrice < 0) return [];
     return rows0.slice(1).map((l) => {
       const c = split(l); const item = c[cItem] || ""; const code = subCodeFor(item);
       return {
-        id: uid("rc"), code: code || "custom", label: item,
+        id: uid("rc"), category: cCat >= 0 ? (c[cCat] || "Other") : "Other",
+        code: code || "custom", label: item,
         unit: cUnit >= 0 ? c[cUnit] : (code && code.endsWith("per_square") ? "sq" : "flat"),
         price: num(String(c[cPrice]).replace(/[$,]/g, "")),
+        notes: cNotes >= 0 ? (c[cNotes] || "") : "",
       };
     }).filter((r) => r.label && r.price > 0);
   };
@@ -16937,25 +16946,30 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             <Upload size={13} /> Add document
           </Btn>
         </Field>
-        <Field label="Pricing sheet" hint="Upload this sub's price sheet (CSV with an item and a price column). Rates drive their pay automatically off each job's installed squares and conditions.">
+        <Field label="Pricing sheet" hint="Upload this sub's full price menu (CSV: category, labor_type, price, unit, notes). Install/steep/tear-off/chimney lines auto-fill a job's sub invoice; every other row is on the menu to add by hand.">
           <input ref={priceRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={onPriceFile} />
           {(f.rateCard || []).length > 0 ? (
             <div style={{ border: `1px solid ${S.line}`, borderRadius: 10, overflow: "hidden", marginBottom: 8 }}>
-              {(f.rateCard || []).map((r) => (
-                <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: `1px solid ${S.line}` }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, color: S.ink }}>{r.label}</div>
-                    <div style={{ fontSize: 11.5, color: S.sub }}>{SUB_RATE_LABELS[r.code] || "Flat add-on"}{r.unit === "sq" ? " · per square" : ""}</div>
-                  </div>
-                  <span style={{ fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{money(r.price)}{r.unit === "sq" ? "/sq" : ""}</span>
-                  <button onClick={() => setF({ ...f, rateCard: (f.rateCard || []).filter((x) => x.id !== r.id) })}
-                    style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={14} color="#B42318" /></button>
+              {[...new Set((f.rateCard || []).map((r) => r.category || "Other"))].map((cat) => (
+                <div key={cat}>
+                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, background: S.soft, padding: "6px 11px" }}>{cat}</div>
+                  {(f.rateCard || []).filter((r) => (r.category || "Other") === cat).map((r) => (
+                    <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: `1px solid ${S.line}` }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, color: S.ink }}>{r.label}</div>
+                        {r.notes && <div style={{ fontSize: 11, color: S.sub, lineHeight: 1.4 }}>{r.notes}</div>}
+                      </div>
+                      <span style={{ fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{money(r.price)}{r.unit && r.unit !== "flat" ? `/${r.unit}` : ""}</span>
+                      <button onClick={() => setF({ ...f, rateCard: (f.rateCard || []).filter((x) => x.id !== r.id) })}
+                        style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={14} color="#B42318" /></button>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
           ) : (
             <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
-              No price sheet yet. Recognized rows: install/steep/tear-off per square, 2- and 3-story adders, and chimney small/medium/large.
+              No price sheet yet. Upload a CSV with columns like <b>category, labor_type, price, unit, notes</b> — every row becomes a priced menu item you can add to a job's sub invoice.
             </div>
           )}
           <Btn kind="ghost" small onClick={() => priceRef.current && priceRef.current.click()}>

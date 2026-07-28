@@ -2973,28 +2973,19 @@ function installedSquares(mats) {
 }
 function subCodeFor(text) {
   const s = String(text || "").toLowerCase();
-  if (/steep|pitch/.test(s)) return "steep_per_square";
-  if (/tear|layer|rip/.test(s)) return "tearoff_per_square";
+  if (/mansard|steep\s*charge/.test(s)) return "steep_per_square";
+  if (/additional layer|layer removal|tear|\brip\b/.test(s)) return "tearoff_per_square";
   if (/(3|three|3\+).*stor/.test(s)) return "story_3";
   if (/(2|two|second).*stor/.test(s)) return "story_2";
-  if (/chimney|flash/.test(s)) {
-    if (/small|sm\b/.test(s)) return "chimney_small";
-    if (/large|lg\b|lrg/.test(s)) return "chimney_large";
+  if (/chimney/.test(s)) {
+    if (/small/.test(s)) return "chimney_small";
+    if (/large/.test(s)) return "chimney_large";
     return "chimney_medium";
   }
-  if (/install|per\s*sq|square|field|labor|base/.test(s)) return "per_square";
+  if (/install/.test(s) && /(shingle|roof)/.test(s)) return "per_square";
+  if (/steep|pitch/.test(s)) return "steep_per_square";
   return null;
 }
-var SUB_RATE_LABELS = {
-  per_square: "Install (per square)",
-  steep_per_square: "Steep charge (per square)",
-  tearoff_per_square: "Tear-off (per square, per extra layer)",
-  story_2: "2-story adder",
-  story_3: "3+ story adder",
-  chimney_small: "Chimney \u2014 small",
-  chimney_medium: "Chimney \u2014 medium",
-  chimney_large: "Chimney \u2014 large"
-};
 function subRate(crew2, code) {
   const row = (crew2 && crew2.rateCard || []).find((r) => r.code === code);
   return row ? num(row.price) : 0;
@@ -18663,9 +18654,11 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast: toast2
       }
       return -1;
     };
-    const cItem = idx(["item", "description", "service", "name", "type", "line"]);
+    const cItem = idx(["labortype", "labor", "item", "description", "service", "name", "type", "line"]);
     const cPrice = idx(["price", "rate", "cost", "amount", "persquare", "persq", "unitprice"]);
     const cUnit = idx(["unit", "uom", "per"]);
+    const cCat = idx(["category", "group", "section"]);
+    const cNotes = idx(["notes", "note", "comment", "comments"]);
     if (cItem < 0 || cPrice < 0) return [];
     return rows0.slice(1).map((l) => {
       const c = split(l);
@@ -18673,10 +18666,12 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast: toast2
       const code = subCodeFor(item);
       return {
         id: uid("rc"),
+        category: cCat >= 0 ? c[cCat] || "Other" : "Other",
         code: code || "custom",
         label: item,
         unit: cUnit >= 0 ? c[cUnit] : code && code.endsWith("per_square") ? "sq" : "flat",
-        price: num(String(c[cPrice]).replace(/[$,]/g, ""))
+        price: num(String(c[cPrice]).replace(/[$,]/g, "")),
+        notes: cNotes >= 0 ? c[cNotes] || "" : ""
       };
     }).filter((r) => r.label && r.price > 0);
   };
@@ -18844,29 +18839,33 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast: toast2
               " Add document"
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Pricing sheet", hint: "Upload this sub's price sheet (CSV with an item and a price column). Rates drive their pay automatically off each job's installed squares and conditions.", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Pricing sheet", hint: "Upload this sub's full price menu (CSV: category, labor_type, price, unit, notes). Install/steep/tear-off/chimney lines auto-fill a job's sub invoice; every other row is on the menu to add by hand.", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: priceRef, type: "file", accept: ".csv,text/csv", style: { display: "none" }, onChange: onPriceFile }),
-            (f.rateCard || []).length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 10, overflow: "hidden", marginBottom: 8 }, children: (f.rateCard || []).map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: `1px solid ${S.line}` }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink }, children: r.label }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub }, children: [
-                  SUB_RATE_LABELS[r.code] || "Flat add-on",
-                  r.unit === "sq" ? " \xB7 per square" : ""
-                ] })
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }, children: [
-                money(r.price),
-                r.unit === "sq" ? "/sq" : ""
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                "button",
-                {
-                  onClick: () => setF({ ...f, rateCard: (f.rateCard || []).filter((x) => x.id !== r.id) }),
-                  style: { border: "none", background: "none", cursor: "pointer" },
-                  children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14, color: "#B42318" })
-                }
-              )
-            ] }, r.id)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }, children: "No price sheet yet. Recognized rows: install/steep/tear-off per square, 2- and 3-story adders, and chimney small/medium/large." }),
+            (f.rateCard || []).length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 10, overflow: "hidden", marginBottom: 8 }, children: [...new Set((f.rateCard || []).map((r) => r.category || "Other"))].map((cat) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, background: S.soft, padding: "6px 11px" }, children: cat }),
+              (f.rateCard || []).filter((r) => (r.category || "Other") === cat).map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: `1px solid ${S.line}` }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink }, children: r.label }),
+                  r.notes && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub, lineHeight: 1.4 }, children: r.notes })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }, children: [
+                  money(r.price),
+                  r.unit && r.unit !== "flat" ? `/${r.unit}` : ""
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "button",
+                  {
+                    onClick: () => setF({ ...f, rateCard: (f.rateCard || []).filter((x) => x.id !== r.id) }),
+                    style: { border: "none", background: "none", cursor: "pointer" },
+                    children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14, color: "#B42318" })
+                  }
+                )
+              ] }, r.id))
+            ] }, cat)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }, children: [
+              "No price sheet yet. Upload a CSV with columns like ",
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "category, labor_type, price, unit, notes" }),
+              " \u2014 every row becomes a priced menu item you can add to a job's sub invoice."
+            ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => priceRef.current && priceRef.current.click(), children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
               " ",
