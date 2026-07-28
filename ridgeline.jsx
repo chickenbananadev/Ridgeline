@@ -3806,6 +3806,17 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
   const avgSale = wonCount ? signedValue / wonCount : 0;
   const collected = jobs.reduce((s, j) => s + paymentsSummary(j).received, 0);
   const closeRate = jobs.length ? wonCount / jobs.length : 0;
+  /* Reviews in the daily workflow: real funnel status across sold/completed
+     jobs. "Posted" is who has actually left one; "recover" is a 1–3★ that
+     needs a call before anything public. */
+  const reviewJobs = jobs.filter((j) => WON_STAGES.includes(j.stageId) || j.stageId === "s10");
+  const rev = { posted: 0, recover: 0, rated: 0, asked: 0, notasked: 0 };
+  reviewJobs.forEach((j) => {
+    const k = reviewState(j).key;
+    if (k === "posted") rev.posted++; else if (k === "recover") rev.recover++;
+    else if (k === "rated") rev.rated++; else if (k === "sent" || k === "clicked") rev.asked++;
+    else rev.notasked++;
+  });
 
   return (
     <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
@@ -4165,6 +4176,30 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         <button onClick={() => go("jobs")} style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", fontSize: 12.5, color: "#9A6B00", padding: "10px 4px 0" }}>
           {stale.length} stale job{stale.length === 1 ? "" : "s"} — 14+ days untouched →
         </button>
+      )}
+
+      {reviewJobs.length > 0 && (
+        <Card style={{ marginTop: 14 }}>
+          <CardTitle right={<button style={linkBtn} onClick={() => go("reviews")}>Manage →</button>}>Reviews</CardTitle>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: rev.recover || rev.notasked ? 10 : 0 }}>
+            {[["Posted", rev.posted, "green"], ["Rated", rev.rated, "amber"], ["Asked", rev.asked, "gray"], ["Not asked", rev.notasked, "blue"], ["Needs a call", rev.recover, "red"]]
+              .filter(([, n]) => n > 0).map(([l, n, tone]) => (
+                <span key={l} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}>
+                  <Chip tone={tone}>{n}</Chip> {l}
+                </span>
+              ))}
+          </div>
+          {rev.recover > 0 && (
+            <div style={{ fontSize: 12.5, color: "#B3261E", lineHeight: 1.5 }}>
+              {rev.recover} customer{rev.recover === 1 ? "" : "s"} rated you 3★ or below — call before asking for anything public.
+            </div>
+          )}
+          {rev.recover === 0 && rev.notasked > 0 && (
+            <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
+              {rev.notasked} sold/finished job{rev.notasked === 1 ? "" : "s"} not yet asked for a review.
+            </div>
+          )}
+        </Card>
       )}
 
       <Card style={{ marginTop: 14 }}>
@@ -14919,6 +14954,26 @@ function reviewState(job) {
   return { key: "ready", label: "Not asked", tone: "blue" };
 }
 
+/* Live public-review pull, wired for later. The Google Business Profile API
+   can't be called with the browser anon key, so this hits a server function
+   (deploy supabase/functions/google-reviews with an API key). Returns
+   [{ authorName, rating, text, time }] or [] until that function exists, so
+   callers degrade to the portal-funnel review status. Match authorName /
+   time against completed jobs to mark job.review.posted for who actually
+   left a review. */
+async function fetchGoogleReviews(placeId) {
+  if (!placeId) return [];
+  try {
+    const sb = (typeof window !== "undefined" && window.__SUPABASE__) || null;
+    if (!sb) return [];
+    const { data, error } = await sb.functions.invoke("google-reviews", { body: { placeId } });
+    if (error || !data) return [];
+    return Array.isArray(data.reviews) ? data.reviews : [];
+  } catch (e) {
+    return [];
+  }
+}
+
 /* The step that is due next for a job, given when the sequence started. */
 function nextReviewStep(job, settings) {
   const r = job.review || {};
@@ -17072,6 +17127,48 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           </span>
         </label>
       </Card>
+
+      {/* Google Business Profile — scaffold. Storing the Place ID and marking
+          the connection is done here; actually pulling live posted reviews to
+          match them to customers needs the Business Profile API through a
+          server function (the anon key can't call it), so fetchGoogleReviews
+          is stubbed until that Edge Function is deployed. */}
+      {(() => {
+        const g = integrations.googleReviews || {};
+        return (
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle right={g.connected ? <Chip tone="green">Connected</Chip> : <Chip tone="gray">Not connected</Chip>}>
+              Google reviews
+            </CardTitle>
+            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 10 }}>
+              Connect your Google Business Profile so review status can reflect who has
+              actually posted a public review, not just who was asked. Paste your Place ID
+              (Google Business Profile → the URL, or the Place ID Finder).
+            </div>
+            {g.connected ? (
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ flex: 1, fontSize: 13.5 }}>Connected · Place ID <b>{g.placeId}</b></div>
+                <Btn small kind="danger" onClick={() => { setIntegrations({ ...integrations, googleReviews: { connected: false } }); toast && toast("Google reviews disconnected"); }}>Disconnect</Btn>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 8 }}>
+                <input style={{ ...inputStyle, flex: 1 }} placeholder="ChIJ… (Google Place ID)"
+                  value={g.draft || ""} onChange={(e) => setIntegrations({ ...integrations, googleReviews: { ...g, draft: e.target.value } })} />
+                <Btn small disabled={!(g.draft || "").trim()}
+                  onClick={() => { setIntegrations({ ...integrations, googleReviews: { connected: true, placeId: (g.draft || "").trim(), at: new Date().toISOString().slice(0, 10) } }); toast && toast("Google reviews connected"); }}>
+                  Connect
+                </Btn>
+              </div>
+            )}
+            <Callout label="Live sync needs a server step" tone="amber">
+              Reading actual posted reviews from Google requires the Business Profile API,
+              which must run server-side (deploy a <code>google-reviews</code> Edge Function
+              with an API key). Until then the connection is stored and the review workflow
+              runs on the real ratings customers submit in their portal.
+            </Callout>
+          </Card>
+        );
+      })()}
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle>On the roadmap</CardTitle>

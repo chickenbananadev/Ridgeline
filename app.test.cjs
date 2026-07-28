@@ -4646,6 +4646,16 @@ function Dashboard({
   const avgSale = wonCount ? signedValue / wonCount : 0;
   const collected = jobs.reduce((s, j) => s + paymentsSummary(j).received, 0);
   const closeRate = jobs.length ? wonCount / jobs.length : 0;
+  const reviewJobs = jobs.filter((j) => WON_STAGES.includes(j.stageId) || j.stageId === "s10");
+  const rev = { posted: 0, recover: 0, rated: 0, asked: 0, notasked: 0 };
+  reviewJobs.forEach((j) => {
+    const k = reviewState(j).key;
+    if (k === "posted") rev.posted++;
+    else if (k === "recover") rev.recover++;
+    else if (k === "rated") rev.rated++;
+    else if (k === "sent" || k === "clicked") rev.asked++;
+    else rev.notasked++;
+  });
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
@@ -5061,6 +5071,26 @@ function Dashboard({
       " stale job",
       stale.length === 1 ? "" : "s",
       " \u2014 14+ days untouched \u2192"
+    ] }),
+    reviewJobs.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("reviews"), children: "Manage \u2192" }), children: "Reviews" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: rev.recover || rev.notasked ? 10 : 0 }, children: [["Posted", rev.posted, "green"], ["Rated", rev.rated, "amber"], ["Asked", rev.asked, "gray"], ["Not asked", rev.notasked, "blue"], ["Needs a call", rev.recover, "red"]].filter(([, n]) => n > 0).map(([l, n, tone]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone, children: n }),
+        " ",
+        l
+      ] }, l)) }),
+      rev.recover > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: "#B3261E", lineHeight: 1.5 }, children: [
+        rev.recover,
+        " customer",
+        rev.recover === 1 ? "" : "s",
+        " rated you 3\u2605 or below \u2014 call before asking for anything public."
+      ] }),
+      rev.recover === 0 && rev.notasked > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: [
+        rev.notasked,
+        " sold/finished job",
+        rev.notasked === 1 ? "" : "s",
+        " not yet asked for a review."
+      ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => go("jobs"), style: { border: "none", background: "none", color: T.accent, fontWeight: 700, fontSize: 13, cursor: "pointer" }, children: "Open board" }), children: "Pipeline by stage" }),
@@ -18979,6 +19009,50 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
         ] })
       ] })
     ] }),
+    (() => {
+      const g = integrations.googleReviews || {};
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: g.connected ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Connected" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Not connected" }), children: "Google reviews" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 10 }, children: "Connect your Google Business Profile so review status can reflect who has actually posted a public review, not just who was asked. Paste your Place ID (Google Business Profile \u2192 the URL, or the Place ID Finder)." }),
+        g.connected ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, fontSize: 13.5 }, children: [
+            "Connected \xB7 Place ID ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: g.placeId })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "danger", onClick: () => {
+            setIntegrations({ ...integrations, googleReviews: { connected: false } });
+            toast2 && toast2("Google reviews disconnected");
+          }, children: "Disconnect" })
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: { ...inputStyle, flex: 1 },
+              placeholder: "ChIJ\u2026 (Google Place ID)",
+              value: g.draft || "",
+              onChange: (e) => setIntegrations({ ...integrations, googleReviews: { ...g, draft: e.target.value } })
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            Btn,
+            {
+              small: true,
+              disabled: !(g.draft || "").trim(),
+              onClick: () => {
+                setIntegrations({ ...integrations, googleReviews: { connected: true, placeId: (g.draft || "").trim(), at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) } });
+                toast2 && toast2("Google reviews connected");
+              },
+              children: "Connect"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Live sync needs a server step", tone: "amber", children: [
+          "Reading actual posted reviews from Google requires the Business Profile API, which must run server-side (deploy a ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "google-reviews" }),
+          " Edge Function with an API key). Until then the connection is stored and the review workflow runs on the real ratings customers submit in their portal."
+        ] })
+      ] });
+    })(),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "On the roadmap" }),
       [
