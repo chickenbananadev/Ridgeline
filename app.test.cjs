@@ -9354,7 +9354,8 @@ function buildPortalSnapshot(job, brand2, token) {
           scope: est.scope || "",
           tiers,
           upgrades,
-          defaultTier: est.selectedTier || tiers[0] && tiers[0].id || null
+          defaultTier: est.selectedTier || tiers[0] && tiers[0].id || null,
+          doc: est.doc ? { coverImage: est.doc.coverImage || null, notes: est.doc.notes || "", terms: est.doc.terms || "" } : null
         };
       })() : null,
       contract: portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
@@ -9908,13 +9909,16 @@ function PortalProposal({ estimate, accent, onSelect = () => {
       ] }, i2))
     ] });
   }
+  const doc = estimate.doc || {};
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+    doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "", style: { width: "100%", borderRadius: 10, marginBottom: 12, display: "block", objectFit: "cover", maxHeight: 200 } }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800 }, children: money(total) }), children: "Choose your option" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 10 }, children: [
       estimate.number,
       estimate.date ? ` \xB7 ${estimate.date}` : ""
     ] }),
     estimate.scope && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }, children: estimate.scope }),
+    doc.notes && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }, children: doc.notes }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gap: 8, marginBottom: 14 }, children: tiers.map((t) => {
       const on = t.id === tier;
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setTier(t.id), style: {
@@ -9977,7 +9981,8 @@ function PortalProposal({ estimate, accent, onSelect = () => {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 800, color: S.ink }, children: "Your total" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 20, fontWeight: 800, color: accent }, children: money(total) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: "Pick the option that fits \u2014 you'll confirm it when you sign, and nothing is final until then." })
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: "Pick the option that fits \u2014 you'll confirm it when you sign, and nothing is final until then." }),
+    doc.terms && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub, marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}`, lineHeight: 1.5, whiteSpace: "pre-wrap" }, children: doc.terms })
   ] });
 }
 function PublicPortal({ token }) {
@@ -13034,7 +13039,9 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
     if (!name || items.length === 0) return;
     setEstimateTemplates([
       ...estimateTemplates.filter((t) => t.name.toLowerCase() !== name.toLowerCase()),
-      { id: uid("etpl"), name, items: items.map(({ id, ...rest }) => rest) }
+      /* Templates now carry the scope and terms too, not just line items, so a
+         saved template seeds a whole proposal rather than a bare price list. */
+      { id: uid("etpl"), name, items: items.map(({ id, ...rest }) => rest), scope: est.scope || "", terms: est.doc && est.doc.terms || "" }
     ]);
     setTplName("");
     setTplSheet(false);
@@ -13047,6 +13054,10 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
     } else {
       setEst({ items: [...est.items, ...newItems] });
     }
+    const patch = {};
+    if (t.scope && !est.scope) patch.scope = t.scope;
+    if (t.terms && !(est.doc && est.doc.terms)) patch.doc = { ...est.doc || {}, terms: t.terms };
+    if (Object.keys(patch).length) setEst(patch);
     setTplSheet(false);
     toast2(`"${t.name}" added \u2014 ${t.items.length} lines${tiersOn ? ` to ${est.tiers.find((x) => x.id === tierTab)?.name || "this tier"}` : ""}`);
   };
@@ -13279,7 +13290,7 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
       !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => {
           setEst({ status: "Sent" });
-          toast2("Estimate emailed to client");
+          toast2(job.portalToken ? "Sent \u2014 it's live in the client portal to choose and sign" : "Marked sent \u2014 publish the client portal to share it");
         }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }),
           " Send"

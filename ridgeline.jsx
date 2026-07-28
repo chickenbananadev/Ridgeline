@@ -7973,6 +7973,7 @@ function buildPortalSnapshot(job, brand, token) {
           number: est.number, date: est.date, total: estimateTotal(est), items: est.items,
           scope: est.scope || "", tiers, upgrades,
           defaultTier: est.selectedTier || (tiers[0] && tiers[0].id) || null,
+          doc: est.doc ? { coverImage: est.doc.coverImage || null, notes: est.doc.notes || "", terms: est.doc.terms || "" } : null,
         };
       })() : null,
       contract: portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
@@ -8541,11 +8542,16 @@ function PortalProposal({ estimate, accent, onSelect = () => {} }) {
     );
   }
 
+  const doc = estimate.doc || {};
   return (
     <Card>
+      {doc.coverImage && (
+        <img src={doc.coverImage} alt="" style={{ width: "100%", borderRadius: 10, marginBottom: 12, display: "block", objectFit: "cover", maxHeight: 200 }} />
+      )}
       <CardTitle right={<span style={{ fontWeight: 800 }}>{money(total)}</span>}>Choose your option</CardTitle>
       <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10 }}>{estimate.number}{estimate.date ? ` · ${estimate.date}` : ""}</div>
       {estimate.scope && <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }}>{estimate.scope}</div>}
+      {doc.notes && <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }}>{doc.notes}</div>}
       <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
         {tiers.map((t) => {
           const on = t.id === tier;
@@ -8599,6 +8605,9 @@ function PortalProposal({ estimate, accent, onSelect = () => {} }) {
       <div style={{ fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
         Pick the option that fits — you'll confirm it when you sign, and nothing is final until then.
       </div>
+      {doc.terms && (
+        <div style={{ fontSize: 11, color: S.sub, marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}`, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{doc.terms}</div>
+      )}
     </Card>
   );
 }
@@ -11740,7 +11749,9 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
     if (!name || items.length === 0) return;
     setEstimateTemplates([
       ...estimateTemplates.filter((t) => t.name.toLowerCase() !== name.toLowerCase()),
-      { id: uid("etpl"), name, items: items.map(({ id, ...rest }) => rest) },
+      /* Templates now carry the scope and terms too, not just line items, so a
+         saved template seeds a whole proposal rather than a bare price list. */
+      { id: uid("etpl"), name, items: items.map(({ id, ...rest }) => rest), scope: est.scope || "", terms: (est.doc && est.doc.terms) || "" },
     ]);
     setTplName(""); setTplSheet(false);
     toast(`Template "${name}" saved`);
@@ -11752,6 +11763,12 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
     } else {
       setEst({ items: [...est.items, ...newItems] });
     }
+    /* Bring the template's scope/terms across when the estimate doesn't have its
+       own yet — never overwrite what a rep already wrote. */
+    const patch = {};
+    if (t.scope && !est.scope) patch.scope = t.scope;
+    if (t.terms && !(est.doc && est.doc.terms)) patch.doc = { ...(est.doc || {}), terms: t.terms };
+    if (Object.keys(patch).length) setEst(patch);
     setTplSheet(false);
     toast(`"${t.name}" added — ${t.items.length} lines${tiersOn ? ` to ${est.tiers.find((x) => x.id === tierTab)?.name || "this tier"}` : ""}`);
   };
@@ -11989,7 +12006,12 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
         <Btn kind="ghost" onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand), toast)}><Printer size={15} /> PDF</Btn>
         {!locked && (
           <>
-            <Btn kind="ghost" onClick={() => { setEst({ status: "Sent" }); toast("Estimate emailed to client"); }}>
+            <Btn kind="ghost" onClick={() => {
+              setEst({ status: "Sent" });
+              toast(job.portalToken
+                ? "Sent — it's live in the client portal to choose and sign"
+                : "Marked sent — publish the client portal to share it");
+            }}>
               <Send size={15} /> Send
             </Btn>
             <Btn onClick={() => setSigOpen(true)}><PenLine size={15} /> Client signature</Btn>
