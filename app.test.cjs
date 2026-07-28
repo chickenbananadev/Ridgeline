@@ -8750,41 +8750,74 @@ function openDoc(title, brand2, bodyHtml, toast2) {
 }
 var esc = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 function lineTable(items, opts = {}) {
-  const rows = items.map((it) => `<tr>
-    <td>${esc(it.desc)}</td>
-    <td class="r">${esc(it.qty)} ${esc(it.unit || "")}</td>
-    ${opts.hidePrice ? "" : `<td class="r">${money(num(it.price))}</td><td class="r">${money(num(it.qty) * num(it.price))}</td>`}
-  </tr>`).join("");
+  const rows = items.map((it) => {
+    const showQty = !opts.honorLine || it.showQty !== false;
+    const showPrice = !opts.hidePrice && (!opts.honorLine || it.showUnitPrice !== false);
+    const descCell = `<td>${esc(it.desc)}${opts.honorLine && it.description ? `<div class="muted" style="font-size:12px;margin-top:2px">${esc(it.description)}</div>` : ""}</td>`;
+    return `<tr>
+      ${descCell}
+      <td class="r">${showQty ? `${esc(it.qty)} ${esc(it.unit || "")}` : ""}</td>
+      ${opts.hidePrice ? "" : showPrice ? `<td class="r">${money(num(it.price))}</td><td class="r">${money(num(it.qty) * num(it.price))}</td>` : `<td class="r"></td><td class="r"></td>`}
+    </tr>`;
+  }).join("");
   return `<table><thead><tr>
     <th>Description</th><th class="r">Qty</th>
     ${opts.hidePrice ? "" : '<th class="r">Unit</th><th class="r">Amount</th>'}
   </tr></thead><tbody>${rows}</tbody></table>`;
+}
+var PROPOSAL_STYLES = [
+  { id: "classic", name: "Classic", blurb: "Clean and traditional" },
+  { id: "bold", name: "Bold", blurb: "Big color banner" },
+  { id: "minimal", name: "Minimal", blurb: "Understated, lots of white" }
+];
+function normalizeProposalDoc(doc) {
+  const d = doc || {};
+  return {
+    style: d.style || "classic",
+    sections: Array.isArray(d.sections) && d.sections.length ? d.sections : ["cover", "items", "notes", "terms"],
+    blocks: d.blocks || {},
+    coverImage: d.coverImage || null,
+    notes: d.notes || "",
+    terms: d.terms || ""
+  };
 }
 function estimateDocHtml(job, brand2) {
   const est = job.estimate;
   const doc = est.doc || {};
   const total = estimateTotal(est);
   const secs = doc.sections || ["cover", "items", "notes", "terms"];
+  const blocks = doc.blocks || {};
+  const style = doc.style || "classic";
+  const coverStyle = style === "bold" ? `background:${brand2.primary};color:#fff;padding:26px;border-radius:14px` : style === "minimal" ? "padding:8px 0" : "";
+  const coverInk = style === "bold" ? "#fff" : brand2.primary;
   let out = "";
   for (const sec of secs) {
-    if (sec === "cover" && (doc.coverImage || true)) {
-      out += `<div class="cover">
+    if (sec === "cover") {
+      out += `<div class="cover" style="${coverStyle}">
         ${doc.coverImage ? `<img class="hero" src="${doc.coverImage}" alt="">` : ""}
-        <div style="font-size:26px;font-weight:800;color:${brand2.primary}">Roofing Proposal</div>
+        <div style="font-size:${style === "bold" ? 30 : 26}px;font-weight:800;color:${coverInk}">Roofing Proposal</div>
         <div style="margin-top:18px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
-        <div class="muted" style="font-size:13px">${esc(job.address)}</div>
-        <div class="muted" style="margin-top:14px">${esc(est.number || "")} \xB7 ${esc(est.date || "")}</div>
+        <div class="muted" style="font-size:13px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(job.address)}</div>
+        <div class="muted" style="margin-top:14px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(est.number || "")} \xB7 ${esc(est.date || "")}</div>
       </div>`;
     }
     if (sec === "items") {
       out += `<h2>Scope of work</h2>`;
       if (est.scope) out += `<div class="muted">${esc(est.scope)}</div>`;
-      out += lineTable(est.items || []);
+      out += lineTable(est.items || [], { honorLine: true });
       out += `<div class="tot grand"><span>Total</span><span>${money(total)}</span></div>`;
       if (est.validThrough) out += `<div class="muted" style="margin-top:10px">Valid through ${esc(est.validThrough)}</div>`;
     }
     if (sec === "notes" && doc.notes) out += `<h2>Special notes</h2><div class="muted">${esc(doc.notes)}</div>`;
     if (sec === "terms" && doc.terms) out += `<h2>Terms &amp; conditions</h2><div class="muted">${esc(doc.terms)}</div>`;
+    const b = blocks[sec];
+    if (b && b.type === "text" && (b.title || b.body)) {
+      out += `<h2>${esc(b.title || "")}</h2><div class="muted">${esc(b.body || "")}</div>`;
+    }
+    if (b && b.type === "pdf" && b.dataUrl) {
+      out += `<h2>${esc(b.name || "Attachment")}</h2>`;
+      out += `<iframe src="${b.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe>`;
+    }
   }
   out += `<div class="sig">
     <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
@@ -9410,7 +9443,12 @@ function buildPortalSnapshot(job, brand2, token) {
           tiers,
           upgrades,
           defaultTier: est.selectedTier || tiers[0] && tiers[0].id || null,
-          doc: est.doc ? { coverImage: est.doc.coverImage || null, notes: est.doc.notes || "", terms: est.doc.terms || "" } : null
+          doc: est.doc ? (() => {
+            const nd = normalizeProposalDoc(est.doc);
+            const custom = nd.sections.map((s) => nd.blocks[s]).filter((b) => b && b.type === "text" && (b.title || b.body)).map((b) => ({ title: b.title || "", body: b.body || "" }));
+            const attachments = nd.sections.map((s) => nd.blocks[s]).filter((b) => b && b.type === "pdf").map((b) => ({ name: b.name || "Attachment" }));
+            return { coverImage: nd.coverImage, notes: nd.notes, terms: nd.terms, style: nd.style, custom, attachments };
+          })() : null
         };
       })() : null,
       contract: portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
@@ -10033,6 +10071,18 @@ function PortalProposal({ estimate, accent, onSelect = () => {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 20, fontWeight: 800, color: accent }, children: money(total) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: "Pick the option that fits \u2014 you'll confirm it when you sign, and nothing is final until then." }),
+    (doc.custom || []).map((c, i2) => c.title || c.body ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14, paddingTop: 12, borderTop: `1px solid ${S.line}` }, children: [
+      c.title && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, marginBottom: 6 }, children: c.title }),
+      c.body && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, lineHeight: 1.55, whiteSpace: "pre-wrap" }, children: c.body })
+    ] }, `c${i2}`) : null),
+    (doc.attachments || []).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14, paddingTop: 12, borderTop: `1px solid ${S.line}` }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, marginBottom: 6 }, children: "Attachments" }),
+      doc.attachments.map((a, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: S.ink, padding: "4px 0" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.FileText, { size: 15, color: accent }),
+        " ",
+        a.name
+      ] }, `a${i2}`))
+    ] }),
     doc.terms && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub, marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}`, lineHeight: 1.5, whiteSpace: "pre-wrap" }, children: doc.terms })
   ] });
 }
@@ -13080,6 +13130,263 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
     ] })
   ] });
 }
+function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast2, total, onClose }) {
+  const doc = normalizeProposalDoc(est.doc);
+  const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
+  const blocks = doc.blocks || {};
+  const [mode, setMode] = (0, import_react.useState)("build");
+  const [addOpen, setAddOpen] = (0, import_react.useState)(false);
+  const coverRef = (0, import_react.useRef)(null);
+  const pdfRef = (0, import_react.useRef)(null);
+  const BUILTIN = { cover: "Cover page", items: "Line items & pricing", notes: "Special notes", terms: "Terms & conditions" };
+  const has = (key) => doc.sections.includes(key);
+  const labelFor = (sec) => BUILTIN[sec] || (blocks[sec] ? blocks[sec].type === "pdf" ? `PDF \xB7 ${blocks[sec].name || "Attachment"}` : blocks[sec].title || "Custom section" : sec);
+  const move = (idx, dir) => {
+    const arr = [...doc.sections];
+    const swap = idx + dir;
+    if (swap < 0 || swap >= arr.length) return;
+    [arr[idx], arr[swap]] = [arr[swap], arr[idx]];
+    setDoc({ sections: arr });
+  };
+  const removeSection = (sec) => {
+    const nextBlocks = { ...blocks };
+    if (nextBlocks[sec]) delete nextBlocks[sec];
+    setDoc({ sections: doc.sections.filter((s) => s !== sec), blocks: nextBlocks });
+  };
+  const addBuiltin = (key) => {
+    if (!has(key)) setDoc({ sections: [...doc.sections, key] });
+    setAddOpen(false);
+  };
+  const addText = () => {
+    const id = uid("sec");
+    setDoc({ sections: [...doc.sections, id], blocks: { ...blocks, [id]: { type: "text", title: "New section", body: "" } } });
+    setAddOpen(false);
+  };
+  const onCover = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    const r = new FileReader();
+    r.onload = () => {
+      setDoc({ coverImage: String(r.result), sections: has("cover") ? doc.sections : ["cover", ...doc.sections] });
+      toast2("Cover image set");
+    };
+    r.readAsDataURL(file);
+    e.target.value = "";
+  };
+  const onPdf = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      toast2("Attach a PDF file");
+      e.target.value = "";
+      return;
+    }
+    const r = new FileReader();
+    r.onload = () => {
+      const id = uid("pdf");
+      setDoc({ sections: [...doc.sections, id], blocks: { ...blocks, [id]: { type: "pdf", name: file.name, dataUrl: String(r.result) } } });
+      toast2(`Attached ${file.name}`);
+    };
+    r.readAsDataURL(file);
+    e.target.value = "";
+    setAddOpen(false);
+  };
+  const chip = (on) => ({
+    border: `1px solid ${on ? T.accent : S.line}`,
+    background: on ? T.accentSoft : "#fff",
+    color: on ? T.accent : S.sub,
+    borderRadius: 999,
+    padding: "6px 13px",
+    fontSize: 12.5,
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "inherit"
+  });
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "fixed", inset: 0, background: S.bg, zIndex: 60, overflowY: "auto", WebkitOverflowScrolling: "touch" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: coverRef, type: "file", accept: "image/*", onChange: onCover, style: { display: "none" } }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: pdfRef, type: "file", accept: "application/pdf", onChange: onPdf, style: { display: "none" } }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "sticky", top: 0, zIndex: 2, background: "#fff", borderBottom: `1px solid ${S.line}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onClose, style: { border: "none", background: "none", cursor: "pointer", padding: 6, display: "flex" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronLeft, { size: 22, color: S.ink }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 16, fontWeight: 800, color: S.ink }, children: "Proposal builder" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: [
+          job.name,
+          " \xB7 ",
+          est.number || "Draft"
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => openDoc(`Estimate \u2014 ${job.name}`, brand2, estimateDocHtml(job, brand2), toast2), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 14 }),
+        " PDF"
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, padding: "12px 16px 0" }, children: [["build", "Build"], ["preview", "Preview"]].map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setMode(id), style: {
+      flex: 1,
+      border: `1px solid ${mode === id ? T.accent : S.line}`,
+      background: mode === id ? T.accentSoft : "#fff",
+      color: mode === id ? T.accent : S.sub,
+      borderRadius: 10,
+      padding: "9px 0",
+      fontSize: 13.5,
+      fontWeight: 800,
+      cursor: "pointer",
+      fontFamily: "inherit"
+    }, children: label }, id)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "14px 16px 120px" }, children: mode === "build" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Template style" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: PROPOSAL_STYLES.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => !locked && setDoc({ style: s.id }), disabled: locked, style: {
+          flex: "1 1 30%",
+          minWidth: 96,
+          textAlign: "left",
+          cursor: locked ? "default" : "pointer",
+          fontFamily: "inherit",
+          border: `2px solid ${doc.style === s.id ? T.accent : S.line}`,
+          background: doc.style === s.id ? T.accentSoft : "#fff",
+          borderRadius: 12,
+          padding: "11px 12px"
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 800, color: S.ink }, children: s.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 2 }, children: s.blurb })
+        ] }, s.id)) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => setAddOpen(true), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }),
+          " Add section"
+        ] }), children: "Pages & sections" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 8 }, children: "Reorder with the arrows. Add custom text sections or attach a PDF; each becomes its own page in the proposal." }),
+        doc.sections.map((sec, idx) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: `1px solid ${S.line}`, padding: "10px 0" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "flex", color: "#C7CBD1" }, children: blocks[sec] && blocks[sec].type === "pdf" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.FileText, { size: 16 }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.GripVertical, { size: 16 }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, fontSize: 14, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: labelFor(sec) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => move(idx, -1), disabled: idx === 0, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronUp, { size: 15 }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => move(idx, 1), disabled: idx === doc.sections.length - 1, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronDown, { size: 15 }) }),
+            !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeSection(sec), style: { border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
+          ] }),
+          sec === "cover" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 8, paddingLeft: 24 }, children: [
+            doc.coverImage ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "Cover", style: { width: "100%", borderRadius: 10, marginBottom: 8, maxHeight: 160, objectFit: "cover", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8 }, children: "No photo yet \u2014 the house photo works great here." }),
+            !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => coverRef.current && coverRef.current.click(), children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
+                " ",
+                doc.coverImage ? "Replace" : "Add photo"
+              ] }),
+              doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setDoc({ coverImage: null }), children: "Remove" })
+            ] })
+          ] }),
+          sec === "notes" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "textarea",
+            {
+              style: { ...inputStyle, minHeight: 60, marginTop: 8, resize: "vertical", fontFamily: "inherit" },
+              value: doc.notes,
+              disabled: locked,
+              onChange: (e) => setDoc({ notes: e.target.value }),
+              placeholder: "Color selections, access notes, exclusions\u2026"
+            }
+          ),
+          sec === "terms" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "textarea",
+            {
+              style: { ...inputStyle, minHeight: 90, marginTop: 8, resize: "vertical", fontFamily: "inherit" },
+              value: doc.terms,
+              disabled: locked,
+              onChange: (e) => setDoc({ terms: e.target.value }),
+              placeholder: "Payment terms, warranty, change orders\u2026"
+            }
+          ),
+          blocks[sec] && blocks[sec].type === "text" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: { ...inputStyle, marginBottom: 8, fontWeight: 700 },
+                value: blocks[sec].title,
+                disabled: locked,
+                placeholder: "Section heading (e.g. Why choose us, Warranty)",
+                onChange: (e) => setDoc({ blocks: { ...blocks, [sec]: { ...blocks[sec], title: e.target.value } } })
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "textarea",
+              {
+                style: { ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" },
+                value: blocks[sec].body,
+                disabled: locked,
+                placeholder: "Section text the customer will read\u2026",
+                onChange: (e) => setDoc({ blocks: { ...blocks, [sec]: { ...blocks[sec], body: e.target.value } } })
+              }
+            )
+          ] }),
+          blocks[sec] && blocks[sec].type === "pdf" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 6, paddingLeft: 24, fontSize: 12.5, color: S.sub }, children: "Attached PDF \u2014 shown as its own page in the proposal." })
+        ] }, sec)),
+        addOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+          !has("cover") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: chip(false), onClick: () => addBuiltin("cover"), children: "+ Cover" }),
+          !has("items") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: chip(false), onClick: () => addBuiltin("items"), children: "+ Line items" }),
+          !has("notes") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: chip(false), onClick: () => addBuiltin("notes"), children: "+ Notes" }),
+          !has("terms") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: chip(false), onClick: () => addBuiltin("terms"), children: "+ Terms" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: chip(false), onClick: addText, children: "+ Custom text" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: chip(false), onClick: () => pdfRef.current && pdfRef.current.click(), children: "+ Attach PDF" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: { ...chip(false), color: S.sub }, onClick: () => setAddOpen(false), children: "Cancel" })
+        ] })
+      ] })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProposalPreview, { job, brand: brand2, est, doc, total }) })
+  ] });
+}
+function ProposalPreview({ job, brand: brand2, est, doc, total }) {
+  const blocks = doc.blocks || {};
+  const style = doc.style || "classic";
+  const coverWrap = style === "bold" ? { background: T.primary, color: "#fff", padding: 22, borderRadius: 14 } : style === "minimal" ? { padding: "6px 2px" } : { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" };
+  const onDark = style === "bold";
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }, children: doc.sections.map((sec) => {
+    if (sec === "cover") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16, ...coverWrap }, children: [
+      doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "", style: { width: "100%", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: style === "bold" ? 0 : style === "minimal" ? "10px 0" : 16 }, children: [
+        brand2.logo && !onDark ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "", style: { height: 34, objectFit: "contain", marginBottom: 8, display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontWeight: 800, fontSize: 17, marginBottom: 4, color: onDark ? "#fff" : S.ink }, children: brand2.company }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800, color: onDark ? "#fff" : brand2.primary }, children: "Roofing Proposal" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12, fontSize: 13.5, color: onDark ? "rgba(255,255,255,.9)" : S.ink }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontWeight: 700 }, children: [
+            "Prepared for ",
+            job.name
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { opacity: 0.85 }, children: job.address }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { opacity: 0.85, marginTop: 4 }, children: [
+            est.number,
+            " \xB7 ",
+            est.date
+          ] })
+        ] })
+      ] })
+    ] }, sec);
+    if (sec === "items") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }, children: "SCOPE & PRICING" }),
+      est.scope && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, lineHeight: 1.5, marginBottom: 8, whiteSpace: "pre-wrap" }, children: est.scope }),
+      (est.items || []).map((it) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PortalEstLine, { it }, it.id)),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 800, marginTop: 8, paddingTop: 8, borderTop: `2px solid ${S.line}` }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Total" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: money(total) })
+      ] })
+    ] }, sec);
+    if (sec === "notes" && doc.notes) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }, children: "SPECIAL NOTES" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }, children: doc.notes })
+    ] }, sec);
+    if (sec === "terms" && doc.terms) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }, children: "TERMS & CONDITIONS" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, lineHeight: 1.6, color: S.sub, whiteSpace: "pre-wrap" }, children: doc.terms })
+    ] }, sec);
+    const b = blocks[sec];
+    if (b && b.type === "text" && (b.title || b.body)) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }, children: (b.title || "").toUpperCase() }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }, children: b.body })
+    ] }, sec);
+    if (b && b.type === "pdf") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16, display: "flex", alignItems: "center", gap: 10, border: `1px solid ${S.line}`, borderRadius: 10, padding: "12px 14px" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.FileText, { size: 20, color: T.accent }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700 }, children: b.name || "Attachment" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { marginLeft: "auto", fontSize: 12, color: S.sub }, children: "PDF page" })
+    ] }, sec);
+    return null;
+  }) });
+}
 function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates = [], setEstimateTemplates = () => {
 }, priceList = [] }) {
   const est = { ...job.estimate, tiers: job.estimate.tiers || [], upgrades: job.estimate.upgrades || [] };
@@ -13173,30 +13480,7 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
     setTplSheet(false);
     toast2(`"${t.name}" added \u2014 ${t.items.length} lines${tiersOn ? ` to ${est.tiers.find((x) => x.id === tierTab)?.name || "this tier"}` : ""}`);
   };
-  const doc = est.doc || { sections: ["cover", "items", "notes", "terms"], coverImage: null, notes: "", terms: "" };
-  const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
-  const [docSheet, setDocSheet] = (0, import_react.useState)(false);
-  const [previewOpen, setPreviewOpen] = (0, import_react.useState)(false);
-  const coverRef = (0, import_react.useRef)(null);
-  const onCover = (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file || !file.type.startsWith("image/")) return;
-    const r = new FileReader();
-    r.onload = () => {
-      setDoc({ coverImage: String(r.result) });
-      toast2("Cover image set");
-    };
-    r.readAsDataURL(file);
-    e.target.value = "";
-  };
-  const moveSection = (idx, dir) => {
-    const arr = [...doc.sections];
-    const swap = idx + dir;
-    if (swap < 0 || swap >= arr.length) return;
-    [arr[idx], arr[swap]] = [arr[swap], arr[idx]];
-    setDoc({ sections: arr });
-  };
-  const SECTION_LABELS = { cover: "Cover page", items: "Line items & pricing", notes: "Special notes", terms: "Terms & conditions" };
+  const [builderOpen, setBuilderOpen] = (0, import_react.useState)(false);
   const m = job.measurements;
   const prefillFromMeasurements = () => {
     if (!num(m.squares)) {
@@ -13271,11 +13555,8 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: `Save this estimate's lines under a name \u2014 "Full replacement \u2014 architectural", "Repair minimum" \u2014 and drop them into any future estimate in one tap.` })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", gap: 6 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "soft", small: true, onClick: () => setDocSheet(true), children: "Layout" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "soft", small: true, onClick: () => setPreviewOpen(true), children: "Preview" })
-      ] }), children: "Estimate document" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: "The customer-facing document: cover page with your logo, a photo, and their info, then sections in the order you choose \u2014 line items, notes, terms." })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "soft", small: true, onClick: () => setBuilderOpen(true), children: "Open builder" }), children: "Proposal document" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: "Opens the full-page proposal builder: pick a template style, add and reorder sections, write custom sections, attach PDFs, and control what pricing the customer sees \u2014 then preview and export." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Scope of work" }),
@@ -13549,92 +13830,19 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
         ] })
       ] }, t.id))
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open: docSheet, onClose: () => setDocSheet(false), title: "Document layout", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: coverRef, type: "file", accept: "image/*", onChange: onCover, style: { display: "none" } }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, marginBottom: 6 }, children: "SECTION ORDER" }),
-      doc.sections.map((sec, idx) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: idx ? `1px solid ${S.line}` : "none" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, fontSize: 14, fontWeight: 600 }, children: SECTION_LABELS[sec] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => moveSection(idx, -1), disabled: idx === 0, children: "\u2191" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => moveSection(idx, 1), disabled: idx === doc.sections.length - 1, children: "\u2193" })
-      ] }, sec)),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, margin: "16px 0 6px" }, children: "COVER PAGE" }),
-      doc.coverImage ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "Cover", style: { width: "100%", borderRadius: 10, marginBottom: 8 } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 8 }, children: "No photo yet \u2014 the house photo works great here." }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => coverRef.current && coverRef.current.click(), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
-          " ",
-          doc.coverImage ? "Replace photo" : "Add photo"
-        ] }),
-        doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setDoc({ coverImage: null }), children: "Remove" })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Special notes", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "textarea",
-          {
-            style: { ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" },
-            value: doc.notes,
-            onChange: (e) => setDoc({ notes: e.target.value }),
-            placeholder: "Color selections, access notes, exclusions\u2026"
-          }
-        ) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Terms & conditions", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "textarea",
-          {
-            style: { ...inputStyle, minHeight: 110, resize: "vertical", fontFamily: "inherit" },
-            value: doc.terms,
-            onChange: (e) => setDoc({ terms: e.target.value }),
-            placeholder: "Payment terms, warranty, change orders\u2026"
-          }
-        ) })
-      ] })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: previewOpen, onClose: () => setPreviewOpen(false), title: "Estimate preview", children: doc.sections.map((sec) => {
-      if (sec === "cover") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 14 }, children: [
-        doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "", style: { width: "100%", display: "block" } }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: 18, background: T.primary, color: "#fff" }, children: [
-          brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "", style: { height: 40, objectFit: "contain", marginBottom: 10, display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontWeight: 800, fontSize: 18, marginBottom: 6 }, children: brand2.company }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, opacity: 0.85 }, children: brand2.slogan }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14, fontSize: 14 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontWeight: 700 }, children: [
-              "Prepared for ",
-              job.name
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { opacity: 0.85 }, children: job.address }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { opacity: 0.85, marginTop: 5 }, children: [
-              est.number,
-              " \xB7 ",
-              est.date
-            ] })
-          ] })
-        ] })
-      ] }, sec);
-      if (sec === "items") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 14 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }, children: "SCOPE & PRICING" }),
-        est.items.map((it) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5, padding: "6px 0", borderBottom: `1px solid ${S.soft}` }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1 }, children: [
-            it.desc,
-            " \u2014 ",
-            it.qty,
-            " ",
-            it.unit
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 600 }, children: money(num(it.qty) * num(it.price)) })
-        ] }, it.id)),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 800, marginTop: 8 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Total" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: money(total) })
-        ] })
-      ] }, sec);
-      if (sec === "notes" && doc.notes) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 14 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }, children: "SPECIAL NOTES" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }, children: doc.notes })
-      ] }, sec);
-      if (sec === "terms" && doc.terms) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 14 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }, children: "TERMS & CONDITIONS" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: S.sub }, children: doc.terms })
-      ] }, sec);
-      return null;
-    }) })
+    builderOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      ProposalBuilder,
+      {
+        job,
+        brand: brand2,
+        est,
+        setEst,
+        locked,
+        toast: toast2,
+        total,
+        onClose: () => setBuilderOpen(false)
+      }
+    )
   ] });
 }
 function TabContract({ job, brand: brand2, setBrand = () => {

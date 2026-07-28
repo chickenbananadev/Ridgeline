@@ -7452,15 +7452,48 @@ const esc = (x) => String(x == null ? "" : x)
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 function lineTable(items, opts = {}) {
-  const rows = items.map((it) => `<tr>
-    <td>${esc(it.desc)}</td>
-    <td class="r">${esc(it.qty)} ${esc(it.unit || "")}</td>
-    ${opts.hidePrice ? "" : `<td class="r">${money(num(it.price))}</td><td class="r">${money(num(it.qty) * num(it.price))}</td>`}
-  </tr>`).join("");
+  /* opts.honorLine → respect each line's customer-visibility toggles
+     (showQty / showUnitPrice) set in the estimate editor, so the printed
+     proposal hides exactly what the rep chose to hide. */
+  const rows = items.map((it) => {
+    const showQty = !opts.honorLine || it.showQty !== false;
+    const showPrice = !opts.hidePrice && (!opts.honorLine || it.showUnitPrice !== false);
+    const descCell = `<td>${esc(it.desc)}${opts.honorLine && it.description ? `<div class="muted" style="font-size:12px;margin-top:2px">${esc(it.description)}</div>` : ""}</td>`;
+    return `<tr>
+      ${descCell}
+      <td class="r">${showQty ? `${esc(it.qty)} ${esc(it.unit || "")}` : ""}</td>
+      ${opts.hidePrice ? "" : (showPrice ? `<td class="r">${money(num(it.price))}</td><td class="r">${money(num(it.qty) * num(it.price))}</td>` : `<td class="r"></td><td class="r"></td>`)}
+    </tr>`;
+  }).join("");
   return `<table><thead><tr>
     <th>Description</th><th class="r">Qty</th>
     ${opts.hidePrice ? "" : '<th class="r">Unit</th><th class="r">Amount</th>'}
   </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+/* Proposal visual styles for the customer-facing document. Each style is a
+   light treatment of the cover/heading; the body stays legible and printable.
+   Additive — an estimate with no doc.style falls back to "classic". */
+const PROPOSAL_STYLES = [
+  { id: "classic", name: "Classic", blurb: "Clean and traditional" },
+  { id: "bold", name: "Bold", blurb: "Big color banner" },
+  { id: "minimal", name: "Minimal", blurb: "Understated, lots of white" },
+];
+/* Read any estimate's doc into the richer proposal shape without mutating
+   old data. Legacy docs (just cover/items/notes/terms strings) come back
+   with an empty blocks map and the classic style; new custom sections and
+   PDF attachments live in `blocks`, keyed by an id that also appears in the
+   ordered `sections` list. */
+function normalizeProposalDoc(doc) {
+  const d = doc || {};
+  return {
+    style: d.style || "classic",
+    sections: Array.isArray(d.sections) && d.sections.length ? d.sections : ["cover", "items", "notes", "terms"],
+    blocks: d.blocks || {},
+    coverImage: d.coverImage || null,
+    notes: d.notes || "",
+    terms: d.terms || "",
+  };
 }
 
 function estimateDocHtml(job, brand) {
@@ -7468,26 +7501,41 @@ function estimateDocHtml(job, brand) {
   const doc = est.doc || {};
   const total = estimateTotal(est);
   const secs = doc.sections || ["cover", "items", "notes", "terms"];
+  const blocks = doc.blocks || {};
+  const style = doc.style || "classic";
+  const coverStyle = style === "bold"
+    ? `background:${brand.primary};color:#fff;padding:26px;border-radius:14px`
+    : style === "minimal" ? "padding:8px 0" : "";
+  const coverInk = style === "bold" ? "#fff" : brand.primary;
   let out = "";
   for (const sec of secs) {
-    if (sec === "cover" && (doc.coverImage || true)) {
-      out += `<div class="cover">
+    if (sec === "cover") {
+      out += `<div class="cover" style="${coverStyle}">
         ${doc.coverImage ? `<img class="hero" src="${doc.coverImage}" alt="">` : ""}
-        <div style="font-size:26px;font-weight:800;color:${brand.primary}">Roofing Proposal</div>
+        <div style="font-size:${style === "bold" ? 30 : 26}px;font-weight:800;color:${coverInk}">Roofing Proposal</div>
         <div style="margin-top:18px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
-        <div class="muted" style="font-size:13px">${esc(job.address)}</div>
-        <div class="muted" style="margin-top:14px">${esc(est.number || "")} · ${esc(est.date || "")}</div>
+        <div class="muted" style="font-size:13px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(job.address)}</div>
+        <div class="muted" style="margin-top:14px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(est.number || "")} · ${esc(est.date || "")}</div>
       </div>`;
     }
     if (sec === "items") {
       out += `<h2>Scope of work</h2>`;
       if (est.scope) out += `<div class="muted">${esc(est.scope)}</div>`;
-      out += lineTable(est.items || []);
+      out += lineTable(est.items || [], { honorLine: true });
       out += `<div class="tot grand"><span>Total</span><span>${money(total)}</span></div>`;
       if (est.validThrough) out += `<div class="muted" style="margin-top:10px">Valid through ${esc(est.validThrough)}</div>`;
     }
     if (sec === "notes" && doc.notes) out += `<h2>Special notes</h2><div class="muted">${esc(doc.notes)}</div>`;
     if (sec === "terms" && doc.terms) out += `<h2>Terms &amp; conditions</h2><div class="muted">${esc(doc.terms)}</div>`;
+    /* Custom sections added in the proposal builder. */
+    const b = blocks[sec];
+    if (b && b.type === "text" && (b.title || b.body)) {
+      out += `<h2>${esc(b.title || "")}</h2><div class="muted">${esc(b.body || "")}</div>`;
+    }
+    if (b && b.type === "pdf" && b.dataUrl) {
+      out += `<h2>${esc(b.name || "Attachment")}</h2>`;
+      out += `<iframe src="${b.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe>`;
+    }
   }
   out += `<div class="sig">
     <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
@@ -8078,7 +8126,21 @@ function buildPortalSnapshot(job, brand, token) {
           number: est.number, date: est.date, total: estimateTotal(est), items: est.items,
           scope: est.scope || "", tiers, upgrades,
           defaultTier: est.selectedTier || (tiers[0] && tiers[0].id) || null,
-          doc: est.doc ? { coverImage: est.doc.coverImage || null, notes: est.doc.notes || "", terms: est.doc.terms || "" } : null,
+          doc: est.doc ? (() => {
+            const nd = normalizeProposalDoc(est.doc);
+            /* Custom text sections travel to the portal in document order.
+               PDF attachments are referenced by name only — the heavy data
+               URL stays out of the portal payload. */
+            const custom = nd.sections
+              .map((s) => nd.blocks[s])
+              .filter((b) => b && b.type === "text" && (b.title || b.body))
+              .map((b) => ({ title: b.title || "", body: b.body || "" }));
+            const attachments = nd.sections
+              .map((s) => nd.blocks[s])
+              .filter((b) => b && b.type === "pdf")
+              .map((b) => ({ name: b.name || "Attachment" }));
+            return { coverImage: nd.coverImage, notes: nd.notes, terms: nd.terms, style: nd.style, custom, attachments };
+          })() : null,
         };
       })() : null,
       contract: portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
@@ -8722,6 +8784,24 @@ function PortalProposal({ estimate, accent, onSelect = () => {} }) {
       <div style={{ fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
         Pick the option that fits — you'll confirm it when you sign, and nothing is final until then.
       </div>
+      {(doc.custom || []).map((c, i2) => (
+        (c.title || c.body) ? (
+          <div key={`c${i2}`} style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${S.line}` }}>
+            {c.title && <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, marginBottom: 6 }}>{c.title}</div>}
+            {c.body && <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{c.body}</div>}
+          </div>
+        ) : null
+      ))}
+      {(doc.attachments || []).length > 0 && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${S.line}` }}>
+          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, marginBottom: 6 }}>Attachments</div>
+          {doc.attachments.map((a, i2) => (
+            <div key={`a${i2}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: S.ink, padding: "4px 0" }}>
+              <FileText size={15} color={accent} /> {a.name}
+            </div>
+          ))}
+        </div>
+      )}
       {doc.terms && (
         <div style={{ fontSize: 11, color: S.sub, marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}`, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{doc.terms}</div>
       )}
@@ -11809,6 +11889,265 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
   );
 }
 
+/* ================================================================
+   PROPOSAL BUILDER — the customer-facing document, on its own page.
+
+   Opens full-screen over the app (its own "page", not a bottom sheet)
+   with a Build / Preview toggle. The rep picks a template style, adds
+   and reorders sections — including custom text sections and attached
+   PDFs — and controls what pricing detail the customer sees (the
+   per-line Qty / Unit-price toggles live in the line editor). Everything
+   writes to est.doc through normalizeProposalDoc, so old estimates open
+   cleanly and nothing here breaks the flattened items every other reader
+   depends on.
+   ================================================================ */
+function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClose }) {
+  const doc = normalizeProposalDoc(est.doc);
+  const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
+  const blocks = doc.blocks || {};
+  const [mode, setMode] = useState("build"); // build | preview
+  const [addOpen, setAddOpen] = useState(false);
+  const coverRef = useRef(null);
+  const pdfRef = useRef(null);
+
+  const BUILTIN = { cover: "Cover page", items: "Line items & pricing", notes: "Special notes", terms: "Terms & conditions" };
+  const has = (key) => doc.sections.includes(key);
+  const labelFor = (sec) => BUILTIN[sec]
+    || (blocks[sec] ? (blocks[sec].type === "pdf" ? `PDF · ${blocks[sec].name || "Attachment"}` : (blocks[sec].title || "Custom section")) : sec);
+
+  const move = (idx, dir) => {
+    const arr = [...doc.sections]; const swap = idx + dir;
+    if (swap < 0 || swap >= arr.length) return;
+    [arr[idx], arr[swap]] = [arr[swap], arr[idx]];
+    setDoc({ sections: arr });
+  };
+  const removeSection = (sec) => {
+    const nextBlocks = { ...blocks };
+    if (nextBlocks[sec]) delete nextBlocks[sec];
+    setDoc({ sections: doc.sections.filter((s) => s !== sec), blocks: nextBlocks });
+  };
+  const addBuiltin = (key) => {
+    if (!has(key)) setDoc({ sections: [...doc.sections, key] });
+    setAddOpen(false);
+  };
+  const addText = () => {
+    const id = uid("sec");
+    setDoc({ sections: [...doc.sections, id], blocks: { ...blocks, [id]: { type: "text", title: "New section", body: "" } } });
+    setAddOpen(false);
+  };
+  const onCover = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    const r = new FileReader();
+    r.onload = () => { setDoc({ coverImage: String(r.result), sections: has("cover") ? doc.sections : ["cover", ...doc.sections] }); toast("Cover image set"); };
+    r.readAsDataURL(file); e.target.value = "";
+  };
+  const onPdf = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") { toast("Attach a PDF file"); e.target.value = ""; return; }
+    const r = new FileReader();
+    r.onload = () => {
+      const id = uid("pdf");
+      setDoc({ sections: [...doc.sections, id], blocks: { ...blocks, [id]: { type: "pdf", name: file.name, dataUrl: String(r.result) } } });
+      toast(`Attached ${file.name}`);
+    };
+    r.readAsDataURL(file); e.target.value = ""; setAddOpen(false);
+  };
+
+  const chip = (on) => ({
+    border: `1px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : "#fff",
+    color: on ? T.accent : S.sub, borderRadius: 999, padding: "6px 13px", fontSize: 12.5, fontWeight: 700,
+    cursor: "pointer", fontFamily: "inherit",
+  });
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: S.bg, zIndex: 60, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+      <input ref={coverRef} type="file" accept="image/*" onChange={onCover} style={{ display: "none" }} />
+      <input ref={pdfRef} type="file" accept="application/pdf" onChange={onPdf} style={{ display: "none" }} />
+      {/* Page header */}
+      <div style={{ position: "sticky", top: 0, zIndex: 2, background: "#fff", borderBottom: `1px solid ${S.line}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+        <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", padding: 6, display: "flex" }}><ChevronLeft size={22} color={S.ink} /></button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: S.ink }}>Proposal builder</div>
+          <div style={{ fontSize: 12, color: S.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{job.name} · {est.number || "Draft"}</div>
+        </div>
+        <Btn kind="ghost" small onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand), toast)}><Printer size={14} /> PDF</Btn>
+      </div>
+      {/* Build / Preview toggle */}
+      <div style={{ display: "flex", gap: 6, padding: "12px 16px 0" }}>
+        {[["build", "Build"], ["preview", "Preview"]].map(([id, label]) => (
+          <button key={id} onClick={() => setMode(id)} style={{
+            flex: 1, border: `1px solid ${mode === id ? T.accent : S.line}`, background: mode === id ? T.accentSoft : "#fff",
+            color: mode === id ? T.accent : S.sub, borderRadius: 10, padding: "9px 0", fontSize: 13.5, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+          }}>{label}</button>
+        ))}
+      </div>
+
+      <div style={{ padding: "14px 16px 120px" }}>
+        {mode === "build" ? (
+          <>
+            {/* Template style */}
+            <Card>
+              <CardTitle>Template style</CardTitle>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {PROPOSAL_STYLES.map((s) => (
+                  <button key={s.id} onClick={() => !locked && setDoc({ style: s.id })} disabled={locked} style={{
+                    flex: "1 1 30%", minWidth: 96, textAlign: "left", cursor: locked ? "default" : "pointer", fontFamily: "inherit",
+                    border: `2px solid ${doc.style === s.id ? T.accent : S.line}`, background: doc.style === s.id ? T.accentSoft : "#fff",
+                    borderRadius: 12, padding: "11px 12px",
+                  }}>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: S.ink }}>{s.name}</div>
+                    <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2 }}>{s.blurb}</div>
+                  </button>
+                ))}
+              </div>
+            </Card>
+
+            {/* Sections */}
+            <Card style={{ marginTop: 12 }}>
+              <CardTitle right={!locked && <Btn kind="soft" small onClick={() => setAddOpen(true)}><Plus size={14} /> Add section</Btn>}>Pages & sections</CardTitle>
+              <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 8 }}>
+                Reorder with the arrows. Add custom text sections or attach a PDF; each becomes its own page in the proposal.
+              </div>
+              {doc.sections.map((sec, idx) => (
+                <div key={sec} style={{ borderTop: `1px solid ${S.line}`, padding: "10px 0" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ display: "flex", color: "#C7CBD1" }}>
+                      {blocks[sec] && blocks[sec].type === "pdf" ? <FileText size={16} /> : <GripVertical size={16} />}
+                    </span>
+                    <div style={{ flex: 1, fontSize: 14, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{labelFor(sec)}</div>
+                    <Btn kind="ghost" small onClick={() => move(idx, -1)} disabled={idx === 0}><ChevronUp size={15} /></Btn>
+                    <Btn kind="ghost" small onClick={() => move(idx, 1)} disabled={idx === doc.sections.length - 1}><ChevronDown size={15} /></Btn>
+                    {!locked && <button onClick={() => removeSection(sec)} style={{ border: "none", background: "none", cursor: "pointer", padding: 4, display: "flex" }}><Trash2 size={15} color="#B42318" /></button>}
+                  </div>
+                  {/* Inline editors */}
+                  {sec === "cover" && (
+                    <div style={{ marginTop: 8, paddingLeft: 24 }}>
+                      {doc.coverImage
+                        ? <img src={doc.coverImage} alt="Cover" style={{ width: "100%", borderRadius: 10, marginBottom: 8, maxHeight: 160, objectFit: "cover", display: "block" }} />
+                        : <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>No photo yet — the house photo works great here.</div>}
+                      {!locked && (
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <Btn kind="ghost" small onClick={() => coverRef.current && coverRef.current.click()}><Upload size={13} /> {doc.coverImage ? "Replace" : "Add photo"}</Btn>
+                          {doc.coverImage && <Btn kind="danger" small onClick={() => setDoc({ coverImage: null })}>Remove</Btn>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {sec === "notes" && (
+                    <textarea style={{ ...inputStyle, minHeight: 60, marginTop: 8, resize: "vertical", fontFamily: "inherit" }} value={doc.notes} disabled={locked}
+                      onChange={(e) => setDoc({ notes: e.target.value })} placeholder="Color selections, access notes, exclusions…" />
+                  )}
+                  {sec === "terms" && (
+                    <textarea style={{ ...inputStyle, minHeight: 90, marginTop: 8, resize: "vertical", fontFamily: "inherit" }} value={doc.terms} disabled={locked}
+                      onChange={(e) => setDoc({ terms: e.target.value })} placeholder="Payment terms, warranty, change orders…" />
+                  )}
+                  {blocks[sec] && blocks[sec].type === "text" && (
+                    <div style={{ marginTop: 8 }}>
+                      <input style={{ ...inputStyle, marginBottom: 8, fontWeight: 700 }} value={blocks[sec].title} disabled={locked}
+                        placeholder="Section heading (e.g. Why choose us, Warranty)" onChange={(e) => setDoc({ blocks: { ...blocks, [sec]: { ...blocks[sec], title: e.target.value } } })} />
+                      <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} value={blocks[sec].body} disabled={locked}
+                        placeholder="Section text the customer will read…" onChange={(e) => setDoc({ blocks: { ...blocks, [sec]: { ...blocks[sec], body: e.target.value } } })} />
+                    </div>
+                  )}
+                  {blocks[sec] && blocks[sec].type === "pdf" && (
+                    <div style={{ marginTop: 6, paddingLeft: 24, fontSize: 12.5, color: S.sub }}>Attached PDF — shown as its own page in the proposal.</div>
+                  )}
+                </div>
+              ))}
+              {addOpen && (
+                <div style={{ marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {!has("cover") && <button style={chip(false)} onClick={() => addBuiltin("cover")}>+ Cover</button>}
+                  {!has("items") && <button style={chip(false)} onClick={() => addBuiltin("items")}>+ Line items</button>}
+                  {!has("notes") && <button style={chip(false)} onClick={() => addBuiltin("notes")}>+ Notes</button>}
+                  {!has("terms") && <button style={chip(false)} onClick={() => addBuiltin("terms")}>+ Terms</button>}
+                  <button style={chip(false)} onClick={addText}>+ Custom text</button>
+                  <button style={chip(false)} onClick={() => pdfRef.current && pdfRef.current.click()}>+ Attach PDF</button>
+                  <button style={{ ...chip(false), color: S.sub }} onClick={() => setAddOpen(false)}>Cancel</button>
+                </div>
+              )}
+            </Card>
+          </>
+        ) : (
+          <ProposalPreview job={job} brand={brand} est={est} doc={doc} total={total} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* Live, on-screen render of the proposal the customer will receive —
+   honors the chosen style, the section order, custom sections/PDFs, and
+   each line's Qty / Unit-price visibility. */
+function ProposalPreview({ job, brand, est, doc, total }) {
+  const blocks = doc.blocks || {};
+  const style = doc.style || "classic";
+  const coverWrap = style === "bold"
+    ? { background: T.primary, color: "#fff", padding: 22, borderRadius: 14 }
+    : style === "minimal" ? { padding: "6px 2px" } : { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" };
+  const onDark = style === "bold";
+  return (
+    <div style={{ background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }}>
+      {doc.sections.map((sec) => {
+        if (sec === "cover") return (
+          <div key={sec} style={{ marginBottom: 16, ...coverWrap }}>
+            {doc.coverImage && <img src={doc.coverImage} alt="" style={{ width: "100%", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 }} />}
+            <div style={{ padding: style === "bold" ? 0 : (style === "minimal" ? "10px 0" : 16) }}>
+              {brand.logo && !onDark
+                ? <img src={brand.logo} alt="" style={{ height: 34, objectFit: "contain", marginBottom: 8, display: "block" }} />
+                : <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 4, color: onDark ? "#fff" : S.ink }}>{brand.company}</div>}
+              <div style={{ fontSize: 22, fontWeight: 800, color: onDark ? "#fff" : brand.primary }}>Roofing Proposal</div>
+              <div style={{ marginTop: 12, fontSize: 13.5, color: onDark ? "rgba(255,255,255,.9)" : S.ink }}>
+                <div style={{ fontWeight: 700 }}>Prepared for {job.name}</div>
+                <div style={{ opacity: 0.85 }}>{job.address}</div>
+                <div style={{ opacity: 0.85, marginTop: 4 }}>{est.number} · {est.date}</div>
+              </div>
+            </div>
+          </div>
+        );
+        if (sec === "items") return (
+          <div key={sec} style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>SCOPE & PRICING</div>
+            {est.scope && <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.5, marginBottom: 8, whiteSpace: "pre-wrap" }}>{est.scope}</div>}
+            {(est.items || []).map((it) => <PortalEstLine key={it.id} it={it} />)}
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 800, marginTop: 8, paddingTop: 8, borderTop: `2px solid ${S.line}` }}>
+              <span>Total</span><span>{money(total)}</span>
+            </div>
+          </div>
+        );
+        if (sec === "notes" && doc.notes) return (
+          <div key={sec} style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>SPECIAL NOTES</div>
+            <div style={{ fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{doc.notes}</div>
+          </div>
+        );
+        if (sec === "terms" && doc.terms) return (
+          <div key={sec} style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>TERMS & CONDITIONS</div>
+            <div style={{ fontSize: 12.5, lineHeight: 1.6, color: S.sub, whiteSpace: "pre-wrap" }}>{doc.terms}</div>
+          </div>
+        );
+        const b = blocks[sec];
+        if (b && b.type === "text" && (b.title || b.body)) return (
+          <div key={sec} style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>{(b.title || "").toUpperCase()}</div>
+            <div style={{ fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{b.body}</div>
+          </div>
+        );
+        if (b && b.type === "pdf") return (
+          <div key={sec} style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 10, border: `1px solid ${S.line}`, borderRadius: 10, padding: "12px 14px" }}>
+            <FileText size={20} color={T.accent} />
+            <div style={{ fontSize: 13.5, fontWeight: 700 }}>{b.name || "Attachment"}</div>
+            <span style={{ marginLeft: "auto", fontSize: 12, color: S.sub }}>PDF page</span>
+          </div>
+        );
+        return null;
+      })}
+    </div>
+  );
+}
+
 function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {}, priceList = [] }) {
   /* job.estimate for any REAL job created before tiers/upgrades
      existed has neither field at all (undefined, not []) — this
@@ -11929,27 +12268,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
     toast(`"${t.name}" added — ${t.items.length} lines${tiersOn ? ` to ${est.tiers.find((x) => x.id === tierTab)?.name || "this tier"}` : ""}`);
   };
 
-  const doc = est.doc || { sections: ["cover", "items", "notes", "terms"], coverImage: null, notes: "", terms: "" };
-  const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
-  const [docSheet, setDocSheet] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const coverRef = useRef(null);
-  const onCover = (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file || !file.type.startsWith("image/")) return;
-    const r = new FileReader();
-    r.onload = () => { setDoc({ coverImage: String(r.result) }); toast("Cover image set"); };
-    r.readAsDataURL(file);
-    e.target.value = "";
-  };
-  const moveSection = (idx, dir) => {
-    const arr = [...doc.sections];
-    const swap = idx + dir;
-    if (swap < 0 || swap >= arr.length) return;
-    [arr[idx], arr[swap]] = [arr[swap], arr[idx]];
-    setDoc({ sections: arr });
-  };
-  const SECTION_LABELS = { cover: "Cover page", items: "Line items & pricing", notes: "Special notes", terms: "Terms & conditions" };
+  const [builderOpen, setBuilderOpen] = useState(false);
   const m = job.measurements;
   const prefillFromMeasurements = () => {
     if (!num(m.squares)) { toast("Enter measurements first"); return; }
@@ -12030,15 +12349,10 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
       </Card>
 
       <Card style={{ marginTop: 12 }}>
-        <CardTitle right={
-          <span style={{ display: "flex", gap: 6 }}>
-            <Btn kind="soft" small onClick={() => setDocSheet(true)}>Layout</Btn>
-            <Btn kind="soft" small onClick={() => setPreviewOpen(true)}>Preview</Btn>
-          </span>
-        }>Estimate document</CardTitle>
+        <CardTitle right={<Btn kind="soft" small onClick={() => setBuilderOpen(true)}>Open builder</Btn>}>Proposal document</CardTitle>
         <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
-          The customer-facing document: cover page with your logo, a photo, and their info, then sections in the
-          order you choose — line items, notes, terms.
+          Opens the full-page proposal builder: pick a template style, add and reorder sections, write custom
+          sections, attach PDFs, and control what pricing the customer sees — then preview and export.
         </div>
       </Card>
 
@@ -12258,83 +12572,10 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
         ))}
       </Sheet>
 
-      <Sheet open={docSheet} onClose={() => setDocSheet(false)} title="Document layout">
-        <input ref={coverRef} type="file" accept="image/*" onChange={onCover} style={{ display: "none" }} />
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginBottom: 6 }}>SECTION ORDER</div>
-        {doc.sections.map((sec, idx) => (
-          <div key={sec} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderTop: idx ? `1px solid ${S.line}` : "none" }}>
-            <div style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{SECTION_LABELS[sec]}</div>
-            <Btn kind="ghost" small onClick={() => moveSection(idx, -1)} disabled={idx === 0}>↑</Btn>
-            <Btn kind="ghost" small onClick={() => moveSection(idx, 1)} disabled={idx === doc.sections.length - 1}>↓</Btn>
-          </div>
-        ))}
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, margin: "16px 0 6px" }}>COVER PAGE</div>
-        {doc.coverImage
-          ? <img src={doc.coverImage} alt="Cover" style={{ width: "100%", borderRadius: 10, marginBottom: 8 }} />
-          : <div style={{ fontSize: 13, color: S.sub, marginBottom: 8 }}>No photo yet — the house photo works great here.</div>}
-        <div style={{ display: "flex", gap: 8 }}>
-          <Btn kind="ghost" small onClick={() => coverRef.current && coverRef.current.click()}><Upload size={13} /> {doc.coverImage ? "Replace photo" : "Add photo"}</Btn>
-          {doc.coverImage && <Btn kind="danger" small onClick={() => setDoc({ coverImage: null })}>Remove</Btn>}
-        </div>
-        <div style={{ marginTop: 14 }}>
-          <Field label="Special notes">
-            <textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} value={doc.notes}
-              onChange={(e) => setDoc({ notes: e.target.value })} placeholder="Color selections, access notes, exclusions…" />
-          </Field>
-          <Field label="Terms & conditions">
-            <textarea style={{ ...inputStyle, minHeight: 110, resize: "vertical", fontFamily: "inherit" }} value={doc.terms}
-              onChange={(e) => setDoc({ terms: e.target.value })} placeholder="Payment terms, warranty, change orders…" />
-          </Field>
-        </div>
-      </Sheet>
-
-      <Sheet open={previewOpen} onClose={() => setPreviewOpen(false)} title="Estimate preview">
-        {doc.sections.map((sec) => {
-          if (sec === "cover") return (
-            <div key={sec} style={{ border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 14 }}>
-              {doc.coverImage && <img src={doc.coverImage} alt="" style={{ width: "100%", display: "block" }} />}
-              <div style={{ padding: 18, background: T.primary, color: "#fff" }}>
-                {brand.logo
-                  ? <img src={brand.logo} alt="" style={{ height: 40, objectFit: "contain", marginBottom: 10, display: "block" }} />
-                  : <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 6 }}>{brand.company}</div>}
-                <div style={{ fontSize: 13, opacity: 0.85 }}>{brand.slogan}</div>
-                <div style={{ marginTop: 14, fontSize: 14 }}>
-                  <div style={{ fontWeight: 700 }}>Prepared for {job.name}</div>
-                  <div style={{ opacity: 0.85 }}>{job.address}</div>
-                  <div style={{ opacity: 0.85, marginTop: 5 }}>{est.number} · {est.date}</div>
-                </div>
-              </div>
-            </div>
-          );
-          if (sec === "items") return (
-            <div key={sec} style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>SCOPE & PRICING</div>
-              {est.items.map((it) => (
-                <div key={it.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5, padding: "6px 0", borderBottom: `1px solid ${S.soft}` }}>
-                  <span style={{ flex: 1 }}>{it.desc} — {it.qty} {it.unit}</span>
-                  <span style={{ fontWeight: 600 }}>{money(num(it.qty) * num(it.price))}</span>
-                </div>
-              ))}
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 800, marginTop: 8 }}>
-                <span>Total</span><span>{money(total)}</span>
-              </div>
-            </div>
-          );
-          if (sec === "notes" && doc.notes) return (
-            <div key={sec} style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>SPECIAL NOTES</div>
-              <div style={{ fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{doc.notes}</div>
-            </div>
-          );
-          if (sec === "terms" && doc.terms) return (
-            <div key={sec} style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>TERMS & CONDITIONS</div>
-              <div style={{ fontSize: 12.5, lineHeight: 1.6, whiteSpace: "pre-wrap", color: S.sub }}>{doc.terms}</div>
-            </div>
-          );
-          return null;
-        })}
-      </Sheet>
+      {builderOpen && (
+        <ProposalBuilder job={job} brand={brand} est={est} setEst={setEst} locked={locked}
+          toast={toast} total={total} onClose={() => setBuilderOpen(false)} />
+      )}
     </>
   );
 }
