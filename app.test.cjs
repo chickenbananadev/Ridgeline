@@ -2990,38 +2990,42 @@ function subRate(crew2, code) {
   const row = (crew2 && crew2.rateCard || []).find((r) => r.code === code);
   return row ? num(row.price) : 0;
 }
-function computeSubPay(job, crew2) {
-  if (!crew2 || !(crew2.rateCard || []).length) return null;
+function mkSubInvoice(over = {}) {
+  return {
+    status: "draft",
+    lines: [],
+    poNumber: "",
+    terms: "",
+    dueDate: "",
+    reviewedBy: "",
+    reviewedAt: "",
+    confirmedBy: "",
+    confirmedAt: "",
+    submittedAt: "",
+    paidAt: "",
+    ...over
+  };
+}
+function subInvoiceTotal(inv) {
+  return (inv && inv.lines || []).reduce((a, l) => a + num(l.qty) * num(l.price), 0);
+}
+function buildSubInvoiceDraft(job, crew2) {
+  const inv = mkSubInvoice({ terms: crew2 && crew2.payment && crew2.payment.terms || "Net 15" });
   const cov = installedSquares(generateRoofingMaterials(job.measurements));
   const sq = cov ? cov.total : 0;
   const wo = job.workOrder || {};
   const lines = [];
-  const per = subRate(crew2, "per_square");
-  if (per && sq) lines.push({ label: `Install ${sq} sq @ ${money(per)}/sq`, amt: per * sq });
-  if (wo.steep) {
-    const s = subRate(crew2, "steep_per_square");
-    if (s && sq) lines.push({ label: `Steep ${sq} sq @ ${money(s)}/sq`, amt: s * sq });
-  }
+  const add = (category, label, qty, unit, price) => {
+    if (price && qty) lines.push({ id: uid("sil"), category, label, qty, unit, price, notes: "", reimbursable: false, source: "auto" });
+  };
+  add("Shingle Installation", "Shingle install", sq, "SQ", subRate(crew2, "per_square"));
+  if (wo.steep) add("Shingle Installation", "Steep charge", sq, "SQ", subRate(crew2, "steep_per_square"));
   const layers = parseInt(wo.layers || job.checklist.layers, 10) || 1;
-  if (layers > 1) {
-    const t = subRate(crew2, "tearoff_per_square");
-    if (t && sq) lines.push({ label: `Tear-off ${layers} layers, ${sq} sq @ ${money(t)}/sq`, amt: t * sq * (layers - 1) });
-  }
-  if (wo.stories === "2") {
-    const a = subRate(crew2, "story_2");
-    if (a) lines.push({ label: "2-story adder", amt: a });
-  }
-  if (wo.stories === "3+") {
-    const a = subRate(crew2, "story_3");
-    if (a) lines.push({ label: "3+ story adder", amt: a });
-  }
+  if (layers > 1) add("Shingle Installation", `Additional layer removal (${layers - 1})`, sq * (layers - 1), "SQ", subRate(crew2, "tearoff_per_square"));
   const chim = (wo.chimney || {}).size;
-  if (chim && chim !== "none") {
-    const a = subRate(crew2, `chimney_${chim}`);
-    if (a) lines.push({ label: `Chimney flashing (${chim})`, amt: a });
-  }
-  const total = lines.reduce((a, l) => a + l.amt, 0);
-  return { lines, total: Math.round(total * 100) / 100, squares: sq };
+  if (chim && chim !== "none") add("Chimney Flashing", `Chimney flashing (${chim})`, 1, "job", subRate(crew2, `chimney_${chim}`));
+  inv.lines = lines;
+  return inv;
 }
 var AUTH = () => typeof window !== "undefined" ? window.__AUTH__ : null;
 var liveAuth = () => !!AUTH();
@@ -14966,6 +14970,133 @@ function TabInvoice({ job, brand: brand2, mut, toast: toast2 }) {
     ] })
   ] });
 }
+function SubInvoiceCard({ job, crew: crew2, mut, toast: toast2 }) {
+  const [menuOpen, setMenuOpen] = (0, import_react.useState)(false);
+  const [menuQ, setMenuQ] = (0, import_react.useState)("");
+  const inv = job.subInvoice || null;
+  const rateCard = crew2 && crew2.rateCard || [];
+  const setInv = (patch) => mut((j) => ({ ...j, subInvoice: { ...j.subInvoice || mkSubInvoice(), ...patch } }));
+  const setLine = (id, k, v) => setInv({ lines: (inv.lines || []).map((l) => l.id === id ? { ...l, [k]: v } : l) });
+  const removeLine = (id) => setInv({ lines: (inv.lines || []).filter((l) => l.id !== id) });
+  const genDraft = () => {
+    mut((j) => ({ ...j, subInvoice: buildSubInvoiceDraft(j, crew2) }));
+    toast2("Draft built from measurements & rate card");
+  };
+  const addFromMenu = (r) => {
+    setInv({ lines: [...inv && inv.lines || [], { id: uid("sil"), category: r.category || "Other", label: r.label, qty: 1, unit: r.unit || "ea", price: num(r.price), notes: r.notes || "", reimbursable: false, source: "menu" }] });
+    setMenuOpen(false);
+    setMenuQ("");
+  };
+  const addReimbursable = () => setInv({ lines: [...inv && inv.lines || [], { id: uid("sil"), category: "Reimbursable", label: "", qty: 1, unit: "ea", price: 0, notes: "at receipt cost", reimbursable: true, source: "manual" }] });
+  const addBlank = () => setInv({ lines: [...inv && inv.lines || [], { id: uid("sil"), category: "Other", label: "", qty: 1, unit: "ea", price: 0, notes: "", reimbursable: false, source: "manual" }] });
+  const total = subInvoiceTotal(inv);
+  const postToCosts = () => {
+    mut((j) => ({ ...j, fin: { ...j.fin || {}, labor: [...(j.fin || {}).labor || [], { id: uid("l"), label: `Sub labor \u2014 ${crew2.name} (invoice)`, amt: Math.round(subInvoiceTotal(j.subInvoice) * 100) / 100, by: crew2.name }] } }));
+    toast2("Posted to job costs");
+  };
+  const STATUS = { draft: ["Draft", "gray"], needs_review: ["Needs review", "amber"], confirmed: ["Confirmed", "blue"], submitted: ["Submitted", "blue"], paid: ["Paid", "green"] };
+  if (!inv) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "No invoice" }), children: [
+        "Sub invoice \u2014 ",
+        crew2.name
+      ] }),
+      rateCard.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: [
+          "Build a draft from the job's measurements and ",
+          crew2.name,
+          "'s rate card, then edit it as actuals come in \u2014 it's temporary until you confirm after install."
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, onClick: genDraft, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+          " Build sub invoice"
+        ] })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: [
+        "No price sheet on file for ",
+        crew2.name,
+        ". Upload one in ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Crews" }),
+        " first."
+      ] })
+    ] });
+  }
+  const [st, tone] = STATUS[inv.status || "draft"] || STATUS.draft;
+  const menu = rateCard.filter((r) => {
+    const q = menuQ.trim().toLowerCase();
+    return !q || `${r.label} ${r.category || ""}`.toLowerCase().includes(q);
+  });
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone, children: st }), children: [
+      "Sub invoice \u2014 ",
+      crew2.name
+    ] }),
+    (inv.lines || []).map((l) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "9px 0", borderTop: `1px solid ${S.line}` }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, flex: 1, fontWeight: 600 }, value: l.label, placeholder: "Line item", onChange: (e) => setLine(l.id, "label", e.target.value) }),
+        l.reimbursable && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "Reimb." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeLine(l.id), style: { border: "none", background: "none", cursor: "pointer" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14, color: "#B42318" }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginTop: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 72, textAlign: "right" }, value: l.qty, inputMode: "decimal", onChange: (e) => setLine(l.id, "qty", e.target.value) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 62 }, value: l.unit, onChange: (e) => setLine(l.id, "unit", e.target.value) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub }, children: "\xD7" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 92, textAlign: "right" }, value: l.price, inputMode: "decimal", onChange: (e) => setLine(l.id, "price", e.target.value) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { marginLeft: "auto", fontWeight: 800, fontVariantNumeric: "tabular-nums" }, children: money(num(l.qty) * num(l.price)) })
+      ] })
+    ] }, l.id)),
+    (inv.lines || []).length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, padding: "10px 0" }, children: "No lines yet \u2014 add from the price menu." }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "10px 0 0", borderTop: `2px solid ${S.line}`, marginTop: 6 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800 }, children: "Total" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }, children: money(total) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => {
+        setMenuOpen(true);
+        setMenuQ("");
+      }, disabled: !rateCard.length, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Package, { size: 13 }),
+        " Add from price menu"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: addReimbursable, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+        " Reimbursable"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: addBlank, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+        " Blank line"
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "PO number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: inv.poNumber || "", onChange: (e) => setInv({ poNumber: e.target.value }) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Terms", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: inv.terms || "", onChange: (e) => setInv({ terms: e.target.value }) }) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { marginTop: 10 }, onClick: postToCosts, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.DollarSign, { size: 13 }),
+      " Post ",
+      money(total),
+      " to job costs"
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open: menuOpen, onClose: () => setMenuOpen(false), title: `${crew2.name} \u2014 price menu`, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, marginBottom: 10 }, value: menuQ, placeholder: "Search\u2026", onChange: (e) => setMenuQ(e.target.value) }),
+      [...new Set(menu.map((r) => r.category || "Other"))].map((cat) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, marginTop: 12, marginBottom: 4 }, children: cat }),
+        menu.filter((r) => (r.category || "Other") === cat).map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => addFromMenu(r), style: { display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "none", borderTop: `1px solid ${S.line}`, background: "none", cursor: "pointer", padding: "10px 2px", fontFamily: "inherit" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 13.5, color: S.ink }, children: r.label }),
+            r.notes && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 11, color: S.sub }, children: r.notes })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" }, children: [
+            money(num(r.price)),
+            "/",
+            r.unit || "ea"
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 15, color: T.accent })
+        ] }, r.id))
+      ] }, cat)),
+      menu.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "Nothing matches." })
+    ] })
+  ] });
+}
 function TabWorkOrder({ job, mut, toast: toast2, brand: brand2, crews, templates, currentUser, users }) {
   const [picking, setPicking] = (0, import_react.useState)(false);
   const [sending, setSending] = (0, import_react.useState)(false);
@@ -14976,13 +15107,6 @@ function TabWorkOrder({ job, mut, toast: toast2, brand: brand2, crews, templates
   const m = job.measurements;
   const mats = generateRoofingMaterials(m);
   const coverage = installedSquares(mats);
-  const subPay = crew2 ? computeSubPay(job, crew2) : null;
-  const addSubToCosts = () => {
-    if (!subPay) return;
-    const line = { id: uid("l"), label: `Sub labor \u2014 ${crew2.name} (${subPay.squares} sq)`, amt: subPay.total, by: crew2.name };
-    mut((j) => ({ ...j, fin: { ...j.fin || {}, labor: [...(j.fin || {}).labor || [], line] } }));
-    toast2("Added to job costs");
-  };
   const wo = job.workOrder || { number: "", sentAt: null, status: "Draft", notes: "" };
   const setWo = (patch) => mut((j) => ({ ...j, workOrder: { ...j.workOrder || {}, ...patch } }));
   const chimney = wo.chimney || { size: "none", notes: "" };
@@ -15065,32 +15189,7 @@ function TabWorkOrder({ job, mut, toast: toast2, brand: brand2, crews, templates
         ] })
       ] })
     ] }),
-    crew2 && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { right: subPay ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: money(subPay.total) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "No rate sheet" }), children: [
-        "Sub pay \u2014 ",
-        crew2.name
-      ] }),
-      subPay && subPay.lines.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-        subPay.lines.map((l, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: i ? `1px solid ${S.line}` : "none" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.ink }, children: l.label }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" }, children: money(l.amt) })
-        ] }, i)),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "9px 0 0", borderTop: `2px solid ${S.line}`, marginTop: 6 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 800 }, children: "Total sub pay" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14.5, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }, children: money(subPay.total) })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { marginTop: 12 }, onClick: addSubToCosts, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
-          " Add to job costs"
-        ] })
-      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: (crew2.rateCard || []).length ? "This job has no installed squares yet \u2014 add measurements to price the sub's pay." : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-        "No price sheet on file for ",
-        crew2.name,
-        ". Upload one in ",
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Crews" }),
-        " and their pay fills in here automatically."
-      ] }) })
-    ] }),
+    crew2 && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubInvoiceCard, { job, crew: crew2, mut, toast: toast2 }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "No pricing" }), children: [
         "Work order \u2014 ",

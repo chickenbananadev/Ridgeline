@@ -2425,6 +2425,38 @@ function crewDocAlerts(crew, today) {
     .map((d) => ({ name: d.name, type: d.type || "", expires: d.expires, status: d.expires < t ? "expired" : (d.expires <= soon ? "expiring" : "ok") }))
     .filter((d) => d.status !== "ok");
 }
+/* Per-job subcontractor invoice — a draft that starts from what we can compute
+   and stays editable until it's confirmed after install (actuals change:
+   extra decking, dump fees, etc.). status: draft → needs_review → confirmed →
+   submitted → paid. */
+function mkSubInvoice(over = {}) {
+  return {
+    status: "draft", lines: [], poNumber: "", terms: "", dueDate: "",
+    reviewedBy: "", reviewedAt: "", confirmedBy: "", confirmedAt: "", submittedAt: "", paidAt: "", ...over,
+  };
+}
+function subInvoiceTotal(inv) {
+  return ((inv && inv.lines) || []).reduce((a, l) => a + num(l.qty) * num(l.price), 0);
+}
+/* Seed the lines we CAN compute from the crew's rate card + the job's installed
+   squares and work-order conditions; the rest are added from the priced menu by
+   hand. Each seeded line stays fully editable (source: "auto"). */
+function buildSubInvoiceDraft(job, crew) {
+  const inv = mkSubInvoice({ terms: (crew && crew.payment && crew.payment.terms) || "Net 15" });
+  const cov = installedSquares(generateRoofingMaterials(job.measurements));
+  const sq = cov ? cov.total : 0;
+  const wo = job.workOrder || {};
+  const lines = [];
+  const add = (category, label, qty, unit, price) => { if (price && qty) lines.push({ id: uid("sil"), category, label, qty, unit, price, notes: "", reimbursable: false, source: "auto" }); };
+  add("Shingle Installation", "Shingle install", sq, "SQ", subRate(crew, "per_square"));
+  if (wo.steep) add("Shingle Installation", "Steep charge", sq, "SQ", subRate(crew, "steep_per_square"));
+  const layers = parseInt(wo.layers || job.checklist.layers, 10) || 1;
+  if (layers > 1) add("Shingle Installation", `Additional layer removal (${layers - 1})`, sq * (layers - 1), "SQ", subRate(crew, "tearoff_per_square"));
+  const chim = (wo.chimney || {}).size;
+  if (chim && chim !== "none") add("Chimney Flashing", `Chimney flashing (${chim})`, 1, "job", subRate(crew, `chimney_${chim}`));
+  inv.lines = lines;
+  return inv;
+}
 
 /* ================================================================
    AUTH ADAPTER
@@ -13415,6 +13447,105 @@ function TabInvoice({ job, brand, mut, toast }) {
 }
 
 /* ---------- Work order — crew view, no pricing ---------- */
+/* Editable subcontractor invoice for a job. Seeds computable lines, lets the
+   office add the rest from the sub's priced menu, capture reimbursables at
+   actual cost, and post the total to job costs. Office-only. */
+function SubInvoiceCard({ job, crew, mut, toast }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuQ, setMenuQ] = useState("");
+  const inv = job.subInvoice || null;
+  const rateCard = (crew && crew.rateCard) || [];
+  const setInv = (patch) => mut((j) => ({ ...j, subInvoice: { ...(j.subInvoice || mkSubInvoice()), ...patch } }));
+  const setLine = (id, k, v) => setInv({ lines: (inv.lines || []).map((l) => (l.id === id ? { ...l, [k]: v } : l)) });
+  const removeLine = (id) => setInv({ lines: (inv.lines || []).filter((l) => l.id !== id) });
+  const genDraft = () => { mut((j) => ({ ...j, subInvoice: buildSubInvoiceDraft(j, crew) })); toast("Draft built from measurements & rate card"); };
+  const addFromMenu = (r) => { setInv({ lines: [...((inv && inv.lines) || []), { id: uid("sil"), category: r.category || "Other", label: r.label, qty: 1, unit: r.unit || "ea", price: num(r.price), notes: r.notes || "", reimbursable: false, source: "menu" }] }); setMenuOpen(false); setMenuQ(""); };
+  const addReimbursable = () => setInv({ lines: [...((inv && inv.lines) || []), { id: uid("sil"), category: "Reimbursable", label: "", qty: 1, unit: "ea", price: 0, notes: "at receipt cost", reimbursable: true, source: "manual" }] });
+  const addBlank = () => setInv({ lines: [...((inv && inv.lines) || []), { id: uid("sil"), category: "Other", label: "", qty: 1, unit: "ea", price: 0, notes: "", reimbursable: false, source: "manual" }] });
+  const total = subInvoiceTotal(inv);
+  const postToCosts = () => {
+    mut((j) => ({ ...j, fin: { ...(j.fin || {}), labor: [...(((j.fin || {}).labor) || []), { id: uid("l"), label: `Sub labor — ${crew.name} (invoice)`, amt: Math.round(subInvoiceTotal(j.subInvoice) * 100) / 100, by: crew.name }] } }));
+    toast("Posted to job costs");
+  };
+  const STATUS = { draft: ["Draft", "gray"], needs_review: ["Needs review", "amber"], confirmed: ["Confirmed", "blue"], submitted: ["Submitted", "blue"], paid: ["Paid", "green"] };
+
+  if (!inv) {
+    return (
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={<Chip tone="gray">No invoice</Chip>}>Sub invoice — {crew.name}</CardTitle>
+        {rateCard.length ? (
+          <>
+            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+              Build a draft from the job's measurements and {crew.name}'s rate card, then edit it as actuals come in — it's temporary until you confirm after install.
+            </div>
+            <Btn small onClick={genDraft}><Plus size={13} /> Build sub invoice</Btn>
+          </>
+        ) : (
+          <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>No price sheet on file for {crew.name}. Upload one in <b>Crews</b> first.</div>
+        )}
+      </Card>
+    );
+  }
+  const [st, tone] = STATUS[inv.status || "draft"] || STATUS.draft;
+  const menu = rateCard.filter((r) => { const q = menuQ.trim().toLowerCase(); return !q || `${r.label} ${r.category || ""}`.toLowerCase().includes(q); });
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle right={<Chip tone={tone}>{st}</Chip>}>Sub invoice — {crew.name}</CardTitle>
+      {(inv.lines || []).map((l) => (
+        <div key={l.id} style={{ padding: "9px 0", borderTop: `1px solid ${S.line}` }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input style={{ ...inputStyle, flex: 1, fontWeight: 600 }} value={l.label} placeholder="Line item" onChange={(e) => setLine(l.id, "label", e.target.value)} />
+            {l.reimbursable && <Chip tone="amber">Reimb.</Chip>}
+            <button onClick={() => removeLine(l.id)} style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={14} color="#B42318" /></button>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
+            <input style={{ ...inputStyle, width: 72, textAlign: "right" }} value={l.qty} inputMode="decimal" onChange={(e) => setLine(l.id, "qty", e.target.value)} />
+            <input style={{ ...inputStyle, width: 62 }} value={l.unit} onChange={(e) => setLine(l.id, "unit", e.target.value)} />
+            <span style={{ color: S.sub }}>×</span>
+            <input style={{ ...inputStyle, width: 92, textAlign: "right" }} value={l.price} inputMode="decimal" onChange={(e) => setLine(l.id, "price", e.target.value)} />
+            <span style={{ marginLeft: "auto", fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{money(num(l.qty) * num(l.price))}</span>
+          </div>
+        </div>
+      ))}
+      {(inv.lines || []).length === 0 && <div style={{ fontSize: 13, color: S.sub, padding: "10px 0" }}>No lines yet — add from the price menu.</div>}
+      <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0 0", borderTop: `2px solid ${S.line}`, marginTop: 6 }}>
+        <span style={{ fontWeight: 800 }}>Total</span>
+        <span style={{ fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>{money(total)}</span>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+        <Btn kind="soft" small onClick={() => { setMenuOpen(true); setMenuQ(""); }} disabled={!rateCard.length}><Package size={13} /> Add from price menu</Btn>
+        <Btn kind="ghost" small onClick={addReimbursable}><Plus size={13} /> Reimbursable</Btn>
+        <Btn kind="ghost" small onClick={addBlank}><Plus size={13} /> Blank line</Btn>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
+        <Field label="PO number"><input style={inputStyle} value={inv.poNumber || ""} onChange={(e) => setInv({ poNumber: e.target.value })} /></Field>
+        <Field label="Terms"><input style={inputStyle} value={inv.terms || ""} onChange={(e) => setInv({ terms: e.target.value })} /></Field>
+      </div>
+      <Btn kind="ghost" small style={{ marginTop: 10 }} onClick={postToCosts}><DollarSign size={13} /> Post {money(total)} to job costs</Btn>
+
+      <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title={`${crew.name} — price menu`}>
+        <input style={{ ...inputStyle, marginBottom: 10 }} value={menuQ} placeholder="Search…" onChange={(e) => setMenuQ(e.target.value)} />
+        {[...new Set(menu.map((r) => r.category || "Other"))].map((cat) => (
+          <div key={cat}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, marginTop: 12, marginBottom: 4 }}>{cat}</div>
+            {menu.filter((r) => (r.category || "Other") === cat).map((r) => (
+              <button key={r.id} onClick={() => addFromMenu(r)} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "none", borderTop: `1px solid ${S.line}`, background: "none", cursor: "pointer", padding: "10px 2px", fontFamily: "inherit" }}>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: 13.5, color: S.ink }}>{r.label}</span>
+                  {r.notes && <span style={{ display: "block", fontSize: 11, color: S.sub }}>{r.notes}</span>}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" }}>{money(num(r.price))}/{r.unit || "ea"}</span>
+                <Plus size={15} color={T.accent} />
+              </button>
+            ))}
+          </div>
+        ))}
+        {menu.length === 0 && <div style={{ fontSize: 13, color: S.sub }}>Nothing matches.</div>}
+      </Sheet>
+    </Card>
+  );
+}
+
 function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, users }) {
   const [picking, setPicking] = useState(false);
   const [sending, setSending] = useState(false);
@@ -13425,13 +13556,6 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
   const m = job.measurements;
   const mats = generateRoofingMaterials(m);
   const coverage = installedSquares(mats);
-  const subPay = crew ? computeSubPay(job, crew) : null;
-  const addSubToCosts = () => {
-    if (!subPay) return;
-    const line = { id: uid("l"), label: `Sub labor — ${crew.name} (${subPay.squares} sq)`, amt: subPay.total, by: crew.name };
-    mut((j) => ({ ...j, fin: { ...(j.fin || {}), labor: [...(((j.fin || {}).labor) || []), line] } }));
-    toast("Added to job costs");
-  };
   const wo = job.workOrder || { number: "", sentAt: null, status: "Draft", notes: "" };
   const setWo = (patch) => mut((j) => ({ ...j, workOrder: { ...(j.workOrder || {}), ...patch } }));
   const chimney = wo.chimney || { size: "none", notes: "" };
@@ -13504,34 +13628,7 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
           card and this job's installed squares + conditions. Never shown on
           the crew-facing document below. */}
       {crew && canSeeMoney(currentUser) && (
-        <Card style={{ marginTop: 12 }}>
-          <CardTitle right={subPay ? <Chip tone="green">{money(subPay.total)}</Chip> : <Chip tone="gray">No rate sheet</Chip>}>
-            Sub pay — {crew.name}
-          </CardTitle>
-          {subPay && subPay.lines.length > 0 ? (
-            <>
-              {subPay.lines.map((l, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
-                  <span style={{ fontSize: 13, color: S.ink }}>{l.label}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{money(l.amt)}</span>
-                </div>
-              ))}
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 0 0", borderTop: `2px solid ${S.line}`, marginTop: 6 }}>
-                <span style={{ fontSize: 13.5, fontWeight: 800 }}>Total sub pay</span>
-                <span style={{ fontSize: 14.5, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>{money(subPay.total)}</span>
-              </div>
-              <Btn kind="ghost" small style={{ marginTop: 12 }} onClick={addSubToCosts}>
-                <Plus size={13} /> Add to job costs
-              </Btn>
-            </>
-          ) : (
-            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
-              {(crew.rateCard || []).length
-                ? "This job has no installed squares yet — add measurements to price the sub's pay."
-                : <>No price sheet on file for {crew.name}. Upload one in <b>Crews</b> and their pay fills in here automatically.</>}
-            </div>
-          )}
-        </Card>
+        <SubInvoiceCard job={job} crew={crew} mut={mut} toast={toast} />
       )}
 
       <Card style={{ marginTop: 12 }}>
