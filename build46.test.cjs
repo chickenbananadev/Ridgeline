@@ -85,13 +85,17 @@ ok(/rl_theme/.test(main), "main.jsx applies saved theme pre-mount");
 ok(/function ProposalBuilder\(\{[^}]*docTemplates/.test(src), "ProposalBuilder receives docTemplates (no ReferenceError)");
 ok(/<ProposalBuilder[\s\S]{0,220}docTemplates=\{docTemplates\}/.test(src), "docTemplates passed into ProposalBuilder");
 ok(/function CoverThumb\(/.test(src) && /<CoverThumb style=\{s\.id\}/.test(src), "visual cover-layout thumbnails");
-ok(/\.cover img\.hero \{[^}]*object-fit: cover/.test(src), "print cover image is height-constrained");
-ok(/height: 240, objectFit: "cover"/.test(src), "builder cover image is height-constrained");
+ok(/\.cover img\.hero \{[^}]*height: 4\.8in[^}]*object-fit: cover/.test(src), "print cover image is ~50% page height");
+ok(/height: 400, objectFit: "cover"/.test(src), "builder cover image is ~50% page height");
 
 /* P10 — Activity opens as a centered dialog, not a bottom sheet */
 ok(/function Sheet\(\{[^}]*center/.test(src), "Sheet supports a center (dialog) variant");
 ok(/alignItems: center \? "center" : "flex-end"/.test(src), "center variant vertically centers");
 ok(/open=\{activityOpen\}[\s\S]{0,80}title="Activity" center/.test(src), "Activity uses the centered dialog");
+
+/* P11 — all popups centered by default + layout picker on the estimate */
+ok(/function Sheet\(\{[^}]*center = true/.test(src), "Sheet defaults to a centered dialog");
+ok(/COVER LAYOUT[\s\S]{0,900}<CoverThumb style=\{s\.id\}/.test(src), "estimate tab surfaces the cover-layout picker");
 
 if (fails) { console.log("\nbuild 46: " + fails + " FAILED"); process.exit(1); }
 console.log("build 46 tests passed");

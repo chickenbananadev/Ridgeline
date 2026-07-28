@@ -3644,7 +3644,7 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
     )) })
   ] });
 }
-function Sheet({ open, onClose, title, children, footer, wide, tall, center }) {
+function Sheet({ open, onClose, title, children, footer, wide, tall, center = true }) {
   if (!open) return null;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
     position: "fixed",
@@ -9371,7 +9371,7 @@ function docShell(title, brand2, bodyHtml) {
   .foot { margin-top: 26px; padding-top: 12px; border-top: 1px solid #E5E7EB;
           font-size: 10.5px; color: #9CA3AF; text-align: center; }
   .cover { text-align: center; padding: 40px 0 30px; page-break-after: always; }
-  .cover img.hero { width: 100%; height: 300px; object-fit: cover; border-radius: 12px; margin-bottom: 26px; }
+  .cover img.hero { width: 100%; height: 4.8in; object-fit: cover; border-radius: 12px; margin-bottom: 26px; }
   @media print { .noprint { display: none !important; } body { padding: 0; } }
   .bar { position: sticky; top: 0; background: #111827; color: #fff; padding: 11px 14px;
          display: flex; gap: 10px; align-items: center; margin: -22px -22px 20px; }
@@ -14898,7 +14898,7 @@ function ProposalPreview({ job, brand: brand2, est, doc, total }) {
       ] })
     ] }) }, sec);
     if (sec === "cover") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16, ...coverWrap }, children: [
-      doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "", style: { width: "100%", height: 240, objectFit: "cover", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 } }),
+      doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "", style: { width: "100%", height: 400, objectFit: "cover", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 } }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: style === "bold" ? 0 : style === "minimal" ? "10px 0" : 16 }, children: [
         brand2.logo && !onDark ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "", style: { height: 34, objectFit: "contain", marginBottom: 8, display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontWeight: 800, fontSize: 17, marginBottom: 4, color: onDark ? "#fff" : S.ink }, children: brand2.company }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800, color: onDark ? "#fff" : brand2.primary }, children: title }),
@@ -15200,7 +15200,30 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "soft", small: true, onClick: () => setBuilderOpen(true), children: "Open builder" }), children: "Proposal document" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: "Opens the full-page proposal builder: pick a template style, add and reorder sections, write custom sections, attach PDFs, and control what pricing the customer sees \u2014 then preview and export." })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Pick a cover layout below, or tap Open builder for the full editor \u2014 add and reorder sections, write custom sections, attach PDFs, and control what pricing the customer sees, then preview and export." }),
+      (() => {
+        const pdoc = normalizeProposalDoc(est.doc);
+        const setStyle = (id) => setEst({ doc: { ...pdoc, style: id } });
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 800, color: S.sub, letterSpacing: 0.3, marginBottom: 8 }, children: "COVER LAYOUT" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))", gap: 10 }, children: PROPOSAL_STYLES.map((s) => {
+            const on = pdoc.style === s.id;
+            return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => !locked && setStyle(s.id), disabled: locked, style: {
+              textAlign: "left",
+              cursor: locked ? "default" : "pointer",
+              fontFamily: "inherit",
+              border: `2px solid ${on ? T.accent : S.line}`,
+              background: on ? T.accentSoft : S.card,
+              borderRadius: 12,
+              padding: 8
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CoverThumb, { style: s.id, accent: T.accent, primary: T.primary }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 800, color: S.ink, marginTop: 7 }, children: s.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, marginTop: 1, lineHeight: 1.35 }, children: s.blurb })
+            ] }, s.id);
+          }) })
+        ] });
+      })()
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Scope of work" }),

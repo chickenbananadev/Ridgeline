@@ -2993,9 +2993,10 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
   );
 }
 
-function Sheet({ open, onClose, title, children, footer, wide, tall, center }) {
+function Sheet({ open, onClose, title, children, footer, wide, tall, center = true }) {
   if (!open) return null;
-  /* `center` renders a floating, vertically-centered dialog (rounded on all
+  /* Dialogs float centered by default (pass center={false} for a bottom sheet).
+     `center` renders a floating, vertically-centered dialog (rounded on all
      sides, insets from the screen edges) instead of the default bottom sheet
      that's anchored to the bottom edge. */
   return (
@@ -7908,7 +7909,7 @@ function docShell(title, brand, bodyHtml) {
   .foot { margin-top: 26px; padding-top: 12px; border-top: 1px solid #E5E7EB;
           font-size: 10.5px; color: #9CA3AF; text-align: center; }
   .cover { text-align: center; padding: 40px 0 30px; page-break-after: always; }
-  .cover img.hero { width: 100%; height: 300px; object-fit: cover; border-radius: 12px; margin-bottom: 26px; }
+  .cover img.hero { width: 100%; height: 4.8in; object-fit: cover; border-radius: 12px; margin-bottom: 26px; }
   @media print { .noprint { display: none !important; } body { padding: 0; } }
   .bar { position: sticky; top: 0; background: #111827; color: #fff; padding: 11px 14px;
          display: flex; gap: 10px; align-items: center; margin: -22px -22px 20px; }
@@ -13405,7 +13406,7 @@ function ProposalPreview({ job, brand, est, doc, total }) {
         );
         if (sec === "cover") return (
           <div key={sec} style={{ marginBottom: 16, ...coverWrap }}>
-            {doc.coverImage && <img src={doc.coverImage} alt="" style={{ width: "100%", height: 240, objectFit: "cover", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 }} />}
+            {doc.coverImage && <img src={doc.coverImage} alt="" style={{ width: "100%", height: 400, objectFit: "cover", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 }} />}
             <div style={{ padding: style === "bold" ? 0 : (style === "minimal" ? "10px 0" : 16) }}>
               {brand.logo && !onDark
                 ? <img src={brand.logo} alt="" style={{ height: 34, objectFit: "contain", marginBottom: 8, display: "block" }} />
@@ -13725,10 +13726,35 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Btn kind="soft" small onClick={() => setBuilderOpen(true)}>Open builder</Btn>}>Proposal document</CardTitle>
-        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
-          Opens the full-page proposal builder: pick a template style, add and reorder sections, write custom
-          sections, attach PDFs, and control what pricing the customer sees — then preview and export.
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Pick a cover layout below, or tap Open builder for the full editor — add and reorder sections, write custom
+          sections, attach PDFs, and control what pricing the customer sees, then preview and export.
         </div>
+        {(() => {
+          const pdoc = normalizeProposalDoc(est.doc);
+          const setStyle = (id) => setEst({ doc: { ...pdoc, style: id } });
+          return (
+            <>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: S.sub, letterSpacing: 0.3, marginBottom: 8 }}>COVER LAYOUT</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))", gap: 10 }}>
+                {PROPOSAL_STYLES.map((s) => {
+                  const on = pdoc.style === s.id;
+                  return (
+                    <button key={s.id} onClick={() => !locked && setStyle(s.id)} disabled={locked} style={{
+                      textAlign: "left", cursor: locked ? "default" : "pointer", fontFamily: "inherit",
+                      border: `2px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : S.card,
+                      borderRadius: 12, padding: 8,
+                    }}>
+                      <CoverThumb style={s.id} accent={T.accent} primary={T.primary} />
+                      <div style={{ fontSize: 12.5, fontWeight: 800, color: S.ink, marginTop: 7 }}>{s.name}</div>
+                      <div style={{ fontSize: 10.5, color: S.sub, marginTop: 1, lineHeight: 1.35 }}>{s.blurb}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          );
+        })()}
       </Card>
 
       <Card style={{ marginTop: 12 }}>
