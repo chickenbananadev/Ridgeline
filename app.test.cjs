@@ -7759,7 +7759,8 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
     }, children: "Open full job" })
   ] });
 }
-function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView }) {
+function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {
+} }) {
   const dragJob = (0, import_react.useRef)(null);
   const focusRef = (0, import_react.useRef)(null);
   (0, import_react.useEffect)(() => {
@@ -7771,9 +7772,35 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
   const [q, setQ] = (0, import_react.useState)("");
   const [showSearch, setShowSearch] = (0, import_react.useState)(false);
   const [dragOver, setDragOver] = (0, import_react.useState)(null);
+  const [selecting, setSelecting] = (0, import_react.useState)(false);
+  const [selected, setSelected] = (0, import_react.useState)(() => /* @__PURE__ */ new Set());
+  const [bulkMenu, setBulkMenu] = (0, import_react.useState)(null);
+  const toggleSel = (id) => setSelected((prev) => {
+    const n = new Set(prev);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
+  const clearSel = () => {
+    setSelected(/* @__PURE__ */ new Set());
+    setBulkMenu(null);
+  };
+  const assigneeOptions = (0, import_react.useMemo)(() => [...new Set(jobs.map((j) => j.assignee).filter(Boolean))], [jobs]);
   const filtered = (0, import_react.useMemo)(() => {
     let out = jobs.filter((j) => {
-      if (q && !(j.name + " " + j.address).toLowerCase().includes(q.toLowerCase())) return false;
+      if (q) {
+        const hay = [
+          j.name,
+          j.address,
+          j.phone,
+          j.contact?.phone,
+          j.email,
+          j.contact?.email,
+          j.insurance?.claim,
+          j.claim?.claim,
+          j.zip
+        ].filter(Boolean).join(" ").toLowerCase();
+        if (!hay.includes(q.toLowerCase())) return false;
+      }
       if (filters.assignees.length && !filters.assignees.includes(j.assignee)) return false;
       if (filters.stages.length && !filters.stages.includes(j.stageId)) return false;
       if (filters.sources.length && !filters.sources.includes(j.leadSource)) return false;
@@ -7974,9 +8001,73 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: onOpenWorkflow, style: { ...pill, whiteSpace: "nowrap" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Pencil, { size: 14 }),
           " Customize workflow"
-        ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          "button",
+          {
+            onClick: () => {
+              if (view === "board") setView("list");
+              setSelecting((s) => !s);
+              clearSel();
+            },
+            style: { ...pill, whiteSpace: "nowrap", ...selecting ? { color: T.accent, background: T.accentSoft } : {} },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Check, { size: 15 }),
+              " ",
+              selecting ? "Done" : "Select"
+            ]
+          }
+        )
       ] }),
-      showSearch && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { paddingBottom: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { autoFocus: true, style: inputStyle, placeholder: "Search name or address", value: q, onChange: (e) => setQ(e.target.value) }) })
+      showSearch && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { paddingBottom: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { autoFocus: true, style: inputStyle, placeholder: "Search name, address, phone, email, claim #\u2026", value: q, onChange: (e) => setQ(e.target.value) }) })
+    ] }),
+    selecting && selected.size > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "sticky", top: 0, zIndex: 5, background: T.primary, color: "#fff", padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontWeight: 800, fontSize: 14 }, children: [
+        selected.size,
+        " selected"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "relative" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "soft", onClick: () => setBulkMenu(bulkMenu === "stage" ? null : "stage"), children: "Move to\u2026" }),
+        bulkMenu === "stage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", top: "110%", left: 0, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }, children: stages.map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            onClick: () => {
+              selected.forEach((id) => onMoveStage(id, st.id));
+              clearSel();
+            },
+            style: { display: "block", width: "100%", textAlign: "left", border: "none", background: "none", padding: "10px 14px", fontSize: 13.5, color: S.ink, cursor: "pointer", fontFamily: "inherit" },
+            children: st.name
+          },
+          st.id
+        )) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "relative" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "soft", onClick: () => setBulkMenu(bulkMenu === "assign" ? null : "assign"), children: "Assign\u2026" }),
+        bulkMenu === "assign" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", top: "110%", left: 0, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }, children: assigneeOptions.map((nm) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            onClick: () => {
+              onBulkUpdate([...selected], { assignee: nm });
+              clearSel();
+            },
+            style: { display: "block", width: "100%", textAlign: "left", border: "none", background: "none", padding: "10px 14px", fontSize: 13.5, color: S.ink, cursor: "pointer", fontFamily: "inherit" },
+            children: nm
+          },
+          nm
+        )) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "soft", onClick: () => {
+        const rows = filtered.filter((j) => selected.has(j.id));
+        const head = ["Name", "Address", "Zip", "State", "Stage", "Value", "Type", "Phone", "Email", "Assignee"];
+        const esc2 = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+        const body = rows.map((j) => [j.name, j.address, j.zip, j.state, (stages.find((s) => s.id === j.stageId) || {}).name || "", j.value, j.claimType, j.phone || j.contact?.phone || "", j.email || j.contact?.email || "", j.assignee].map(esc2).join(",")).join("\n");
+        const blob = new Blob([head.join(",") + "\n" + body], { type: "text/csv" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "jobs-export.csv";
+        a.click();
+      }, children: "Export CSV" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: clearSel, style: { marginLeft: "auto", border: "none", background: "rgba(255,255,255,.15)", color: "#fff", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }, children: "Clear" })
     ] }),
     view === "board" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
       display: "flex",
@@ -8047,7 +8138,32 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
         stage.id
       );
     }) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: 16, background: S.bg, minHeight: "62vh" }, children: [
-      filtered.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(JobCard, { job: j }, j.id)),
+      selecting && filtered.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "button",
+        {
+          onClick: () => setSelected(selected.size === filtered.length ? /* @__PURE__ */ new Set() : new Set(filtered.map((j) => j.id))),
+          style: { border: "none", background: "none", color: T.accent, fontWeight: 700, fontSize: 13, cursor: "pointer", padding: "0 0 10px", fontFamily: "inherit" },
+          children: selected.size === filtered.length ? "Deselect all" : `Select all ${filtered.length}`
+        }
+      ),
+      filtered.map((j) => selecting ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { onClick: () => toggleSel(j.id), style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        background: "#fff",
+        cursor: "pointer",
+        border: `1px solid ${selected.has(j.id) ? T.accent : S.line}`,
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 10
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 22, height: 22, borderRadius: 6, flexShrink: 0, border: `2px solid ${selected.has(j.id) ? T.accent : S.line}`, background: selected.has(j.id) ? T.accent : "#fff", display: "grid", placeItems: "center" }, children: selected.has(j.id) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Check, { size: 14, color: "#fff" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700, color: S.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: j.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: j.address })
+        ] }),
+        j.value > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, whiteSpace: "nowrap" }, children: money(j.value) })
+      ] }, j.id) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(JobCard, { job: j }, j.id)),
       filtered.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { textAlign: "center", color: S.sub, fontSize: 14, padding: 40 }, children: "No jobs match the current filters." })
     ] })
   ] });
@@ -23643,7 +23759,8 @@ function SupremeCRM() {
         focusStage: boardStage,
         onClearFocus: () => setBoardStage(null),
         view: boardView,
-        setView: setBoardView
+        setView: setBoardView,
+        onBulkUpdate: (ids, patch) => setJobs((prev) => prev.map((j) => ids.includes(j.id) ? { ...j, ...patch } : j))
       }
     ) : nav === "inbox" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       Inbox,

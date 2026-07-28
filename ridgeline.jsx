@@ -6586,7 +6586,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
 /* ================================================================
    JOB BOARD — kanban with drag between stages + tap-to-move
    ================================================================ */
-function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView }) {
+function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {} }) {
   const dragJob = useRef(null);
   const focusRef = useRef(null);
   useEffect(() => {
@@ -6598,10 +6598,20 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
   const [q, setQ] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [dragOver, setDragOver] = useState(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
+  const [bulkMenu, setBulkMenu] = useState(null); // "stage" | "assign" | null
+  const toggleSel = (id) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const clearSel = () => { setSelected(new Set()); setBulkMenu(null); };
+  const assigneeOptions = useMemo(() => [...new Set(jobs.map((j) => j.assignee).filter(Boolean))], [jobs]);
 
   const filtered = useMemo(() => {
     let out = jobs.filter((j) => {
-      if (q && !(j.name + " " + j.address).toLowerCase().includes(q.toLowerCase())) return false;
+      if (q) {
+        const hay = [j.name, j.address, j.phone, j.contact?.phone, j.email, j.contact?.email,
+          j.insurance?.claim, j.claim?.claim, j.zip].filter(Boolean).join(" ").toLowerCase();
+        if (!hay.includes(q.toLowerCase())) return false;
+      }
       if (filters.assignees.length && !filters.assignees.includes(j.assignee)) return false;
       if (filters.stages.length && !filters.stages.includes(j.stageId)) return false;
       if (filters.sources.length && !filters.sources.includes(j.leadSource)) return false;
@@ -6726,13 +6736,55 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
           <button onClick={onOpenWorkflow} style={{ ...pill, whiteSpace: "nowrap" }}>
             <Pencil size={14} /> Customize workflow
           </button>
+          <button onClick={() => { if (view === "board") setView("list"); setSelecting((s) => !s); clearSel(); }}
+            style={{ ...pill, whiteSpace: "nowrap", ...(selecting ? { color: T.accent, background: T.accentSoft } : {}) }}>
+            <Check size={15} /> {selecting ? "Done" : "Select"}
+          </button>
         </div>
         {showSearch && (
           <div style={{ paddingBottom: 12 }}>
-            <input autoFocus style={inputStyle} placeholder="Search name or address" value={q} onChange={(e) => setQ(e.target.value)} />
+            <input autoFocus style={inputStyle} placeholder="Search name, address, phone, email, claim #…" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
         )}
       </div>
+
+      {/* Bulk-action bar — appears once rows are selected in list view. */}
+      {selecting && selected.size > 0 && (
+        <div style={{ position: "sticky", top: 0, zIndex: 5, background: T.primary, color: "#fff", padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontWeight: 800, fontSize: 14 }}>{selected.size} selected</span>
+          <div style={{ position: "relative" }}>
+            <Btn small kind="soft" onClick={() => setBulkMenu(bulkMenu === "stage" ? null : "stage")}>Move to…</Btn>
+            {bulkMenu === "stage" && (
+              <div style={{ position: "absolute", top: "110%", left: 0, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }}>
+                {stages.map((st) => (
+                  <button key={st.id} onClick={() => { selected.forEach((id) => onMoveStage(id, st.id)); clearSel(); }}
+                    style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", padding: "10px 14px", fontSize: 13.5, color: S.ink, cursor: "pointer", fontFamily: "inherit" }}>{st.name}</button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div style={{ position: "relative" }}>
+            <Btn small kind="soft" onClick={() => setBulkMenu(bulkMenu === "assign" ? null : "assign")}>Assign…</Btn>
+            {bulkMenu === "assign" && (
+              <div style={{ position: "absolute", top: "110%", left: 0, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }}>
+                {assigneeOptions.map((nm) => (
+                  <button key={nm} onClick={() => { onBulkUpdate([...selected], { assignee: nm }); clearSel(); }}
+                    style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", padding: "10px 14px", fontSize: 13.5, color: S.ink, cursor: "pointer", fontFamily: "inherit" }}>{nm}</button>
+                ))}
+              </div>
+            )}
+          </div>
+          <Btn small kind="soft" onClick={() => {
+            const rows = filtered.filter((j) => selected.has(j.id));
+            const head = ["Name", "Address", "Zip", "State", "Stage", "Value", "Type", "Phone", "Email", "Assignee"];
+            const esc2 = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
+            const body = rows.map((j) => [j.name, j.address, j.zip, j.state, (stages.find((s) => s.id === j.stageId) || {}).name || "", j.value, j.claimType, j.phone || j.contact?.phone || "", j.email || j.contact?.email || "", j.assignee].map(esc2).join(",")).join("\n");
+            const blob = new Blob([head.join(",") + "\n" + body], { type: "text/csv" });
+            const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "jobs-export.csv"; a.click();
+          }}>Export CSV</Btn>
+          <button onClick={clearSel} style={{ marginLeft: "auto", border: "none", background: "rgba(255,255,255,.15)", color: "#fff", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Clear</button>
+        </div>
+      )}
 
       {view === "board" ? (
         <div style={{
@@ -6776,7 +6828,27 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
         </div>
       ) : (
         <div style={{ padding: 16, background: S.bg, minHeight: "62vh" }}>
-          {filtered.map((j) => <JobCard key={j.id} job={j} />)}
+          {selecting && filtered.length > 0 && (
+            <button onClick={() => setSelected(selected.size === filtered.length ? new Set() : new Set(filtered.map((j) => j.id)))}
+              style={{ border: "none", background: "none", color: T.accent, fontWeight: 700, fontSize: 13, cursor: "pointer", padding: "0 0 10px", fontFamily: "inherit" }}>
+              {selected.size === filtered.length ? "Deselect all" : `Select all ${filtered.length}`}
+            </button>
+          )}
+          {filtered.map((j) => selecting ? (
+            <div key={j.id} onClick={() => toggleSel(j.id)} style={{
+              display: "flex", alignItems: "center", gap: 12, background: "#fff", cursor: "pointer",
+              border: `1px solid ${selected.has(j.id) ? T.accent : S.line}`, borderRadius: 12, padding: 14, marginBottom: 10,
+            }}>
+              <span style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, border: `2px solid ${selected.has(j.id) ? T.accent : S.line}`, background: selected.has(j.id) ? T.accent : "#fff", display: "grid", placeItems: "center" }}>
+                {selected.has(j.id) && <Check size={14} color="#fff" />}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: S.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.name}</div>
+                <div style={{ fontSize: 12.5, color: S.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{j.address}</div>
+              </div>
+              {j.value > 0 && <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: "nowrap" }}>{money(j.value)}</div>}
+            </div>
+          ) : <JobCard key={j.id} job={j} />)}
           {filtered.length === 0 && (
             <div style={{ textAlign: "center", color: S.sub, fontSize: 14, padding: 40 }}>
               No jobs match the current filters.
@@ -21482,7 +21554,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onOpenJob={openJobScreen} onMoveStage={moveStage} onNewLead={() => { setLeadSeed(null); setNewLeadOpen(true); }}
           onQuickAction={(jobId) => setQuickJobId(jobId)}
           focusStage={boardStage} onClearFocus={() => setBoardStage(null)}
-          view={boardView} setView={setBoardView} />
+          view={boardView} setView={setBoardView}
+          onBulkUpdate={(ids, patch) => setJobs((prev) => prev.map((j) => ids.includes(j.id) ? { ...j, ...patch } : j))} />
       ) : nav === "inbox" ? (
         <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)}
           chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} users={users} currentUser={liveUser}
