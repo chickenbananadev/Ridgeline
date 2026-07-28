@@ -5495,7 +5495,7 @@ function Dashboard({
     })()
   ] });
 }
-function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast: toast2 }) {
+function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast: toast2, crews = [] }) {
   const [scope, setScope] = (0, import_react.useState)(isAdmin ? "company" : currentUser.name);
   const [range, setRange] = (0, import_react.useState)("all");
   const [tab, setTab] = (0, import_react.useState)("summary");
@@ -5519,6 +5519,15 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast:
     const netCo = wonCaps.reduce((x, c) => x + c.netCompany, 0);
     const decided = won.length + lost.length;
     const pay = scoped.map((j) => paymentsSummary(j));
+    const order = stages.map((s) => s.id);
+    const wonIdx = order.indexOf("s5");
+    const oddsFor = (sid) => {
+      const i = order.indexOf(sid);
+      if (i < 0 || wonIdx <= 0) return 0.3;
+      return Math.max(0.1, Math.min(0.9, (i + 1) / (wonIdx + 1)));
+    };
+    const weightedPipeline = open.reduce((x, j) => x + num(j.value) * oddsFor(j.stageId), 0);
+    const avgAge = open.length ? open.reduce((x, j) => x + num(j.daysInStage), 0) / open.length : 0;
     return {
       total: scoped.length,
       won: won.length,
@@ -5527,6 +5536,8 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast:
       done: done.length,
       open: open.length,
       openValue: open.reduce((x, j) => x + j.value, 0),
+      weightedPipeline,
+      avgAge,
       revenue,
       cogs,
       gross,
@@ -5545,7 +5556,19 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast:
       reviewsSent: scoped.filter((j) => j.review.sent).length,
       caps
     };
-  }, [scoped]);
+  }, [scoped, stages]);
+  const crewRows = (0, import_react.useMemo)(() => (crews || []).map((cr) => {
+    const mine = scoped.filter((j) => j.crewId === cr.id);
+    const doneJobs = mine.filter((j) => j.stageId === "s10");
+    const inProd = mine.filter((j) => ["s8", "s9"].includes(j.stageId) || j.schedDate && !DEAD_STAGES.includes(j.stageId) && j.stageId !== "s10");
+    return {
+      name: cr.name,
+      assigned: mine.length,
+      inProd: inProd.length,
+      done: doneJobs.length,
+      revenue: doneJobs.reduce((x, j) => x + computeCapOut(j).contract, 0)
+    };
+  }).filter((r) => r.assigned > 0).sort((a2, b2) => b2.done - a2.done), [scoped, crews]);
   const reps = (0, import_react.useMemo)(() => users.filter((u) => u.role !== "crew").map((u) => {
     const mine = jobs.filter((j) => jobReps(j).some((r) => r.name === u.name));
     const won = mine.filter((j) => WON_STAGES.includes(j.stageId));
@@ -5864,23 +5887,47 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast:
         ] }, r.source)) })
       ] }) })
     ] }),
-    tab === "pipeline" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Stage distribution" }),
-      stages.map((st) => {
-        const inStage = scoped.filter((j) => j.stageId === st.id);
-        const max = Math.max(1, ...stages.map((x) => scoped.filter((j) => j.stageId === x.id).length));
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 140, fontSize: 12, color: S.sub, flexShrink: 0 }, children: st.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, height: 18, background: "#EEF1F4", borderRadius: 6, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
-            height: "100%",
-            width: `${inStage.length / max * 100}%`,
-            background: DEAD_STAGES.includes(st.id) ? "#B42318" : WON_STAGES.includes(st.id) ? "#177245" : T.primary,
-            borderRadius: 6,
-            minWidth: inStage.length ? 18 : 0
-          } }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 28, fontSize: 13, fontWeight: 700, textAlign: "right" }, children: inStage.length })
-        ] }, st.id);
-      })
+    tab === "pipeline" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Open pipeline", value: money(stat.openValue), sub: `${stat.open} open` }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Weighted pipeline", value: money(stat.weightedPipeline), sub: "value \xD7 stage odds" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Avg age in stage", value: `${Math.round(stat.avgAge)}d`, sub: "open jobs" })
+      ] }),
+      crewRows.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Crew throughput" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", fontSize: 11, fontWeight: 800, color: S.sub, padding: "0 0 6px", letterSpacing: ".03em" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1 }, children: "CREW" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 66, textAlign: "right" }, children: "ASSIGNED" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 70, textAlign: "right" }, children: "IN PROD" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, textAlign: "right" }, children: "DONE" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 92, textAlign: "right" }, children: "REVENUE" })
+        ] }),
+        crewRows.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", fontSize: 13, padding: "8px 0", borderTop: `1px solid ${S.line}` }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, fontWeight: 700, color: S.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: r.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 66, textAlign: "right" }, children: r.assigned }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 70, textAlign: "right" }, children: r.inProd }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, textAlign: "right", fontWeight: 700 }, children: r.done }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 92, textAlign: "right", color: S.sub }, children: money(r.revenue) })
+        ] }, r.name))
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Stage distribution" }),
+        stages.map((st) => {
+          const inStage = scoped.filter((j) => j.stageId === st.id);
+          const max = Math.max(1, ...stages.map((x) => scoped.filter((j) => j.stageId === x.id).length));
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 140, fontSize: 12, color: S.sub, flexShrink: 0 }, children: st.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, height: 18, background: "#EEF1F4", borderRadius: 6, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+              height: "100%",
+              width: `${inStage.length / max * 100}%`,
+              background: DEAD_STAGES.includes(st.id) ? "#B42318" : WON_STAGES.includes(st.id) ? "#177245" : T.primary,
+              borderRadius: 6,
+              minWidth: inStage.length ? 18 : 0
+            } }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 28, fontSize: 13, fontWeight: 700, textAlign: "right" }, children: inStage.length })
+          ] }, st.id);
+        })
+      ] })
     ] })
   ] });
 }
@@ -23568,7 +23615,8 @@ function SupremeCRM() {
         onBack: () => setNav("more"),
         isAdmin,
         currentUser: liveUser,
-        toast: toast2
+        toast: toast2,
+        crews
       }
     ) : nav === "calendar" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       CalendarView,

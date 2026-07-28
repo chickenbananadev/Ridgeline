@@ -4589,7 +4589,7 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
 /* ================================================================
    PERFORMANCE — rep scoreboard + funnel, computed from live jobs
    ================================================================ */
-function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast }) {
+function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [] }) {
   const [scope, setScope] = useState(isAdmin ? "company" : currentUser.name);
   const [range, setRange] = useState("all");
   const [tab, setTab] = useState("summary");
@@ -4614,10 +4614,18 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
     const netCo = wonCaps.reduce((x, c) => x + c.netCompany, 0);
     const decided = won.length + lost.length;
     const pay = scoped.map((j) => paymentsSummary(j));
+    /* Weighted pipeline: each open job's value discounted by how far it has
+       progressed toward the won stage (further along = more likely to close). */
+    const order = stages.map((s) => s.id);
+    const wonIdx = order.indexOf("s5");
+    const oddsFor = (sid) => { const i = order.indexOf(sid); if (i < 0 || wonIdx <= 0) return 0.3; return Math.max(0.1, Math.min(0.9, (i + 1) / (wonIdx + 1))); };
+    const weightedPipeline = open.reduce((x, j) => x + num(j.value) * oddsFor(j.stageId), 0);
+    const avgAge = open.length ? open.reduce((x, j) => x + num(j.daysInStage), 0) / open.length : 0;
     return {
       total: scoped.length, won: won.length, lost: lost.length, unq: unq.length,
       done: done.length, open: open.length,
       openValue: open.reduce((x, j) => x + j.value, 0),
+      weightedPipeline, avgAge,
       revenue, cogs, gross, commission, reimb, netCo,
       payout: commission + reimb,
       margin: revenue ? (gross / revenue) * 100 : 0,
@@ -4631,7 +4639,18 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
       reviewsSent: scoped.filter((j) => j.review.sent).length,
       caps,
     };
-  }, [scoped]);
+  }, [scoped, stages]);
+
+  /* Crew throughput — how work is flowing through each crew. */
+  const crewRows = useMemo(() => (crews || []).map((cr) => {
+    const mine = scoped.filter((j) => j.crewId === cr.id);
+    const doneJobs = mine.filter((j) => j.stageId === "s10");
+    const inProd = mine.filter((j) => ["s8", "s9"].includes(j.stageId) || (j.schedDate && !DEAD_STAGES.includes(j.stageId) && j.stageId !== "s10"));
+    return {
+      name: cr.name, assigned: mine.length, inProd: inProd.length, done: doneJobs.length,
+      revenue: doneJobs.reduce((x, j) => x + computeCapOut(j).contract, 0),
+    };
+  }).filter((r) => r.assigned > 0).sort((a2, b2) => b2.done - a2.done), [scoped, crews]);
 
   const reps = useMemo(() => users.filter((u) => u.role !== "crew").map((u) => {
     /* A shared job counts for everyone on it, but each rep is credited
@@ -4958,6 +4977,33 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
       )}
 
       {tab === "pipeline" && (
+        <>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 12 }}>
+          <Stat label="Open pipeline" value={money(stat.openValue)} sub={`${stat.open} open`} />
+          <Stat label="Weighted pipeline" value={money(stat.weightedPipeline)} sub="value × stage odds" />
+          <Stat label="Avg age in stage" value={`${Math.round(stat.avgAge)}d`} sub="open jobs" />
+        </div>
+        {crewRows.length > 0 && (
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle>Crew throughput</CardTitle>
+            <div style={{ display: "flex", fontSize: 11, fontWeight: 800, color: S.sub, padding: "0 0 6px", letterSpacing: ".03em" }}>
+              <div style={{ flex: 1 }}>CREW</div>
+              <div style={{ width: 66, textAlign: "right" }}>ASSIGNED</div>
+              <div style={{ width: 70, textAlign: "right" }}>IN PROD</div>
+              <div style={{ width: 56, textAlign: "right" }}>DONE</div>
+              <div style={{ width: 92, textAlign: "right" }}>REVENUE</div>
+            </div>
+            {crewRows.map((r) => (
+              <div key={r.name} style={{ display: "flex", alignItems: "center", fontSize: 13, padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
+                <div style={{ flex: 1, fontWeight: 700, color: S.ink, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</div>
+                <div style={{ width: 66, textAlign: "right" }}>{r.assigned}</div>
+                <div style={{ width: 70, textAlign: "right" }}>{r.inProd}</div>
+                <div style={{ width: 56, textAlign: "right", fontWeight: 700 }}>{r.done}</div>
+                <div style={{ width: 92, textAlign: "right", color: S.sub }}>{money(r.revenue)}</div>
+              </div>
+            ))}
+          </Card>
+        )}
         <Card style={{ marginTop: 12 }}>
           <CardTitle>Stage distribution</CardTitle>
           {stages.map((st) => {
@@ -4978,6 +5024,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
             );
           })}
         </Card>
+        </>
       )}
     </div>
   );
@@ -21386,7 +21433,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           seed={codeSeed} onConsumeSeed={() => setCodeSeed(null)} />
       ) : nav === "performance" ? (
         <Performance jobs={jobs} stages={stages} users={users} onBack={() => setNav("more")}
-          isAdmin={isAdmin} currentUser={liveUser} toast={toast} />
+          isAdmin={isAdmin} currentUser={liveUser} toast={toast} crews={crews} />
       ) : nav === "calendar" ? (
         <CalendarView jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}
           appointments={appointments} setAppointments={setAppointments}
