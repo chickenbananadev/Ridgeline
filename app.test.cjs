@@ -12852,6 +12852,7 @@ function TabClaim({ job, mut, toast: toast2, brand: brand2 }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }, children: "Held back is RCV less ACV less the deductible \u2014 derived, not typed, so the two can never disagree." })
       ] })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupplementCheck, { job, mut, toast: toast2 }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, fontWeight: 800 }, children: money(m.supApproved) }), children: "Supplements" }),
       m.sups.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }, children: "Nothing filed. Check the carrier's scope line by line against the Insurance hub's trigger list before accepting it." }),
@@ -13426,75 +13427,137 @@ function supplementFindings(job) {
   const text = items.map((i) => String(i.desc || "").toLowerCase()).join(" \n ");
   const has = (re) => re.test(text);
   const n = (x) => num(x);
+  const state = (jurisdictionForZip(job.zip) || {}).state || "OH";
   const out = [];
-  const add = (sev, title, why) => out.push({ sev, title, why });
+  const add = (sev, title, why, opts = {}) => {
+    const prov = opts.topic ? citeFor(state, opts.topic) : null;
+    out.push({ sev, title, why, topic: opts.topic || null, line: opts.line || null, cite: prov ? prov.cite : opts.cite || null, verified: prov ? prov.verified : false });
+  };
   if (items.length === 0) return out;
   if (n(m.valleys) > 0 && !has(/ice\s*&?\s*water|i\s*&\s*w|weather\s*watch|storm\s*guard/i))
     add(
       "HIGH",
       "Ice & water shield \u2014 valleys",
-      `${m.valleys} LF of valley measured, no ice & water line item. Required in open valleys by manufacturer specs and most adopted codes.`
+      `${m.valleys} LF of valley measured, no ice & water line item. Required in open valleys by manufacturer specs and most adopted codes.`,
+      { topic: "iceBarrier", line: { desc: "Ice & water shield \u2014 valleys", qty: Math.round(n(m.valleys) * 3 / 100 * 10) / 10, unit: "SQ" } }
     );
   if (n(m.eaves) > 0 && !has(/ice\s*&?\s*water|i\s*&\s*w|weather\s*watch|storm\s*guard/i))
     add(
       "HIGH",
       "Ice & water shield \u2014 eaves",
-      `${m.eaves} LF of eave measured. IRC R905.1.2 requires an ice barrier at eaves where there is a history of ice damming \u2014 that is this market.`
+      `${m.eaves} LF of eave measured. The ice-barrier code requires it at eaves where there is a history of ice damming \u2014 that is this market.`,
+      { topic: "iceBarrier", line: { desc: "Ice & water shield \u2014 eaves", qty: Math.round(n(m.eaves) * 3 / 100 * 10) / 10, unit: "SQ" } }
     );
   if (n(m.eaves) + n(m.rakes) > 0 && !has(/drip\s*edge/i))
     add(
       "HIGH",
       "Drip edge",
-      `${n(m.eaves) + n(m.rakes)} LF of eave and rake measured, no drip edge line. IRC R905.2.8.5 requires it at eaves and rakes.`
+      `${n(m.eaves) + n(m.rakes)} LF of eave and rake measured, no drip edge line. Code requires it at eaves and rakes.`,
+      { topic: "dripEdge", line: { desc: "Drip edge \u2014 eaves & rakes", qty: n(m.eaves) + n(m.rakes), unit: "LF" } }
     );
   if ((n(m.penetrations) > 0 || c.pipeBoots === "Yes") && !has(/pipe\s*(boot|flash|jack)|neoprene/i))
     add(
       c.pipeBoots === "Yes" ? "HIGH" : "MODERATE",
       "Pipe boots / flashings",
-      c.pipeBoots === "Yes" ? "Inspection documented cracked pipe boots \u2014 an active leak path \u2014 and the estimate has no pipe flashing line." : `${m.penetrations} penetrations measured, no pipe flashing line item.`
+      c.pipeBoots === "Yes" ? "Inspection documented cracked pipe boots \u2014 an active leak path \u2014 and the estimate has no pipe flashing line." : `${m.penetrations} penetrations measured, no pipe flashing line item.`,
+      { line: { desc: "Pipe boots / neoprene flashings", qty: Math.max(1, n(m.penetrations)), unit: "EA" } }
     );
   if (n(m.stepFlash) > 0 && !has(/step\s*flash/i))
-    add("MODERATE", "Step flashing", `${m.stepFlash} LF of step flashing measured but not on the estimate.`);
+    add(
+      "MODERATE",
+      "Step flashing",
+      `${m.stepFlash} LF of step flashing measured but not on the estimate.`,
+      { line: { desc: "Step flashing \u2014 R&R", qty: n(m.stepFlash), unit: "LF" } }
+    );
   if (n(m.wallFlash) > 0 && !has(/counter\s*flash|apron|wall\s*flash|headwall/i))
-    add("MODERATE", "Wall / counterflashing", `${m.wallFlash} LF of wall flashing measured but not on the estimate.`);
+    add(
+      "MODERATE",
+      "Wall / counterflashing",
+      `${m.wallFlash} LF of wall flashing measured but not on the estimate.`,
+      { line: { desc: "Counterflashing / apron at walls", qty: n(m.wallFlash), unit: "LF" } }
+    );
   if (c.flashingFail === "Yes" && !has(/chimney|counter\s*flash/i))
     add(
       "MODERATE",
       "Chimney counterflashing",
-      "Inspection documented failed flashings; nothing on the estimate addresses the chimney or counterflashing."
+      "Inspection documented failed flashings; nothing on the estimate addresses the chimney or counterflashing.",
+      { line: { desc: "Chimney reflash \u2014 counter & step", qty: 1, unit: "EA" } }
+    );
+  if ((c.flashingFail === "Yes" || n(m.wallFlash) > 0) && !has(/kickout|kick\s*out|diverter/i))
+    add(
+      "MODERATE",
+      "Kickout / diverter flashing",
+      "Wall-to-roof intersections need a kickout diverter at the eave end to keep runoff out of the wall \u2014 commonly omitted and code-required.",
+      { cite: "IRC R703.4", line: { desc: "Kickout / diverter flashing", qty: 2, unit: "EA" } }
     );
   if (!has(/underlayment|synthetic|felt/i))
-    add("HIGH", "Underlayment", "No underlayment line item. IRC R905.1.1 requires underlayment beneath asphalt shingles.");
+    add(
+      "HIGH",
+      "Underlayment",
+      "No underlayment line item. Code requires underlayment beneath asphalt shingles.",
+      { topic: "underlayment", line: { desc: "Synthetic underlayment \u2014 field", qty: n(m.squares) || 1, unit: "SQ" } }
+    );
   if (!has(/starter/i))
-    add("MODERATE", "Starter strip", "No starter course line. Manufacturers void wind warranties without a proper starter at eaves and rakes.");
+    add(
+      "MODERATE",
+      "Starter strip",
+      "No starter course line. Manufacturers void wind warranties without a proper starter at eaves and rakes.",
+      { line: { desc: "Starter strip \u2014 eaves & rakes", qty: n(m.eaves) + n(m.rakes) || 1, unit: "LF" } }
+    );
   if (n(m.ridges) + n(m.hips) > 0 && !has(/ridge\s*cap|hip\s*(&|and)?\s*ridge|cap\s*shingle/i))
-    add("MODERATE", "Hip & ridge caps", `${n(m.ridges) + n(m.hips)} LF of hip and ridge measured, no cap shingle line.`);
+    add(
+      "MODERATE",
+      "Hip & ridge caps",
+      `${n(m.ridges) + n(m.hips)} LF of hip and ridge measured, no cap shingle line.`,
+      { line: { desc: "Hip & ridge cap shingles", qty: n(m.ridges) + n(m.hips), unit: "LF" } }
+    );
   const layerCount = parseInt(String(c.layers || ""), 10);
   if (layerCount >= 2 && !has(/(2|second|extra|additional).{0,12}layer|layers/i))
     add(
       "HIGH",
       "Extra tear-off layer",
-      `Inspection documented ${c.layers}. Tear-off is priced per layer \u2014 a single-layer tear-off line underbills this roof.`
+      `Inspection documented ${c.layers}. Tear-off is priced per layer \u2014 a single-layer tear-off line underbills this roof.`,
+      { topic: "tearOff", line: { desc: "Additional layer tear-off", qty: n(m.squares) || 1, unit: "SQ" } }
     );
   const pitchNum = parseInt(String(c.pitch || m.pitch || "").split("/")[0], 10);
   if (pitchNum >= 8 && !has(/steep/i))
     add(
       "MODERATE",
       "Steep-slope charge",
-      `${c.pitch || m.pitch} pitch documented. 8/12 and up is steep-slope work \u2014 harnessed crews move slower and carriers pay for it.`
+      `${c.pitch || m.pitch} pitch documented. 8/12 and up is steep-slope work \u2014 harnessed crews move slower and carriers pay for it.`,
+      { line: { desc: "Steep-slope charge (8/12+)", qty: n(m.squares) || 1, unit: "SQ" } }
     );
   if ((c.ventCond === "Poor" || c.ventCond === "Critical") && !has(/vent/i))
     add(
       "MODERATE",
       "Ventilation",
-      `Ventilation condition rated ${c.ventCond} on inspection, and the estimate has no ventilation line at all.`
+      `Ventilation condition rated ${c.ventCond} on inspection, and the estimate has no ventilation line at all.`,
+      { topic: "ventilation", line: { desc: "Ridge ventilation", qty: n(m.ridges) || 1, unit: "LF" } }
     );
   if ((c.atticDecking === "Active Rot / Mold" || c.lightCheck === "Yes") && !has(/deck|osb|plywood|sheathing/i))
     add(
       "HIGH",
       "Decking allowance",
-      "Attic inspection shows compromised decking, but no decking replacement line or per-sheet allowance is on the estimate."
+      "Attic inspection shows compromised decking, but no decking replacement line or per-sheet allowance is on the estimate.",
+      { topic: "decking", line: { desc: "Roof decking replacement (7/16 OSB)", qty: 5, unit: "sheet" } }
     );
+  if (job.claimType === "Insurance") {
+    if (!has(/permit/i))
+      add(
+        "MODERATE",
+        "Permit & inspection fee",
+        "No permit/inspection fee line. Full replacements pull a permit in most jurisdictions \u2014 a recoverable cost the carrier owes.",
+        { cite: "Jurisdiction", line: { desc: "Permit & inspection fee", qty: 1, unit: "EA" } }
+      );
+    const trades = [/siding/i, /gutter|downspout/i, /roof|shingle|tear-?off/i].filter((re) => has(re)).length;
+    if (trades >= 2 && !has(/overhead|o\s*&\s*p|profit/i))
+      add(
+        "MODERATE",
+        "Overhead & profit (O&P)",
+        `Estimate spans ${trades} trades. Multi-trade losses typically warrant 10/10 overhead & profit \u2014 not currently on the estimate.`,
+        { line: { desc: "General contractor overhead & profit (10/10)", qty: 1, unit: "EA" } }
+      );
+  }
   const sq = n(m.squares);
   if (sq > 0) {
     const cutUp = (n(m.hips) + n(m.valleys)) / sq;
@@ -13514,22 +13577,55 @@ function supplementFindings(job) {
   }
   return out;
 }
-function SupplementCheck({ job }) {
+function SupplementCheck({ job, mut, toast: toast2, locked = false }) {
   const [open, setOpen] = (0, import_react.useState)(true);
+  const [done, setDone] = (0, import_react.useState)({});
   const found = supplementFindings(job);
   const items = (job.estimate || {}).items || [];
   if (items.length === 0) return null;
   const tone = { HIGH: "red", MODERATE: "amber", LOW: "blue" };
+  const isClaim = job.claimType === "Insurance";
+  const addToEstimate = (f) => {
+    if (!mut || !f.line) return;
+    const row = { id: uid("e"), desc: f.line.desc, qty: f.line.qty || 1, unit: f.line.unit || "EA", price: 0 };
+    mut((j) => ({ ...j, estimate: { ...j.estimate || {}, items: [...(j.estimate || {}).items || [], row] } }));
+    setDone((d) => ({ ...d, [f.title]: "estimate" }));
+    toast2 && toast2(`Added "${f.line.desc}" \u2014 set its price`);
+  };
+  const addAsSupplement = (f) => {
+    if (!mut) return;
+    const cite = f.cite ? ` [${f.cite}]` : "";
+    const row = { id: uid("sup"), desc: `${f.title}${cite}`, amount: "", status: "Draft", at: nowStamp() };
+    mut((j) => ({ ...j, claim: { ...j.claim || {}, supplements: [...(j.claim || {}).supplements || [], row] } }));
+    setDone((d) => ({ ...d, [f.title]: "supplement" }));
+    toast2 && toast2(`Added "${f.title}" to the claim supplements`);
+  };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 12 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: found.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Clear" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: found.some((f) => f.sev === "HIGH") ? "red" : "amber", children: found.length }), children: "Supplement check" }),
     found.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.55 }, children: "Every documented condition and measurement is reflected in a line item. Nothing obviously missing." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "The inspection and measurements document conditions this estimate does not price. Each one cites its evidence \u2014 that is what makes it supplementable." }),
-      (open ? found : found.slice(0, 3)).map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, padding: "9px 0", borderTop: `1px solid ${S.line}` }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: tone[f.sev], children: f.sev }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: f.title }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 2 }, children: f.why })
-        ] })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: [
+        "The inspection and measurements document conditions this estimate does not price. Each cites its code so it holds up",
+        isClaim ? " \u2014 add it to the estimate or file it as a claim supplement." : "."
+      ] }),
+      (open ? found : found.slice(0, 3)).map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "10px 0", borderTop: `1px solid ${S.line}` }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: tone[f.sev], children: f.sev }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: f.title }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 2 }, children: f.why }),
+            f.cite && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 5 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: f.verified ? "blue" : "amber", children: f.cite }) })
+          ] })
+        ] }),
+        !locked && mut && (done[f.title] || f.line || isClaim) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, marginTop: 8, marginLeft: 0, flexWrap: "wrap" }, children: done[f.title] ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: done[f.title] === "estimate" ? "\u2713 Added to estimate" : "\u2713 Added as supplement" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          f.line && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => addToEstimate(f), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 12 }),
+            " Add to estimate"
+          ] }),
+          isClaim && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => addAsSupplement(f), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 12 }),
+            " Add as supplement"
+          ] })
+        ] }) })
       ] }, i)),
       found.length > 3 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setOpen(!open), style: {
         border: "none",
@@ -14169,7 +14265,7 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
     toast2(priced ? `Generated \u2014 priced ${priced} of ${spec.length} lines from your price list` : "Line items generated \u2014 add prices or upload a price list");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupplementCheck, { job }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupplementCheck, { job, mut, toast: toast2, locked }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: locked ? "green" : est.status === "Sent" ? "blue" : "gray", children: est.status }), children: [
         "Estimate ",

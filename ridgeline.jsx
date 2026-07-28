@@ -11532,6 +11532,9 @@ function TabClaim({ job, mut, toast, brand }) {
         </div>
       </Card>
 
+      {/* What the inspection supports supplementing — cited & one-tap to file */}
+      <div style={{ marginTop: 12 }}><SupplementCheck job={job} mut={mut} toast={toast} /></div>
+
       {/* Supplements */}
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<span style={{ fontSize: 13, fontWeight: 800 }}>{money(m.supApproved)}</span>}>Supplements</CardTitle>
@@ -12143,57 +12146,95 @@ function supplementFindings(job) {
   const text = items.map((i) => String(i.desc || "").toLowerCase()).join(" \n ");
   const has = (re) => re.test(text);
   const n = (x) => num(x);
+  const state = (jurisdictionForZip(job.zip) || {}).state || "OH";
   const out = [];
-  const add = (sev, title, why) => out.push({ sev, title, why });
+  /* opts: { topic, line } — topic maps to the state code library (citeFor),
+     line is a ready-to-add estimate row so the finding is one tap to fix. */
+  const add = (sev, title, why, opts = {}) => {
+    const prov = opts.topic ? citeFor(state, opts.topic) : null;
+    out.push({ sev, title, why, topic: opts.topic || null, line: opts.line || null, cite: prov ? prov.cite : (opts.cite || null), verified: prov ? prov.verified : false });
+  };
 
   if (items.length === 0) return out; // Nothing to check an empty estimate against.
 
   // --- Flashings & penetrations ---
   if (n(m.valleys) > 0 && !has(/ice\s*&?\s*water|i\s*&\s*w|weather\s*watch|storm\s*guard/i))
     add("HIGH", "Ice & water shield — valleys",
-      `${m.valleys} LF of valley measured, no ice & water line item. Required in open valleys by manufacturer specs and most adopted codes.`);
+      `${m.valleys} LF of valley measured, no ice & water line item. Required in open valleys by manufacturer specs and most adopted codes.`,
+      { topic: "iceBarrier", line: { desc: "Ice & water shield — valleys", qty: Math.round((n(m.valleys) * 3) / 100 * 10) / 10, unit: "SQ" } });
   if (n(m.eaves) > 0 && !has(/ice\s*&?\s*water|i\s*&\s*w|weather\s*watch|storm\s*guard/i))
     add("HIGH", "Ice & water shield — eaves",
-      `${m.eaves} LF of eave measured. IRC R905.1.2 requires an ice barrier at eaves where there is a history of ice damming — that is this market.`);
+      `${m.eaves} LF of eave measured. The ice-barrier code requires it at eaves where there is a history of ice damming — that is this market.`,
+      { topic: "iceBarrier", line: { desc: "Ice & water shield — eaves", qty: Math.round((n(m.eaves) * 3) / 100 * 10) / 10, unit: "SQ" } });
   if ((n(m.eaves) + n(m.rakes)) > 0 && !has(/drip\s*edge/i))
     add("HIGH", "Drip edge",
-      `${n(m.eaves) + n(m.rakes)} LF of eave and rake measured, no drip edge line. IRC R905.2.8.5 requires it at eaves and rakes.`);
+      `${n(m.eaves) + n(m.rakes)} LF of eave and rake measured, no drip edge line. Code requires it at eaves and rakes.`,
+      { topic: "dripEdge", line: { desc: "Drip edge — eaves & rakes", qty: n(m.eaves) + n(m.rakes), unit: "LF" } });
   if ((n(m.penetrations) > 0 || c.pipeBoots === "Yes") && !has(/pipe\s*(boot|flash|jack)|neoprene/i))
     add(c.pipeBoots === "Yes" ? "HIGH" : "MODERATE", "Pipe boots / flashings",
       c.pipeBoots === "Yes"
         ? "Inspection documented cracked pipe boots — an active leak path — and the estimate has no pipe flashing line."
-        : `${m.penetrations} penetrations measured, no pipe flashing line item.`);
+        : `${m.penetrations} penetrations measured, no pipe flashing line item.`,
+      { line: { desc: "Pipe boots / neoprene flashings", qty: Math.max(1, n(m.penetrations)), unit: "EA" } });
   if (n(m.stepFlash) > 0 && !has(/step\s*flash/i))
-    add("MODERATE", "Step flashing", `${m.stepFlash} LF of step flashing measured but not on the estimate.`);
+    add("MODERATE", "Step flashing", `${m.stepFlash} LF of step flashing measured but not on the estimate.`,
+      { line: { desc: "Step flashing — R&R", qty: n(m.stepFlash), unit: "LF" } });
   if (n(m.wallFlash) > 0 && !has(/counter\s*flash|apron|wall\s*flash|headwall/i))
-    add("MODERATE", "Wall / counterflashing", `${m.wallFlash} LF of wall flashing measured but not on the estimate.`);
+    add("MODERATE", "Wall / counterflashing", `${m.wallFlash} LF of wall flashing measured but not on the estimate.`,
+      { line: { desc: "Counterflashing / apron at walls", qty: n(m.wallFlash), unit: "LF" } });
   if (c.flashingFail === "Yes" && !has(/chimney|counter\s*flash/i))
     add("MODERATE", "Chimney counterflashing",
-      "Inspection documented failed flashings; nothing on the estimate addresses the chimney or counterflashing.");
+      "Inspection documented failed flashings; nothing on the estimate addresses the chimney or counterflashing.",
+      { line: { desc: "Chimney reflash — counter & step", qty: 1, unit: "EA" } });
+  // Kickout / diverter flashing — a routinely-missed leak point at wall/roof ends.
+  if ((c.flashingFail === "Yes" || n(m.wallFlash) > 0) && !has(/kickout|kick\s*out|diverter/i))
+    add("MODERATE", "Kickout / diverter flashing",
+      "Wall-to-roof intersections need a kickout diverter at the eave end to keep runoff out of the wall — commonly omitted and code-required.",
+      { cite: "IRC R703.4", line: { desc: "Kickout / diverter flashing", qty: 2, unit: "EA" } });
 
   // --- Field of the roof ---
   if (!has(/underlayment|synthetic|felt/i))
-    add("HIGH", "Underlayment", "No underlayment line item. IRC R905.1.1 requires underlayment beneath asphalt shingles.");
+    add("HIGH", "Underlayment", "No underlayment line item. Code requires underlayment beneath asphalt shingles.",
+      { topic: "underlayment", line: { desc: "Synthetic underlayment — field", qty: n(m.squares) || 1, unit: "SQ" } });
   if (!has(/starter/i))
-    add("MODERATE", "Starter strip", "No starter course line. Manufacturers void wind warranties without a proper starter at eaves and rakes.");
+    add("MODERATE", "Starter strip", "No starter course line. Manufacturers void wind warranties without a proper starter at eaves and rakes.",
+      { line: { desc: "Starter strip — eaves & rakes", qty: n(m.eaves) + n(m.rakes) || 1, unit: "LF" } });
   if (n(m.ridges) + n(m.hips) > 0 && !has(/ridge\s*cap|hip\s*(&|and)?\s*ridge|cap\s*shingle/i))
-    add("MODERATE", "Hip & ridge caps", `${n(m.ridges) + n(m.hips)} LF of hip and ridge measured, no cap shingle line.`);
+    add("MODERATE", "Hip & ridge caps", `${n(m.ridges) + n(m.hips)} LF of hip and ridge measured, no cap shingle line.`,
+      { line: { desc: "Hip & ridge cap shingles", qty: n(m.ridges) + n(m.hips), unit: "LF" } });
 
   // --- Conditions that change labor ---
   const layerCount = parseInt(String(c.layers || ""), 10);
   if (layerCount >= 2 && !has(/(2|second|extra|additional).{0,12}layer|layers/i))
     add("HIGH", "Extra tear-off layer",
-      `Inspection documented ${c.layers}. Tear-off is priced per layer — a single-layer tear-off line underbills this roof.`);
+      `Inspection documented ${c.layers}. Tear-off is priced per layer — a single-layer tear-off line underbills this roof.`,
+      { topic: "tearOff", line: { desc: "Additional layer tear-off", qty: n(m.squares) || 1, unit: "SQ" } });
   const pitchNum = parseInt(String(c.pitch || m.pitch || "").split("/")[0], 10);
   if (pitchNum >= 8 && !has(/steep/i))
     add("MODERATE", "Steep-slope charge",
-      `${c.pitch || m.pitch} pitch documented. 8/12 and up is steep-slope work — harnessed crews move slower and carriers pay for it.`);
+      `${c.pitch || m.pitch} pitch documented. 8/12 and up is steep-slope work — harnessed crews move slower and carriers pay for it.`,
+      { line: { desc: "Steep-slope charge (8/12+)", qty: n(m.squares) || 1, unit: "SQ" } });
   if ((c.ventCond === "Poor" || c.ventCond === "Critical") && !has(/vent/i))
     add("MODERATE", "Ventilation",
-      `Ventilation condition rated ${c.ventCond} on inspection, and the estimate has no ventilation line at all.`);
+      `Ventilation condition rated ${c.ventCond} on inspection, and the estimate has no ventilation line at all.`,
+      { topic: "ventilation", line: { desc: "Ridge ventilation", qty: n(m.ridges) || 1, unit: "LF" } });
   if ((c.atticDecking === "Active Rot / Mold" || c.lightCheck === "Yes") && !has(/deck|osb|plywood|sheathing/i))
     add("HIGH", "Decking allowance",
-      "Attic inspection shows compromised decking, but no decking replacement line or per-sheet allowance is on the estimate.");
+      "Attic inspection shows compromised decking, but no decking replacement line or per-sheet allowance is on the estimate.",
+      { topic: "decking", line: { desc: "Roof decking replacement (7/16 OSB)", qty: 5, unit: "sheet" } });
+
+  // --- Claim-only supplements (only when this is an insurance job) ---
+  if (job.claimType === "Insurance") {
+    if (!has(/permit/i))
+      add("MODERATE", "Permit & inspection fee",
+        "No permit/inspection fee line. Full replacements pull a permit in most jurisdictions — a recoverable cost the carrier owes.",
+        { cite: "Jurisdiction", line: { desc: "Permit & inspection fee", qty: 1, unit: "EA" } });
+    const trades = [/siding/i, /gutter|downspout/i, /roof|shingle|tear-?off/i].filter((re) => has(re)).length;
+    if (trades >= 2 && !has(/overhead|o\s*&\s*p|profit/i))
+      add("MODERATE", "Overhead & profit (O&P)",
+        `Estimate spans ${trades} trades. Multi-trade losses typically warrant 10/10 overhead & profit — not currently on the estimate.`,
+        { line: { desc: "General contractor overhead & profit (10/10)", qty: 1, unit: "EA" } });
+  }
 
   // --- Waste factor sanity (deterministic version of waste intelligence) ---
   const sq = n(m.squares);
@@ -12211,12 +12252,31 @@ function supplementFindings(job) {
   return out;
 }
 
-function SupplementCheck({ job }) {
+function SupplementCheck({ job, mut, toast, locked = false }) {
   const [open, setOpen] = useState(true);
+  const [done, setDone] = useState({}); // title -> "estimate" | "supplement"
   const found = supplementFindings(job);
   const items = ((job.estimate || {}).items || []);
   if (items.length === 0) return null; // No estimate yet — nothing to audit.
   const tone = { HIGH: "red", MODERATE: "amber", LOW: "blue" };
+  const isClaim = job.claimType === "Insurance";
+
+  const addToEstimate = (f) => {
+    if (!mut || !f.line) return;
+    const row = { id: uid("e"), desc: f.line.desc, qty: f.line.qty || 1, unit: f.line.unit || "EA", price: 0 };
+    mut((j) => ({ ...j, estimate: { ...(j.estimate || {}), items: [...((j.estimate || {}).items || []), row] } }));
+    setDone((d) => ({ ...d, [f.title]: "estimate" }));
+    toast && toast(`Added "${f.line.desc}" — set its price`);
+  };
+  const addAsSupplement = (f) => {
+    if (!mut) return;
+    const cite = f.cite ? ` [${f.cite}]` : "";
+    const row = { id: uid("sup"), desc: `${f.title}${cite}`, amount: "", status: "Draft", at: nowStamp() };
+    mut((j) => ({ ...j, claim: { ...(j.claim || {}), supplements: [...((j.claim || {}).supplements || []), row] } }));
+    setDone((d) => ({ ...d, [f.title]: "supplement" }));
+    toast && toast(`Added "${f.title}" to the claim supplements`);
+  };
+
   return (
     <Card style={{ marginBottom: 12 }}>
       <CardTitle right={found.length === 0
@@ -12231,16 +12291,31 @@ function SupplementCheck({ job }) {
       ) : (
         <>
           <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
-            The inspection and measurements document conditions this estimate does not price.
-            Each one cites its evidence — that is what makes it supplementable.
+            The inspection and measurements document conditions this estimate does not price. Each cites its code so
+            it holds up{isClaim ? " — add it to the estimate or file it as a claim supplement." : "."}
           </div>
           {(open ? found : found.slice(0, 3)).map((f, i) => (
-            <div key={i} style={{ display: "flex", gap: 10, padding: "9px 0", borderTop: `1px solid ${S.line}` }}>
-              <Chip tone={tone[f.sev]}>{f.sev}</Chip>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{f.title}</div>
-                <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 2 }}>{f.why}</div>
+            <div key={i} style={{ padding: "10px 0", borderTop: `1px solid ${S.line}` }}>
+              <div style={{ display: "flex", gap: 10 }}>
+                <Chip tone={tone[f.sev]}>{f.sev}</Chip>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{f.title}</div>
+                  <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 2 }}>{f.why}</div>
+                  {f.cite && <div style={{ marginTop: 5 }}><Chip tone={f.verified ? "blue" : "amber"}>{f.cite}</Chip></div>}
+                </div>
               </div>
+              {!locked && mut && (done[f.title] || f.line || isClaim) && (
+                <div style={{ display: "flex", gap: 7, marginTop: 8, marginLeft: 0, flexWrap: "wrap" }}>
+                  {done[f.title] ? (
+                    <Chip tone="green">{done[f.title] === "estimate" ? "✓ Added to estimate" : "✓ Added as supplement"}</Chip>
+                  ) : (
+                    <>
+                      {f.line && <Btn kind="soft" small onClick={() => addToEstimate(f)}><Plus size={12} /> Add to estimate</Btn>}
+                      {isClaim && <Btn kind="ghost" small onClick={() => addAsSupplement(f)}><Plus size={12} /> Add as supplement</Btn>}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           ))}
           {found.length > 3 && (
@@ -12821,7 +12896,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
   };
   return (
     <>
-      <SupplementCheck job={job} />
+      <SupplementCheck job={job} mut={mut} toast={toast} locked={locked} />
       <Card>
         <CardTitle right={<Chip tone={locked ? "green" : est.status === "Sent" ? "blue" : "gray"}>{est.status}</Chip>}>
           Estimate {est.number && `· ${est.number}`}
