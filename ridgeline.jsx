@@ -7902,7 +7902,7 @@ function docShell(title, brand, bodyHtml) {
   .foot { margin-top: 26px; padding-top: 12px; border-top: 1px solid #E5E7EB;
           font-size: 10.5px; color: #9CA3AF; text-align: center; }
   .cover { text-align: center; padding: 40px 0 30px; page-break-after: always; }
-  .cover img.hero { width: 100%; border-radius: 12px; margin-bottom: 26px; }
+  .cover img.hero { width: 100%; height: 300px; object-fit: cover; border-radius: 12px; margin-bottom: 26px; }
   @media print { .noprint { display: none !important; } body { padding: 0; } }
   .bar { position: sticky; top: 0; background: #111827; color: #fff; padding: 11px 14px;
          display: flex; gap: 10px; align-items: center; margin: -22px -22px 20px; }
@@ -13125,9 +13125,12 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
    cleanly and nothing here breaks the flattened items every other reader
    depends on.
    ================================================================ */
-function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClose }) {
+function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClose, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {} }) {
   const doc = normalizeProposalDoc(est.doc);
   const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
+  /* Notes/terms template helpers, matching the estimate tab. */
+  const setDocTpl = (kind) => (list) => setDocTemplates({ ...docTemplates, [kind]: list });
+  const appendText = (cur, body) => (cur && cur.trim()) ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
   const blocks = doc.blocks || {};
   const [mode, setMode] = useState("build"); // build | preview
   const [addOpen, setAddOpen] = useState(false);
@@ -13211,20 +13214,27 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
       <div style={{ padding: "14px 16px 120px" }}>
         {mode === "build" ? (
           <>
-            {/* Template style */}
+            {/* Cover layout — visual chooser */}
             <Card>
-              <CardTitle>Template style</CardTitle>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {PROPOSAL_STYLES.map((s) => (
-                  <button key={s.id} onClick={() => !locked && setDoc({ style: s.id })} disabled={locked} style={{
-                    flex: "1 1 30%", minWidth: 96, textAlign: "left", cursor: locked ? "default" : "pointer", fontFamily: "inherit",
-                    border: `2px solid ${doc.style === s.id ? T.accent : S.line}`, background: doc.style === s.id ? T.accentSoft : "#fff",
-                    borderRadius: 12, padding: "11px 12px",
-                  }}>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: S.ink }}>{s.name}</div>
-                    <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2 }}>{s.blurb}</div>
-                  </button>
-                ))}
+              <CardTitle>Cover layout</CardTitle>
+              <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+                Pick how the cover page looks. Add a home photo below and it fills the layout — no oversized images.
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))", gap: 10 }}>
+                {PROPOSAL_STYLES.map((s) => {
+                  const on = doc.style === s.id;
+                  return (
+                    <button key={s.id} onClick={() => !locked && setDoc({ style: s.id })} disabled={locked} style={{
+                      textAlign: "left", cursor: locked ? "default" : "pointer", fontFamily: "inherit",
+                      border: `2px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : S.card,
+                      borderRadius: 12, padding: 8,
+                    }}>
+                      <CoverThumb style={s.id} accent={T.accent} primary={T.primary} />
+                      <div style={{ fontSize: 12.5, fontWeight: 800, color: S.ink, marginTop: 7 }}>{s.name}</div>
+                      <div style={{ fontSize: 10.5, color: S.sub, marginTop: 1, lineHeight: 1.35 }}>{s.blurb}</div>
+                    </button>
+                  );
+                })}
               </div>
             </Card>
 
@@ -13315,6 +13325,54 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
 /* Live, on-screen render of the proposal the customer will receive —
    honors the chosen style, the section order, custom sections/PDFs, and
    each line's Qty / Unit-price visibility. */
+/* A tiny visual mock of each cover layout for the chooser — a stand-in photo
+   area, a title bar and a couple of text lines arranged per style, so a rep
+   picks a look by sight rather than by name. */
+function CoverThumb({ style, accent, primary }) {
+  const photo = "linear-gradient(135deg,#9AA6B2,#5B6470)";
+  const line = (w, c = "#C7CBD1") => ({ height: 4, width: w, borderRadius: 2, background: c, marginTop: 4 });
+  const box = { width: "100%", height: 78, borderRadius: 6, overflow: "hidden", border: "1px solid #E5E7EB", background: "#fff" };
+  if (style === "photo") {
+    return (
+      <div style={{ ...box, position: "relative", background: photo }}>
+        <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 30, background: "linear-gradient(transparent,rgba(0,0,0,.75))", padding: 6, boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+          <div style={{ ...line(30, "#fff"), marginTop: 0 }} />
+          <div style={line(20, "rgba(255,255,255,.7)")} />
+        </div>
+      </div>
+    );
+  }
+  if (style === "bold") {
+    return (
+      <div style={{ ...box, background: primary, padding: 8, boxSizing: "border-box" }}>
+        <div style={{ height: 22, borderRadius: 3, background: photo, marginBottom: 6 }} />
+        <div style={{ ...line(34, "#fff"), marginTop: 0 }} />
+        <div style={line(24, "rgba(255,255,255,.55)")} />
+      </div>
+    );
+  }
+  if (style === "minimal") {
+    return (
+      <div style={{ ...box, padding: 8, boxSizing: "border-box" }}>
+        <div style={{ ...line(16, accent), marginTop: 0 }} />
+        <div style={line(30, "#3F4650")} />
+        <div style={line(22)} />
+        <div style={{ height: 18, borderRadius: 3, background: photo, marginTop: 8 }} />
+      </div>
+    );
+  }
+  /* classic — photo band on top, title + lines below */
+  return (
+    <div style={{ ...box }}>
+      <div style={{ height: 40, background: photo }} />
+      <div style={{ padding: 8 }}>
+        <div style={{ ...line(32, "#3F4650"), marginTop: 0 }} />
+        <div style={line(24)} />
+      </div>
+    </div>
+  );
+}
+
 function ProposalPreview({ job, brand, est, doc, total }) {
   const blocks = doc.blocks || {};
   const style = doc.style || "classic";
@@ -13341,7 +13399,7 @@ function ProposalPreview({ job, brand, est, doc, total }) {
         );
         if (sec === "cover") return (
           <div key={sec} style={{ marginBottom: 16, ...coverWrap }}>
-            {doc.coverImage && <img src={doc.coverImage} alt="" style={{ width: "100%", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 }} />}
+            {doc.coverImage && <img src={doc.coverImage} alt="" style={{ width: "100%", height: 240, objectFit: "cover", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 }} />}
             <div style={{ padding: style === "bold" ? 0 : (style === "minimal" ? "10px 0" : 16) }}>
               {brand.logo && !onDark
                 ? <img src={brand.logo} alt="" style={{ height: 34, objectFit: "contain", marginBottom: 8, display: "block" }} />
@@ -13914,7 +13972,8 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
 
       {builderOpen && (
         <ProposalBuilder job={job} brand={brand} est={est} setEst={setEst} locked={locked}
-          toast={toast} total={total} onClose={() => setBuilderOpen(false)} />
+          toast={toast} total={total} onClose={() => setBuilderOpen(false)}
+          docTemplates={docTemplates} setDocTemplates={setDocTemplates} />
       )}
     </>
   );

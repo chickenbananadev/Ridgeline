@@ -81,5 +81,12 @@ ok(/setTheme\(id\)/.test(src) && /Appearance/.test(src), "MoreMenu has an appear
 ok(/data-theme="light"[\s\S]{0,120}<PublicPortal/.test(src), "client portal pinned light");
 ok(/rl_theme/.test(main), "main.jsx applies saved theme pre-mount");
 
+/* P9 — proposal cover: constrained image + visual layout picker (no crash) */
+ok(/function ProposalBuilder\(\{[^}]*docTemplates/.test(src), "ProposalBuilder receives docTemplates (no ReferenceError)");
+ok(/<ProposalBuilder[\s\S]{0,220}docTemplates=\{docTemplates\}/.test(src), "docTemplates passed into ProposalBuilder");
+ok(/function CoverThumb\(/.test(src) && /<CoverThumb style=\{s\.id\}/.test(src), "visual cover-layout thumbnails");
+ok(/\.cover img\.hero \{[^}]*object-fit: cover/.test(src), "print cover image is height-constrained");
+ok(/height: 240, objectFit: "cover"/.test(src), "builder cover image is height-constrained");
+
 if (fails) { console.log("\nbuild 46: " + fails + " FAILED"); process.exit(1); }
 console.log("build 46 tests passed");

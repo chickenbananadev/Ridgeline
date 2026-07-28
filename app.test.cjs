@@ -8349,7 +8349,7 @@ function JobDetail({
   onOpenCodeLookup = () => {
   },
   priceList = [],
-  docTemplates: docTemplates2 = { notes: [], terms: [], scope: [] },
+  docTemplates = { notes: [], terms: [], scope: [] },
   setDocTemplates = () => {
   }
 }) {
@@ -8643,7 +8643,7 @@ function JobDetail({
                   estimateTemplates,
                   setEstimateTemplates,
                   priceList,
-                  docTemplates: docTemplates2,
+                  docTemplates,
                   setDocTemplates
                 }
               );
@@ -8657,7 +8657,7 @@ function JobDetail({
                     setBrand,
                     mut,
                     toast: toast2,
-                    docTemplates: docTemplates2,
+                    docTemplates,
                     setDocTemplates
                   }
                 ),
@@ -9368,7 +9368,7 @@ function docShell(title, brand2, bodyHtml) {
   .foot { margin-top: 26px; padding-top: 12px; border-top: 1px solid #E5E7EB;
           font-size: 10.5px; color: #9CA3AF; text-align: center; }
   .cover { text-align: center; padding: 40px 0 30px; page-break-after: always; }
-  .cover img.hero { width: 100%; border-radius: 12px; margin-bottom: 26px; }
+  .cover img.hero { width: 100%; height: 300px; object-fit: cover; border-radius: 12px; margin-bottom: 26px; }
   @media print { .noprint { display: none !important; } body { padding: 0; } }
   .bar { position: sticky; top: 0; background: #111827; color: #fff; padding: 11px 14px;
          display: flex; gap: 10px; align-items: center; margin: -22px -22px 20px; }
@@ -14593,9 +14593,12 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
     ] })
   ] });
 }
-function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast2, total, onClose }) {
+function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast2, total, onClose, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
+} }) {
   const doc = normalizeProposalDoc(est.doc);
   const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
+  const setDocTpl = (kind) => (list) => setDocTemplates({ ...docTemplates, [kind]: list });
+  const appendText = (cur, body) => cur && cur.trim() ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
   const blocks = doc.blocks || {};
   const [mode, setMode] = (0, import_react.useState)("build");
   const [addOpen, setAddOpen] = (0, import_react.useState)(false);
@@ -14697,21 +14700,24 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast
     }, children: label }, id)) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "14px 16px 120px" }, children: mode === "build" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Template style" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: PROPOSAL_STYLES.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => !locked && setDoc({ style: s.id }), disabled: locked, style: {
-          flex: "1 1 30%",
-          minWidth: 96,
-          textAlign: "left",
-          cursor: locked ? "default" : "pointer",
-          fontFamily: "inherit",
-          border: `2px solid ${doc.style === s.id ? T.accent : S.line}`,
-          background: doc.style === s.id ? T.accentSoft : "#fff",
-          borderRadius: 12,
-          padding: "11px 12px"
-        }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 800, color: S.ink }, children: s.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 2 }, children: s.blurb })
-        ] }, s.id)) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Cover layout" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Pick how the cover page looks. Add a home photo below and it fills the layout \u2014 no oversized images." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(104px, 1fr))", gap: 10 }, children: PROPOSAL_STYLES.map((s) => {
+          const on = doc.style === s.id;
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => !locked && setDoc({ style: s.id }), disabled: locked, style: {
+            textAlign: "left",
+            cursor: locked ? "default" : "pointer",
+            fontFamily: "inherit",
+            border: `2px solid ${on ? T.accent : S.line}`,
+            background: on ? T.accentSoft : S.card,
+            borderRadius: 12,
+            padding: 8
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CoverThumb, { style: s.id, accent: T.accent, primary: T.primary }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 800, color: S.ink, marginTop: 7 }, children: s.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, marginTop: 1, lineHeight: 1.35 }, children: s.blurb })
+          ] }, s.id);
+        }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => setAddOpen(true), children: [
@@ -14832,6 +14838,39 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast
     ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProposalPreview, { job, brand: brand2, est, doc, total }) })
   ] });
 }
+function CoverThumb({ style, accent, primary }) {
+  const photo = "linear-gradient(135deg,#9AA6B2,#5B6470)";
+  const line = (w, c = "#C7CBD1") => ({ height: 4, width: w, borderRadius: 2, background: c, marginTop: 4 });
+  const box = { width: "100%", height: 78, borderRadius: 6, overflow: "hidden", border: "1px solid #E5E7EB", background: "#fff" };
+  if (style === "photo") {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { ...box, position: "relative", background: photo }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "absolute", left: 0, right: 0, bottom: 0, height: 30, background: "linear-gradient(transparent,rgba(0,0,0,.75))", padding: 6, boxSizing: "border-box", display: "flex", flexDirection: "column", justifyContent: "flex-end" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { ...line(30, "#fff"), marginTop: 0 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: line(20, "rgba(255,255,255,.7)") })
+    ] }) });
+  }
+  if (style === "bold") {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { ...box, background: primary, padding: 8, boxSizing: "border-box" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 22, borderRadius: 3, background: photo, marginBottom: 6 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { ...line(34, "#fff"), marginTop: 0 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: line(24, "rgba(255,255,255,.55)") })
+    ] });
+  }
+  if (style === "minimal") {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { ...box, padding: 8, boxSizing: "border-box" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { ...line(16, accent), marginTop: 0 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: line(30, "#3F4650") }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: line(22) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 18, borderRadius: 3, background: photo, marginTop: 8 } })
+    ] });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { ...box }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 40, background: photo } }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: 8 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { ...line(32, "#3F4650"), marginTop: 0 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: line(24) })
+    ] })
+  ] });
+}
 function ProposalPreview({ job, brand: brand2, est, doc, total }) {
   const blocks = doc.blocks || {};
   const style = doc.style || "classic";
@@ -14856,7 +14895,7 @@ function ProposalPreview({ job, brand: brand2, est, doc, total }) {
       ] })
     ] }) }, sec);
     if (sec === "cover") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16, ...coverWrap }, children: [
-      doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "", style: { width: "100%", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 } }),
+      doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "", style: { width: "100%", height: 240, objectFit: "cover", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 } }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: style === "bold" ? 0 : style === "minimal" ? "10px 0" : 16 }, children: [
         brand2.logo && !onDark ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "", style: { height: 34, objectFit: "contain", marginBottom: 8, display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontWeight: 800, fontSize: 17, marginBottom: 4, color: onDark ? "#fff" : S.ink }, children: brand2.company }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800, color: onDark ? "#fff" : brand2.primary }, children: title }),
@@ -14983,7 +15022,7 @@ function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
   ] });
 }
 function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates = [], setEstimateTemplates = () => {
-}, priceList = [], docTemplates: docTemplates2 = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
+}, priceList = [], docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
 } }) {
   const est = { ...job.estimate, tiers: job.estimate.tiers || [], upgrades: job.estimate.upgrades || [] };
   const [sigOpen, setSigOpen] = (0, import_react.useState)(false);
@@ -15024,8 +15063,8 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
   const toggleConcealed = (id, on) => setConcealed(id, "on", on);
   const addConcealed = () => setEst({ concealed: [...est.concealed, { id: uid("cc"), desc: "", unit: "per unit", price: 0, on: true, custom: true }] });
   const removeConcealed = (id) => setEst({ concealed: est.concealed.filter((x) => x.id !== id) });
-  const setDocTpl2 = (kind) => (list) => setDocTemplates({ ...docTemplates2, [kind]: list });
-  const appendText2 = (cur, body) => cur && cur.trim() ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
+  const setDocTpl = (kind) => (list) => setDocTemplates({ ...docTemplates, [kind]: list });
+  const appendText = (cur, body) => cur && cur.trim() ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
   const [adjMode, setAdjMode] = (0, import_react.useState)("margin");
   const [adjPct, setAdjPct] = (0, import_react.useState)("");
   const applyPricing = () => {
@@ -15166,11 +15205,11 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
         TemplateBar,
         {
           label: "Scope",
-          list: docTemplates2.scope,
-          setList: setDocTpl2("scope"),
+          list: docTemplates.scope,
+          setList: setDocTpl("scope"),
           value: est.scope,
           locked,
-          onApply: (body) => setEst({ scope: appendText2(est.scope, body) })
+          onApply: (body) => setEst({ scope: appendText(est.scope, body) })
         }
       ),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -15492,21 +15531,23 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
         locked,
         toast: toast2,
         total,
-        onClose: () => setBuilderOpen(false)
+        onClose: () => setBuilderOpen(false),
+        docTemplates,
+        setDocTemplates
       }
     )
   ] });
 }
 function TabContract({ job, brand: brand2, setBrand = () => {
-}, mut, toast: toast2, docTemplates: docTemplates2 = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
+}, mut, toast: toast2, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
 } }) {
   const con = job.contract;
   const [sigFor, setSigFor] = (0, import_react.useState)(null);
   const [fillerOpen, setFillerOpen] = (0, import_react.useState)(false);
   const locked = con.status === "Signed";
   const setCon = (patch) => mut((j) => ({ ...j, contract: { ...j.contract, ...patch } }));
-  const setDocTpl2 = (kind) => (list) => setDocTemplates({ ...docTemplates2, [kind]: list });
-  const appendText2 = (cur, body) => cur && cur.trim() ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
+  const setDocTpl = (kind) => (list) => setDocTemplates({ ...docTemplates, [kind]: list });
+  const appendText = (cur, body) => cur && cur.trim() ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
   const addAttachment = (file) => {
     if (!file) return;
     const r = new FileReader();
@@ -15675,11 +15716,11 @@ function TabContract({ job, brand: brand2, setBrand = () => {
         TemplateBar,
         {
           label: "Terms",
-          list: docTemplates2.terms,
-          setList: setDocTpl2("terms"),
+          list: docTemplates.terms,
+          setList: setDocTpl("terms"),
           value: con.terms,
           locked,
-          onApply: (body) => setCon({ terms: appendText2(con.terms, body) })
+          onApply: (body) => setCon({ terms: appendText(con.terms, body) })
         }
       ),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -24312,7 +24353,7 @@ function SupremeCRM() {
   ]);
   const [appointments, setAppointments] = (0, import_react.useState)([]);
   const [estimateTemplates, setEstimateTemplates] = (0, import_react.useState)([]);
-  const [docTemplates2, setDocTemplates] = (0, import_react.useState)({ notes: [], terms: [], scope: [] });
+  const [docTemplates, setDocTemplates] = (0, import_react.useState)({ notes: [], terms: [], scope: [] });
   const [activity, setActivity] = (0, import_react.useState)([]);
   const [chatMsgs, setChatMsgs] = (0, import_react.useState)([]);
   const [announcements, setAnnouncements] = (0, import_react.useState)([]);
@@ -24435,7 +24476,7 @@ function SupremeCRM() {
       setNav("home");
     }
   };
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, docTemplates2, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
     announcements,
     calls,
@@ -24444,7 +24485,7 @@ function SupremeCRM() {
     apptTypes,
     templates,
     estimateTemplates,
-    docTemplates: docTemplates2,
+    docTemplates,
     priceList,
     companyDocs,
     crews,
@@ -24926,7 +24967,7 @@ function SupremeCRM() {
         features,
         onOpenCodeLookup: openCodeLookup,
         priceList,
-        docTemplates: docTemplates2,
+        docTemplates,
         setDocTemplates
       }
     ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
