@@ -1796,6 +1796,7 @@ function catalogUnitPrice(priceList, keywords, factor) {
   if (!base) return null;
   return Math.round(base * factor * 100) / 100;
 }
+var SUPPLIER_OPTIONS = ["QXO", "ABC Supply", "Beacon", "SRS Distribution", "Other"];
 function mkContract(over = {}) {
   return {
     number: "",
@@ -19651,6 +19652,60 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           "Reading actual posted reviews from Google requires the Business Profile API, which must run server-side (deploy a ",
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "google-reviews" }),
           " Edge Function with an API key). Until then the connection is stored and the review workflow runs on the real ratings customers submit in their portal."
+        ] })
+      ] });
+    })(),
+    isAdmin && (() => {
+      const sup = integrations.suppliers || { list: [] };
+      const list = sup.list || [];
+      const draft = sup.draft || { name: "QXO", account: "", branch: "" };
+      const setSup = (next) => setIntegrations({ ...integrations, suppliers: next });
+      const setDraft = (patch) => setSup({ ...sup, list, draft: { ...draft, ...patch } });
+      const addConn = () => {
+        if (!draft.account.trim()) {
+          toast2 && toast2("Enter your account number");
+          return;
+        }
+        setSup({ list: [...list, { id: uid("sup"), name: draft.name, account: draft.account.trim(), branch: (draft.branch || "").trim(), at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) }], draft: { name: "QXO", account: "", branch: "" } });
+        toast2 && toast2(`${draft.name} account saved`);
+      };
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: list.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "green", children: [
+          list.length,
+          " account",
+          list.length === 1 ? "" : "s"
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Not connected" }), children: "Supplier pricing" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 10 }, children: [
+          "Add your distributor accounts (QXO, ABC Supply, and more) so estimate materials can be priced from your ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "real, account-specific pricing" }),
+          " instead of a static list. Each account is stored here; branch is optional."
+        ] }),
+        list.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${S.line}` }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700 }, children: c.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub }, children: [
+              "Acct ",
+              c.account,
+              c.branch ? ` \xB7 ${c.branch}` : "",
+              " \xB7 added ",
+              c.at
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "danger", onClick: () => {
+            setSup({ ...sup, list: list.filter((x) => x.id !== c.id) });
+            toast2 && toast2("Account removed");
+          }, children: "Remove" })
+        ] }, c.id)),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, alignItems: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: { ...inputStyle, width: 150 }, value: draft.name, onChange: (e) => setDraft({ name: e.target.value }), children: SUPPLIER_OPTIONS.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: s, children: s }, s)) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, flex: 1, minWidth: 130 }, placeholder: "Account number", value: draft.account, onChange: (e) => setDraft({ account: e.target.value }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 130 }, placeholder: "Branch (optional)", value: draft.branch, onChange: (e) => setDraft({ branch: e.target.value }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, onClick: addConn, children: "Add account" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Live pricing needs a server step", tone: "amber", children: [
+          "Reading real prices from a distributor requires their API key, which must run server-side (deploy a ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "supplier-pricing" }),
+          " Edge Function per supplier). Until then accounts are stored and estimates use your manual price list."
         ] })
       ] });
     })(),

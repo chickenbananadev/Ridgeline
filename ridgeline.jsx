@@ -1381,6 +1381,18 @@ function catalogUnitPrice(priceList, keywords, factor) {
   if (!base) return null;
   return Math.round(base * factor * 100) / 100;
 }
+/* Live supplier pricing (QXO, ABC Supply, Beacon, SRS…) — scaffold.
+   A distributor account is stored per supplier so estimates can eventually
+   pull the customer's real, account-specific price for a SKU. The pull
+   itself must run server-side (the anon key can't hold a distributor API
+   key), so this returns "pending" until a supplier-pricing Edge Function
+   is deployed. Shape mirrors the Google-reviews stub. */
+const SUPPLIER_OPTIONS = ["QXO", "ABC Supply", "Beacon", "SRS Distribution", "Other"];
+async function fetchSupplierPricing(/* supplier, sku, account */) {
+  // No server function yet — reads fall through to the manual price list.
+  return { ok: false, pending: true, price: null };
+}
+
 function mkContract(over = {}) {
   return {
     number: "", price: 0, depositPct: 50, status: "Not started",
@@ -17737,6 +17749,57 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
               which must run server-side (deploy a <code>google-reviews</code> Edge Function
               with an API key). Until then the connection is stored and the review workflow
               runs on the real ratings customers submit in their portal.
+            </Callout>
+          </Card>
+        );
+      })()}
+
+      {/* Supplier pricing — scaffold. Stores the distributor account per
+          supplier so estimate lines can later be priced from the customer's
+          real account. The live pull needs a server function (see
+          fetchSupplierPricing); until then the manual price list is used. */}
+      {isAdmin && (() => {
+        const sup = integrations.suppliers || { list: [] };
+        const list = sup.list || [];
+        const draft = sup.draft || { name: "QXO", account: "", branch: "" };
+        const setSup = (next) => setIntegrations({ ...integrations, suppliers: next });
+        const setDraft = (patch) => setSup({ ...sup, list, draft: { ...draft, ...patch } });
+        const addConn = () => {
+          if (!draft.account.trim()) { toast && toast("Enter your account number"); return; }
+          setSup({ list: [...list, { id: uid("sup"), name: draft.name, account: draft.account.trim(), branch: (draft.branch || "").trim(), at: new Date().toISOString().slice(0, 10) }], draft: { name: "QXO", account: "", branch: "" } });
+          toast && toast(`${draft.name} account saved`);
+        };
+        return (
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle right={list.length ? <Chip tone="green">{list.length} account{list.length === 1 ? "" : "s"}</Chip> : <Chip tone="gray">Not connected</Chip>}>
+              Supplier pricing
+            </CardTitle>
+            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 10 }}>
+              Add your distributor accounts (QXO, ABC Supply, and more) so estimate materials
+              can be priced from your <b>real, account-specific pricing</b> instead of a static list.
+              Each account is stored here; branch is optional.
+            </div>
+            {list.map((c) => (
+              <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${S.line}` }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{c.name}</div>
+                  <div style={{ fontSize: 12, color: S.sub }}>Acct {c.account}{c.branch ? ` · ${c.branch}` : ""} · added {c.at}</div>
+                </div>
+                <Btn small kind="danger" onClick={() => { setSup({ ...sup, list: list.filter((x) => x.id !== c.id) }); toast && toast("Account removed"); }}>Remove</Btn>
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
+              <select style={{ ...inputStyle, width: 150 }} value={draft.name} onChange={(e) => setDraft({ name: e.target.value })}>
+                {SUPPLIER_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <input style={{ ...inputStyle, flex: 1, minWidth: 130 }} placeholder="Account number" value={draft.account} onChange={(e) => setDraft({ account: e.target.value })} />
+              <input style={{ ...inputStyle, width: 130 }} placeholder="Branch (optional)" value={draft.branch} onChange={(e) => setDraft({ branch: e.target.value })} />
+              <Btn small onClick={addConn}>Add account</Btn>
+            </div>
+            <Callout label="Live pricing needs a server step" tone="amber">
+              Reading real prices from a distributor requires their API key, which must run
+              server-side (deploy a <code>supplier-pricing</code> Edge Function per supplier).
+              Until then accounts are stored and estimates use your manual price list.
             </Callout>
           </Card>
         );
