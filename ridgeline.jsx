@@ -2742,12 +2742,12 @@ const DONUT_PALETTE = ["#0A9E98", "#1B6DE0", "#F59E0B", "#7C3AED", "#EC4899", "#
 
 function Chip({ children, tone = "gray" }) {
   const tones = {
-    gray: { bg: "#F3F4F6", fg: "#374151" },
+    gray: { bg: "var(--rl-gray-bg)", fg: "var(--rl-gray-fg)" },
     blue: { bg: T.accentSoft, fg: T.accent },
-    green: { bg: "#E8F6EE", fg: "#177245" },
-    red: { bg: "#FDECEC", fg: "#B42318" },
-    amber: { bg: "#FDF4E3", fg: "#92600A" },
-    slate: { bg: "#E9EDEF", fg: T.primary },
+    green: { bg: "var(--rl-green-bg)", fg: "var(--rl-green-fg)" },
+    red: { bg: "var(--rl-red-bg)", fg: "var(--rl-red-fg)" },
+    amber: { bg: "var(--rl-amber-bg)", fg: "var(--rl-amber-fg)" },
+    slate: { bg: "var(--rl-slate-bg)", fg: T.primary },
   };
   const t = tones[tone] || tones.gray;
   return (
@@ -2832,7 +2832,9 @@ function KV({ k, v, strong }) {
 /* Merged from the Ridgeline repo. */
 function Callout({ label, children, tone = "amber" }) {
   const map = {
-    amber: ["#FDF4E3", "#92600A"], red: ["#FDECEC", "#B42318"], green: ["#E8F6EE", "#177245"],
+    amber: ["var(--rl-amber-bg)", "var(--rl-amber-fg)"],
+    red: ["var(--rl-red-bg)", "var(--rl-red-fg)"],
+    green: ["var(--rl-green-bg)", "var(--rl-green-fg)"],
   };
   const [bg, fg] = map[tone] || map.amber;
   return (
@@ -2973,7 +2975,7 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
               style={{
                 display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left",
                 border: "none", cursor: "pointer", padding: "11px 13px",
-                background: hi === i ? T.accentSoft : "#fff",
+                background: hi === i ? T.accentSoft : S.card,
                 borderTop: i ? `1px solid ${S.line}` : "none",
               }}>
               <MapPin size={14} color={T.accent} style={{ flexShrink: 0, marginTop: 2 }} />
@@ -3014,8 +3016,8 @@ function Sheet({ open, onClose, title, children, footer, wide, tall, center = tr
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 12px" }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: S.ink }}>{title}</div>
           <button onClick={onClose} style={{
-            border: "none", background: "#F3F4F6", borderRadius: 999, width: 34, height: 34,
-            display: "grid", placeItems: "center", cursor: "pointer",
+            border: "none", background: S.soft, borderRadius: 999, width: 34, height: 34,
+            display: "grid", placeItems: "center", cursor: "pointer", color: S.ink,
           }}><X size={17} /></button>
         </div>
         <div style={{ overflowY: "auto", padding: "4px 20px 20px", flex: 1 }}>{children}</div>
@@ -4593,7 +4595,7 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
               <span style={{ fontWeight: 600, color: S.ink }}>{s.name} · {s.count}</span>
               <span style={{ color: S.sub }}>{money(s.value)}</span>
             </div>
-            <div style={{ height: 7, background: "#EEF1F4", borderRadius: 99 }}>
+            <div style={{ height: 7, background: S.soft, borderRadius: 99 }}>
               <div style={{
                 height: 7, borderRadius: 99, background: T.accent,
                 width: `${Math.max(5, totalPipeline + signedValue ? (s.value / Math.max(totalPipeline, signedValue)) * 100 : 0)}%`,
@@ -4663,12 +4665,12 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
           <Card style={{ marginTop: 14 }}>
             <CardTitle right={<button style={linkBtn} onClick={() => go("reviews")}>Settings →</button>}>Reviews</CardTitle>
             <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-              <div style={{ flex: 1, background: "#EAF6EE", borderRadius: 10, padding: "9px 0", textAlign: "center" }}>
-                <div style={{ fontSize: 18, fontWeight: 800, color: "#177245" }}>{posted}</div>
+              <div style={{ flex: 1, background: "var(--rl-green-bg)", borderRadius: 10, padding: "9px 0", textAlign: "center" }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "var(--rl-green-fg)" }}>{posted}</div>
                 <div style={{ fontSize: 11, color: S.sub }}>posted</div>
               </div>
-              <div style={{ flex: 1, background: "#FFF6E5", borderRadius: 10, padding: "9px 0", textAlign: "center" }}>
-                <div style={{ fontSize: 18, fontWeight: 800, color: "#9A6B00" }}>{awaiting}</div>
+              <div style={{ flex: 1, background: "var(--rl-amber-bg)", borderRadius: 10, padding: "9px 0", textAlign: "center" }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "var(--rl-amber-fg)" }}>{awaiting}</div>
                 <div style={{ fontSize: 11, color: S.sub }}>awaiting</div>
               </div>
               <div style={{ flex: 1, background: T.accentSoft, borderRadius: 10, padding: "9px 0", textAlign: "center" }}>
@@ -5143,7 +5145,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
             return (
               <div key={st.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
                 <div style={{ width: 140, fontSize: 12, color: S.sub, flexShrink: 0 }}>{st.name}</div>
-                <div style={{ flex: 1, height: 18, background: "#EEF1F4", borderRadius: 6, overflow: "hidden" }}>
+                <div style={{ flex: 1, height: 18, background: S.soft, borderRadius: 6, overflow: "hidden" }}>
                   <div style={{
                     height: "100%", width: `${(inStage.length / max) * 100}%`,
                     background: DEAD_STAGES.includes(st.id) ? "#B42318" : WON_STAGES.includes(st.id) ? "#177245" : T.primary,
@@ -6800,7 +6802,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
         <button
           onClick={(e) => { e.stopPropagation(); setMoveMenuFor(moveMenuFor === job.id ? null : job.id); }}
           style={{
-            flex: 1, border: `1px solid ${S.line}`, background: "#FAFBFC",
+            flex: 1, border: `1px solid ${S.line}`, background: S.card,
             borderRadius: 8, padding: "7px 0", fontSize: 13, fontWeight: 600, color: S.sub, cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
           }}>
@@ -6887,12 +6889,14 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
             )}
           </div>
           <Btn small kind="soft" onClick={() => {
+            /* Goes through the same admin-only gate + audit log as every
+               other export in the app (downloadCsv/EXPORT_ALLOWED) — this
+               used to build and download the Blob directly, letting any rep
+               export the whole book of business unrestricted and unlogged. */
             const rows = filtered.filter((j) => selected.has(j.id));
             const head = ["Name", "Address", "Zip", "State", "Stage", "Value", "Type", "Phone", "Email", "Assignee"];
-            const esc2 = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-            const body = rows.map((j) => [j.name, j.address, j.zip, j.state, (stages.find((s) => s.id === j.stageId) || {}).name || "", j.value, j.claimType, j.phone || j.contact?.phone || "", j.email || j.contact?.email || "", j.assignee].map(esc2).join(",")).join("\n");
-            const blob = new Blob([head.join(",") + "\n" + body], { type: "text/csv" });
-            const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "jobs-export.csv"; a.click();
+            const body = rows.map((j) => [j.name, j.address, j.zip, j.state, (stages.find((s) => s.id === j.stageId) || {}).name || "", j.value, j.claimType, j.phone || j.contact?.phone || "", j.email || j.contact?.email || "", j.assignee]);
+            downloadCsv("jobs-export.csv", [head, ...body]);
           }}>Export CSV</Btn>
           <button onClick={clearSel} style={{ marginLeft: "auto", border: "none", background: "rgba(255,255,255,.15)", color: "#fff", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Clear</button>
         </div>
@@ -6973,8 +6977,8 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
 }
 const pill = {
   display: "flex", alignItems: "center", gap: 6, border: "none",
-  background: "#F3F4F6", borderRadius: 999, padding: "9px 14px",
-  fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#111827", flexShrink: 0,
+  background: S.soft, borderRadius: 999, padding: "9px 14px",
+  fontSize: 13, fontWeight: 600, cursor: "pointer", color: S.ink, flexShrink: 0,
 };
 
 /* ================================================================
@@ -7128,7 +7132,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
                   <span style={{
                     display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
                     padding: "9px 0", borderRadius: 10, border: `1px solid ${S.line}`,
-                    background: disabled ? "#F7F8FA" : "#fff", color: disabled ? "#C7CBD1" : T.accent,
+                    background: disabled ? S.soft : S.card, color: disabled ? "#C7CBD1" : T.accent,
                     fontSize: 11, fontWeight: 700, cursor: disabled ? "default" : "pointer", width: "100%",
                   }}><Icon size={17} /> {label}</span>
                 );
@@ -7228,8 +7232,8 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
                 onOpenCodeLookup={onOpenCodeLookup} />;
               case "claim": return <TabClaim job={job} mut={mut} toast={toast} brand={brand} />;
               case "handoff": return <TabHandoff job={job} mut={mut} toast={toast} isAdmin={isAdmin}
-                currentUser={currentUser} stages={stages} onMoveStage={onMoveStage} />;
-              case "changeorders": return <TabChangeOrders job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />;
+                currentUser={currentUser} stages={stages} onMoveStage={onMoveStage} showMoney={showMoney} />;
+              case "changeorders": return <TabChangeOrders job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} showMoney={showMoney} />;
               case "checklist": return <TabChecklist job={job} mut={mut} toast={toast} />;
               case "ventilation": return <TabVentilation job={job} mut={mut} toast={toast} />;
               case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
@@ -7239,16 +7243,16 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
                 docTemplates={docTemplates} setDocTemplates={setDocTemplates} />;
               case "contract": return (<>
                 <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast}
-                  docTemplates={docTemplates} setDocTemplates={setDocTemplates} />
+                  docTemplates={docTemplates} setDocTemplates={setDocTemplates} currentUser={currentUser} integrations={integrations} />
                 {/* Countersign queue + signature audit trail live with the
                     contract now, not in a separate section. */}
                 <TabSignatures job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />
               </>);
-              case "report": return <TabReport job={job} brand={brand} juris={juris} />;
+              case "report": return <TabReport job={job} brand={brand} juris={juris} mut={mut} toast={toast} currentUser={currentUser} integrations={integrations} />;
               case "messages": return <TabMessages job={job} mut={mut} toast={toast} brand={brand}
                 templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />;
               case "photos": return <TabPhotos job={job} mut={mut} toast={toast} ccToken={ccToken} />;
-              case "financials": return <TabFinancialsCombined job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />;
+              case "financials": return <TabFinancialsCombined job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} integrations={integrations} />;
               case "workorder": return <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
                 crews={crews} templates={templates} currentUser={currentUser} users={users} />;
               case "tasks": return <TabTasks job={job} mut={mut} toast={toast} />;
@@ -7300,7 +7304,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               }}>
                 <button onClick={() => setOpen((o) => ({ ...o, [id]: !o[id] }))} style={{
                   display: "flex", alignItems: "center", gap: 11, width: "100%",
-                  border: "none", background: isOpen ? "#fff" : S.bg, cursor: "pointer",
+                  border: "none", background: isOpen ? S.card : S.bg, cursor: "pointer",
                   textAlign: "left", padding: "14px 15px", fontFamily: "inherit",
                 }}>
                   <Icon size={17} color={T.accent} />
@@ -10812,7 +10816,7 @@ function PillGroup({ options, value, onPick, multi = false }) {
             else onPick(on ? "" : o);   /* tapping the active one clears it */
           }} style={{
             border: `1.5px solid ${on ? T.accent : S.line}`,
-            background: on ? T.accentSoft : "#fff",
+            background: on ? T.accentSoft : S.card,
             color: on ? T.accent : S.ink,
             borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 600,
             cursor: "pointer", touchAction: "manipulation",
@@ -11050,7 +11054,7 @@ function buildJobFolder(job, approver) {
   };
 }
 
-function TabHandoff({ job, mut, toast, isAdmin, currentUser, stages, onMoveStage }) {
+function TabHandoff({ job, mut, toast, isAdmin, currentUser, stages, onMoveStage, showMoney = true }) {
   const r = handoffReadiness(job);
   const folder = job.jobFolder || null;
   const requested = !!job.soldRequestedAt;
@@ -11089,7 +11093,7 @@ function TabHandoff({ job, mut, toast, isAdmin, currentUser, stages, onMoveStage
           </div>
           <KV k="Customer" v={folder.customer} />
           <KV k="Address" v={folder.address} />
-          <KV k="Contract price" v={money(folder.contractPrice)} strong />
+          {showMoney && <KV k="Contract price" v={money(folder.contractPrice)} strong />}
           <KV k="Squares" v={folder.squares || "—"} />
           <KV k="Pitch" v={folder.pitch || "—"} />
           <KV k="Layers" v={folder.layers || "—"} />
@@ -11232,7 +11236,7 @@ function changeOrderTotals(job) {
   };
 }
 
-function TabChangeOrders({ job, mut, toast, currentUser, brand }) {
+function TabChangeOrders({ job, mut, toast, currentUser, brand, showMoney = true }) {
   const t = changeOrderTotals(job);
   const base = num(job.contract && job.contract.price) || num(job.fin && job.fin.contract);
   const [openId, setOpenId] = useState(null);
@@ -11318,22 +11322,24 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand }) {
 
   return (
     <>
-      <Card>
-        <CardTitle right={t.pendingCount > 0 ? <Chip tone="amber">{t.pendingCount} pending</Chip> : null}>
-          Contract value
-        </CardTitle>
-        <KV k="Original contract" v={money(base)} />
-        <KV k="Approved changes" v={`${t.approvedTotal >= 0 ? "+" : "-"}${money(Math.abs(t.approvedTotal))}`} />
-        <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 8, paddingTop: 8 }}>
-          <KV k="Current contract value" v={money(base + t.approvedTotal)} strong />
-        </div>
-        {t.pendingTotal !== 0 && (
-          <div style={{ fontSize: 12, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
-            {money(t.pendingTotal)} is out for signature and is not counted above.
-            Only approved changes move the contract.
+      {showMoney && (
+        <Card>
+          <CardTitle right={t.pendingCount > 0 ? <Chip tone="amber">{t.pendingCount} pending</Chip> : null}>
+            Contract value
+          </CardTitle>
+          <KV k="Original contract" v={money(base)} />
+          <KV k="Approved changes" v={`${t.approvedTotal >= 0 ? "+" : "-"}${money(Math.abs(t.approvedTotal))}`} />
+          <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 8, paddingTop: 8 }}>
+            <KV k="Current contract value" v={money(base + t.approvedTotal)} strong />
           </div>
-        )}
-      </Card>
+          {t.pendingTotal !== 0 && (
+            <div style={{ fontSize: 12, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+              {money(t.pendingTotal)} is out for signature and is not counted above.
+              Only approved changes move the contract.
+            </div>
+          )}
+        </Card>
+      )}
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Change orders</CardTitle>
@@ -11364,9 +11370,11 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand }) {
                   </span>
                 </span>
                 <span style={{ textAlign: "right", flexShrink: 0 }}>
-                  <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: total < 0 ? "#177245" : S.ink }}>
-                    {money(total)}
-                  </span>
+                  {showMoney && (
+                    <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: total < 0 ? "#177245" : S.ink }}>
+                      {money(total)}
+                    </span>
+                  )}
                   <Chip tone={tone}>{c.status}</Chip>
                 </span>
               </button>
@@ -11385,41 +11393,49 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand }) {
                     </select>
                   </Field>
 
-                  <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", margin: "4px 0 7px" }}>LINES</div>
-                  {(c.lines || []).map((l) => (
-                    <div key={l.id} style={{ background: S.bg, borderRadius: 10, padding: 10, marginBottom: 8 }}>
-                      <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
-                        <input style={{ ...inputStyle, flex: 1, padding: "8px 10px" }} value={l.desc}
-                          placeholder="Replace decking" onChange={(e) => editLine(c.id, l.id, "desc", e.target.value)} />
-                        <button onClick={() => delLine(c.id, l.id)} style={{ border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}>
-                          <Trash2 size={14} color="#B42318" />
-                        </button>
-                      </div>
-                      <div style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 7 }}>
-                        <input style={{ ...inputStyle, width: 62, textAlign: "right", padding: "8px 8px" }} inputMode="decimal"
-                          value={l.qty} onChange={(e) => editLine(c.id, l.id, "qty", e.target.value)} />
-                        <select style={{ ...selStyle, width: 78, padding: "8px 6px" }} value={l.unit || "ea"}
-                          onChange={(e) => editLine(c.id, l.id, "unit", e.target.value)}>
-                          {["ea", "sq", "LF", "SF", "hr", "day", "sheet", "bundle"].map((u) => <option key={u}>{u}</option>)}
-                        </select>
-                        <span style={{ fontSize: 13, color: S.sub }}>×</span>
-                        <span style={{ fontSize: 13, color: S.sub }}>$</span>
-                        <input style={{ ...inputStyle, flex: 1, textAlign: "right", padding: "8px 10px" }} inputMode="decimal"
-                          value={l.price} placeholder="0.00" onChange={(e) => editLine(c.id, l.id, "price", e.target.value)} />
-                      </div>
-                      <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: S.ink, marginTop: 6 }}>
-                        {money(lineTotal(l.qty, l.price))}
-                      </div>
-                    </div>
-                  ))}
-                  <Btn kind="soft" small style={{ width: "100%" }} onClick={() => addLine(c.id)}>
-                    <Plus size={13} /> Add line
-                  </Btn>
+                  {showMoney ? (
+                    <>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", margin: "4px 0 7px" }}>LINES</div>
+                      {(c.lines || []).map((l) => (
+                        <div key={l.id} style={{ background: S.bg, borderRadius: 10, padding: 10, marginBottom: 8 }}>
+                          <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
+                            <input style={{ ...inputStyle, flex: 1, padding: "8px 10px" }} value={l.desc}
+                              placeholder="Replace decking" onChange={(e) => editLine(c.id, l.id, "desc", e.target.value)} />
+                            <button onClick={() => delLine(c.id, l.id)} style={{ border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}>
+                              <Trash2 size={14} color="#B42318" />
+                            </button>
+                          </div>
+                          <div style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 7 }}>
+                            <input style={{ ...inputStyle, width: 62, textAlign: "right", padding: "8px 8px" }} inputMode="decimal"
+                              value={l.qty} onChange={(e) => editLine(c.id, l.id, "qty", e.target.value)} />
+                            <select style={{ ...selStyle, width: 78, padding: "8px 6px" }} value={l.unit || "ea"}
+                              onChange={(e) => editLine(c.id, l.id, "unit", e.target.value)}>
+                              {["ea", "sq", "LF", "SF", "hr", "day", "sheet", "bundle"].map((u) => <option key={u}>{u}</option>)}
+                            </select>
+                            <span style={{ fontSize: 13, color: S.sub }}>×</span>
+                            <span style={{ fontSize: 13, color: S.sub }}>$</span>
+                            <input style={{ ...inputStyle, flex: 1, textAlign: "right", padding: "8px 10px" }} inputMode="decimal"
+                              value={l.price} placeholder="0.00" onChange={(e) => editLine(c.id, l.id, "price", e.target.value)} />
+                          </div>
+                          <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: S.ink, marginTop: 6 }}>
+                            {money(lineTotal(l.qty, l.price))}
+                          </div>
+                        </div>
+                      ))}
+                      <Btn kind="soft" small style={{ width: "100%" }} onClick={() => addLine(c.id)}>
+                        <Plus size={13} /> Add line
+                      </Btn>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}` }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>Change order total</span>
-                    <span style={{ fontSize: 19, fontWeight: 800, color: total < 0 ? "#177245" : S.ink }}>{money(total)}</span>
-                  </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}` }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>Change order total</span>
+                        <span style={{ fontSize: 19, fontWeight: 800, color: total < 0 ? "#177245" : S.ink }}>{money(total)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 4 }}>
+                      Pricing on this change order isn't shown for your role. Ask the office for the amount.
+                    </div>
+                  )}
 
                   <div style={{ display: "flex", gap: 5, marginTop: 11, flexWrap: "wrap" }}>
                     {CO_STATUS.map((st) => {
@@ -14012,7 +14028,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
 }
 
 /* ---------- Contract ---------- */
-function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {} }) {
+function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {}, currentUser = null, integrations = {} }) {
   const con = job.contract;
   const [sigFor, setSigFor] = useState(null); // "client" | "contractor"
   const [fillerOpen, setFillerOpen] = useState(false);
@@ -14193,7 +14209,10 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
       </Card>
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
         <Btn kind="ghost" onClick={() => openDoc(`Contract — ${job.name}`, brand, contractDocHtml(job, brand), toast)}><Printer size={15} /> PDF</Btn>
-        <Btn kind="ghost" onClick={() => toast("Contract emailed to client")}><Send size={15} /> Email to client</Btn>
+        <Btn kind="ghost" onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
+          subject: `Your contract is ready — ${brand.company}`,
+          body: `Hi ${job.name}, your contract for ${job.address} is ready to review and sign. Reply to this email with any questions.`,
+        })}><Send size={15} /> Email to client</Btn>
       </div>
       <SignaturePad open={!!sigFor} onClose={() => setSigFor(null)}
         title={sigFor === "client" ? "Client signature" : "Company signature"}
@@ -14206,7 +14225,7 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
 }
 
 /* ---------- Inspection report (fed from checklist) ---------- */
-function TabReport({ job, brand, juris }) {
+function TabReport({ job, brand, juris, mut, toast, currentUser = null, integrations = {} }) {
   const c = job.checklist;
   if (!c.complete) {
     return (
@@ -14250,7 +14269,7 @@ function TabReport({ job, brand, juris }) {
           <div style={{ fontSize: 20, fontWeight: 800, margin: "6px 0 2px" }}>{job.name}</div>
           <div style={{ fontSize: 13, opacity: 0.85 }}>{job.address}</div>
           <div style={{ fontSize: 12, opacity: 0.7, marginTop: 10 }}>{brand.company} · {brand.phone}</div>
-          <button onClick={() => openDoc(`Inspection report — ${job.name}`, brand, reportDocHtml(job, brand))}
+          <button onClick={() => openDoc(`Inspection report — ${job.name}`, brand, reportDocHtml(job, brand), toast)}
             style={{
               marginTop: 12, border: "1.5px solid rgba(255,255,255,.4)", background: "rgba(255,255,255,.12)",
               color: "#fff", borderRadius: 10, padding: "9px 14px", fontSize: 13.5, fontWeight: 700,
@@ -14319,9 +14338,17 @@ function TabReport({ job, brand, juris }) {
         </div>
       </Section>
       <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-        <Btn kind="ghost" onClick={() => openDoc(`Work order — ${job.name}`, brand, workOrderDocHtml(job, brand, crew), toast)}><Printer size={15} /> Print / PDF</Btn>
-        <Btn kind="ghost"><Send size={15} /> Email to client</Btn>
-        <Btn kind="ghost"><Share2 size={15} /> Share link</Btn>
+        <Btn kind="ghost" onClick={() => openDoc(`Inspection report — ${job.name}`, brand, reportDocHtml(job, brand), toast)}><Printer size={15} /> Print / PDF</Btn>
+        <Btn kind="ghost" onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
+          subject: `Your inspection report — ${brand.company}`,
+          body: `Hi ${job.name}, your roof inspection report for ${job.address} is ready. Reply to this email with any questions.`,
+        })}><Send size={15} /> Email to client</Btn>
+        <Btn kind="ghost" onClick={() => {
+          if (!job.portalToken) { toast("Publish the customer portal first — see Client portal"); return; }
+          const url = `${window.location.origin}/?portal=${job.portalToken}`;
+          try { navigator.clipboard.writeText(url); toast("Portal link copied"); }
+          catch (e) { toast("Couldn't copy — the link is under Client portal"); }
+        }}><Share2 size={15} /> Share link</Btn>
       </div>
     </>
   );
@@ -14333,6 +14360,40 @@ const SHOT_LIST = [
   "Granule loss close-up", "Hail impact w/ chalk circle", "Wind-creased tabs",
   "Flashing at walls / chimney", "Pipe boots", "Gutters — granules", "Attic — decking underside",
 ];
+/* Shared "email this document to the client" action for Contract/Invoice/
+   Report — mirrors TabMessages' honest send-or-queue pattern below instead of
+   a bare toast claiming success. Requires email consent on file, sends
+   through the rep's connected Gmail when available, and always records a
+   real job.messages entry with the true outcome (Sent / Queued / Failed) so
+   the thread never lies about what happened. */
+async function sendClientEmail(job, mut, currentUser, integrations, toast, { subject, body }) {
+  if (!job.consent?.email?.granted) { toast("No email consent on file — cannot send"); return; }
+  const addr = job.email;
+  if (!addr) { toast("No contact email on file"); return; }
+  const msgId = uid("msg");
+  const record = (status) => mut((j) => ({
+    ...j,
+    messages: [...(j.messages || []), { id: msgId, kind: "email", audience: "Customer", to: addr, subject, body, at: nowStamp(), by: currentUser.name, status }],
+  }));
+  const myGmail = ((integrations && integrations.gmailByUser) || {})[currentUser.id] || { connected: false };
+  const auth = AUTH();
+  if (myGmail.connected && auth && auth.sendGmail) {
+    try {
+      await auth.sendGmail({ to: addr, subject, body });
+      record("Sent");
+      toast(`Email sent${myGmail.email ? ` from ${myGmail.email}` : ""}`);
+    } catch (e) {
+      const m = (e && e.message) || "Could not send";
+      const notSetUp = /not configured|Function not found|Failed to send a request|non-2xx|isn't connected/i.test(m);
+      record(notSetUp ? "Queued — email not set up yet" : `Failed — ${m}`);
+      toast(notSetUp ? "Email sending isn't deployed yet — saved to the thread" : `Gmail: ${m}`);
+    }
+    return;
+  }
+  record("Queued — no provider connected");
+  toast("Saved to thread — connect your Gmail to deliver");
+}
+
 /* ================================================================
    MESSAGES — send email or SMS to the customer or crew from the job,
    with the thread kept on the job record.
@@ -14827,7 +14888,7 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
    each sub-tab is still the exact same component as before (nothing
    about TabFinancials/TabPayments/TabInvoice changed), just reached
    through one door instead of three. */
-function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand }) {
+function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, integrations = {} }) {
   const [sub, setSub] = useState("costs");
   const SUBS = [["costs", "Costs & profit"], ["payments", "Payments"], ["invoice", "Invoice"]];
   return (
@@ -14844,7 +14905,7 @@ function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand })
       </div>
       {sub === "costs" && <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />}
       {sub === "payments" && <TabPayments job={job} mut={mut} toast={toast} />}
-      {sub === "invoice" && <TabInvoice job={job} brand={brand} mut={mut} toast={toast} />}
+      {sub === "invoice" && <TabInvoice job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser} integrations={integrations} />}
     </>
   );
 }
@@ -15240,7 +15301,7 @@ function TabPayments({ job, mut, toast }) {
 }
 
 /* ---------- Invoice ---------- */
-function TabInvoice({ job, brand, mut, toast }) {
+function TabInvoice({ job, brand, mut, toast, currentUser = null, integrations = {} }) {
   const pay = paymentsSummary(job);
   return (
     <>
@@ -15290,7 +15351,10 @@ function TabInvoice({ job, brand, mut, toast }) {
       </Card>
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
         <Btn kind="ghost" style={{ flex: 1 }} onClick={() => openDoc(`Invoice — ${job.name}`, brand, invoiceDocHtml(job, brand), toast)}><Printer size={15} /> PDF</Btn>
-        <Btn style={{ flex: 1 }} onClick={() => toast("Invoice emailed to client")}><Send size={15} /> Send invoice</Btn>
+        <Btn style={{ flex: 1 }} onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
+          subject: `Invoice — ${job.name}, ${money(pay.balance)} due`,
+          body: `Hi ${job.name}, here is your invoice for ${job.address}. Balance due: ${money(pay.balance)}. Reply to this email with any questions.`,
+        })}><Send size={15} /> Send invoice</Btn>
       </div>
     </>
   );
@@ -16630,7 +16694,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
           <button key={id} onClick={() => setTab(id)} style={{
             border: "none", borderRadius: 999, padding: "9px 16px", fontSize: 14, fontWeight: 700,
             cursor: "pointer", whiteSpace: "nowrap",
-            background: tab === id ? T.primary : "#fff", color: tab === id ? "#fff" : S.ink,
+            background: tab === id ? T.primary : S.card, color: tab === id ? "#fff" : S.ink,
           }}>{label}</button>
         ))}
       </div>
@@ -16647,7 +16711,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
             {[["all", "Everything"], ...KB_SYSTEMS].map(([id, label]) => (
               <button key={id} onClick={() => setKbSys(id)} style={{
                 border: `1.5px solid ${kbSys === id ? T.accent : S.line}`,
-                background: kbSys === id ? T.accentSoft : "#fff", color: kbSys === id ? T.accent : S.ink,
+                background: kbSys === id ? T.accentSoft : S.card, color: kbSys === id ? T.accent : S.ink,
                 borderRadius: 999, padding: "6px 12px", fontSize: 12.5, fontWeight: 700,
                 cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit",
               }}>{label}</button>
@@ -22255,20 +22319,36 @@ export default function SupremeCRM() {
   }, [boardView]);
   /* Dark/light appearance. Follows the OS until the user picks one, then the
      choice persists on the device. Flipping data-theme on <html> repaints the
-     whole app via the CSS variables in index.html. */
-  const [theme, setTheme] = useState(() => {
+     whole app via the CSS variables in index.html.
+
+     themeExplicit tracks whether `theme` came from a stored preference (or a
+     just-now toggle) versus the computed OS-derived default — only an
+     explicit choice gets persisted/stamped. Without this, the effect below
+     would fire on the very first render too (keyed on `theme`), locking in
+     whatever the OS happened to be on day one and permanently overriding the
+     index.html `@media (prefers-color-scheme: dark)` rule — so the app would
+     stop following the OS the moment it changed, contrary to the design. */
+  const themeExplicit = useRef(false);
+  const [theme, setThemeState] = useState(() => {
     try {
-      return localStorage.getItem("rl_theme")
-        || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    } catch (e) { return "light"; }
+      const saved = localStorage.getItem("rl_theme");
+      if (saved === "dark" || saved === "light") { themeExplicit.current = true; return saved; }
+    } catch (e) { /* private mode */ }
+    try { return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; }
+    catch (e) { return "light"; }
   });
+  const setTheme = (next) => { themeExplicit.current = true; setThemeState(next); };
   useEffect(() => {
-    try { localStorage.setItem("rl_theme", theme); } catch (e) { /* private mode */ }
+    /* The browser-chrome meta color is cosmetic only (doesn't affect which
+       theme the page CSS follows), so it's safe to keep it in sync with the
+       current appearance even for the computed default. */
     try {
-      document.documentElement.dataset.theme = theme;
       const m = document.querySelector('meta[name="theme-color"]');
       if (m) m.setAttribute("content", theme === "dark" ? "#0F1216" : "#20242A");
     } catch (e) { /* non-browser test env */ }
+    if (!themeExplicit.current) return; // computed default — don't persist or override the OS-following CSS
+    try { localStorage.setItem("rl_theme", theme); } catch (e) { /* private mode */ }
+    try { document.documentElement.dataset.theme = theme; } catch (e) { /* non-browser test env */ }
   }, [theme]);
   const [leadSeed, setLeadSeed] = useState(null);
   const [qt, setQt] = useState({ jobId: "", label: "", due: "", time: "" });
@@ -22419,17 +22499,26 @@ export default function SupremeCRM() {
 
   /* Finish the Gmail OAuth handshake when Google redirects back with
      ?state=gmail&code=... — exchange the code, mark the seat connected, and
-     clean the URL. Runs once when a code is present. */
+     clean the URL. Runs once when a code is present.
+
+     currentUser starts null on every fresh mount (session restore is async),
+     and a real Google redirect is a full-page navigation, so this effect's
+     first firing almost always lands before currentUser has hydrated. Only
+     latch gmailCbDone/clean() on a TERMINAL outcome (no backend at all, or the
+     exchange actually ran) — otherwise wait and let the effect re-fire once
+     currentUser is set, rather than consuming the one-shot code and giving up
+     silently. */
   const gmailCbDone = useRef(false);
   useEffect(() => {
     if (gmailCbDone.current || typeof window === "undefined") return;
     const qs = new URLSearchParams(window.location.search);
     if (qs.get("state") !== "gmail" || !qs.get("code")) return;
-    gmailCbDone.current = true;
-    const code = qs.get("code");
     const a = AUTH();
     const clean = () => { try { window.history.replaceState({}, "", window.location.pathname); } catch { /* ignore */ } };
-    if (!a || !a.gmailExchange || !currentUser) { clean(); return; }
+    if (!a || !a.gmailExchange) { gmailCbDone.current = true; clean(); return; }
+    if (!currentUser) return; // wait — effect re-runs once currentUser hydrates
+    gmailCbDone.current = true;
+    const code = qs.get("code");
     a.gmailExchange(code).then((res) => {
       setIntegrations((prev) => ({
         ...prev,

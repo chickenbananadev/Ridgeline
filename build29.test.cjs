@@ -82,8 +82,8 @@ check("DEFAULT_BRAND no longer leaks Jacob's real contact info",
     && !/Supreme-Building-Group-Review/.test(defaultBrandBlock));
 check("DEFAULT_BRAND is an explicit neutral placeholder", /company: "Your Company"/.test(defaultBrandBlock));
 
-check("SystemCheck probe uses a random per-run id, not a shared id=99",
-  /const probeId = 1000 \+ Math\.floor\(Math\.random\(\) \* 2000000000\)/.test(src));
+check("SystemCheck probe upserts on the tenant's own row, not a shared/random id",
+  /db\.from\("crm_brand"\)\.upsert\(\{ tenant_id: currentUser\.tenantId, updated_at/.test(src));
 check("SystemCheck stored-branding report is tenant-scoped",
   /currentUser && currentUser\.tenantId[\s\S]*?eq\("tenant_id", currentUser\.tenantId\)/.test(src));
 
