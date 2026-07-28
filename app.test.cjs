@@ -1760,10 +1760,10 @@ function mkEstimate(over = {}) {
     upgrades: [],
     // [{ id, desc, price, cost, selected }]
     concealed: [
-      { id: "c1", desc: 'Roof decking replacement (7/16" OSB)', unit: "per 4\xD78 sheet", price: 0 },
-      { id: "c2", desc: "Plank decking replacement", unit: "per LF", price: 0 },
-      { id: "c3", desc: "Rafter sistering / repair", unit: "per rafter", price: 0 },
-      { id: "c4", desc: "Fascia replacement", unit: "per LF", price: 0 }
+      { id: "c1", desc: 'Roof decking replacement (7/16" OSB)', unit: "per 4\xD78 sheet", price: 0, on: true },
+      { id: "c2", desc: "Plank decking replacement", unit: "per LF", price: 0, on: true },
+      { id: "c3", desc: "Rafter sistering / repair", unit: "per rafter", price: 0, on: true },
+      { id: "c4", desc: "Fascia replacement", unit: "per LF", price: 0, on: true }
     ],
     clientSig: null,
     sigAt: null,
@@ -8348,7 +8348,10 @@ function JobDetail({
   features = {},
   onOpenCodeLookup = () => {
   },
-  priceList = []
+  priceList = [],
+  docTemplates: docTemplates2 = { notes: [], terms: [], scope: [] },
+  setDocTemplates = () => {
+  }
 }) {
   const [tab, setTab] = (0, import_react.useState)(openTab || "overview");
   const [open, setOpen] = (0, import_react.useState)(() => openTab ? { [openTab]: true } : {});
@@ -8639,12 +8642,25 @@ function JobDetail({
                   toast: toast2,
                   estimateTemplates,
                   setEstimateTemplates,
-                  priceList
+                  priceList,
+                  docTemplates: docTemplates2,
+                  setDocTemplates
                 }
               );
             case "contract":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabContract, { job, brand: brand2, setBrand, mut, toast: toast2 }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  TabContract,
+                  {
+                    job,
+                    brand: brand2,
+                    setBrand,
+                    mut,
+                    toast: toast2,
+                    docTemplates: docTemplates2,
+                    setDocTemplates
+                  }
+                ),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabSignatures, { job, mut, toast: toast2, currentUser, brand: brand2 })
               ] });
             case "report":
@@ -9466,6 +9482,11 @@ function normalizeProposalDoc(doc) {
     terms: d.terms || ""
   };
 }
+function concealedTableHtml(est) {
+  const rows = (est && est.concealed || []).filter((c) => c.on !== false && String(c.desc || "").trim());
+  if (!rows.length) return "";
+  return `<h2>Concealed conditions \u2014 unit pricing</h2><div class="muted" style="margin-bottom:8px">Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented.</div><table><thead><tr><th>Condition</th><th>Unit</th><th class="r">Price</th></tr></thead><tbody>` + rows.map((c) => `<tr><td>${esc(c.desc)}</td><td>${esc(c.unit || "")}</td><td class="r">${num(c.price) ? money(num(c.price)) : "\u2014"}</td></tr>`).join("") + `</tbody></table>`;
+}
 function estimateDocHtml(job, brand2) {
   const est = job.estimate;
   const doc = est.doc || {};
@@ -9516,6 +9537,7 @@ function estimateDocHtml(job, brand2) {
       out += `<iframe src="${b.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe>`;
     }
   }
+  out += concealedTableHtml(est);
   out += `<div class="sig">
     <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
     <div><div class="sigline"></div><div class="siglbl">${esc(brand2.company)} representative</div></div>
@@ -9625,6 +9647,13 @@ function contractDocHtml(job, brand2) {
     <div class="tot"><span>Due at signing${mode === "pct" ? ` (${con.depositPct}%)` : ""}</span><span>${money(deposit)}</span></div>
     <div class="tot grand"><span>Due on substantial completion</span><span>${money((con.price || 0) - deposit)}</span></div>`;
   if (con.terms) out += `<h2>Terms &amp; conditions</h2><div class="muted">${esc(con.terms)}</div>`;
+  out += concealedTableHtml(job.estimate);
+  for (const a of con.attachments || []) {
+    if (a && a.dataUrl) {
+      out += `<h2>${esc(a.name || "Attachment")}</h2>`;
+      out += `<iframe src="${a.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe>`;
+    }
+  }
   out += `<div class="sig">
     <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
     <div><div class="sigline"></div><div class="siglbl">${esc(brand2.company)} representative / date</div></div>
@@ -13714,6 +13743,208 @@ async function extractPdfText(file) {
   }
   return text;
 }
+async function renderPdfPages(buf, scale = 1.4) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf");
+  const workerSrc = (await import("pdfjs-dist/legacy/build/pdf.worker.min.js?url")).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+  const doc = await pdfjs.getDocument({ data: buf }).promise;
+  const out = [];
+  const pages = Math.min(doc.numPages, 12);
+  for (let i = 1; i <= pages; i++) {
+    const page = await doc.getPage(i);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    out.push({ dataUrl: canvas.toDataURL("image/png"), w: viewport.width, h: viewport.height });
+  }
+  return out;
+}
+function bytesToDataUrl(bytes, mime) {
+  let bin = "";
+  const chunk = 32768;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return `data:${mime};base64,${btoa(bin)}`;
+}
+function PdfFiller({ open, onClose, onExport }) {
+  const [buf, setBuf] = (0, import_react.useState)(null);
+  const [name, setName] = (0, import_react.useState)("");
+  const [pages, setPages] = (0, import_react.useState)(null);
+  const [fields, setFields] = (0, import_react.useState)([]);
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const [err, setErr] = (0, import_react.useState)("");
+  const [mode, setMode] = (0, import_react.useState)("text");
+  const reset = () => {
+    setBuf(null);
+    setName("");
+    setPages(null);
+    setFields([]);
+    setErr("");
+  };
+  const pillStyle = (active) => ({
+    border: `1.5px solid ${active ? T.accent : S.line}`,
+    background: active ? T.accentSoft : "#fff",
+    color: active ? T.accent : S.ink,
+    borderRadius: 999,
+    padding: "6px 13px",
+    fontSize: 12.5,
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "inherit"
+  });
+  const load = async (file) => {
+    if (!file) return;
+    setBusy(true);
+    setErr("");
+    setFields([]);
+    try {
+      const ab = await file.arrayBuffer();
+      setBuf(ab.slice(0));
+      setName(file.name.replace(/\.pdf$/i, "") + " \u2014 filled.pdf");
+      const rendered = await renderPdfPages(ab.slice(0));
+      if (!rendered.length) throw new Error("empty");
+      setPages(rendered);
+    } catch (e) {
+      setErr("Couldn't open that PDF. Try another file.");
+    }
+    setBusy(false);
+  };
+  const addField = (pageIdx, e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xPct = (e.clientX - rect.left) / rect.width;
+    const yPct = (e.clientY - rect.top) / rect.height;
+    setFields((f) => [...f, { id: uid("fld"), page: pageIdx, xPct, yPct, text: mode === "check" ? "X" : "", size: 12, type: mode }]);
+  };
+  const setField = (id, patch) => setFields((f) => f.map((x) => x.id === id ? { ...x, ...patch } : x));
+  const delField = (id) => setFields((f) => f.filter((x) => x.id !== id));
+  const exportPdf = async () => {
+    if (!buf) return;
+    setBusy(true);
+    setErr("");
+    try {
+      const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+      const pdf = await PDFDocument.load(buf);
+      const font = await pdf.embedFont(StandardFonts.Helvetica);
+      const pdfPages = pdf.getPages();
+      for (const f of fields) {
+        const page = pdfPages[f.page];
+        if (!page || !String(f.text).trim()) continue;
+        const { width, height } = page.getSize();
+        const size = f.size || 12;
+        const x = f.xPct * width;
+        const y = height - f.yPct * height - size;
+        page.drawText(String(f.text), { x, y, size, font, color: rgb(0.05, 0.05, 0.05) });
+      }
+      const bytes = await pdf.save();
+      onExport(name || "filled.pdf", bytesToDataUrl(bytes, "application/pdf"));
+      reset();
+      onClose();
+    } catch (e) {
+      setErr("Couldn't build the filled PDF.");
+    }
+    setBusy(false);
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open, onClose: () => {
+    reset();
+    onClose();
+  }, title: "Fill a PDF form", tall: true, children: !pages ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 12 }, children: "Upload any PDF \u2014 a carrier form, a permit application, a terms sheet \u2014 then tap to place text and checkmarks on it. Export a real filled PDF that attaches straight to the contract." }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: {
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 8,
+      cursor: "pointer",
+      border: `1px solid ${S.line}`,
+      borderRadius: 10,
+      padding: "10px 16px",
+      fontWeight: 600,
+      color: S.ink
+    }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 15 }),
+      " ",
+      busy ? "Opening\u2026" : "Choose PDF",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          type: "file",
+          accept: "application/pdf",
+          style: { display: "none" },
+          onChange: (e) => {
+            load(e.target.files && e.target.files[0]);
+            e.target.value = "";
+          }
+        }
+      )
+    ] }),
+    err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginTop: 10 }, children: err })
+  ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub, fontWeight: 700 }, children: "Tap the page to add:" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => setMode("text"), style: pillStyle(mode === "text"), children: "Text" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => setMode("check"), style: pillStyle(mode === "check"), children: "\u2713 Check" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { marginLeft: "auto", fontSize: 12, color: S.sub }, children: [
+        fields.length,
+        " field",
+        fields.length === 1 ? "" : "s"
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { maxHeight: "52vh", overflowY: "auto", background: S.soft, borderRadius: 10, padding: 8 }, children: pages.map((pg, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { onClick: (e) => addField(i, e), style: {
+      position: "relative",
+      margin: "0 auto 12px",
+      width: "100%",
+      maxWidth: pg.w,
+      cursor: "crosshair",
+      boxShadow: "0 1px 6px rgba(0,0,0,.12)"
+    }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: pg.dataUrl, alt: `Page ${i + 1}`, style: { width: "100%", display: "block", borderRadius: 6 }, draggable: false }),
+      fields.filter((f) => f.page === i).map((f) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { onClick: (e) => e.stopPropagation(), style: {
+        position: "absolute",
+        left: `${f.xPct * 100}%`,
+        top: `${f.yPct * 100}%`,
+        transform: "translateY(-2px)",
+        display: "flex",
+        alignItems: "center",
+        gap: 2
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            value: f.text,
+            onChange: (e) => setField(f.id, { text: e.target.value }),
+            placeholder: f.type === "check" ? "X" : "text",
+            autoFocus: true,
+            style: {
+              font: "600 13px sans-serif",
+              color: "#111",
+              background: "rgba(255,255,120,.55)",
+              border: "1px solid #C9A400",
+              borderRadius: 3,
+              padding: "1px 3px",
+              width: f.type === "check" ? 26 : Math.max(46, (f.text.length + 2) * 8)
+            }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            type: "button",
+            onClick: () => delField(f.id),
+            title: "Remove",
+            style: { border: "none", background: "rgba(180,35,24,.9)", color: "#fff", borderRadius: 3, cursor: "pointer", fontSize: 10, lineHeight: 1, padding: "2px 4px" },
+            children: "\xD7"
+          }
+        )
+      ] }, f.id))
+    ] }, i)) }),
+    err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginTop: 10 }, children: err }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: reset, children: "Start over" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 2 }, onClick: exportPdf, disabled: busy || !fields.some((f) => String(f.text).trim()), children: busy ? "Building\u2026" : "Export filled PDF" })
+    ] })
+  ] }) });
+}
 function MeasureImport({ onApply, toast: toast2 }) {
   const [busy, setBusy] = (0, import_react.useState)(false);
   const [found, setFound] = (0, import_react.useState)(null);
@@ -14519,26 +14750,52 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast
               doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setDoc({ coverImage: null }), children: "Remove" })
             ] })
           ] }),
-          sec === "notes" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "textarea",
-            {
-              style: { ...inputStyle, minHeight: 60, marginTop: 8, resize: "vertical", fontFamily: "inherit" },
-              value: doc.notes,
-              disabled: locked,
-              onChange: (e) => setDoc({ notes: e.target.value }),
-              placeholder: "Color selections, access notes, exclusions\u2026"
-            }
-          ),
-          sec === "terms" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "textarea",
-            {
-              style: { ...inputStyle, minHeight: 90, marginTop: 8, resize: "vertical", fontFamily: "inherit" },
-              value: doc.terms,
-              disabled: locked,
-              onChange: (e) => setDoc({ terms: e.target.value }),
-              placeholder: "Payment terms, warranty, change orders\u2026"
-            }
-          ),
+          sec === "notes" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              TemplateBar,
+              {
+                label: "Notes",
+                list: docTemplates.notes,
+                setList: setDocTpl("notes"),
+                value: doc.notes,
+                locked,
+                onApply: (body) => setDoc({ notes: appendText(doc.notes, body) })
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "textarea",
+              {
+                style: { ...inputStyle, minHeight: 60, resize: "vertical", fontFamily: "inherit" },
+                value: doc.notes,
+                disabled: locked,
+                onChange: (e) => setDoc({ notes: e.target.value }),
+                placeholder: "Color selections, access notes, exclusions\u2026"
+              }
+            )
+          ] }),
+          sec === "terms" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              TemplateBar,
+              {
+                label: "Terms",
+                list: docTemplates.terms,
+                setList: setDocTpl("terms"),
+                value: doc.terms,
+                locked,
+                onApply: (body) => setDoc({ terms: appendText(doc.terms, body) })
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "textarea",
+              {
+                style: { ...inputStyle, minHeight: 90, resize: "vertical", fontFamily: "inherit" },
+                value: doc.terms,
+                disabled: locked,
+                onChange: (e) => setDoc({ terms: e.target.value }),
+                placeholder: "Payment terms, warranty, change orders\u2026"
+              }
+            )
+          ] }),
           blocks[sec] && blocks[sec].type === "text" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 8 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
               "input",
@@ -14648,8 +14905,87 @@ function ProposalPreview({ job, brand: brand2, est, doc, total }) {
     return null;
   }) });
 }
+function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
+  const [naming, setNaming] = (0, import_react.useState)(false);
+  const [name, setName] = (0, import_react.useState)("");
+  const save = () => {
+    const body = String(value || "").trim();
+    const nm = name.trim();
+    if (!body || !nm) return;
+    setList([...list.filter((t) => t.name.toLowerCase() !== nm.toLowerCase()), { id: uid("tpl"), name: nm, body }]);
+    setName("");
+    setNaming(false);
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 8 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11.5, color: S.sub, fontWeight: 700 }, children: [
+      label,
+      " templates:"
+    ] }),
+    list.length === 0 && !naming && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub }, children: "none saved" }),
+    list.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", border: `1px solid ${S.line}`, borderRadius: 999, overflow: "hidden" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => onApply(t.body), disabled: locked, style: {
+        border: "none",
+        background: "#fff",
+        color: T.accent,
+        fontSize: 12,
+        fontWeight: 700,
+        padding: "5px 10px",
+        cursor: locked ? "not-allowed" : "pointer",
+        fontFamily: "inherit"
+      }, children: t.name }),
+      !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => setList(list.filter((x) => x.id !== t.id)), title: "Delete template", style: {
+        border: "none",
+        borderLeft: `1px solid ${S.line}`,
+        background: "#fff",
+        color: "#B42318",
+        padding: "5px 8px",
+        cursor: "pointer",
+        fontSize: 12,
+        lineHeight: 1
+      }, children: "\xD7" })
+    ] }, t.id)),
+    !locked && (naming ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", gap: 6, alignItems: "center" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          autoFocus: true,
+          style: { ...inputStyle, height: 30, width: 150, fontSize: 12.5 },
+          value: name,
+          placeholder: "Template name",
+          onChange: (e) => setName(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              save();
+            }
+            if (e.key === "Escape") {
+              setNaming(false);
+              setName("");
+            }
+          }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, onClick: save, disabled: !name.trim() || !String(value || "").trim(), children: "Save" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => {
+        setNaming(false);
+        setName("");
+      }, style: { border: "none", background: "none", color: S.sub, cursor: "pointer", fontSize: 12 }, children: "Cancel" })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => setNaming(true), disabled: !String(value || "").trim(), style: {
+      border: `1px dashed ${S.line}`,
+      background: "#fff",
+      color: String(value || "").trim() ? T.accent : S.sub,
+      borderRadius: 999,
+      padding: "5px 10px",
+      fontSize: 12,
+      fontWeight: 700,
+      cursor: String(value || "").trim() ? "pointer" : "not-allowed",
+      fontFamily: "inherit"
+    }, children: "+ Save current" }))
+  ] });
+}
 function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates = [], setEstimateTemplates = () => {
-}, priceList = [] }) {
+}, priceList = [], docTemplates: docTemplates2 = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
+} }) {
   const est = { ...job.estimate, tiers: job.estimate.tiers || [], upgrades: job.estimate.upgrades || [] };
   const [sigOpen, setSigOpen] = (0, import_react.useState)(false);
   const locked = est.status === "Signed";
@@ -14685,6 +15021,12 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
   const setUpgrade = (id, k, v) => recompute({ upgrades: est.upgrades.map((u) => u.id === id ? { ...u, [k]: v } : u) });
   const toggleUpgrade = (id, checked) => recompute({ upgrades: est.upgrades.map((u) => u.id === id ? { ...u, selected: checked } : u) });
   const removeUpgrade = (id) => recompute({ upgrades: est.upgrades.filter((u) => u.id !== id) });
+  const setConcealed = (id, k, v) => setEst({ concealed: est.concealed.map((x) => x.id === id ? { ...x, [k]: v } : x) });
+  const toggleConcealed = (id, on) => setConcealed(id, "on", on);
+  const addConcealed = () => setEst({ concealed: [...est.concealed, { id: uid("cc"), desc: "", unit: "per unit", price: 0, on: true, custom: true }] });
+  const removeConcealed = (id) => setEst({ concealed: est.concealed.filter((x) => x.id !== id) });
+  const setDocTpl2 = (kind) => (list) => setDocTemplates({ ...docTemplates2, [kind]: list });
+  const appendText2 = (cur, body) => cur && cur.trim() ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
   const [adjMode, setAdjMode] = (0, import_react.useState)("margin");
   const [adjPct, setAdjPct] = (0, import_react.useState)("");
   const applyPricing = () => {
@@ -14822,6 +15164,17 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Scope of work" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        TemplateBar,
+        {
+          label: "Scope",
+          list: docTemplates2.scope,
+          setList: setDocTpl2("scope"),
+          value: est.scope,
+          locked,
+          onApply: (body) => setEst({ scope: appendText2(est.scope, body) })
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "textarea",
         {
           style: { ...inputStyle, minHeight: 110 },
@@ -14901,29 +15254,68 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Concealed conditions \u2014 unit pricing" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10 }, children: "Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented." }),
-      est.concealed.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, fontSize: 13, color: S.ink }, children: [
-          c.desc,
-          " ",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub }, children: [
-            "(",
-            c.unit,
-            ")"
-          ] })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
-          {
-            style: { ...inputStyle, width: 90, textAlign: "right" },
-            value: c.price,
-            disabled: locked,
-            inputMode: "decimal",
-            onChange: (e) => setEst({ concealed: est.concealed.map((x) => x.id === c.id ? { ...x, price: e.target.value } : x) })
-          }
-        )
-      ] }, c.id))
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10 }, children: "Pre-agreed pricing for conditions found after tear-off. Check the ones that apply to this roof and set the price \u2014 only the checked rows print on the estimate and contract. Billed as change orders only when found and documented." }),
+      est.concealed.map((c) => {
+        const on = c.on !== false;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              type: "checkbox",
+              checked: on,
+              disabled: locked,
+              style: { width: 18, height: 18, accentColor: T.accent, flexShrink: 0 },
+              onChange: (e) => toggleConcealed(c.id, e.target.checked)
+            }
+          ),
+          c.custom ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: { ...inputStyle, flex: 1, opacity: on ? 1 : 0.55 },
+                value: c.desc,
+                disabled: locked,
+                placeholder: "Condition (e.g. chimney flashing rebuild)",
+                onChange: (e) => setConcealed(c.id, "desc", e.target.value)
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: { ...inputStyle, width: 92, fontSize: 12.5, opacity: on ? 1 : 0.55 },
+                value: c.unit,
+                disabled: locked,
+                placeholder: "per unit",
+                onChange: (e) => setConcealed(c.id, "unit", e.target.value)
+              }
+            )
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, fontSize: 13, color: S.ink, opacity: on ? 1 : 0.55 }, children: [
+            c.desc,
+            " ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub }, children: [
+              "(",
+              c.unit,
+              ")"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: { ...inputStyle, width: 82, textAlign: "right", opacity: on ? 1 : 0.55 },
+              value: c.price,
+              disabled: locked,
+              inputMode: "decimal",
+              onChange: (e) => setConcealed(c.id, "price", e.target.value)
+            }
+          ),
+          !locked && c.custom && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeConcealed(c.id), style: { border: "none", background: "none", cursor: "pointer" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
+        ] }, c.id);
+      }),
+      !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, style: { marginTop: 6 }, onClick: addConcealed, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }),
+        " Add custom condition"
+      ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Acceptance" }),
@@ -15107,11 +15499,22 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
   ] });
 }
 function TabContract({ job, brand: brand2, setBrand = () => {
-}, mut, toast: toast2 }) {
+}, mut, toast: toast2, docTemplates: docTemplates2 = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
+} }) {
   const con = job.contract;
   const [sigFor, setSigFor] = (0, import_react.useState)(null);
+  const [fillerOpen, setFillerOpen] = (0, import_react.useState)(false);
   const locked = con.status === "Signed";
   const setCon = (patch) => mut((j) => ({ ...j, contract: { ...j.contract, ...patch } }));
+  const setDocTpl2 = (kind) => (list) => setDocTemplates({ ...docTemplates2, [kind]: list });
+  const appendText2 = (cur, body) => cur && cur.trim() ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
+  const addAttachment = (file) => {
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => setCon({ attachments: [...con.attachments || [], { id: uid("att"), name: file.name, dataUrl: String(r.result) }] });
+    r.readAsDataURL(file);
+  };
+  const removeAttachment = (id) => setCon({ attachments: (con.attachments || []).filter((a) => a.id !== id) });
   const estTotal = estimateTotal(job.estimate);
   const depositMode = con.depositMode || "pct";
   const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
@@ -15270,6 +15673,17 @@ function TabContract({ job, brand: brand2, setBrand = () => {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Terms" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        TemplateBar,
+        {
+          label: "Terms",
+          list: docTemplates2.terms,
+          setList: setDocTpl2("terms"),
+          value: con.terms,
+          locked,
+          onApply: (body) => setCon({ terms: appendText2(con.terms, body) })
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "textarea",
         {
           style: { ...inputStyle, minHeight: 130, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.6 },
@@ -15286,6 +15700,63 @@ function TabContract({ job, brand: brand2, setBrand = () => {
         brand2.contractTerms && brand2.contractTerms !== con.terms && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => setCon({ terms: brand2.contractTerms }), children: "Load company default" })
       ] })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "gray", children: [
+        (con.attachments || []).length,
+        " on file"
+      ] }), children: "Attachments \u2014 T&C, addenda, filled forms" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Upload a signed terms & conditions PDF, an addendum, or a filled PDF form. Attachments embed in the printed and portal contract. Use the PDF filler below to complete a blank form first." }),
+      (con.attachments || []).map((a) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", padding: "8px 0", borderTop: `1px solid ${S.line}` }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.FileText, { size: 15, color: T.accent, style: { flexShrink: 0 } }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: a.dataUrl, target: "_blank", rel: "noreferrer", style: { flex: 1, minWidth: 0, fontSize: 13, color: S.ink, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: a.name }),
+        !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeAttachment(a.id), style: { border: "none", background: "none", cursor: "pointer" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
+      ] }, a.id)),
+      !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: {
+          cursor: "pointer",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          border: `1px solid ${S.line}`,
+          borderRadius: 10,
+          padding: "7px 12px",
+          fontSize: 13,
+          fontWeight: 600,
+          color: S.ink,
+          background: "#fff"
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 14 }),
+          " Upload PDF",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              type: "file",
+              accept: "application/pdf",
+              style: { display: "none" },
+              onChange: (e) => {
+                addAttachment(e.target.files && e.target.files[0]);
+                e.target.value = "";
+              }
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => setFillerOpen(true), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.PenLine, { size: 14 }),
+          " Fill a PDF form"
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      PdfFiller,
+      {
+        open: fillerOpen,
+        onClose: () => setFillerOpen(false),
+        onExport: (name, dataUrl) => {
+          setCon({ attachments: [...con.attachments || [], { id: uid("att"), name, dataUrl }] });
+          toast2("Filled PDF attached to the contract");
+        }
+      }
+    ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Signatures" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 14, flexWrap: "wrap" }, children: [
@@ -23565,6 +24036,7 @@ function SupremeCRM() {
   ]);
   const [appointments, setAppointments] = (0, import_react.useState)([]);
   const [estimateTemplates, setEstimateTemplates] = (0, import_react.useState)([]);
+  const [docTemplates2, setDocTemplates] = (0, import_react.useState)({ notes: [], terms: [], scope: [] });
   const [activity, setActivity] = (0, import_react.useState)([]);
   const [chatMsgs, setChatMsgs] = (0, import_react.useState)([]);
   const [announcements, setAnnouncements] = (0, import_react.useState)([]);
@@ -23668,7 +24140,7 @@ function SupremeCRM() {
       setNav("home");
     }
   };
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, docTemplates2, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
     announcements,
     calls,
@@ -23677,6 +24149,7 @@ function SupremeCRM() {
     apptTypes,
     templates,
     estimateTemplates,
+    docTemplates: docTemplates2,
     priceList,
     companyDocs,
     crews,
@@ -23698,6 +24171,7 @@ function SupremeCRM() {
     if (d.apptTypes) setApptTypes(d.apptTypes);
     if (d.templates) setTemplates(d.templates);
     if (d.estimateTemplates) setEstimateTemplates(d.estimateTemplates);
+    if (d.docTemplates) setDocTemplates({ notes: [], terms: [], scope: [], ...d.docTemplates });
     if (d.priceList) setPriceList(d.priceList);
     if (d.companyDocs) setCompanyDocs(d.companyDocs);
     if (d.crews) setCrews(d.crews);
@@ -24130,7 +24604,9 @@ function SupremeCRM() {
         openTab: jobOpenTab,
         features,
         onOpenCodeLookup: openCodeLookup,
-        priceList
+        priceList,
+        docTemplates: docTemplates2,
+        setDocTemplates
       }
     ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       liveDb() && jobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { margin: "14px 16px 0", background: "#EAF6EE", border: "1px solid #CDE8D6", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "#177245", lineHeight: 1.5 }, children: "Fresh database \u2014 no demo customers here. Everything you create now saves for real. Have a Roofr export? More \u2192 Import jobs pulls your whole pipeline in." }),

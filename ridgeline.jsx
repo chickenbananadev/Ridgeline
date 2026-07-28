@@ -1343,10 +1343,10 @@ function mkEstimate(over = {}) {
     selectedTier: null,   // id of the active tier, or null = flat estimate (old behavior)
     upgrades: [],         // [{ id, desc, price, cost, selected }]
     concealed: [
-      { id: "c1", desc: "Roof decking replacement (7/16\" OSB)", unit: "per 4×8 sheet", price: 0 },
-      { id: "c2", desc: "Plank decking replacement", unit: "per LF", price: 0 },
-      { id: "c3", desc: "Rafter sistering / repair", unit: "per rafter", price: 0 },
-      { id: "c4", desc: "Fascia replacement", unit: "per LF", price: 0 },
+      { id: "c1", desc: "Roof decking replacement (7/16\" OSB)", unit: "per 4×8 sheet", price: 0, on: true },
+      { id: "c2", desc: "Plank decking replacement", unit: "per LF", price: 0, on: true },
+      { id: "c3", desc: "Rafter sistering / repair", unit: "per rafter", price: 0, on: true },
+      { id: "c4", desc: "Fascia replacement", unit: "per LF", price: 0, on: true },
     ],
     clientSig: null, sigAt: null, ...over,
   };
@@ -7027,7 +7027,7 @@ const JOB_TAB_GROUPS = [
 ];
 
 function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [], ccToken = null,
-  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null, features = {}, onOpenCodeLookup = () => {}, priceList = [] }) {
+  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null, features = {}, onOpenCodeLookup = () => {}, priceList = [], docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {} }) {
   const [tab, setTab] = useState(openTab || "overview");
   /* Every section starts collapsed so the job opens as a clean, scannable
      stack; the rep expands what they need. A deep link still opens its own
@@ -7224,9 +7224,11 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
               case "materials": return <TabMaterials job={job} mut={mut} toast={toast} />;
               case "estimate": return <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
-                estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} priceList={priceList} />;
+                estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} priceList={priceList}
+                docTemplates={docTemplates} setDocTemplates={setDocTemplates} />;
               case "contract": return (<>
-                <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast} />
+                <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast}
+                  docTemplates={docTemplates} setDocTemplates={setDocTemplates} />
                 {/* Countersign queue + signature audit trail live with the
                     contract now, not in a separate section. */}
                 <TabSignatures job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />
@@ -8015,6 +8017,18 @@ function normalizeProposalDoc(doc) {
   };
 }
 
+/* The concealed-condition rows the rep checked on, as a small unit-price
+   table for the estimate/contract. Blank when nothing is selected. */
+function concealedTableHtml(est) {
+  const rows = ((est && est.concealed) || []).filter((c) => c.on !== false && String(c.desc || "").trim());
+  if (!rows.length) return "";
+  return `<h2>Concealed conditions — unit pricing</h2>` +
+    `<div class="muted" style="margin-bottom:8px">Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented.</div>` +
+    `<table><thead><tr><th>Condition</th><th>Unit</th><th class="r">Price</th></tr></thead><tbody>` +
+    rows.map((c) => `<tr><td>${esc(c.desc)}</td><td>${esc(c.unit || "")}</td><td class="r">${num(c.price) ? money(num(c.price)) : "—"}</td></tr>`).join("") +
+    `</tbody></table>`;
+}
+
 function estimateDocHtml(job, brand) {
   const est = job.estimate;
   const doc = est.doc || {};
@@ -8070,6 +8084,7 @@ function estimateDocHtml(job, brand) {
       out += `<iframe src="${b.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe>`;
     }
   }
+  out += concealedTableHtml(est);
   out += `<div class="sig">
     <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
     <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative</div></div>
@@ -8178,6 +8193,15 @@ function contractDocHtml(job, brand) {
     <div class="tot"><span>Due at signing${mode === "pct" ? ` (${con.depositPct}%)` : ""}</span><span>${money(deposit)}</span></div>
     <div class="tot grand"><span>Due on substantial completion</span><span>${money((con.price || 0) - deposit)}</span></div>`;
   if (con.terms) out += `<h2>Terms &amp; conditions</h2><div class="muted">${esc(con.terms)}</div>`;
+  out += concealedTableHtml(job.estimate);
+  /* Uploaded contract attachments — signed T&C, addenda, filled PDF forms —
+     embedded so they travel with the printed/portal contract. */
+  for (const a of con.attachments || []) {
+    if (a && a.dataUrl) {
+      out += `<h2>${esc(a.name || "Attachment")}</h2>`;
+      out += `<iframe src="${a.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe>`;
+    }
+  }
   out += `<div class="sig">
     <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
     <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative / date</div></div>
@@ -12387,6 +12411,165 @@ async function extractPdfText(file) {
   return text;
 }
 
+/* Render every page of a PDF to a PNG data URL with pdf.js, at a scale that
+   keeps text crisp on screen. Returns [{ dataUrl, w, h }] in page order. */
+async function renderPdfPages(buf, scale = 1.4) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf");
+  const workerSrc = (await import("pdfjs-dist/legacy/build/pdf.worker.min.js?url")).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+  const doc = await pdfjs.getDocument({ data: buf }).promise;
+  const out = [];
+  const pages = Math.min(doc.numPages, 12);
+  for (let i = 1; i <= pages; i++) {
+    const page = await doc.getPage(i);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d");
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    out.push({ dataUrl: canvas.toDataURL("image/png"), w: viewport.width, h: viewport.height });
+  }
+  return out;
+}
+function bytesToDataUrl(bytes, mime) {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return `data:${mime};base64,${btoa(bin)}`;
+}
+
+/* True PDF form-filler. Upload a PDF (a carrier form, a T&C, a permit
+   application), render it, tap to drop text or ✓ fields anywhere on the page,
+   type, then export a real filled PDF with the text embedded via pdf-lib. The
+   exported PDF is handed back through onExport(name, dataUrl). */
+function PdfFiller({ open, onClose, onExport }) {
+  const [buf, setBuf] = useState(null);      // original bytes (ArrayBuffer) for pdf-lib
+  const [name, setName] = useState("");
+  const [pages, setPages] = useState(null);  // [{dataUrl,w,h}]
+  const [fields, setFields] = useState([]);  // [{id,page,xPct,yPct,text,size,type}]
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [mode, setMode] = useState("text");  // "text" | "check"
+
+  const reset = () => { setBuf(null); setName(""); setPages(null); setFields([]); setErr(""); };
+  const pillStyle = (active) => ({
+    border: `1.5px solid ${active ? T.accent : S.line}`, background: active ? T.accentSoft : "#fff",
+    color: active ? T.accent : S.ink, borderRadius: 999, padding: "6px 13px",
+    fontSize: 12.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+  });
+
+  const load = async (file) => {
+    if (!file) return;
+    setBusy(true); setErr(""); setFields([]);
+    try {
+      const ab = await file.arrayBuffer();
+      setBuf(ab.slice(0));
+      setName(file.name.replace(/\.pdf$/i, "") + " — filled.pdf");
+      const rendered = await renderPdfPages(ab.slice(0));
+      if (!rendered.length) throw new Error("empty");
+      setPages(rendered);
+    } catch (e) { setErr("Couldn't open that PDF. Try another file."); }
+    setBusy(false);
+  };
+
+  const addField = (pageIdx, e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xPct = (e.clientX - rect.left) / rect.width;
+    const yPct = (e.clientY - rect.top) / rect.height;
+    setFields((f) => [...f, { id: uid("fld"), page: pageIdx, xPct, yPct, text: mode === "check" ? "X" : "", size: 12, type: mode }]);
+  };
+  const setField = (id, patch) => setFields((f) => f.map((x) => x.id === id ? { ...x, ...patch } : x));
+  const delField = (id) => setFields((f) => f.filter((x) => x.id !== id));
+
+  const exportPdf = async () => {
+    if (!buf) return;
+    setBusy(true); setErr("");
+    try {
+      const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+      const pdf = await PDFDocument.load(buf);
+      const font = await pdf.embedFont(StandardFonts.Helvetica);
+      const pdfPages = pdf.getPages();
+      for (const f of fields) {
+        const page = pdfPages[f.page];
+        if (!page || !String(f.text).trim()) continue;
+        const { width, height } = page.getSize();
+        const size = f.size || 12;
+        const x = f.xPct * width;
+        const y = height - f.yPct * height - size; // canvas y is top-down; PDF y is bottom-up
+        page.drawText(String(f.text), { x, y, size, font, color: rgb(0.05, 0.05, 0.05) });
+      }
+      const bytes = await pdf.save();
+      onExport(name || "filled.pdf", bytesToDataUrl(bytes, "application/pdf"));
+      reset(); onClose();
+    } catch (e) { setErr("Couldn't build the filled PDF."); }
+    setBusy(false);
+  };
+
+  return (
+    <Sheet open={open} onClose={() => { reset(); onClose(); }} title="Fill a PDF form" tall>
+      {!pages ? (
+        <div>
+          <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 12 }}>
+            Upload any PDF — a carrier form, a permit application, a terms sheet — then tap to place
+            text and checkmarks on it. Export a real filled PDF that attaches straight to the contract.
+          </div>
+          <label style={{
+            display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer",
+            border: `1px solid ${S.line}`, borderRadius: 10, padding: "10px 16px", fontWeight: 600, color: S.ink,
+          }}>
+            <Upload size={15} /> {busy ? "Opening…" : "Choose PDF"}
+            <input type="file" accept="application/pdf" style={{ display: "none" }}
+              onChange={(e) => { load(e.target.files && e.target.files[0]); e.target.value = ""; }} />
+          </label>
+          {err && <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 10 }}>{err}</div>}
+        </div>
+      ) : (
+        <div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontSize: 12, color: S.sub, fontWeight: 700 }}>Tap the page to add:</span>
+            <button type="button" onClick={() => setMode("text")} style={pillStyle(mode === "text")}>Text</button>
+            <button type="button" onClick={() => setMode("check")} style={pillStyle(mode === "check")}>✓ Check</button>
+            <span style={{ marginLeft: "auto", fontSize: 12, color: S.sub }}>{fields.length} field{fields.length === 1 ? "" : "s"}</span>
+          </div>
+          <div style={{ maxHeight: "52vh", overflowY: "auto", background: S.soft, borderRadius: 10, padding: 8 }}>
+            {pages.map((pg, i) => (
+              <div key={i} onClick={(e) => addField(i, e)} style={{
+                position: "relative", margin: "0 auto 12px", width: "100%", maxWidth: pg.w,
+                cursor: "crosshair", boxShadow: "0 1px 6px rgba(0,0,0,.12)",
+              }}>
+                <img src={pg.dataUrl} alt={`Page ${i + 1}`} style={{ width: "100%", display: "block", borderRadius: 6 }} draggable={false} />
+                {fields.filter((f) => f.page === i).map((f) => (
+                  <div key={f.id} onClick={(e) => e.stopPropagation()} style={{
+                    position: "absolute", left: `${f.xPct * 100}%`, top: `${f.yPct * 100}%`,
+                    transform: "translateY(-2px)", display: "flex", alignItems: "center", gap: 2,
+                  }}>
+                    <input value={f.text} onChange={(e) => setField(f.id, { text: e.target.value })}
+                      placeholder={f.type === "check" ? "X" : "text"} autoFocus
+                      style={{
+                        font: "600 13px sans-serif", color: "#111", background: "rgba(255,255,120,.55)",
+                        border: "1px solid #C9A400", borderRadius: 3, padding: "1px 3px",
+                        width: f.type === "check" ? 26 : Math.max(46, (f.text.length + 2) * 8),
+                      }} />
+                    <button type="button" onClick={() => delField(f.id)} title="Remove"
+                      style={{ border: "none", background: "rgba(180,35,24,.9)", color: "#fff", borderRadius: 3, cursor: "pointer", fontSize: 10, lineHeight: 1, padding: "2px 4px" }}>×</button>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+          {err && <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 10 }}>{err}</div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={reset}>Start over</Btn>
+            <Btn style={{ flex: 2 }} onClick={exportPdf} disabled={busy || !fields.some((f) => String(f.text).trim())}>
+              {busy ? "Building…" : "Export filled PDF"}
+            </Btn>
+          </div>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
 function MeasureImport({ onApply, toast }) {
   const [busy, setBusy] = useState(false);
   const [found, setFound] = useState(null);
@@ -13072,12 +13255,20 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
                     </div>
                   )}
                   {sec === "notes" && (
-                    <textarea style={{ ...inputStyle, minHeight: 60, marginTop: 8, resize: "vertical", fontFamily: "inherit" }} value={doc.notes} disabled={locked}
-                      onChange={(e) => setDoc({ notes: e.target.value })} placeholder="Color selections, access notes, exclusions…" />
+                    <div style={{ marginTop: 8 }}>
+                      <TemplateBar label="Notes" list={docTemplates.notes} setList={setDocTpl("notes")} value={doc.notes} locked={locked}
+                        onApply={(body) => setDoc({ notes: appendText(doc.notes, body) })} />
+                      <textarea style={{ ...inputStyle, minHeight: 60, resize: "vertical", fontFamily: "inherit" }} value={doc.notes} disabled={locked}
+                        onChange={(e) => setDoc({ notes: e.target.value })} placeholder="Color selections, access notes, exclusions…" />
+                    </div>
                   )}
                   {sec === "terms" && (
-                    <textarea style={{ ...inputStyle, minHeight: 90, marginTop: 8, resize: "vertical", fontFamily: "inherit" }} value={doc.terms} disabled={locked}
-                      onChange={(e) => setDoc({ terms: e.target.value })} placeholder="Payment terms, warranty, change orders…" />
+                    <div style={{ marginTop: 8 }}>
+                      <TemplateBar label="Terms" list={docTemplates.terms} setList={setDocTpl("terms")} value={doc.terms} locked={locked}
+                        onApply={(body) => setDoc({ terms: appendText(doc.terms, body) })} />
+                      <textarea style={{ ...inputStyle, minHeight: 90, resize: "vertical", fontFamily: "inherit" }} value={doc.terms} disabled={locked}
+                        onChange={(e) => setDoc({ terms: e.target.value })} placeholder="Payment terms, warranty, change orders…" />
+                    </div>
                   )}
                   {blocks[sec] && blocks[sec].type === "text" && (
                     <div style={{ marginTop: 8 }}>
@@ -13198,7 +13389,58 @@ function ProposalPreview({ job, brand, est, doc, total }) {
   );
 }
 
-function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {}, priceList = [] }) {
+/* A compact template control for a long-form text field. Shows the saved
+   templates for one kind (notes / terms / scope) as insertable chips, and a
+   "Save current" affordance with inline naming. onApply receives the chosen
+   body; the caller decides whether to replace or append. */
+function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState("");
+  const save = () => {
+    const body = String(value || "").trim();
+    const nm = name.trim();
+    if (!body || !nm) return;
+    setList([...list.filter((t) => t.name.toLowerCase() !== nm.toLowerCase()), { id: uid("tpl"), name: nm, body }]);
+    setName(""); setNaming(false);
+  };
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 8 }}>
+      <span style={{ fontSize: 11.5, color: S.sub, fontWeight: 700 }}>{label} templates:</span>
+      {list.length === 0 && !naming && <span style={{ fontSize: 12, color: S.sub }}>none saved</span>}
+      {list.map((t) => (
+        <span key={t.id} style={{ display: "inline-flex", alignItems: "center", border: `1px solid ${S.line}`, borderRadius: 999, overflow: "hidden" }}>
+          <button type="button" onClick={() => onApply(t.body)} disabled={locked} style={{
+            border: "none", background: "#fff", color: T.accent, fontSize: 12, fontWeight: 700,
+            padding: "5px 10px", cursor: locked ? "not-allowed" : "pointer", fontFamily: "inherit",
+          }}>{t.name}</button>
+          {!locked && (
+            <button type="button" onClick={() => setList(list.filter((x) => x.id !== t.id))} title="Delete template" style={{
+              border: "none", borderLeft: `1px solid ${S.line}`, background: "#fff", color: "#B42318",
+              padding: "5px 8px", cursor: "pointer", fontSize: 12, lineHeight: 1,
+            }}>×</button>
+          )}
+        </span>
+      ))}
+      {!locked && (naming ? (
+        <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+          <input autoFocus style={{ ...inputStyle, height: 30, width: 150, fontSize: 12.5 }} value={name}
+            placeholder="Template name" onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } if (e.key === "Escape") { setNaming(false); setName(""); } }} />
+          <Btn small onClick={save} disabled={!name.trim() || !String(value || "").trim()}>Save</Btn>
+          <button type="button" onClick={() => { setNaming(false); setName(""); }} style={{ border: "none", background: "none", color: S.sub, cursor: "pointer", fontSize: 12 }}>Cancel</button>
+        </span>
+      ) : (
+        <button type="button" onClick={() => setNaming(true)} disabled={!String(value || "").trim()} style={{
+          border: `1px dashed ${S.line}`, background: "#fff", color: String(value || "").trim() ? T.accent : S.sub,
+          borderRadius: 999, padding: "5px 10px", fontSize: 12, fontWeight: 700,
+          cursor: String(value || "").trim() ? "pointer" : "not-allowed", fontFamily: "inherit",
+        }}>+ Save current</button>
+      ))}
+    </div>
+  );
+}
+
+function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {}, priceList = [], docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {} }) {
   /* job.estimate for any REAL job created before tiers/upgrades
      existed has neither field at all (undefined, not []) — this
      JSONB blob is exactly what was last saved, and mkEstimate()'s
@@ -13246,6 +13488,17 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
   const setUpgrade = (id, k, v) => recompute({ upgrades: est.upgrades.map((u) => (u.id === id ? { ...u, [k]: v } : u)) });
   const toggleUpgrade = (id, checked) => recompute({ upgrades: est.upgrades.map((u) => (u.id === id ? { ...u, selected: checked } : u)) });
   const removeUpgrade = (id) => recompute({ upgrades: est.upgrades.filter((u) => u.id !== id) });
+  /* Concealed conditions: pick which pre-agreed unit prices are associated
+     with this job, toggle them on/off, and add custom ones. Only toggled-on
+     rows print on the estimate/contract. */
+  const setConcealed = (id, k, v) => setEst({ concealed: est.concealed.map((x) => x.id === id ? { ...x, [k]: v } : x) });
+  const toggleConcealed = (id, on) => setConcealed(id, "on", on);
+  const addConcealed = () => setEst({ concealed: [...est.concealed, { id: uid("cc"), desc: "", unit: "per unit", price: 0, on: true, custom: true }] });
+  const removeConcealed = (id) => setEst({ concealed: est.concealed.filter((x) => x.id !== id) });
+  /* Notes/terms/scope templates: setter per kind, and an insert that appends
+     to any existing text rather than clobbering it. */
+  const setDocTpl = (kind) => (list) => setDocTemplates({ ...docTemplates, [kind]: list });
+  const appendText = (cur, body) => (cur && cur.trim()) ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
 
   const [adjMode, setAdjMode] = useState("margin");
   const [adjPct, setAdjPct] = useState("");
@@ -13408,6 +13661,8 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Scope of work</CardTitle>
+        <TemplateBar label="Scope" list={docTemplates.scope} setList={setDocTpl("scope")} value={est.scope} locked={locked}
+          onApply={(body) => setEst({ scope: appendText(est.scope, body) })} />
         <textarea style={{ ...inputStyle, minHeight: 110 }} disabled={locked} value={est.scope}
           onChange={(e) => setEst({ scope: e.target.value })}
           placeholder="Describe the work — tear-off, dry-in, install, flashings, cleanup…" />
@@ -13491,17 +13746,44 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
 
         <CardTitle>Concealed conditions — unit pricing</CardTitle>
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>
-          Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented.
+          Pre-agreed pricing for conditions found after tear-off. Check the ones that apply to
+          this roof and set the price — only the checked rows print on the estimate and contract.
+          Billed as change orders only when found and documented.
         </div>
-        {est.concealed.map((c) => (
-          <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
-            <div style={{ flex: 1, fontSize: 13, color: S.ink }}>{c.desc} <span style={{ color: S.sub }}>({c.unit})</span></div>
-            <span style={{ color: S.sub, fontSize: 13 }}>$</span>
-            <input style={{ ...inputStyle, width: 90, textAlign: "right" }} value={c.price} disabled={locked}
-              inputMode="decimal"
-              onChange={(e) => setEst({ concealed: est.concealed.map((x) => x.id === c.id ? { ...x, price: e.target.value } : x) })} />
-          </div>
-        ))}
+        {est.concealed.map((c) => {
+          const on = c.on !== false;
+          return (
+            <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+              <input type="checkbox" checked={on} disabled={locked} style={{ width: 18, height: 18, accentColor: T.accent, flexShrink: 0 }}
+                onChange={(e) => toggleConcealed(c.id, e.target.checked)} />
+              {c.custom ? (
+                <>
+                  <input style={{ ...inputStyle, flex: 1, opacity: on ? 1 : 0.55 }} value={c.desc} disabled={locked}
+                    placeholder="Condition (e.g. chimney flashing rebuild)"
+                    onChange={(e) => setConcealed(c.id, "desc", e.target.value)} />
+                  <input style={{ ...inputStyle, width: 92, fontSize: 12.5, opacity: on ? 1 : 0.55 }} value={c.unit} disabled={locked}
+                    placeholder="per unit" onChange={(e) => setConcealed(c.id, "unit", e.target.value)} />
+                </>
+              ) : (
+                <div style={{ flex: 1, fontSize: 13, color: S.ink, opacity: on ? 1 : 0.55 }}>{c.desc} <span style={{ color: S.sub }}>({c.unit})</span></div>
+              )}
+              <span style={{ color: S.sub, fontSize: 13 }}>$</span>
+              <input style={{ ...inputStyle, width: 82, textAlign: "right", opacity: on ? 1 : 0.55 }} value={c.price} disabled={locked}
+                inputMode="decimal"
+                onChange={(e) => setConcealed(c.id, "price", e.target.value)} />
+              {!locked && c.custom && (
+                <button onClick={() => removeConcealed(c.id)} style={{ border: "none", background: "none", cursor: "pointer" }}>
+                  <Trash2 size={15} color="#B42318" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {!locked && (
+          <Btn kind="soft" small style={{ marginTop: 6 }} onClick={addConcealed}>
+            <Plus size={14} /> Add custom condition
+          </Btn>
+        )}
       </Card>
 
       <Card style={{ marginTop: 12 }}>
@@ -13631,11 +13913,23 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
 }
 
 /* ---------- Contract ---------- */
-function TabContract({ job, brand, setBrand = () => {}, mut, toast }) {
+function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {} }) {
   const con = job.contract;
   const [sigFor, setSigFor] = useState(null); // "client" | "contractor"
+  const [fillerOpen, setFillerOpen] = useState(false);
   const locked = con.status === "Signed";
   const setCon = (patch) => mut((j) => ({ ...j, contract: { ...j.contract, ...patch } }));
+  const setDocTpl = (kind) => (list) => setDocTemplates({ ...docTemplates, [kind]: list });
+  const appendText = (cur, body) => (cur && cur.trim()) ? cur.replace(/\s*$/, "") + "\n\n" + body : body;
+  /* Upload T&C / addenda / filled-PDF forms onto the contract; they embed in
+     the printed and portal contract via contractDocHtml. */
+  const addAttachment = (file) => {
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => setCon({ attachments: [...(con.attachments || []), { id: uid("att"), name: file.name, dataUrl: String(r.result) }] });
+    r.readAsDataURL(file);
+  };
+  const removeAttachment = (id) => setCon({ attachments: (con.attachments || []).filter((a) => a.id !== id) });
   const estTotal = estimateTotal(job.estimate);
   const depositMode = con.depositMode || "pct";
   const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
@@ -13733,6 +14027,8 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast }) {
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Terms</CardTitle>
+        <TemplateBar label="Terms" list={docTemplates.terms} setList={setDocTpl("terms")} value={con.terms} locked={locked}
+          onApply={(body) => setCon({ terms: appendText(con.terms, body) })} />
         <textarea style={{ ...inputStyle, minHeight: 130, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.6 }}
           value={con.terms} disabled={locked} onChange={(e) => setCon({ terms: e.target.value })} />
         {!locked && (
@@ -13746,6 +14042,40 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast }) {
           </div>
         )}
       </Card>
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={<Chip tone="gray">{(con.attachments || []).length} on file</Chip>}>Attachments — T&amp;C, addenda, filled forms</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Upload a signed terms &amp; conditions PDF, an addendum, or a filled PDF form. Attachments
+          embed in the printed and portal contract. Use the PDF filler below to complete a blank form first.
+        </div>
+        {(con.attachments || []).map((a) => (
+          <div key={a.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
+            <FileText size={15} color={T.accent} style={{ flexShrink: 0 }} />
+            <a href={a.dataUrl} target="_blank" rel="noreferrer" style={{ flex: 1, minWidth: 0, fontSize: 13, color: S.ink, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</a>
+            {!locked && (
+              <button onClick={() => removeAttachment(a.id)} style={{ border: "none", background: "none", cursor: "pointer" }}>
+                <Trash2 size={15} color="#B42318" />
+              </button>
+            )}
+          </div>
+        ))}
+        {!locked && (
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            <label style={{
+              cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+              border: `1px solid ${S.line}`, borderRadius: 10, padding: "7px 12px",
+              fontSize: 13, fontWeight: 600, color: S.ink, background: "#fff",
+            }}>
+              <Upload size={14} /> Upload PDF
+              <input type="file" accept="application/pdf" style={{ display: "none" }}
+                onChange={(e) => { addAttachment(e.target.files && e.target.files[0]); e.target.value = ""; }} />
+            </label>
+            <Btn kind="soft" small onClick={() => setFillerOpen(true)}><PenLine size={14} /> Fill a PDF form</Btn>
+          </div>
+        )}
+      </Card>
+      <PdfFiller open={fillerOpen} onClose={() => setFillerOpen(false)}
+        onExport={(name, dataUrl) => { setCon({ attachments: [...(con.attachments || []), { id: uid("att"), name, dataUrl }] }); toast("Filled PDF attached to the contract"); }} />
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Signatures</CardTitle>
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
@@ -21492,6 +21822,10 @@ export default function SupremeCRM() {
   ]);
   const [appointments, setAppointments] = useState([]);
   const [estimateTemplates, setEstimateTemplates] = useState([]);
+  /* Saved reusable text for the three long-form fields — special notes,
+     terms & conditions, and scope of work. Each kind is a list of
+     { id, name, body }; a picker on each editor inserts one. */
+  const [docTemplates, setDocTemplates] = useState({ notes: [], terms: [], scope: [] });
   const [activity, setActivity] = useState([]);
   const [chatMsgs, setChatMsgs] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
@@ -21603,9 +21937,9 @@ export default function SupremeCRM() {
   };
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
-    announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates,
+    announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, docTemplates,
     priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate,
     features, security, jurisContacts, learnedJuris, version: 1,
   });
@@ -21617,6 +21951,7 @@ export default function SupremeCRM() {
     if (d.apptTypes) setApptTypes(d.apptTypes);
     if (d.templates) setTemplates(d.templates);
     if (d.estimateTemplates) setEstimateTemplates(d.estimateTemplates);
+    if (d.docTemplates) setDocTemplates({ notes: [], terms: [], scope: [], ...d.docTemplates });
     if (d.priceList) setPriceList(d.priceList);
     if (d.companyDocs) setCompanyDocs(d.companyDocs);
     if (d.crews) setCrews(d.crews);
@@ -21966,7 +22301,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} setBrand={setBrand}
           onLog={logAct} leadSources={leadSources} activity={activity} ccToken={ccToken}
           onDelete={isAdmin ? deleteJobs : null} openTab={jobOpenTab} features={features}
-          onOpenCodeLookup={openCodeLookup} priceList={priceList} />
+          onOpenCodeLookup={openCodeLookup} priceList={priceList}
+          docTemplates={docTemplates} setDocTemplates={setDocTemplates} />
       ) : nav === "home" ? (
         <>
           {liveDb() && jobs.length === 0 && (
