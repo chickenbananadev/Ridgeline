@@ -20401,6 +20401,58 @@ const HELP_ARTICLES = [
       ["warn", "If a subscription lapses the account goes read-only. Your data is never deleted — you can still see everything, you just cannot add to it until billing is current."],
     ],
   },
+  // ---------- Insurance & claims (new tools) ----------
+  {
+    id: "ins-assistant", cat: "Customers", title: "The Claim Assistant",
+    summary: "Ask a claim, code, or adjuster question and get cited answers.",
+    body: [
+      ["p", "More → Insurance & claims → Assistant. Type a question in plain words — 'adjuster only paid ACV', 'do I get drip edge', 'they applied an RPS' — and it answers from the app's own code library, glossary, claim playbook, carrier patterns and supplement templates."],
+      ["p", "Every answer shows its source so you can verify before you quote it to an adjuster. It never invents an answer; if nothing matches it tells you and suggests better search terms."],
+      ["tip", "It works offline and needs no setup — the knowledge is built in."],
+      ["warn", "It's guidance from the knowledge base, not legal advice. Confirm the cite and the policy language before filing."],
+    ],
+  },
+  {
+    id: "ins-code-lookup", cat: "Customers", title: "Code lookup by ZIP — any state",
+    summary: "Adopted code, permit notes and the building department for a job's ZIP.",
+    body: [
+      ["p", "More → Insurance & claims → Code lookup. Enter a job-site ZIP to pull the state's adopted building code and, where we have it on file, the county building department's contact."],
+      ["p", "Ohio, Kentucky and Illinois use Supreme's validated library. Every other state resolves to its adopted-code family (IRC-based, or a state-specific code) with a 'verify locally' note — a correct starting point, but confirm the edition and the local department before you cite it."],
+    ],
+  },
+  {
+    id: "ins-date-of-loss", cat: "Customers", title: "Storm history & date of loss",
+    summary: "Pull wind and hail history for the address to set the date of loss.",
+    body: [
+      ["p", "On an insurance job, open Insurance claim → Storm history. Pick a window and it lists the notable damaging-wind, hail and heavy-rain days for the property from the weather record."],
+      ["p", "Tap 'Use' on a day to set it as the date of loss, and 'NOAA' to open the official Storm Prediction Center report for that day to attach as corroboration."],
+      ["tip", "Wind gusts and rain come from reanalysis data; hail is inferred from thunderstorm-with-hail codes. Always confirm against the official NOAA report before filing."],
+    ],
+  },
+  {
+    id: "ins-depreciation", cat: "Money", title: "Chasing recoverable depreciation",
+    summary: "Track the withheld depreciation to release so it doesn't get left on the table.",
+    body: [
+      ["p", "On an RCV claim the carrier withholds depreciation until the work is done and invoiced. In Insurance claim → Settlement, the Recoverable depreciation card tracks it Held → Requested → Released with dates."],
+      ["p", "The home dashboard totals the recoverable depreciation still outstanding across your claims so nothing slips — it's the single most common piece of unclaimed money on a roof."],
+    ],
+  },
+  {
+    id: "jobs-bulk", cat: "Jobs & pipeline", title: "Search and bulk actions",
+    summary: "Find any job fast and move many at once.",
+    body: [
+      ["p", "On the Jobs board, the search box matches name, address, phone, email, claim number and ZIP — not just the name."],
+      ["p", "Tap Select to turn the list into checkboxes. Choose several jobs, then move them all to a stage, assign them to a rep, or export them to CSV from the bar at the top."],
+    ],
+  },
+  {
+    id: "jobs-property", cat: "Jobs & pipeline", title: "Property records (year built & sq ft)",
+    summary: "Pull the home's year built and square footage.",
+    body: [
+      ["p", "On a job's Site location card, the Property record section holds year built, square footage and stories. 'County records' opens the assessor page for the address so you can read and enter them — free, anywhere in the US."],
+      ["p", "If a property-data key is connected (More → Integrations), 'Auto-fill from records' fills them for you. Year built also suggests a starting roof age on the inspection."],
+    ],
+  },
 ];
 
 const HELP_CATS = ["Getting started", "Jobs & pipeline", "Estimating & documents", "Money",
