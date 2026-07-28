@@ -2777,6 +2777,38 @@ async function geoAutocomplete(text, signal) {
     return [];
   }
 }
+var PROPERTY_PROVIDER = {
+  name: "rentcast",
+  apiKey: typeof window !== "undefined" && window.__PROPERTY_KEY__ || "",
+  base: "https://api.rentcast.io/v1/properties"
+};
+var propertyReady = () => !!PROPERTY_PROVIDER.apiKey;
+var countyRecordsLink = (address) => `https://www.google.com/search?q=${encodeURIComponent(`${address} property record assessor parcel year built square feet`)}`;
+var PROPERTY_CACHE = /* @__PURE__ */ new Map();
+async function fetchPropertyRecord(address) {
+  if (!propertyReady() || !address) return null;
+  const key = address.trim().toLowerCase();
+  if (PROPERTY_CACHE.has(key)) return PROPERTY_CACHE.get(key);
+  try {
+    const res = await fetch(
+      `${PROPERTY_PROVIDER.base}?address=${encodeURIComponent(address)}`,
+      { headers: { "X-Api-Key": PROPERTY_PROVIDER.apiKey, Accept: "application/json" } }
+    );
+    if (!res.ok) throw new Error("property");
+    const data = await res.json();
+    const r = Array.isArray(data) ? data[0] : data;
+    const out = r ? {
+      yearBuilt: r.yearBuilt || null,
+      squareFeet: r.squareFootage || r.squareFeet || null,
+      stories: r.stories || r.features && r.features.floorCount || null,
+      lotSize: r.lotSize || null
+    } : null;
+    PROPERTY_CACHE.set(key, out);
+    return out;
+  } catch (e) {
+    return null;
+  }
+}
 async function geoReverse(lat, lng) {
   if (!geoReady() || lat == null || lng == null) return null;
   const url = `${GEO_PROVIDER.base}/reverse?lat=${lat}&lon=${lng}&format=json&apiKey=${GEO_PROVIDER.apiKey}`;
@@ -8813,6 +8845,7 @@ function TabOverview({ job, juris, mut, toast: toast2, reviewSettings, brand: br
         ] }) })
       ] })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PropertyRecordCard, { job, mut, toast: toast2 }),
     juris && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { right: juris.precision === "verified" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Verified" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "State-level" }), children: [
         "Jurisdiction \u2014 ",
@@ -11115,6 +11148,54 @@ function WeatherNow({ lat, lng, zip, style }) {
     wx.windMph >= 15 ? ` \xB7 ${wx.windMph} mph wind` : ""
   ] });
 }
+function PropertyRecordCard({ job, mut, toast: toast2 }) {
+  const p = job.property || {};
+  const [loading, setLoading] = (0, import_react.useState)(false);
+  const setP = (k, v) => mut((j) => ({ ...j, property: { ...j.property || {}, [k]: v } }));
+  const lookup = async () => {
+    if (!propertyReady()) {
+      try {
+        window.open(countyRecordsLink(job.address), "_blank");
+      } catch (e) {
+      }
+      return;
+    }
+    setLoading(true);
+    const rec = await fetchPropertyRecord(job.address);
+    setLoading(false);
+    if (!rec || !rec.yearBuilt && !rec.squareFeet) {
+      toast2 && toast2("No record found \u2014 try the county-records link");
+      return;
+    }
+    mut((j) => ({ ...j, property: {
+      ...j.property || {},
+      yearBuilt: rec.yearBuilt || j.property?.yearBuilt || null,
+      squareFeet: rec.squareFeet || j.property?.squareFeet || null,
+      stories: rec.stories || j.property?.stories || null
+    } }));
+    toast2 && toast2("Property record filled");
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "County records" }), children: "Property record" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Year built", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "numeric", value: p.yearBuilt || "", placeholder: "\u2014", onChange: (e) => setP("yearBuilt", e.target.value) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Sq ft", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "numeric", value: p.squareFeet || "", placeholder: "\u2014", onChange: (e) => setP("squareFeet", e.target.value) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Stories", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "numeric", value: p.stories || "", placeholder: "\u2014", onChange: (e) => setP("stories", e.target.value) }) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 2 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: lookup, disabled: loading || !job.address, style: { flex: 1 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Search, { size: 13 }),
+        " ",
+        loading ? "Looking\u2026" : propertyReady() ? "Auto-fill from records" : "Look up"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: countyRecordsLink(job.address), target: "_blank", rel: "noreferrer", style: { flex: 1, textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { width: "100%" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ExternalLink, { size: 13 }),
+        " County records"
+      ] }) })
+    ] }),
+    !propertyReady() && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: "Free: the county-records link opens the assessor page for this address \u2014 read the year built & sq ft and type them above. Add a property-data API key (More \u2192 Integrations) to auto-fill." })
+  ] });
+}
 var STORM_CACHE = /* @__PURE__ */ new Map();
 async function fetchStormHistory(lat, lng, start, end) {
   const key = `${weatherKey(lat, lng)}:${start}:${end}`;
@@ -13001,7 +13082,22 @@ function TabChecklist({ job, mut, toast: toast2 }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Structure & history" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Structure type", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Single Family", "Multi-Family", "Detached Garage", "Commercial"], value: c.structure, onPick: set("structure") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Approximate roof age (years)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: c.roofAge, onChange: (e) => set("roofAge")(e.target.value) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Approximate roof age (years)", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: c.roofAge, onChange: (e) => set("roofAge")(e.target.value) }),
+        (() => {
+          const yb = num(job.property?.yearBuilt);
+          if (!yb || c.roofAge) return null;
+          const maxAge = (/* @__PURE__ */ new Date()).getFullYear() - yb;
+          if (maxAge <= 0 || maxAge > 200) return null;
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => set("roofAge")(String(maxAge)), style: { ...linkBtn, marginTop: 6, fontSize: 12 }, children: [
+            "Home built ",
+            yb,
+            " \u2014 original roof would be ~",
+            maxAge,
+            " yr. Use as a starting point?"
+          ] });
+        })()
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Inspection method", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"], value: c.method, onPick: set("method") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Layers", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ["1 Layer", "2 Layers", "3+ Layers"], value: c.layers, onPick: set("layers") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Roof covering", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ROOF_COVERING_OPTIONS, value: c.roofType, onPick: set("roofType") }) }),
@@ -21033,6 +21129,19 @@ var SETUP_ITEMS = [
     doneByDefault: true
   },
   {
+    id: "property",
+    label: "Property records (year built / sq ft)",
+    secret: false,
+    unlocks: "Auto-fill year built & square footage on a job. Without a key, the free county-records link still works.",
+    where: "Vercel \u2192 Environment Variables",
+    keyName: "VITE_PROPERTY_KEY",
+    steps: [
+      "Create a free RentCast account at rentcast.io (free tier ~50 lookups/mo).",
+      "Copy your API key from the RentCast dashboard.",
+      "Add it in Vercel as VITE_PROPERTY_KEY and redeploy."
+    ]
+  },
+  {
     id: "supabase",
     label: "Database (Supabase)",
     secret: false,
@@ -22978,7 +23087,10 @@ function SupremeCRM() {
         zip: existingPropertyJob?.property?.zip || f.zip.trim(),
         lat: existingPropertyJob?.property?.lat ?? f.lat ?? null,
         lng: existingPropertyJob?.property?.lng ?? f.lng ?? null,
-        use: existingPropertyJob?.property?.use || f.propertyUse || ""
+        use: existingPropertyJob?.property?.use || f.propertyUse || "",
+        yearBuilt: existingPropertyJob?.property?.yearBuilt || null,
+        squareFeet: existingPropertyJob?.property?.squareFeet || null,
+        stories: existingPropertyJob?.property?.stories || null
       },
       intake,
       address,

@@ -7,6 +7,7 @@ import App from "../ridgeline.jsx";
    Keeping import.meta out of ridgeline.jsx lets that same file run in
    preview sandboxes that don't evaluate it as an ES module. */
 window.__GEOAPIFY_KEY__ = import.meta.env.VITE_GEOAPIFY_KEY || "";
+window.__PROPERTY_KEY__ = import.meta.env.VITE_PROPERTY_KEY || "";
 
 const url = import.meta.env.VITE_SUPABASE_URL;
 const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;

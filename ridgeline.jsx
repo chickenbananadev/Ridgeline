@@ -2087,6 +2087,41 @@ async function geoAutocomplete(text, signal) {
   } catch { return []; }
 }
 
+/* Property records (year built, square footage) — a keyed provider (e.g.
+   RentCast's free tier) auto-fills the fields; without a key the free
+   county-records deep-link still works nationwide. Mirrors GEO_PROVIDER. */
+const PROPERTY_PROVIDER = {
+  name: "rentcast",
+  apiKey: (typeof window !== "undefined" && window.__PROPERTY_KEY__) || "",
+  base: "https://api.rentcast.io/v1/properties",
+};
+const propertyReady = () => !!PROPERTY_PROVIDER.apiKey;
+/* Free, keyless: a scoped web search that lands on the county assessor /
+   parcel record for the address. Works anywhere in the US. */
+const countyRecordsLink = (address) =>
+  `https://www.google.com/search?q=${encodeURIComponent(`${address} property record assessor parcel year built square feet`)}`;
+const PROPERTY_CACHE = new Map();
+async function fetchPropertyRecord(address) {
+  if (!propertyReady() || !address) return null;
+  const key = address.trim().toLowerCase();
+  if (PROPERTY_CACHE.has(key)) return PROPERTY_CACHE.get(key);
+  try {
+    const res = await fetch(`${PROPERTY_PROVIDER.base}?address=${encodeURIComponent(address)}`,
+      { headers: { "X-Api-Key": PROPERTY_PROVIDER.apiKey, Accept: "application/json" } });
+    if (!res.ok) throw new Error("property");
+    const data = await res.json();
+    const r = Array.isArray(data) ? data[0] : data;
+    const out = r ? {
+      yearBuilt: r.yearBuilt || null,
+      squareFeet: r.squareFootage || r.squareFeet || null,
+      stories: r.stories || (r.features && r.features.floorCount) || null,
+      lotSize: r.lotSize || null,
+    } : null;
+    PROPERTY_CACHE.set(key, out);
+    return out;
+  } catch (e) { return null; }
+}
+
 /* Coordinates -> street address. Used to stamp photos with a real address
    alongside the GPS fix. */
 async function geoReverse(lat, lng) {
@@ -7363,6 +7398,8 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
         </div>
       </Card>
 
+      <PropertyRecordCard job={job} mut={mut} toast={toast} />
+
       {juris && (
         <Card style={{ marginTop: 12 }}>
           <CardTitle right={juris.precision === "verified"
@@ -9754,6 +9791,51 @@ function WeatherNow({ lat, lng, zip, style }) {
   );
 }
 
+/* Property record — year built / square footage / stories. Editable fields
+   plus a free county-records deep-link, and one-tap auto-fill when a
+   property-data API key is configured. Lives on the job's Site-location card. */
+function PropertyRecordCard({ job, mut, toast }) {
+  const p = job.property || {};
+  const [loading, setLoading] = useState(false);
+  const setP = (k, v) => mut((j) => ({ ...j, property: { ...(j.property || {}), [k]: v } }));
+  const lookup = async () => {
+    if (!propertyReady()) { try { window.open(countyRecordsLink(job.address), "_blank"); } catch (e) { /* ignore */ } return; }
+    setLoading(true);
+    const rec = await fetchPropertyRecord(job.address);
+    setLoading(false);
+    if (!rec || (!rec.yearBuilt && !rec.squareFeet)) { toast && toast("No record found — try the county-records link"); return; }
+    mut((j) => ({ ...j, property: { ...(j.property || {}),
+      yearBuilt: rec.yearBuilt || j.property?.yearBuilt || null,
+      squareFeet: rec.squareFeet || j.property?.squareFeet || null,
+      stories: rec.stories || j.property?.stories || null } }));
+    toast && toast("Property record filled");
+  };
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle right={<Chip tone="gray">County records</Chip>}>Property record</CardTitle>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+        <Field label="Year built"><input style={inputStyle} inputMode="numeric" value={p.yearBuilt || ""} placeholder="—" onChange={(e) => setP("yearBuilt", e.target.value)} /></Field>
+        <Field label="Sq ft"><input style={inputStyle} inputMode="numeric" value={p.squareFeet || ""} placeholder="—" onChange={(e) => setP("squareFeet", e.target.value)} /></Field>
+        <Field label="Stories"><input style={inputStyle} inputMode="numeric" value={p.stories || ""} placeholder="—" onChange={(e) => setP("stories", e.target.value)} /></Field>
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
+        <Btn kind="soft" small onClick={lookup} disabled={loading || !job.address} style={{ flex: 1 }}>
+          <Search size={13} /> {loading ? "Looking…" : propertyReady() ? "Auto-fill from records" : "Look up"}
+        </Btn>
+        <a href={countyRecordsLink(job.address)} target="_blank" rel="noreferrer" style={{ flex: 1, textDecoration: "none" }}>
+          <Btn kind="ghost" small style={{ width: "100%" }}><ExternalLink size={13} /> County records</Btn>
+        </a>
+      </div>
+      {!propertyReady() && (
+        <div style={{ fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+          Free: the county-records link opens the assessor page for this address — read the year built &amp; sq ft and
+          type them above. Add a property-data API key (More → Integrations) to auto-fill.
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* Storm history for a date-of-loss lookup. Open-Meteo's Archive API (ERA5,
    keyless, CORS-open) gives daily max wind GUSTS and precipitation for any
    past date; hail is inferred from the WMO thunderstorm-with-hail codes
@@ -11696,7 +11778,20 @@ function TabChecklist({ job, mut, toast }) {
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Structure & history</CardTitle>
         <Field label="Structure type"><PillGroup options={["Single Family", "Multi-Family", "Detached Garage", "Commercial"]} value={c.structure} onPick={set("structure")} /></Field>
-        <Field label="Approximate roof age (years)"><input style={inputStyle} value={c.roofAge} onChange={(e) => set("roofAge")(e.target.value)} /></Field>
+        <Field label="Approximate roof age (years)">
+          <input style={inputStyle} value={c.roofAge} onChange={(e) => set("roofAge")(e.target.value)} />
+          {(() => {
+            const yb = num(job.property?.yearBuilt);
+            if (!yb || c.roofAge) return null;
+            const maxAge = new Date().getFullYear() - yb;
+            if (maxAge <= 0 || maxAge > 200) return null;
+            return (
+              <button onClick={() => set("roofAge")(String(maxAge))} style={{ ...linkBtn, marginTop: 6, fontSize: 12 }}>
+                Home built {yb} — original roof would be ~{maxAge} yr. Use as a starting point?
+              </button>
+            );
+          })()}
+        </Field>
         <Field label="Inspection method"><PillGroup multi options={["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"]} value={c.method} onPick={set("method")} /></Field>
         <Field label="Layers"><PillGroup multi options={["1 Layer", "2 Layers", "3+ Layers"]} value={c.layers} onPick={set("layers")} /></Field>
         <Field label="Roof covering"><PillGroup multi options={ROOF_COVERING_OPTIONS} value={c.roofType} onPick={set("roofType")} /></Field>
@@ -19014,6 +19109,17 @@ const SETUP_ITEMS = [
     doneByDefault: true,
   },
   {
+    id: "property", label: "Property records (year built / sq ft)", secret: false,
+    unlocks: "Auto-fill year built & square footage on a job. Without a key, the free county-records link still works.",
+    where: "Vercel → Environment Variables",
+    keyName: "VITE_PROPERTY_KEY",
+    steps: [
+      "Create a free RentCast account at rentcast.io (free tier ~50 lookups/mo).",
+      "Copy your API key from the RentCast dashboard.",
+      "Add it in Vercel as VITE_PROPERTY_KEY and redeploy.",
+    ],
+  },
+  {
     id: "supabase", label: "Database (Supabase)", secret: false,
     unlocks: "Everything — jobs, portals, chat, activity.",
     where: "Vercel → Environment Variables",
@@ -20960,6 +21066,9 @@ export default function SupremeCRM() {
         zip: existingPropertyJob?.property?.zip || f.zip.trim(),
         lat: existingPropertyJob?.property?.lat ?? f.lat ?? null, lng: existingPropertyJob?.property?.lng ?? f.lng ?? null,
         use: existingPropertyJob?.property?.use || f.propertyUse || "",
+        yearBuilt: existingPropertyJob?.property?.yearBuilt || null,
+        squareFeet: existingPropertyJob?.property?.squareFeet || null,
+        stories: existingPropertyJob?.property?.stories || null,
       },
       intake,
       address,
