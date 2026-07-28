@@ -26,7 +26,7 @@ function check(name, cond) {
 /* ---- static: all four features present and shaped right ---- */
 check("supplementFindings exists", /function supplementFindings\(job\)/.test(src));
 check("supplement rules cite evidence", /IRC R905\.2\.8\.5/.test(src) && /IRC R905\.1\.2/.test(src));
-check("supplement check renders in estimate tab", /<SupplementCheck job=\{job\} \/>/.test(src));
+check("supplement check renders in estimate tab", /<SupplementCheck job=\{job\} mut=\{mut\} toast=\{toast\} locked=\{locked\} \/>/.test(src));
 check("empty estimate produces no findings", /if \(items\.length === 0\) return out;/.test(src));
 check("waste-factor rule exists", /Waste factor looks low/.test(src));
 
