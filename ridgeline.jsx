@@ -1624,11 +1624,83 @@ const seedJobs = [
    Production: point resolveJurisdiction() at a live code-data service
    (OneClickCode / county GIS) — the screen contract stays identical.
    ================================================================ */
+/* Nationwide ZIP-3 → state (USPS SCF ranges). Lets stateForZip resolve any
+   US address, not just the OH/KY/IL market. First match wins. */
 const ZIP_PREFIX_STATE = [
-  { lo: 430, hi: 459, state: "OH" },
-  { lo: 400, hi: 427, state: "KY" },
-  { lo: 600, hi: 629, state: "IL" },
+  { lo: 10, hi: 27, state: "MA" }, { lo: 28, hi: 29, state: "RI" }, { lo: 30, hi: 38, state: "NH" },
+  { lo: 39, hi: 49, state: "ME" }, { lo: 50, hi: 59, state: "VT" }, { lo: 60, hi: 69, state: "CT" },
+  { lo: 70, hi: 89, state: "NJ" }, { lo: 100, hi: 149, state: "NY" }, { lo: 150, hi: 196, state: "PA" },
+  { lo: 197, hi: 199, state: "DE" }, { lo: 200, hi: 205, state: "DC" }, { lo: 206, hi: 219, state: "MD" },
+  { lo: 220, hi: 246, state: "VA" }, { lo: 247, hi: 268, state: "WV" }, { lo: 270, hi: 289, state: "NC" },
+  { lo: 290, hi: 299, state: "SC" }, { lo: 300, hi: 319, state: "GA" }, { lo: 320, hi: 349, state: "FL" },
+  { lo: 350, hi: 369, state: "AL" }, { lo: 370, hi: 385, state: "TN" }, { lo: 386, hi: 397, state: "MS" },
+  { lo: 398, hi: 399, state: "GA" }, { lo: 400, hi: 427, state: "KY" }, { lo: 430, hi: 459, state: "OH" },
+  { lo: 460, hi: 479, state: "IN" }, { lo: 480, hi: 499, state: "MI" }, { lo: 500, hi: 528, state: "IA" },
+  { lo: 530, hi: 549, state: "WI" }, { lo: 550, hi: 567, state: "MN" }, { lo: 570, hi: 577, state: "SD" },
+  { lo: 580, hi: 588, state: "ND" }, { lo: 590, hi: 599, state: "MT" }, { lo: 600, hi: 629, state: "IL" },
+  { lo: 630, hi: 658, state: "MO" }, { lo: 660, hi: 679, state: "KS" }, { lo: 680, hi: 693, state: "NE" },
+  { lo: 700, hi: 714, state: "LA" }, { lo: 716, hi: 729, state: "AR" }, { lo: 730, hi: 749, state: "OK" },
+  { lo: 750, hi: 799, state: "TX" }, { lo: 800, hi: 816, state: "CO" }, { lo: 820, hi: 831, state: "WY" },
+  { lo: 832, hi: 838, state: "ID" }, { lo: 840, hi: 847, state: "UT" }, { lo: 850, hi: 865, state: "AZ" },
+  { lo: 870, hi: 884, state: "NM" }, { lo: 885, hi: 885, state: "TX" }, { lo: 889, hi: 898, state: "NV" },
+  { lo: 900, hi: 961, state: "CA" }, { lo: 967, hi: 968, state: "HI" }, { lo: 970, hi: 979, state: "OR" },
+  { lo: 980, hi: 994, state: "WA" }, { lo: 995, hi: 999, state: "AK" },
 ];
+/* All states + DC, for the supplement state picker. */
+const US_STATES = [
+  ["AL", "Alabama"], ["AK", "Alaska"], ["AZ", "Arizona"], ["AR", "Arkansas"], ["CA", "California"],
+  ["CO", "Colorado"], ["CT", "Connecticut"], ["DE", "Delaware"], ["DC", "District of Columbia"], ["FL", "Florida"],
+  ["GA", "Georgia"], ["HI", "Hawaii"], ["ID", "Idaho"], ["IL", "Illinois"], ["IN", "Indiana"], ["IA", "Iowa"],
+  ["KS", "Kansas"], ["KY", "Kentucky"], ["LA", "Louisiana"], ["ME", "Maine"], ["MD", "Maryland"], ["MA", "Massachusetts"],
+  ["MI", "Michigan"], ["MN", "Minnesota"], ["MS", "Mississippi"], ["MO", "Missouri"], ["MT", "Montana"], ["NE", "Nebraska"],
+  ["NV", "Nevada"], ["NH", "New Hampshire"], ["NJ", "New Jersey"], ["NM", "New Mexico"], ["NY", "New York"],
+  ["NC", "North Carolina"], ["ND", "North Dakota"], ["OH", "Ohio"], ["OK", "Oklahoma"], ["OR", "Oregon"], ["PA", "Pennsylvania"],
+  ["RI", "Rhode Island"], ["SC", "South Carolina"], ["SD", "South Dakota"], ["TN", "Tennessee"], ["TX", "Texas"],
+  ["UT", "Utah"], ["VT", "Vermont"], ["VA", "Virginia"], ["WA", "Washington"], ["WV", "West Virginia"], ["WI", "Wisconsin"], ["WY", "Wyoming"],
+];
+/* Adopted residential code family per state. Statewide IRC adoptions are the
+   norm; the notable exceptions (state-specific codes, home-rule/local
+   adoption) are called out. Editions and local amendments always need local
+   verification — hence verified:false everywhere except Ohio's curated set. */
+const STATE_CODE_ADOPTION = {
+  AL: { code: "Alabama Residential Code (IRC-based)" }, AK: { code: "IRC as adopted locally", local: true },
+  AZ: { code: "IRC as adopted by each city/county", local: true }, AR: { code: "Arkansas Residential Code (IRC-based)" },
+  CA: { code: "California Residential Code (Title 24, Part 2.5)" }, CO: { code: "IRC as adopted locally (no statewide code)", local: true },
+  CT: { code: "Connecticut State Building Code (IRC-based)" }, DE: { code: "IRC as adopted by county/municipality", local: true },
+  DC: { code: "DC Construction Codes (IRC-based)" }, FL: { code: "Florida Building Code — Residential" },
+  GA: { code: "Georgia State Minimum Residential Code (IRC-based)" }, HI: { code: "IRC as adopted by county", local: true },
+  ID: { code: "Idaho Residential Code (IRC-based)" }, IL: { code: "Locally adopted IRC (no statewide code)", local: true },
+  IN: { code: "Indiana Residential Code (IRC-based)" }, IA: { code: "Iowa State Building Code (IRC-based)" },
+  KS: { code: "IRC as adopted locally", local: true }, KY: { code: "Kentucky Residential Code (KRC)" },
+  LA: { code: "Louisiana State Uniform Construction Code (IRC-based)" }, ME: { code: "Maine Uniform Building & Energy Code (IRC-based)" },
+  MD: { code: "Maryland Building Performance Standards (IRC-based)" }, MA: { code: "Massachusetts Residential Code (IRC-based, amended)" },
+  MI: { code: "Michigan Residential Code (IRC-based)" }, MN: { code: "Minnesota Residential Code (IRC-based)" },
+  MS: { code: "IRC as adopted locally", local: true }, MO: { code: "IRC as adopted locally (no statewide code)", local: true },
+  MT: { code: "Montana Residential Code (IRC-based)" }, NE: { code: "Nebraska adopts the IRC (local enforcement)" },
+  NV: { code: "IRC as adopted by county/city", local: true }, NH: { code: "New Hampshire adopts the IRC" },
+  NJ: { code: "NJ Uniform Construction Code (IRC-based)" }, NM: { code: "New Mexico Residential Code (IRC-based)" },
+  NY: { code: "NYS Uniform Code — Residential (IRC-based)" }, NC: { code: "North Carolina Residential Code (IRC-based)" },
+  ND: { code: "North Dakota adopts the IRC" }, OH: { code: "Residential Code of Ohio (RCO)" },
+  OK: { code: "Oklahoma adopts the IRC" }, OR: { code: "Oregon Residential Specialty Code (IRC-based)" },
+  PA: { code: "PA Uniform Construction Code (IRC-based)" }, RI: { code: "Rhode Island State Building Code (IRC-based)" },
+  SC: { code: "South Carolina Residential Code (IRC-based)" }, SD: { code: "IRC as adopted locally", local: true },
+  TN: { code: "Tennessee Residential Code (IRC-based)" }, TX: { code: "IRC as adopted by municipality (no statewide residential code)", local: true },
+  UT: { code: "Utah Residential Code (IRC-based)" }, VT: { code: "Vermont Residential Building Energy Standards + IRC" },
+  VA: { code: "Virginia Residential Code (IRC-based)" }, WA: { code: "Washington State Residential Code (IRC-based)" },
+  WV: { code: "West Virginia adopts the IRC" }, WI: { code: "Wisconsin Uniform Dwelling Code (IRC-based)" },
+  WY: { code: "IRC as adopted locally", local: true },
+};
+/* Plain IRC cites — the base every state's residential code derives from.
+   Used when a state has no curated CODE_PROVISIONS entry. */
+const IRC_BASE = {
+  iceBarrier: { cite: "IRC R905.1.2", note: "Ice barrier from the eave edge to at least 24 in. inside the exterior wall line, measured along the slope." },
+  tearOff: { cite: "IRC R908.3", note: "Recover prohibited over two or more layers or water-soaked / deteriorated covering — full tear-off required." },
+  dripEdge: { cite: "IRC R905.2.8.5", note: "Drip edge required at eaves and rakes on shingle roofs." },
+  underlayment: { cite: "IRC R905.1.1", note: "Double-layer underlayment (or self-adhering membrane) on slopes 2:12 up to 4:12." },
+  ventilation: { cite: "IRC R806.2", note: "Default 1/150 net free ventilating area; the 1/300 exception applies only with a balanced system." },
+  fastening: { cite: "IRC R905.2.5", note: "4 nails per shingle minimum; 6-nail where the manufacturer or wind zone requires." },
+  decking: { cite: "IRC R803 / R908.3", note: "Sheathing must be structurally sound; recover over unsound decking prohibited." },
+};
 const STATE_DEFAULTS = {
   OH: {
     codeName: "Residential Code of Ohio (RCO)", codeEdition: "Current RCO — confirm edition",
@@ -2347,7 +2419,13 @@ function downloadCsv(name, rows) {
 }
 function jurisdictionForZip(zip) { return resolveJurisdiction(zip); }
 function citeFor(state, topic) {
-  return (CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic]) || CODE_PROVISIONS.OH[topic];
+  if (CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic]) return CODE_PROVISIONS[state][topic];
+  /* Any state without a curated set gets the IRC base cite, labeled with the
+     state's adopted code so the rep knows where to verify the exact number. */
+  const base = IRC_BASE[topic] || CODE_PROVISIONS.OH[topic];
+  const adopt = STATE_CODE_ADOPTION[state];
+  const label = adopt ? adopt.code : "the locally adopted IRC";
+  return { cite: `${base.cite} — per ${label}; verify edition${adopt && adopt.local ? " & local adoption" : ""}`, note: base.note, verified: false };
 }
 
 /* Material list generator — quantities from measurements + waste. */
@@ -15317,28 +15395,33 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
         <div style={{ marginTop: 14 }}>
           <Card pad={14}>
             <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>
-              One template library, three jurisdictions — pick the job's state and every template renders with the
+              One template library, every state — pick the job's state and every template renders with the
               right code citation.
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {["OH", "KY", "IL"].map((st) => (
-                <button key={st} onClick={() => setTplState(st)} style={{
-                  flex: 1, border: `1.5px solid ${tplState === st ? T.accent : S.line}`,
-                  background: tplState === st ? T.accentSoft : "#fff",
-                  color: tplState === st ? T.accent : S.ink,
-                  borderRadius: 10, padding: "10px 0", fontWeight: 800, cursor: "pointer",
-                }}>{st}</button>
-              ))}
-            </div>
-            {tplState !== "OH" && (
-              <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "flex-start" }}>
-                <AlertTriangle size={15} color="#92600A" style={{ flexShrink: 0, marginTop: 1 }} />
-                <div style={{ fontSize: 12, color: "#92600A" }}>
-                  {tplState === "KY" ? "Kentucky cites are IRC-based — verify the current KRC edition before sending."
-                    : "Illinois has no statewide code — verify the municipality's adopted edition and amendments before sending."}
-                </div>
-              </div>
-            )}
+            <select style={selStyle} value={tplState} onChange={(e) => setTplState(e.target.value)}>
+              {US_STATES.map(([ab, name]) => <option key={ab} value={ab}>{name}</option>)}
+            </select>
+            {(() => {
+              const adopt = STATE_CODE_ADOPTION[tplState];
+              const verified = tplState === "OH";
+              return (
+                <>
+                  {adopt && <div style={{ fontSize: 12.5, color: S.ink, marginTop: 10, lineHeight: 1.5 }}><b>Adopted code:</b> {adopt.code}</div>}
+                  {!verified && (
+                    <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "flex-start" }}>
+                      <AlertTriangle size={15} color="#92600A" style={{ flexShrink: 0, marginTop: 1 }} />
+                      <div style={{ fontSize: 12, color: "#92600A" }}>
+                        {tplState === "KY" ? "Kentucky cites are IRC-based — verify the current KRC edition before sending."
+                          : `These cites are IRC-based — verify the current edition${adopt && adopt.local ? " and the local adopting ordinance" : ""} before sending.`}
+                      </div>
+                    </div>
+                  )}
+                  {verified && (
+                    <div style={{ fontSize: 12, color: "#177245", marginTop: 10 }}>Ohio cites are from Supreme's validated library.</div>
+                  )}
+                </>
+              );
+            })()}
           </Card>
           {SUPPLEMENT_TEMPLATES.map((t) => {
             const prov = citeFor(tplState, t.topic);
