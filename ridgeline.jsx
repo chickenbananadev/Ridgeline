@@ -1366,6 +1366,21 @@ function applyEstimateSelection(est) {
   }));
   return [...base, ...upgradeItems];
 }
+/* Price one generated estimate line from the price list, converting the
+   catalog's per-unit price into the line's unit with `factor` (the coverage
+   constants: 3 bundles per SQ of shingles, 25 LF of cap per bundle, etc.).
+   Returns null when nothing in the catalog matches, so the caller can leave
+   the price at 0 and flag it rather than inventing a number. */
+function catalogUnitPrice(priceList, keywords, factor) {
+  if (!Array.isArray(priceList) || !priceList.length) return null;
+  const hit = priceList.find((r) => {
+    const hay = `${r.item || ""} ${r.sku || ""} ${r.category || ""}`.toLowerCase();
+    return keywords.some((k) => hay.includes(k));
+  });
+  const base = hit ? num(hit.price) : 0;
+  if (!base) return null;
+  return Math.round(base * factor * 100) / 100;
+}
 function mkContract(over = {}) {
   return {
     number: "", price: 0, depositPct: 50, status: "Not started",
@@ -11619,22 +11634,34 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
   const m = job.measurements;
   const prefillFromMeasurements = () => {
     if (!num(m.squares)) { toast("Enter measurements first"); return; }
-    const sqW = (num(m.squares) * (1 + num(m.waste) / 100)).toFixed(1);
+    const sqW = num((num(m.squares) * (1 + num(m.waste) / 100)).toFixed(1));
+    /* Each line names how its unit relates to the catalog's: `factor` turns a
+       catalog per-unit price into the line's unit (shingles 3 bundles/SQ,
+       ridge cap 25 LF/bundle → ÷25, underlayment 10 SQ/roll → ÷10, etc.). */
+    const spec = [
+      { desc: `Tear-off & disposal — ${job.checklist.layers || "1 layer"}`, qty: num(m.squares), unit: "SQ", kw: ["tear-off", "tear off", "disposal", "dumpster"], factor: 1 },
+      { desc: "Ice & water shield — eaves & valleys", qty: Math.round(((num(m.eaves) + num(m.valleys)) * 3) / 100 * 10) / 10, unit: "SQ", kw: ["ice & water", "ice and water", "ice&water", "i&w"], factor: 1 / 2 },
+      { desc: "Synthetic underlayment — field", qty: num(m.squares), unit: "SQ", kw: ["underlayment", "synthetic", "felt"], factor: 1 / 10 },
+      { desc: "Drip edge — eaves & rakes", qty: num(m.eaves) + num(m.rakes), unit: "LF", kw: ["drip edge", "drip"], factor: 1 / 10 },
+      { desc: "Architectural shingles (incl. waste)", qty: sqW, unit: "SQ", kw: ["shingle", "laminate", "architectural"], factor: 3 },
+      { desc: "Hip & ridge cap", qty: num(m.ridges) + num(m.hips), unit: "LF", kw: ["ridge cap", "hip & ridge", "hip and ridge", "seal-a-ridge", "z-ridge"], factor: 1 / 25 },
+      { desc: "Ridge ventilation", qty: num(m.ridges), unit: "LF", kw: ["ridge vent", "ventilation", "cobra", "shinglevent"], factor: 1 / 4 },
+      { desc: "Pipe jacks at penetrations", qty: num(m.penetrations), unit: "EA", kw: ["pipe jack", "pipe boot", "boot", "flashing collar"], factor: 1 },
+    ];
+    let priced = 0;
+    const items = spec.map((s) => {
+      const p = catalogUnitPrice(priceList, s.kw, s.factor);
+      if (p != null) priced++;
+      return { id: uid("e"), desc: s.desc, qty: s.qty, unit: s.unit, price: p != null ? p : 0 };
+    });
     setEst({
       number: est.number || `EST-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
       date: est.date || new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
-      items: [
-        { id: uid("e"), desc: `Tear-off & disposal — ${job.checklist.layers || "1 layer"}`, qty: num(m.squares), unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Ice & water shield — eaves & valleys", qty: Math.round(((num(m.eaves) + num(m.valleys)) * 3) / 100 * 10) / 10, unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Synthetic underlayment — field", qty: num(m.squares), unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Drip edge — eaves & rakes", qty: num(m.eaves) + num(m.rakes), unit: "LF", price: 0 },
-        { id: uid("e"), desc: "Architectural shingles (incl. waste)", qty: num(sqW), unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Hip & ridge cap", qty: num(m.ridges) + num(m.hips), unit: "LF", price: 0 },
-        { id: uid("e"), desc: "Ridge ventilation", qty: num(m.ridges), unit: "LF", price: 0 },
-        { id: uid("e"), desc: "Pipe jacks at penetrations", qty: num(m.penetrations), unit: "EA", price: 0 },
-      ],
+      items,
     });
-    toast("Line items generated from measurements");
+    toast(priced
+      ? `Generated — priced ${priced} of ${spec.length} lines from your price list`
+      : "Line items generated — add prices or upload a price list");
   };
   return (
     <>

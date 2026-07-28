@@ -1786,6 +1786,16 @@ function applyEstimateSelection(est) {
   }));
   return [...base, ...upgradeItems];
 }
+function catalogUnitPrice(priceList, keywords, factor) {
+  if (!Array.isArray(priceList) || !priceList.length) return null;
+  const hit = priceList.find((r) => {
+    const hay = `${r.item || ""} ${r.sku || ""} ${r.category || ""}`.toLowerCase();
+    return keywords.some((k) => hay.includes(k));
+  });
+  const base = hit ? num(hit.price) : 0;
+  if (!base) return null;
+  return Math.round(base * factor * 100) / 100;
+}
 function mkContract(over = {}) {
   return {
     number: "",
@@ -12929,22 +12939,29 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
       toast2("Enter measurements first");
       return;
     }
-    const sqW = (num(m.squares) * (1 + num(m.waste) / 100)).toFixed(1);
+    const sqW = num((num(m.squares) * (1 + num(m.waste) / 100)).toFixed(1));
+    const spec = [
+      { desc: `Tear-off & disposal \u2014 ${job.checklist.layers || "1 layer"}`, qty: num(m.squares), unit: "SQ", kw: ["tear-off", "tear off", "disposal", "dumpster"], factor: 1 },
+      { desc: "Ice & water shield \u2014 eaves & valleys", qty: Math.round((num(m.eaves) + num(m.valleys)) * 3 / 100 * 10) / 10, unit: "SQ", kw: ["ice & water", "ice and water", "ice&water", "i&w"], factor: 1 / 2 },
+      { desc: "Synthetic underlayment \u2014 field", qty: num(m.squares), unit: "SQ", kw: ["underlayment", "synthetic", "felt"], factor: 1 / 10 },
+      { desc: "Drip edge \u2014 eaves & rakes", qty: num(m.eaves) + num(m.rakes), unit: "LF", kw: ["drip edge", "drip"], factor: 1 / 10 },
+      { desc: "Architectural shingles (incl. waste)", qty: sqW, unit: "SQ", kw: ["shingle", "laminate", "architectural"], factor: 3 },
+      { desc: "Hip & ridge cap", qty: num(m.ridges) + num(m.hips), unit: "LF", kw: ["ridge cap", "hip & ridge", "hip and ridge", "seal-a-ridge", "z-ridge"], factor: 1 / 25 },
+      { desc: "Ridge ventilation", qty: num(m.ridges), unit: "LF", kw: ["ridge vent", "ventilation", "cobra", "shinglevent"], factor: 1 / 4 },
+      { desc: "Pipe jacks at penetrations", qty: num(m.penetrations), unit: "EA", kw: ["pipe jack", "pipe boot", "boot", "flashing collar"], factor: 1 }
+    ];
+    let priced = 0;
+    const items = spec.map((s) => {
+      const p = catalogUnitPrice(priceList, s.kw, s.factor);
+      if (p != null) priced++;
+      return { id: uid("e"), desc: s.desc, qty: s.qty, unit: s.unit, price: p != null ? p : 0 };
+    });
     setEst({
       number: est.number || `EST-${(/* @__PURE__ */ new Date()).getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
       date: est.date || (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { month: "short", day: "numeric", year: "numeric" }),
-      items: [
-        { id: uid("e"), desc: `Tear-off & disposal \u2014 ${job.checklist.layers || "1 layer"}`, qty: num(m.squares), unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Ice & water shield \u2014 eaves & valleys", qty: Math.round((num(m.eaves) + num(m.valleys)) * 3 / 100 * 10) / 10, unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Synthetic underlayment \u2014 field", qty: num(m.squares), unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Drip edge \u2014 eaves & rakes", qty: num(m.eaves) + num(m.rakes), unit: "LF", price: 0 },
-        { id: uid("e"), desc: "Architectural shingles (incl. waste)", qty: num(sqW), unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Hip & ridge cap", qty: num(m.ridges) + num(m.hips), unit: "LF", price: 0 },
-        { id: uid("e"), desc: "Ridge ventilation", qty: num(m.ridges), unit: "LF", price: 0 },
-        { id: uid("e"), desc: "Pipe jacks at penetrations", qty: num(m.penetrations), unit: "EA", price: 0 }
-      ]
+      items
     });
-    toast2("Line items generated from measurements");
+    toast2(priced ? `Generated \u2014 priced ${priced} of ${spec.length} lines from your price list` : "Line items generated \u2014 add prices or upload a price list");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupplementCheck, { job }),
