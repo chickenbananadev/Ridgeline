@@ -3238,6 +3238,15 @@ function scrollToMktSection(id) {
 
 function Marketing({ onSignIn, onStartTrial }) {
   useMktFont();
+  const [faqOpen, setFaqOpen] = useState(null);
+  const FAQS = [
+    ["Can I bring my existing jobs in?", "Yes. Import your current pipeline from a CSV — the Roofr export columns map automatically, and anything unmatched lands in your first stage instead of getting dropped. No re-keying a season of work."],
+    ["Does it actually work on my phone in the field?", "It's built phone-first. Add it to your iOS home screen and it runs like an app — pipeline, dispatch, photos, e-signatures, call/text/directions on a job, all from the truck."],
+    ["Do you handle insurance restoration?", "Deeply. Track ACV, supplements, deductible and recoverable depreciation per job; a supplement checker cites the code behind every missed line for all 50 states; pull storm history for a date of loss; and chase depreciation to release."],
+    ["Am I locked into a contract?", "No. Every plan is month-to-month — the 7-day trial doesn't charge if you cancel before it ends, and you can cancel anytime after. No tiers to unlock; every account gets every feature."],
+    ["Is my data mine?", "Always. Export jobs and financials to CSV and QuickBooks whenever you want. Your customer list and history are yours to take with you."],
+    ["Can my whole crew have logins?", "Yes. Add seats as you grow, or go unlimited and stop counting logins. Roles keep money and settings visible only to who should see them."],
+  ];
   const STRIDE = [
     ["S", "Simplicity", "We turn complicated roofing workflows into clear, straightforward steps.", "stride-simplicity.jpg"],
     ["T", "Transparency", "Clear information, honest communication, and no hidden surprises.", "stride-transparency.jpg"],
@@ -3534,6 +3543,33 @@ function Marketing({ onSignIn, onStartTrial }) {
         </Reveal>
       </div>
 
+      {/* ---------- FAQ ---------- */}
+      <div id="faq" style={{ padding: "72px 20px", background: "#fff" }}>
+        <Reveal style={{ maxWidth: 760, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 32 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
+              Questions
+            </div>
+            <div style={{ fontFamily: MKT_DISPLAY_FONT, fontSize: 30, fontWeight: 700, color: MKT.ink, letterSpacing: -0.3 }}>Straight answers</div>
+          </div>
+          {FAQS.map(([q, a], i) => {
+            const on = faqOpen === i;
+            return (
+              <div key={i} style={{ borderTop: `1px solid ${MKT.line}`, ...(i === FAQS.length - 1 ? { borderBottom: `1px solid ${MKT.line}` } : {}) }}>
+                <button onClick={() => setFaqOpen(on ? null : i)} style={{
+                  width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
+                  border: "none", background: "none", cursor: "pointer", padding: "18px 4px", textAlign: "left", fontFamily: "inherit",
+                }}>
+                  <span style={{ fontSize: 16.5, fontWeight: 700, color: MKT.ink }}>{q}</span>
+                  <ChevronDown size={20} color={MKT.sub} style={{ flexShrink: 0, transform: on ? "none" : "rotate(-90deg)", transition: "transform .15s" }} />
+                </button>
+                {on && <div style={{ fontSize: 14.5, color: MKT.sub, lineHeight: 1.6, padding: "0 4px 20px" }}>{a}</div>}
+              </div>
+            );
+          })}
+        </Reveal>
+      </div>
+
       {/* ---------- Final CTA ---------- */}
       <div style={{ background: MKT.teal, padding: "56px 20px", textAlign: "center" }}>
         <Reveal y={16}>
@@ -3584,6 +3620,7 @@ function Marketing({ onSignIn, onStartTrial }) {
               <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: 0.8, color: "rgba(255,255,255,.4)", textTransform: "uppercase", marginBottom: 14 }}>Company</div>
               <button onClick={() => scrollToMktSection("values")} style={{ display: "block", border: "none", background: "none", cursor: "pointer", color: "rgba(255,255,255,.7)", fontSize: 13.5, padding: "6px 0", textAlign: "left", fontFamily: "inherit" }}>What we stand for</button>
               <button onClick={() => scrollToMktSection("pricing")} style={{ display: "block", border: "none", background: "none", cursor: "pointer", color: "rgba(255,255,255,.7)", fontSize: 13.5, padding: "6px 0", textAlign: "left", fontFamily: "inherit" }}>Pricing</button>
+              <button onClick={() => scrollToMktSection("faq")} style={{ display: "block", border: "none", background: "none", cursor: "pointer", color: "rgba(255,255,255,.7)", fontSize: 13.5, padding: "6px 0", textAlign: "left", fontFamily: "inherit" }}>FAQ</button>
               <button onClick={onSignIn} style={{ display: "block", border: "none", background: "none", cursor: "pointer", color: "rgba(255,255,255,.7)", fontSize: 13.5, padding: "6px 0", textAlign: "left", fontFamily: "inherit" }}>Sign in</button>
               <button onClick={onStartTrial} style={{ display: "block", border: "none", background: "none", cursor: "pointer", color: "rgba(255,255,255,.7)", fontSize: 13.5, padding: "6px 0", textAlign: "left", fontFamily: "inherit" }}>Start free trial</button>
             </div>
@@ -8427,6 +8464,20 @@ function PortalRequestCenter({ token, jobId, role, customerName, accent, allowQu
   );
 }
 
+/* What kind of project this is, for customer-facing copy — a roofing shop
+   also does siding, gutters, windows. Derived from the intake work request;
+   defaults to roofing. */
+function projectNoun(job) {
+  const w = (job.intake?.workRequested || job.workRequested || []).map((x) => String(x).toLowerCase());
+  const has = (s) => w.some((x) => x.includes(s));
+  const flags = [has("roof"), has("siding"), has("gutter"), has("window")];
+  if (flags.filter(Boolean).length >= 2) return "exterior";
+  if (has("siding")) return "siding";
+  if (has("gutter")) return "gutter";
+  if (has("window")) return "window";
+  return "roofing";
+}
+
 function buildPortalSnapshot(job, brand, token) {
   const portal = { ...DEFAULT_PORTAL_SETTINGS, ...(job.portal || {}) };
   const pay = paymentsSummary(job);
@@ -8436,6 +8487,7 @@ function buildPortalSnapshot(job, brand, token) {
       company: brand.company, logo: brand.logo || null, primary: brand.primary,
       slogan: brand.slogan, phone: brand.phone, email: brand.email,
       jobId: job.id, name: job.name, address: job.address,
+      projectType: projectNoun(job),
       stageLabel: job.stageLabel || "",
       order: portalOrderOf(portal).filter((sid) => portalSectionOn(portal, sid)),
       /* Rep block: a per-job override wins over the assigned seat, so a
@@ -9255,7 +9307,7 @@ function PublicPortal({ token }) {
         {d.logo
           ? <img src={d.logo} alt="" style={{ height: 44, objectFit: "contain", marginBottom: 10, display: "block" }} />
           : <div style={{ fontSize: 13, opacity: 0.8 }}>{d.company}</div>}
-        <div style={{ fontSize: 21, fontWeight: 800, marginTop: 4 }}>Your roofing project</div>
+        <div style={{ fontSize: 21, fontWeight: 800, marginTop: 4 }}>Your {d.projectType || "roofing"} project</div>
         <div style={{ fontSize: 13.5, opacity: 0.85, marginTop: 3 }}>{d.address}</div>
       </div>
       <div style={{ padding: "16px 16px 60px" }}>
@@ -15487,7 +15539,7 @@ function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "" }) {
         <div style={{ border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" }}>
           <div style={{ background: T.primary, padding: "16px 16px 14px", color: "#fff" }}>
             <div style={{ fontSize: 12, opacity: 0.75 }}>{brand.company}</div>
-            <div style={{ fontSize: 17, fontWeight: 800, marginTop: 3 }}>Your roofing project</div>
+            <div style={{ fontSize: 17, fontWeight: 800, marginTop: 3 }}>Your {projectNoun(job)} project</div>
             <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>{job.address}</div>
           </div>
           <div style={{ padding: 14 }}>
