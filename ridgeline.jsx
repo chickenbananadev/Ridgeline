@@ -15852,6 +15852,113 @@ function ManufacturerSpecs() {
   );
 }
 
+/* ================================================================
+   CLAIM ASSISTANT — a chat-style Q&A over the app's own knowledge base
+   (code library, glossary, playbook scenarios, carrier patterns,
+   supplement templates, policy provisions). Retrieval-based: it works
+   with no API key and offline, and always shows its sources so a rep can
+   verify before quoting an adjuster. If an AI key is later connected it
+   can synthesize; until then it surfaces the most relevant cited entries.
+   ================================================================ */
+const CLAIM_STOPWORDS = new Set("the a an of to in on for is are do does how what when should i my me we our you your can could with and or if it this that at as be by from about".split(" "));
+function buildClaimCorpus() {
+  const items = [];
+  (KB_CODES || []).forEach((c) => items.push({ title: c.title, body: `${c.body} ${c.supplement || ""}`, cite: c.cite, source: "Code", tag: "Code" }));
+  (KB_TERMS || []).forEach(([term, expand, def]) => items.push({ title: `${term}${expand ? ` — ${expand}` : ""}`, body: def, source: "Glossary", tag: "Term" }));
+  (CLAIM_SCENARIOS || []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook" }));
+  (typeof MORE_SCENARIOS !== "undefined" ? MORE_SCENARIOS : []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook" }));
+  (typeof CARRIER_PATTERNS !== "undefined" ? CARRIER_PATTERNS : []).forEach((c) => items.push({ title: c.title, body: `${c.pattern || ""} ${(c.answer || []).join(" ")}`, source: "Carrier patterns", tag: "Carrier" }));
+  (SUPPLEMENT_TEMPLATES || []).forEach((t) => items.push({ title: t.title, body: `${t.scenario || ""} ${t.wording || ""}`, source: "Supplement template", tag: "Supplement" }));
+  (typeof POLICY_CARDS !== "undefined" ? POLICY_CARDS : []).forEach((c) => items.push({ title: c.title, body: `${c.body || ""} ${(c.callout && c.callout.text) || ""}`, source: "Policy provisions", tag: "Policy" }));
+  return items;
+}
+const CLAIM_CORPUS = buildClaimCorpus();
+function answerClaim(q) {
+  const terms = String(q || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !CLAIM_STOPWORDS.has(w));
+  if (!terms.length) return [];
+  return CLAIM_CORPUS.map((it) => {
+    const title = it.title.toLowerCase(), body = it.body.toLowerCase();
+    let score = 0;
+    terms.forEach((t) => { if (title.includes(t)) score += 3; if (body.includes(t)) score += 1; });
+    return { it, score };
+  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 4).map((x) => x.it);
+}
+
+function ClaimAssistant() {
+  const SUGGESTIONS = [
+    "Adjuster only paid ACV — how does the homeowner recover depreciation?",
+    "Carrier says the damage is cosmetic only",
+    "Do I get drip edge on a full replacement?",
+    "What is a matching claim and when does it apply?",
+    "They applied a roof payment schedule (RPS)",
+  ];
+  const [msgs, setMsgs] = useState([]);
+  const [q, setQ] = useState("");
+  const scrollRef = useRef(null);
+  const ask = (text) => {
+    const question = (text || "").trim();
+    if (!question) return;
+    const hits = answerClaim(question);
+    setMsgs((m) => [...m, { role: "user", text: question }, { role: "bot", hits, text: hits.length ? "" : "I couldn't find that in the knowledge base. Try a component (drip edge, valley), a term (ACV, betterment, matching), or a carrier position." }]);
+    setQ("");
+  };
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs]);
+  const tone = { Code: "blue", Term: "gray", Playbook: "green", Carrier: "amber", Supplement: "blue", Policy: "slate" };
+  return (
+    <div style={{ marginTop: 14 }}>
+      <Card>
+        <CardTitle right={<Chip tone="green">{CLAIM_CORPUS.length} sources</Chip>}>Claim assistant</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
+          Ask a claim, code, or adjuster question in plain words. Answers come straight from Supreme's own code library,
+          glossary, playbook and carrier patterns — with the source shown so you can verify before you quote it.
+        </div>
+      </Card>
+
+      {msgs.length === 0 && (
+        <Card style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", marginBottom: 8 }}>TRY ASKING</div>
+          {SUGGESTIONS.map((s) => (
+            <button key={s} onClick={() => ask(s)} style={{ display: "block", width: "100%", textAlign: "left", border: `1px solid ${S.line}`, background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 8, fontSize: 13, color: S.ink, cursor: "pointer", fontFamily: "inherit", lineHeight: 1.4 }}>{s}</button>
+          ))}
+        </Card>
+      )}
+
+      {msgs.length > 0 && (
+        <div ref={scrollRef} style={{ marginTop: 12, maxHeight: "56vh", overflowY: "auto" }}>
+          {msgs.map((m, i) => m.role === "user" ? (
+            <div key={i} style={{ display: "flex", justifyContent: "flex-end", margin: "8px 0" }}>
+              <div style={{ background: T.accent, color: "#fff", borderRadius: "14px 14px 3px 14px", padding: "9px 13px", fontSize: 13.5, maxWidth: "85%", lineHeight: 1.45 }}>{m.text}</div>
+            </div>
+          ) : (
+            <div key={i} style={{ margin: "8px 0" }}>
+              {m.text && <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 8 }}>{m.text}</div>}
+              {(m.hits || []).map((h, j) => (
+                <Card key={j} style={{ marginBottom: 8 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 5 }}>
+                    <Chip tone={tone[h.tag] || "gray"}>{h.source}</Chip>
+                    {h.cite && <span style={{ fontSize: 12, fontWeight: 700, color: T.accent }}>{h.cite}</span>}
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: S.ink, lineHeight: 1.35 }}>{h.title}</div>
+                  <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginTop: 5 }}>{h.body.length > 320 ? h.body.slice(0, 320).trim() + "…" : h.body}</div>
+                </Card>
+              ))}
+            </div>
+          ))}
+          <div style={{ fontSize: 11, color: S.sub, textAlign: "center", padding: "6px 0", lineHeight: 1.5 }}>
+            Guidance from your knowledge base — not legal advice. Confirm the cite and the policy before filing.
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, marginTop: 12, position: "sticky", bottom: 0, background: S.bg, paddingTop: 6 }}>
+        <input style={{ ...inputStyle, flex: 1 }} value={q} placeholder="Ask about a claim, code, or adjuster position…"
+          onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") ask(q); }} />
+        <Btn onClick={() => ask(q)} disabled={!q.trim()}><Send size={15} /></Btn>
+      </div>
+    </div>
+  );
+}
+
 function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {}, seed = null, onConsumeSeed = () => {} }) {
   const [tab, setTab] = useState(seed && seed.tab ? seed.tab : (seed && seed.zip ? "codes" : "clients"));
   const [zip, setZip] = useState(seed ? seed.zip || "" : "");
@@ -15878,7 +15985,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
   }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
 
   /* One index across codes, terms and supplement triggers, so a rep
      types what they half-remember rather than guessing which tab it
@@ -15917,6 +16024,8 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
           }}>{label}</button>
         ))}
       </div>
+
+      {tab === "ask" && <ClaimAssistant />}
 
       {tab === "search" && (
         <div style={{ marginTop: 14 }}>
@@ -20451,6 +20560,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
     ]],
     ["Insurance & resources", [
       ["insurance", Shield, "Insurance & claims", "Clients, claims, supplements & depreciation"],
+      ["insurance:ask", MessageCircle, "Claim assistant", "Ask a claim, code or adjuster question — cited answers"],
       ["insurance:codes", ScrollText, "Code lookup", "Adopted code & building department by zip"],
       ["insurance:resources", BookOpen, "Roofing resources", "Manufacturer specs, policy provisions, letters, playbook"],
     ]],
@@ -21677,6 +21787,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <MoreMenu brand={brand} onNav={(id) => {
           if (id === "password") return setChangePwOpen(true);
           if (id === "workflow") return setWorkflowOpen(true);
+          if (id === "insurance:ask") { setCodeSeed({ tab: "ask" }); return setNav("insurance"); }
           if (id === "insurance:codes") { setCodeSeed({ tab: "codes" }); return setNav("insurance"); }
           if (id === "insurance:resources") { setCodeSeed({ tab: "resources" }); return setNav("insurance"); }
           return setNav(id);

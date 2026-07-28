@@ -17669,6 +17669,97 @@ function ManufacturerSpecs() {
     ] })
   ] });
 }
+var CLAIM_STOPWORDS = new Set("the a an of to in on for is are do does how what when should i my me we our you your can could with and or if it this that at as be by from about".split(" "));
+function buildClaimCorpus() {
+  const items = [];
+  (KB_CODES || []).forEach((c) => items.push({ title: c.title, body: `${c.body} ${c.supplement || ""}`, cite: c.cite, source: "Code", tag: "Code" }));
+  (KB_TERMS || []).forEach(([term, expand, def]) => items.push({ title: `${term}${expand ? ` \u2014 ${expand}` : ""}`, body: def, source: "Glossary", tag: "Term" }));
+  (CLAIM_SCENARIOS || []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook" }));
+  (typeof MORE_SCENARIOS !== "undefined" ? MORE_SCENARIOS : []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook" }));
+  (typeof CARRIER_PATTERNS !== "undefined" ? CARRIER_PATTERNS : []).forEach((c) => items.push({ title: c.title, body: `${c.pattern || ""} ${(c.answer || []).join(" ")}`, source: "Carrier patterns", tag: "Carrier" }));
+  (SUPPLEMENT_TEMPLATES || []).forEach((t) => items.push({ title: t.title, body: `${t.scenario || ""} ${t.wording || ""}`, source: "Supplement template", tag: "Supplement" }));
+  (typeof POLICY_CARDS !== "undefined" ? POLICY_CARDS : []).forEach((c) => items.push({ title: c.title, body: `${c.body || ""} ${c.callout && c.callout.text || ""}`, source: "Policy provisions", tag: "Policy" }));
+  return items;
+}
+var CLAIM_CORPUS = buildClaimCorpus();
+function answerClaim(q) {
+  const terms = String(q || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !CLAIM_STOPWORDS.has(w));
+  if (!terms.length) return [];
+  return CLAIM_CORPUS.map((it) => {
+    const title = it.title.toLowerCase(), body = it.body.toLowerCase();
+    let score = 0;
+    terms.forEach((t) => {
+      if (title.includes(t)) score += 3;
+      if (body.includes(t)) score += 1;
+    });
+    return { it, score };
+  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 4).map((x) => x.it);
+}
+function ClaimAssistant() {
+  const SUGGESTIONS = [
+    "Adjuster only paid ACV \u2014 how does the homeowner recover depreciation?",
+    "Carrier says the damage is cosmetic only",
+    "Do I get drip edge on a full replacement?",
+    "What is a matching claim and when does it apply?",
+    "They applied a roof payment schedule (RPS)"
+  ];
+  const [msgs, setMsgs] = (0, import_react.useState)([]);
+  const [q, setQ] = (0, import_react.useState)("");
+  const scrollRef = (0, import_react.useRef)(null);
+  const ask = (text) => {
+    const question = (text || "").trim();
+    if (!question) return;
+    const hits = answerClaim(question);
+    setMsgs((m) => [...m, { role: "user", text: question }, { role: "bot", hits, text: hits.length ? "" : "I couldn't find that in the knowledge base. Try a component (drip edge, valley), a term (ACV, betterment, matching), or a carrier position." }]);
+    setQ("");
+  };
+  (0, import_react.useEffect)(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [msgs]);
+  const tone = { Code: "blue", Term: "gray", Playbook: "green", Carrier: "amber", Supplement: "blue", Policy: "slate" };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "green", children: [
+        CLAIM_CORPUS.length,
+        " sources"
+      ] }), children: "Claim assistant" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: "Ask a claim, code, or adjuster question in plain words. Answers come straight from Supreme's own code library, glossary, playbook and carrier patterns \u2014 with the source shown so you can verify before you quote it." })
+    ] }),
+    msgs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", marginBottom: 8 }, children: "TRY ASKING" }),
+      SUGGESTIONS.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => ask(s), style: { display: "block", width: "100%", textAlign: "left", border: `1px solid ${S.line}`, background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 8, fontSize: 13, color: S.ink, cursor: "pointer", fontFamily: "inherit", lineHeight: 1.4 }, children: s }, s))
+    ] }),
+    msgs.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { ref: scrollRef, style: { marginTop: 12, maxHeight: "56vh", overflowY: "auto" }, children: [
+      msgs.map((m, i) => m.role === "user" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", margin: "8px 0" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: T.accent, color: "#fff", borderRadius: "14px 14px 3px 14px", padding: "9px 13px", fontSize: 13.5, maxWidth: "85%", lineHeight: 1.45 }, children: m.text }) }, i) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { margin: "8px 0" }, children: [
+        m.text && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 8 }, children: m.text }),
+        (m.hits || []).map((h, j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 8 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 5 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: tone[h.tag] || "gray", children: h.source }),
+            h.cite && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, fontWeight: 700, color: T.accent }, children: h.cite })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 800, color: S.ink, lineHeight: 1.35 }, children: h.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginTop: 5 }, children: h.body.length > 320 ? h.body.slice(0, 320).trim() + "\u2026" : h.body })
+        ] }, j))
+      ] }, i)),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub, textAlign: "center", padding: "6px 0", lineHeight: 1.5 }, children: "Guidance from your knowledge base \u2014 not legal advice. Confirm the cite and the policy before filing." })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12, position: "sticky", bottom: 0, background: S.bg, paddingTop: 6 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: { ...inputStyle, flex: 1 },
+          value: q,
+          placeholder: "Ask about a claim, code, or adjuster position\u2026",
+          onChange: (e) => setQ(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === "Enter") ask(q);
+          }
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { onClick: () => ask(q), disabled: !q.trim(), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }) })
+    ] })
+  ] });
+}
 function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2, onSaveDept = () => {
 }, onSaveJurisdiction = () => {
 }, seed = null, onConsumeSeed = () => {
@@ -17695,7 +17786,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2, onSaveDept = () 
   }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
   const kbHits = (() => {
     const q = kbQ.trim().toLowerCase();
     if (!q) return null;
@@ -17729,6 +17820,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2, onSaveDept = () 
       background: tab === id ? T.primary : "#fff",
       color: tab === id ? "#fff" : S.ink
     }, children: label }, id)) }),
+    tab === "ask" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimAssistant, {}),
     tab === "search" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "input",
@@ -22558,6 +22650,7 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
     ]],
     ["Insurance & resources", [
       ["insurance", import_lucide_react.Shield, "Insurance & claims", "Clients, claims, supplements & depreciation"],
+      ["insurance:ask", import_lucide_react.MessageCircle, "Claim assistant", "Ask a claim, code or adjuster question \u2014 cited answers"],
       ["insurance:codes", import_lucide_react.ScrollText, "Code lookup", "Adopted code & building department by zip"],
       ["insurance:resources", import_lucide_react.BookOpen, "Roofing resources", "Manufacturer specs, policy provisions, letters, playbook"]
     ]],
@@ -23877,6 +23970,10 @@ function SupremeCRM() {
     ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand: brand2, onNav: (id) => {
       if (id === "password") return setChangePwOpen(true);
       if (id === "workflow") return setWorkflowOpen(true);
+      if (id === "insurance:ask") {
+        setCodeSeed({ tab: "ask" });
+        return setNav("insurance");
+      }
       if (id === "insurance:codes") {
         setCodeSeed({ tab: "codes" });
         return setNav("insurance");
