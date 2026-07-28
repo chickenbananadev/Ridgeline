@@ -2733,7 +2733,7 @@ function resolveJurisdiction(zip) {
     codeEdition: "Verify the adopted edition",
     adoption: adopt && adopt.local ? "Adopted locally \u2014 confirm the adopting jurisdiction." : "Confirm the current adopted edition and local amendments.",
     permit: "Confirm permit requirements with the local building department.",
-    sources: ["ICC"]
+    sources: ["ICC", "MUNICODE"]
   };
   return {
     zip: z,
@@ -2870,7 +2870,7 @@ function jurisdictionFromLookup(hit) {
     codeEdition: "Verify the adopted edition",
     adoption: adopt && adopt.local ? "Adopted locally \u2014 confirm the adopting municipality/county for this address." : "Confirm the current adopted edition and any local amendments.",
     permit: "Confirm permit requirements with the local building department.",
-    sources: ["ICC"]
+    sources: ["ICC", "MUNICODE"]
   };
   const dept = hit.dept;
   return {
@@ -3495,6 +3495,37 @@ function SourceLink({ srcId }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ExternalLink, { size: 13 }),
     " ",
     s.name
+  ] });
+}
+function municodeUrl(state, city) {
+  const st = String(state || "").trim().toLowerCase();
+  if (!/^[a-z]{2}$/.test(st)) return SOURCES.MUNICODE.url;
+  const slug = String(city || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return slug ? `https://library.municode.com/${st}/${slug}` : `https://library.municode.com/${st}`;
+}
+function deptSearchUrl(city, state) {
+  const q = [city, state, "building department permits phone"].filter(Boolean).join(" ");
+  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+}
+function AssistLink({ href, children }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href, target: "_blank", rel: "noreferrer", style: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    textDecoration: "none",
+    border: `1px solid ${S.line}`,
+    borderRadius: 999,
+    padding: "6px 12px",
+    fontSize: 12.5,
+    fontWeight: 700,
+    color: T.accent,
+    background: "#fff",
+    marginTop: 8,
+    marginRight: 8
+  }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ExternalLink, { size: 13 }),
+    " ",
+    children
   ] });
 }
 function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
@@ -11539,20 +11570,63 @@ async function fetchStormHistory(lat, lng, start, end) {
       const code = d.daily.weather_code?.[i];
       const precip = d.daily.precipitation_sum?.[i];
       const hail = code === 96 || code === 99;
-      const damagingWind = gust != null && gust >= 45;
+      const g = gust != null ? Math.round(gust) : null;
+      const highWind = g != null && g >= 45;
+      const damagingWind = g != null && g >= 58;
       const storm = code === 95 || code === 96 || code === 99;
       return {
         date: iso,
-        gust: gust != null ? Math.round(gust) : null,
+        gust: g,
         precip: precip != null ? precip : null,
         code,
         hail,
+        highWind,
         damagingWind,
-        storm
+        storm,
+        hailIn: null,
+        reportWind: null,
+        reports: null
+        // filled by enrichStormDay
       };
     });
     STORM_CACHE.set(key, days);
     return days;
+  } catch (e) {
+    return null;
+  }
+}
+var LSR_CACHE = /* @__PURE__ */ new Map();
+async function enrichStormDay(lat, lng, iso) {
+  const key = `${weatherKey(lat, lng)}:${iso}`;
+  if (LSR_CACHE.has(key)) return LSR_CACHE.get(key);
+  try {
+    const sts = `${iso}T00:00Z`;
+    const nextIso = new Date((/* @__PURE__ */ new Date(iso + "T00:00Z")).getTime() + 864e5).toISOString().slice(0, 10);
+    const ets = `${nextIso}T00:00Z`;
+    const url = `https://mesonet.agron.iastate.edu/geojson/lsr.geojson?sts=${sts}&ets=${ets}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("lsr");
+    const gj = await res.json();
+    let hailIn = null, windMph = null, count = 0;
+    for (const f of gj.features || []) {
+      const c = f.geometry && f.geometry.coordinates;
+      if (!c) continue;
+      const [flng, flat] = c;
+      if (Math.abs(flat - lat) > 0.5 || Math.abs(flng - lng) > 0.6) continue;
+      const p = f.properties || {};
+      const type = String(p.type || "").toUpperCase();
+      const mag = parseFloat(p.magnitude);
+      if (type.includes("HAIL") && !isNaN(mag)) {
+        hailIn = Math.max(hailIn ?? 0, mag);
+        count++;
+      } else if (type.includes("WND") && !isNaN(mag)) {
+        windMph = Math.max(windMph ?? 0, mag);
+        count++;
+      } else if (type.includes("TORNADO")) count++;
+    }
+    const out = { hailIn, reportWind: windMph, count };
+    LSR_CACHE.set(key, out);
+    return out;
   } catch (e) {
     return null;
   }
@@ -11562,7 +11636,7 @@ function spcReportLink(iso) {
   return `https://www.spc.noaa.gov/climo/reports/${yymmdd}_rpt.html`;
 }
 function stormSeverity(r) {
-  return (r.hail ? 3e3 : 0) + (r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
+  return (r.hailIn ? 4e3 + r.hailIn * 500 : r.hail ? 3e3 : 0) + (r.reportWind || r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
 }
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast: toast2, embedded = false }) {
   const [day, setDay] = (0, import_react.useState)(() => todayIso());
@@ -12948,6 +13022,46 @@ function TabSignatures({ job, mut, toast: toast2, currentUser, brand: brand2 }) 
     )
   ] });
 }
+function StormScout({ toast: toast2 }) {
+  const [addr, setAddr] = (0, import_react.useState)("");
+  const [loc, setLoc] = (0, import_react.useState)(null);
+  const [dol, setDol] = (0, import_react.useState)("");
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "Door-knock" }), children: "Storm scout" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Type any address to see the hail and high-wind days on record there \u2014 useful when you're canvassing a neighborhood after a storm and haven't created a job yet." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Address or ZIP", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        AddressAutocomplete,
+        {
+          value: addr,
+          onChange: setAddr,
+          placeholder: "123 Main St, or a ZIP",
+          onPick: (it) => {
+            setAddr(it.formatted || it.street || addr);
+            setLoc({ lat: it.lat, lng: it.lng, zip: it.postcode || it.zip || "", label: it.formatted || it.street || "" });
+          }
+        }
+      ) }),
+      !loc && /^\s*\d{5}\s*$/.test(addr) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", style: { marginTop: 2 }, onClick: async () => {
+        const g = await geocodeZip(addr.trim());
+        if (g) setLoc({ lat: g.lat, lng: g.lng, zip: addr.trim(), label: addr.trim() });
+        else toast2 && toast2("Couldn't locate that ZIP");
+      }, children: [
+        "Use ZIP ",
+        addr.trim()
+      ] })
+    ] }),
+    loc && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      StormLookup,
+      {
+        job: { lat: loc.lat, lng: loc.lng, zip: loc.zip, address: loc.label },
+        dol,
+        onPick: setDol,
+        toast: toast2
+      }
+    )
+  ] });
+}
 function StormLookup({ job, dol, onPick, toast: toast2 }) {
   const iso = (d) => d.toISOString().slice(0, 10);
   const [start, setStart] = (0, import_react.useState)(() => {
@@ -12982,14 +13096,22 @@ function StormLookup({ job, dol, onPick, toast: toast2 }) {
       setLoading(false);
       return;
     }
-    const notable = days.filter((r) => r.hail || r.damagingWind || r.storm || r.precip != null && r.precip >= 0.75).sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1)).slice(0, 24);
+    const notable = days.filter((r) => r.hail || r.highWind || r.storm || r.precip != null && r.precip >= 0.75).sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1)).slice(0, 24);
     setRows(notable);
     setLoading(false);
-    if (!notable.length) toast2 && toast2("No notable storm days in that window");
+    if (!notable.length) {
+      toast2 && toast2("No notable storm days in that window");
+      return;
+    }
+    notable.slice(0, 8).forEach(async (r) => {
+      const info = await enrichStormDay(lat, lng, r.date);
+      if (!info) return;
+      setRows((prev) => prev && prev.map((x) => x.date === r.date ? { ...x, hailIn: info.hailIn, reportWind: info.reportWind, reports: info.count } : x));
+    });
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "NOAA / Open-Meteo" }), children: "Storm history \u2014 date of loss" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Pulls damaging-wind, hail and heavy-rain days for this address so you can set the date of loss from the record. Wind gusts & precip are ERA5 reanalysis; hail is inferred from thunderstorm-with-hail codes \u2014 confirm the official NOAA storm report before filing." }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Pulls high-wind, hail and heavy-rain days for this address so you can set the date of loss from the record. Gusts & precip are ERA5 reanalysis; the strongest days are cross-checked against official NOAA storm reports, so where a report exists you'll see the measured hail size and peak wind. Confirm the NOAA report before filing." }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "From", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: start, max: end, onChange: (e) => setStart(e.target.value) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "To", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: end, max: iso(/* @__PURE__ */ new Date()), onChange: (e) => setEnd(e.target.value) }) }),
@@ -13002,10 +13124,21 @@ function StormLookup({ job, dol, onPick, toast: toast2 }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: r.date }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }, children: [
-            r.hail && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "red", children: "Hail likely" }),
-            r.gust != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray", children: [
+            r.hailIn != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "red", children: [
+              "Hail \u2014 ",
+              r.hailIn.toFixed(2).replace(/\.?0+$/, ""),
+              "\u2033 (NOAA)"
+            ] }) : r.hail && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "Hail possible" }),
+            r.reportWind != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.reportWind >= 58 ? "red" : "amber", children: [
+              r.reportWind >= 58 ? "Damaging wind" : "High wind",
+              " \u2014 ",
+              Math.round(r.reportWind),
+              " mph (NOAA)"
+            ] }) : r.gust != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray", children: [
+              r.gust >= 58 ? "Damaging wind" : r.gust >= 45 ? "High wind" : "Gusts",
+              " \u2014 ",
               r.gust,
-              " mph gusts"
+              " mph"
             ] }),
             r.precip != null && r.precip >= 0.5 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
               r.precip.toFixed(2),
@@ -17827,7 +17960,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2, onSaveDept = () 
   }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
   const kbHits = (() => {
     const q = kbQ.trim().toLowerCase();
     if (!q) return null;
@@ -17862,6 +17995,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2, onSaveDept = () 
       color: tab === id ? "#fff" : S.ink
     }, children: label }, id)) }),
     tab === "ask" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimAssistant, {}),
+    tab === "storm" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StormScout, { toast: toast2 }),
     tab === "search" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "input",
@@ -18207,7 +18341,10 @@ Authority: ${c.cite}`;
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Edition", v: juris.codeEdition }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Adoption", v: juris.adoption }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Permits", v: juris.permit }),
-          juris.sources && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8 }, children: juris.sources.map((sid) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SourceLink, { srcId: sid }, sid)) }),
+          juris.sources && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8 }, children: juris.sources.map((sid) => sid === "MUNICODE" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(AssistLink, { href: municodeUrl(juris.state, juris.city), children: [
+            "Municode \u2014 ",
+            juris.city ? `${juris.city}, ${juris.state}` : `${juris.state} ordinances`
+          ] }, sid) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SourceLink, { srcId: sid }, sid)) }),
           !juris.verified && juris.precision === "market" && juris.needsContact && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "City and county confirmed; office not yet on file", children: "Ohio and Kentucky both run statewide residential codes, so the code basis above is right for this address. What is missing is which building department issues the permit \u2014 add it below the first time you call them and it is saved for everyone." }),
           !juris.verified && juris.precision !== "market" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Before field use", children: "Open the official source above, confirm the adopted edition and local amendments, and have the office mark this jurisdiction verified with a date and initials." })
         ] }),
@@ -18261,8 +18398,18 @@ Authority: ${c.cite}`;
                 }
               )
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: "Saved against this ZIP for the whole company, so nobody has to look it up twice." })
-          ] }) : juris.needsContact ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55 }, children: "Not on file yet. Rather than print a number that might be wrong, this stays blank until someone confirms it \u2014 a dead line on a permit call costs more than an empty field." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 4 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistLink, { href: deptSearchUrl(juris.city, juris.state), children: "Find building department" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistLink, { href: municodeUrl(juris.state, juris.city), children: "Municode ordinances" })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: "Assisted lookup \u2014 no free nationwide directory exists, so these open a scoped search and the municipal code. Confirm the office, then Save it against this ZIP for the whole company so nobody has to look it up twice." })
+          ] }) : juris.needsContact ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55 }, children: "Not on file yet. Rather than print a number that might be wrong, this stays blank until someone confirms it \u2014 a dead line on a permit call costs more than an empty field." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 6 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistLink, { href: deptSearchUrl(juris.city, juris.state), children: "Find building department" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistLink, { href: municodeUrl(juris.state, juris.city), children: "Municode ordinances" })
+            ] })
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Office", v: juris.inspector.office || "\u2014" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Phone", v: juris.inspector.phone ? fmtPhone(juris.inspector.phone) : "\u2014" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Address", v: juris.inspector.address || "\u2014" }),

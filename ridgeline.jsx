@@ -2042,7 +2042,7 @@ function resolveJurisdiction(zip) {
     codeName: codeNameForState(st), codeEdition: "Verify the adopted edition",
     adoption: adopt && adopt.local ? "Adopted locally — confirm the adopting jurisdiction." : "Confirm the current adopted edition and local amendments.",
     permit: "Confirm permit requirements with the local building department.",
-    sources: ["ICC"],
+    sources: ["ICC", "MUNICODE"],
   };
   return {
     zip: z, city: "", county: "", state: st,
@@ -2195,7 +2195,7 @@ function jurisdictionFromLookup(hit) {
       ? "Adopted locally — confirm the adopting municipality/county for this address."
       : "Confirm the current adopted edition and any local amendments.",
     permit: "Confirm permit requirements with the local building department.",
-    sources: ["ICC"],
+    sources: ["ICC", "MUNICODE"],
   };
   const dept = hit.dept;
   return {
@@ -2857,6 +2857,36 @@ function SourceLink({ srcId }) {
       fontSize: 12.5, fontWeight: 700, color: T.accent, background: "#fff", marginTop: 8, marginRight: 8,
     }}>
       <ExternalLink size={13} /> {s.name}
+    </a>
+  );
+}
+
+/* Municode hosts most municipal codes of ordinances. Their URLs are
+   library.municode.com/<state-abbr>/<city-slug>; with no city we land on
+   the state index so the rep can pick the municipality. Slugs are lower-
+   case with underscores for spaces (e.g. "Forest Park" -> forest_park). */
+function municodeUrl(state, city) {
+  const st = String(state || "").trim().toLowerCase();
+  if (!/^[a-z]{2}$/.test(st)) return SOURCES.MUNICODE.url;
+  const slug = String(city || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return slug ? `https://library.municode.com/${st}/${slug}` : `https://library.municode.com/${st}`;
+}
+/* No free nationwide building-department directory exists, so we hand the
+   rep a scoped web search that lands on the right office nearly every time.
+   Honest assist, not a database. */
+function deptSearchUrl(city, state) {
+  const q = [city, state, "building department permits phone"].filter(Boolean).join(" ");
+  return `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+}
+/* A pill link that matches SourceLink's look but points anywhere. */
+function AssistLink({ href, children }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" style={{
+      display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none",
+      border: `1px solid ${S.line}`, borderRadius: 999, padding: "6px 12px",
+      fontSize: 12.5, fontWeight: 700, color: T.accent, background: "#fff", marginTop: 8, marginRight: 8,
+    }}>
+      <ExternalLink size={13} /> {children}
     </a>
   );
 }
@@ -10137,16 +10167,56 @@ async function fetchStormHistory(lat, lng, start, end) {
       const gust = d.daily.wind_gusts_10m_max?.[i];
       const code = d.daily.weather_code?.[i];
       const precip = d.daily.precipitation_sum?.[i];
-      const hail = code === 96 || code === 99;
-      const damagingWind = gust != null && gust >= 45;
+      const hail = code === 96 || code === 99;      // possible hail from WMO code
+      const g = gust != null ? Math.round(gust) : null;
+      /* Roofing-relevant wind bands: 45+ is a high-wind flag, 58+ is the NWS
+         severe/"damaging" threshold. Always keep the gust value so it shows. */
+      const highWind = g != null && g >= 45;
+      const damagingWind = g != null && g >= 58;
       const storm = code === 95 || code === 96 || code === 99;
       return {
-        date: iso, gust: gust != null ? Math.round(gust) : null,
-        precip: precip != null ? precip : null, code, hail, damagingWind, storm,
+        date: iso, gust: g, precip: precip != null ? precip : null, code,
+        hail, highWind, damagingWind, storm,
+        hailIn: null, reportWind: null, reports: null, // filled by enrichStormDay
       };
     });
     STORM_CACHE.set(key, days);
     return days;
+  } catch (e) { return null; }
+}
+/* Best-effort official corroboration: the Iowa Environmental Mesonet mirrors
+   NOAA Local Storm Reports as CORS-open GeoJSON. For a single day we pull the
+   national LSR set and keep the HAIL / wind reports within ~35 mi of the
+   point, returning the largest hail size (inches) and peak measured/estimated
+   wind (mph). Fails quiet — the code-based flags still stand on their own. */
+const LSR_CACHE = new Map();
+async function enrichStormDay(lat, lng, iso) {
+  const key = `${weatherKey(lat, lng)}:${iso}`;
+  if (LSR_CACHE.has(key)) return LSR_CACHE.get(key);
+  try {
+    const sts = `${iso}T00:00Z`;
+    const nextIso = new Date(new Date(iso + "T00:00Z").getTime() + 864e5).toISOString().slice(0, 10);
+    const ets = `${nextIso}T00:00Z`;
+    const url = `https://mesonet.agron.iastate.edu/geojson/lsr.geojson?sts=${sts}&ets=${ets}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("lsr");
+    const gj = await res.json();
+    let hailIn = null, windMph = null, count = 0;
+    for (const f of gj.features || []) {
+      const c = f.geometry && f.geometry.coordinates;
+      if (!c) continue;
+      const [flng, flat] = c;
+      if (Math.abs(flat - lat) > 0.5 || Math.abs(flng - lng) > 0.6) continue;
+      const p = f.properties || {};
+      const type = String(p.type || "").toUpperCase();
+      const mag = parseFloat(p.magnitude);
+      if (type.includes("HAIL") && !isNaN(mag)) { hailIn = Math.max(hailIn ?? 0, mag); count++; }
+      else if (type.includes("WND") && !isNaN(mag)) { windMph = Math.max(windMph ?? 0, mag); count++; }
+      else if (type.includes("TORNADO")) count++;
+    }
+    const out = { hailIn, reportWind: windMph, count };
+    LSR_CACHE.set(key, out);
+    return out;
   } catch (e) { return null; }
 }
 /* NOAA SPC storm-report page for a given ISO date (official corroboration). */
@@ -10155,7 +10225,8 @@ function spcReportLink(iso) {
   return `https://www.spc.noaa.gov/climo/reports/${yymmdd}_rpt.html`;
 }
 function stormSeverity(r) {
-  return (r.hail ? 3000 : 0) + (r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
+  return (r.hailIn ? 4000 + r.hailIn * 500 : r.hail ? 3000 : 0)
+    + (r.reportWind || r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
 }
 
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded = false }) {
@@ -11539,6 +11610,46 @@ function TabSignatures({ job, mut, toast, currentUser, brand }) {
   );
 }
 
+/* Standalone storm scout — no job attached. A rep door-knocking or scouting a
+   neighborhood types any address, and the same StormLookup engine reports the
+   hail/high-wind days over the window. Feeds the pitch, not a claim. */
+function StormScout({ toast }) {
+  const [addr, setAddr] = useState("");
+  const [loc, setLoc] = useState(null); // { lat, lng, zip, label }
+  const [dol, setDol] = useState("");
+  return (
+    <div style={{ marginTop: 14 }}>
+      <Card>
+        <CardTitle right={<Chip tone="blue">Door-knock</Chip>}>Storm scout</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Type any address to see the hail and high-wind days on record there — useful
+          when you're canvassing a neighborhood after a storm and haven't created a job yet.
+        </div>
+        <Field label="Address or ZIP">
+          <AddressAutocomplete value={addr} onChange={setAddr}
+            placeholder="123 Main St, or a ZIP"
+            onPick={(it) => {
+              setAddr(it.formatted || it.street || addr);
+              setLoc({ lat: it.lat, lng: it.lng, zip: it.postcode || it.zip || "", label: it.formatted || it.street || "" });
+            }} />
+        </Field>
+        {!loc && /^\s*\d{5}\s*$/.test(addr) && (
+          <Btn small kind="soft" style={{ marginTop: 2 }} onClick={async () => {
+            const g = await geocodeZip(addr.trim());
+            if (g) setLoc({ lat: g.lat, lng: g.lng, zip: addr.trim(), label: addr.trim() });
+            else toast && toast("Couldn't locate that ZIP");
+          }}>Use ZIP {addr.trim()}</Btn>
+        )}
+      </Card>
+      {loc && (
+        <StormLookup
+          job={{ lat: loc.lat, lng: loc.lng, zip: loc.zip, address: loc.label }}
+          dol={dol} onPick={setDol} toast={toast} />
+      )}
+    </div>
+  );
+}
+
 /* Date-of-loss storm lookup. Pulls damaging-wind / hail / heavy-rain days for
    the property over a window so the rep can pick the actual date of loss from
    the weather record, then corroborate against the official NOAA SPC report. */
@@ -11558,20 +11669,29 @@ function StormLookup({ job, dol, onPick, toast }) {
     const days = await fetchStormHistory(lat, lng, start, end);
     if (!days) { setErr("Couldn't reach the weather archive. Check the connection and try again."); setLoading(false); return; }
     const notable = days
-      .filter((r) => r.hail || r.damagingWind || r.storm || (r.precip != null && r.precip >= 0.75))
+      .filter((r) => r.hail || r.highWind || r.storm || (r.precip != null && r.precip >= 0.75))
       .sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1))
       .slice(0, 24);
     setRows(notable); setLoading(false);
-    if (!notable.length) toast && toast("No notable storm days in that window");
+    if (!notable.length) { toast && toast("No notable storm days in that window"); return; }
+    /* Enrich the strongest candidates with official NOAA/IEM storm reports so
+       real hail size and measured wind show where they exist. Best-effort and
+       progressive — each day updates its row as its report comes back. */
+    notable.slice(0, 8).forEach(async (r) => {
+      const info = await enrichStormDay(lat, lng, r.date);
+      if (!info) return;
+      setRows((prev) => prev && prev.map((x) => x.date === r.date
+        ? { ...x, hailIn: info.hailIn, reportWind: info.reportWind, reports: info.count } : x));
+    });
   };
 
   return (
     <Card style={{ marginTop: 12 }}>
       <CardTitle right={<Chip tone="blue">NOAA / Open-Meteo</Chip>}>Storm history — date of loss</CardTitle>
       <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
-        Pulls damaging-wind, hail and heavy-rain days for this address so you can set the date of loss from the record.
-        Wind gusts &amp; precip are ERA5 reanalysis; hail is inferred from thunderstorm-with-hail codes — confirm the
-        official NOAA storm report before filing.
+        Pulls high-wind, hail and heavy-rain days for this address so you can set the date of loss from the record.
+        Gusts &amp; precip are ERA5 reanalysis; the strongest days are cross-checked against official NOAA storm reports,
+        so where a report exists you'll see the measured hail size and peak wind. Confirm the NOAA report before filing.
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }}>
         <Field label="From"><input style={dateInputStyle} type="date" value={start} max={end} onChange={(e) => setStart(e.target.value)} /></Field>
@@ -11588,8 +11708,14 @@ function StormLookup({ job, dol, onPick, toast }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{r.date}</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }}>
-                    {r.hail && <Chip tone="red">Hail likely</Chip>}
-                    {r.gust != null && <Chip tone={r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray"}>{r.gust} mph gusts</Chip>}
+                    {r.hailIn != null
+                      ? <Chip tone="red">Hail — {r.hailIn.toFixed(2).replace(/\.?0+$/, "")}″ (NOAA)</Chip>
+                      : r.hail && <Chip tone="amber">Hail possible</Chip>}
+                    {r.reportWind != null
+                      ? <Chip tone={r.reportWind >= 58 ? "red" : "amber"}>{r.reportWind >= 58 ? "Damaging wind" : "High wind"} — {Math.round(r.reportWind)} mph (NOAA)</Chip>
+                      : r.gust != null && <Chip tone={r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray"}>
+                          {r.gust >= 58 ? "Damaging wind" : r.gust >= 45 ? "High wind" : "Gusts"} — {r.gust} mph
+                        </Chip>}
                     {r.precip != null && r.precip >= 0.5 && <Chip tone="blue">{r.precip.toFixed(2)}″ rain</Chip>}
                   </div>
                 </div>
@@ -16019,7 +16145,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
   }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
 
   /* One index across codes, terms and supplement triggers, so a rep
      types what they half-remember rather than guessing which tab it
@@ -16060,6 +16186,8 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
       </div>
 
       {tab === "ask" && <ClaimAssistant />}
+
+      {tab === "storm" && <StormScout toast={toast} />}
 
       {tab === "search" && (
         <div style={{ marginTop: 14 }}>
@@ -16401,7 +16529,11 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                 <KV k="Permits" v={juris.permit} />
                 {juris.sources && (
                   <div style={{ marginTop: 8 }}>
-                    {juris.sources.map((sid) => <SourceLink key={sid} srcId={sid} />)}
+                    {juris.sources.map((sid) => sid === "MUNICODE"
+                      ? <AssistLink key={sid} href={municodeUrl(juris.state, juris.city)}>
+                          Municode — {juris.city ? `${juris.city}, ${juris.state}` : `${juris.state} ordinances`}
+                        </AssistLink>
+                      : <SourceLink key={sid} srcId={sid} />)}
                   </div>
                 )}
                 {!juris.verified && juris.precision === "market" && juris.needsContact && (
@@ -16447,17 +16579,29 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                       <Btn style={{ flex: 1 }} disabled={!deptForm.office.trim()}
                         onClick={() => { onSaveDept(juris.zip, deptForm); setEditDept(false); }}>Save</Btn>
                     </div>
+                    <div style={{ marginTop: 4 }}>
+                      <AssistLink href={deptSearchUrl(juris.city, juris.state)}>Find building department</AssistLink>
+                      <AssistLink href={municodeUrl(juris.state, juris.city)}>Municode ordinances</AssistLink>
+                    </div>
                     <div style={{ fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
-                      Saved against this ZIP for the whole company, so nobody has
-                      to look it up twice.
+                      Assisted lookup — no free nationwide directory exists, so these
+                      open a scoped search and the municipal code. Confirm the office,
+                      then Save it against this ZIP for the whole company so nobody
+                      has to look it up twice.
                     </div>
                   </>
                 ) : juris.needsContact ? (
-                  <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
-                    Not on file yet. Rather than print a number that might be
-                    wrong, this stays blank until someone confirms it — a dead
-                    line on a permit call costs more than an empty field.
-                  </div>
+                  <>
+                    <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
+                      Not on file yet. Rather than print a number that might be
+                      wrong, this stays blank until someone confirms it — a dead
+                      line on a permit call costs more than an empty field.
+                    </div>
+                    <div style={{ marginTop: 6 }}>
+                      <AssistLink href={deptSearchUrl(juris.city, juris.state)}>Find building department</AssistLink>
+                      <AssistLink href={municodeUrl(juris.state, juris.city)}>Municode ordinances</AssistLink>
+                    </div>
+                  </>
                 ) : (
                   <>
                     <KV k="Office" v={juris.inspector.office || "—"} />
