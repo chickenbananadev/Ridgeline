@@ -5017,7 +5017,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
           <Btn small onClick={() => openAdd(null)}><Plus size={14} /> Add</Btn>
         </div>
       ) : (
-        <SubHeader title="Calendar" onBack={onBack}
+        <SubHeader title="Schedule" onBack={onBack}
           right={<Btn small onClick={() => openAdd(null)}><Plus size={14} /> Add</Btn>} />
       )}
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -18566,46 +18566,48 @@ function HelpDesk({ onBack, brand }) {
 }
 
 function MoreMenu({ onNav, onLogout, brand, currentUser }) {
+  const admin = currentUser && currentUser.role === "admin";
   const groups = [
-    ["Sales", [
+    ["Schedule & production", [
+      ["calendar", CalIcon, "Schedule", "Appointments, inspections & material drops"],
+      ["dispatch", HardHat, "Dispatch", "Which crews are on which jobs, day by day"],
+      ["crews", Wrench, "Crews", "Your subs, their trades and pricing"],
+      ["pos", Package, "Purchase orders", "Order, receive and reconcile materials"],
+      ["warranties", Shield, "Warranties", "Every roof's labor and manufacturer terms"],
+    ]],
+    ["Sales & marketing", [
       ["activity", ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", Phone, "Calls & attribution", "Log calls, see which sources make money"],
-      ["performance", PieChart, "Financials & performance", "Company money, commission, rep scoreboard & funnel"],
       ["contacts", Users, "Contacts", "Every client, with consent status"],
-      ["leadsources", Filter, "Lead sources", "Add, remove, and reorder the options"],
-      ["reviews", Star, "Review automation", "Google review requests"],
+      ["leadsources", Filter, "Lead sources", "Add, remove and reorder the options"],
+      ["reviews", Star, "Reviews", "Funnel, follow-ups, and who's actually left one"],
     ]],
-    ["Production", [
-      ["dispatch", HardHat, "Dispatch board", "Who's on which roof, day by day"],
-      ["calendar", CalIcon, "Calendar", "Schedule & material drops"],
-      ["pos", Package, "Purchase orders", "Order, receive, reconcile materials"],
-      ["crews", Wrench, "Crews", "Dispatch directory for work orders"],
-      ["warranties", Shield, "Warranties", "Every roof's labor and manufacturer terms"],
-      ["insurance", Shield, "Insurance", "Clients, supplements, code lookup"],
-    ]],
-    ["Company", [
-      ["inbox", MessageCircle, "Team chat", "Now in the Inbox — @ someone, tag a job"],
-      ["announcements", Megaphone, "Company announcements", "Posted to everyone's home screen"],
-      ["team", HardHat, "Team & seats", canManageSeats(currentUser) ? "Add users, roles, logins" : "Who's on the team"],
-      ["documents", FileText, "Documents", "Contracts, COIs, licenses, warranties"],
-      ["vendors", Building2, "Vendors & suppliers", "Material suppliers and account details"],
+    ["Money", [
+      ["performance", PieChart, "Financials & performance", "Company money, commission, rep scoreboard"],
       ["pricelist", Package, "Price list", "Material costs and margins — CSV import"],
+      admin && ["crewpay", HardHat, "Crew payouts", "What each crew is owed and has been paid"],
+    ]],
+    ["Customers & documents", [
+      ["insurance", Shield, "Insurance", "Clients, supplements and code lookup"],
+      ["documents", FileText, "Documents", "Contracts, COIs, licenses, warranties"],
       ["templates", ScrollText, "Message templates", "Email and text, customer and crew"],
+      ["announcements", Megaphone, "Announcements", "Posted to everyone's home screen"],
     ]],
     ["Setup", [
-      ["help", BookOpen, "Help & guides", "How every part of the app works"],
+      ["team", HardHat, "Team & seats", canManageSeats(currentUser) ? "Add users, roles, logins" : "Who's on the team"],
+      ["vendors", Building2, "Vendors & suppliers", "Material suppliers and account details"],
       ["branding", Settings, "Company branding", "Name, logo, colors, what prints on documents"],
-      ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam"],
-      ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
       ["workflow", ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
-      ["password", Lock, "Change my password", "Update your sign-in password"],
-      currentUser && currentUser.role === "admin" && ["crewpay", HardHat, "Crew payouts", "What each crew is owed and has been paid"],
-      currentUser && currentUser.role === "admin" && ["admin", Shield, "Admin controls", "Feature switches, security and the audit log"],
-      currentUser && currentUser.role === "admin" && ["setupkeys", Lock, "Setup & keys", "API keys and services still to connect"],
+      ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam, Google reviews"],
+      ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
+      admin && ["admin", Shield, "Admin controls", "Feature switches, security and the audit log"],
+      admin && ["setupkeys", Lock, "Setup & keys", "API keys and services still to connect"],
       ["syscheck", AlertTriangle, "System check", "Test the database connection and setup"],
+      ["help", BookOpen, "Help & guides", "How every part of the app works"],
+      ["password", Lock, "Change my password", "Update your sign-in password"],
     ]],
   ];
-  const [open, setOpen] = useState({ Sales: true, Production: true, Company: false, Setup: false });
+  const [open, setOpen] = useState({ "Schedule & production": true, "Sales & marketing": true, Money: false, "Customers & documents": false, Setup: false });
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
   /* Searching flattens the groups — hunting through four accordions on

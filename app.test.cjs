@@ -5879,7 +5879,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       SubHeader,
       {
-        title: "Calendar",
+        title: "Schedule",
         onBack,
         right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, onClick: () => openAdd(null), children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }),
@@ -20489,46 +20489,48 @@ function HelpDesk({ onBack, brand: brand2 }) {
   ] });
 }
 function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
+  const admin = currentUser && currentUser.role === "admin";
   const groups = [
-    ["Sales", [
+    ["Schedule & production", [
+      ["calendar", import_lucide_react.Calendar, "Schedule", "Appointments, inspections & material drops"],
+      ["dispatch", import_lucide_react.HardHat, "Dispatch", "Which crews are on which jobs, day by day"],
+      ["crews", import_lucide_react.Wrench, "Crews", "Your subs, their trades and pricing"],
+      ["pos", import_lucide_react.Package, "Purchase orders", "Order, receive and reconcile materials"],
+      ["warranties", import_lucide_react.Shield, "Warranties", "Every roof's labor and manufacturer terms"]
+    ]],
+    ["Sales & marketing", [
       ["activity", import_lucide_react.ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", import_lucide_react.Phone, "Calls & attribution", "Log calls, see which sources make money"],
-      ["performance", import_lucide_react.PieChart, "Financials & performance", "Company money, commission, rep scoreboard & funnel"],
       ["contacts", import_lucide_react.Users, "Contacts", "Every client, with consent status"],
-      ["leadsources", import_lucide_react.Filter, "Lead sources", "Add, remove, and reorder the options"],
-      ["reviews", import_lucide_react.Star, "Review automation", "Google review requests"]
+      ["leadsources", import_lucide_react.Filter, "Lead sources", "Add, remove and reorder the options"],
+      ["reviews", import_lucide_react.Star, "Reviews", "Funnel, follow-ups, and who's actually left one"]
     ]],
-    ["Production", [
-      ["dispatch", import_lucide_react.HardHat, "Dispatch board", "Who's on which roof, day by day"],
-      ["calendar", import_lucide_react.Calendar, "Calendar", "Schedule & material drops"],
-      ["pos", import_lucide_react.Package, "Purchase orders", "Order, receive, reconcile materials"],
-      ["crews", import_lucide_react.Wrench, "Crews", "Dispatch directory for work orders"],
-      ["warranties", import_lucide_react.Shield, "Warranties", "Every roof's labor and manufacturer terms"],
-      ["insurance", import_lucide_react.Shield, "Insurance", "Clients, supplements, code lookup"]
-    ]],
-    ["Company", [
-      ["inbox", import_lucide_react.MessageCircle, "Team chat", "Now in the Inbox \u2014 @ someone, tag a job"],
-      ["announcements", import_lucide_react.Megaphone, "Company announcements", "Posted to everyone's home screen"],
-      ["team", import_lucide_react.HardHat, "Team & seats", canManageSeats(currentUser) ? "Add users, roles, logins" : "Who's on the team"],
-      ["documents", import_lucide_react.FileText, "Documents", "Contracts, COIs, licenses, warranties"],
-      ["vendors", import_lucide_react.Building2, "Vendors & suppliers", "Material suppliers and account details"],
+    ["Money", [
+      ["performance", import_lucide_react.PieChart, "Financials & performance", "Company money, commission, rep scoreboard"],
       ["pricelist", import_lucide_react.Package, "Price list", "Material costs and margins \u2014 CSV import"],
-      ["templates", import_lucide_react.ScrollText, "Message templates", "Email and text, customer and crew"]
+      admin && ["crewpay", import_lucide_react.HardHat, "Crew payouts", "What each crew is owed and has been paid"]
+    ]],
+    ["Customers & documents", [
+      ["insurance", import_lucide_react.Shield, "Insurance", "Clients, supplements and code lookup"],
+      ["documents", import_lucide_react.FileText, "Documents", "Contracts, COIs, licenses, warranties"],
+      ["templates", import_lucide_react.ScrollText, "Message templates", "Email and text, customer and crew"],
+      ["announcements", import_lucide_react.Megaphone, "Announcements", "Posted to everyone's home screen"]
     ]],
     ["Setup", [
-      ["help", import_lucide_react.BookOpen, "Help & guides", "How every part of the app works"],
+      ["team", import_lucide_react.HardHat, "Team & seats", canManageSeats(currentUser) ? "Add users, roles, logins" : "Who's on the team"],
+      ["vendors", import_lucide_react.Building2, "Vendors & suppliers", "Material suppliers and account details"],
       ["branding", import_lucide_react.Settings, "Company branding", "Name, logo, colors, what prints on documents"],
-      ["integrations", import_lucide_react.Share2, "Integrations", "Gmail, texting, CompanyCam"],
-      ["import", import_lucide_react.Upload, "Import jobs", "Bring a pipeline in from CSV"],
       ["workflow", import_lucide_react.ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
-      ["password", import_lucide_react.Lock, "Change my password", "Update your sign-in password"],
-      currentUser && currentUser.role === "admin" && ["crewpay", import_lucide_react.HardHat, "Crew payouts", "What each crew is owed and has been paid"],
-      currentUser && currentUser.role === "admin" && ["admin", import_lucide_react.Shield, "Admin controls", "Feature switches, security and the audit log"],
-      currentUser && currentUser.role === "admin" && ["setupkeys", import_lucide_react.Lock, "Setup & keys", "API keys and services still to connect"],
-      ["syscheck", import_lucide_react.AlertTriangle, "System check", "Test the database connection and setup"]
+      ["integrations", import_lucide_react.Share2, "Integrations", "Gmail, texting, CompanyCam, Google reviews"],
+      ["import", import_lucide_react.Upload, "Import jobs", "Bring a pipeline in from CSV"],
+      admin && ["admin", import_lucide_react.Shield, "Admin controls", "Feature switches, security and the audit log"],
+      admin && ["setupkeys", import_lucide_react.Lock, "Setup & keys", "API keys and services still to connect"],
+      ["syscheck", import_lucide_react.AlertTriangle, "System check", "Test the database connection and setup"],
+      ["help", import_lucide_react.BookOpen, "Help & guides", "How every part of the app works"],
+      ["password", import_lucide_react.Lock, "Change my password", "Update your sign-in password"]
     ]]
   ];
-  const [open, setOpen] = (0, import_react.useState)({ Sales: true, Production: true, Company: false, Setup: false });
+  const [open, setOpen] = (0, import_react.useState)({ "Schedule & production": true, "Sales & marketing": true, Money: false, "Customers & documents": false, Setup: false });
   const [q, setQ] = (0, import_react.useState)("");
   const needle = q.trim().toLowerCase();
   const matches = needle ? groups.flatMap(([, items]) => items.filter(Boolean).filter(([, , label, sub]) => (label + " " + (sub || "")).toLowerCase().includes(needle))) : null;
