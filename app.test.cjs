@@ -7658,7 +7658,8 @@ function JobDetail({
   openTab = null,
   features = {},
   onOpenCodeLookup = () => {
-  }
+  },
+  priceList = []
 }) {
   const [tab, setTab] = (0, import_react.useState)(openTab || "overview");
   const [open, setOpen] = (0, import_react.useState)(() => openTab ? { [openTab]: true } : {});
@@ -7948,7 +7949,8 @@ function JobDetail({
                   mut,
                   toast: toast2,
                   estimateTemplates,
-                  setEstimateTemplates
+                  setEstimateTemplates,
+                  priceList
                 }
               );
             case "contract":
@@ -12658,8 +12660,20 @@ function SupplementCheck({ job }) {
     ] })
   ] });
 }
-function LineItemEditor({ items, setItems, locked, addLabel = "Add line item" }) {
+function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", priceList = [] }) {
   const setItem = (id, k, v) => setItems(items.map((it) => it.id === id ? { ...it, [k]: v } : it));
+  const [pick, setPick] = (0, import_react.useState)(false);
+  const [pq, setPq] = (0, import_react.useState)("");
+  const catalog = (priceList || []).filter((r) => {
+    const q = pq.trim().toLowerCase();
+    if (!q) return true;
+    return `${r.item} ${r.sku || ""} ${r.category || ""}`.toLowerCase().includes(q);
+  });
+  const addFromCatalog = (r) => {
+    setItems([...items, { id: uid("e"), desc: r.item, qty: 1, unit: r.unit || "EA", price: num(r.price), cost: num(r.cost) }]);
+    setPick(false);
+    setPq("");
+  };
   const lineMargin = (it) => {
     const cost = num(it.cost), price = num(it.price);
     return price > 0 && cost > 0 ? ((price - cost) / price * 100).toFixed(0) : null;
@@ -12736,24 +12750,70 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item" })
         )
       ] })
     ] }, it.id)),
-    !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-      Btn,
-      {
-        kind: "soft",
-        small: true,
-        style: { marginTop: 12 },
-        onClick: () => setItems([...items, { id: uid("e"), desc: "", qty: 1, unit: "EA", price: 0 }]),
-        children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }),
-          " ",
-          addLabel
-        ]
-      }
-    )
+    !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+        Btn,
+        {
+          kind: "soft",
+          small: true,
+          onClick: () => setItems([...items, { id: uid("e"), desc: "", qty: 1, unit: "EA", price: 0 }]),
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }),
+            " ",
+            addLabel
+          ]
+        }
+      ),
+      (priceList || []).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => {
+        setPick(true);
+        setPq("");
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Package, { size: 14 }),
+        " From price list"
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open: pick, onClose: () => setPick(false), title: "Add from price list", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: { ...inputStyle, marginBottom: 10 },
+          value: pq,
+          autoFocus: true,
+          placeholder: "Search materials\u2026",
+          onChange: (e) => setPq(e.target.value)
+        }
+      ),
+      catalog.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "Nothing matches that." }),
+      catalog.slice(0, 60).map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => addFromCatalog(r), style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        width: "100%",
+        textAlign: "left",
+        border: "none",
+        borderTop: `1px solid ${S.line}`,
+        background: "none",
+        cursor: "pointer",
+        padding: "11px 2px",
+        fontFamily: "inherit"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 14, fontWeight: 600, color: S.ink }, children: r.item }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "block", fontSize: 11.5, color: S.sub }, children: [
+            r.category || "Uncategorized",
+            " \xB7 ",
+            r.unit || "EA",
+            r.supplier ? ` \xB7 ${r.supplier}` : ""
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }, children: money(num(r.price)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 15, color: T.accent })
+      ] }, r.id))
+    ] })
   ] });
 }
 function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates = [], setEstimateTemplates = () => {
-} }) {
+}, priceList = [] }) {
   const est = { ...job.estimate, tiers: job.estimate.tiers || [], upgrades: job.estimate.upgrades || [] };
   const [sigOpen, setSigOpen] = (0, import_react.useState)(false);
   const locked = est.status === "Signed";
@@ -12986,7 +13046,8 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
               items: t.items,
               locked,
               setItems: (items) => setTierItems(t.id, items),
-              addLabel: `Add line to ${t.name}`
+              addLabel: `Add line to ${t.name}`,
+              priceList
             }
           ),
           !locked && est.selectedTier !== t.id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { marginTop: 4 }, onClick: () => selectTier(t.id), children: "Show customer this tier instead" })
@@ -13003,7 +13064,7 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
         'Managed above \u2014 editing the "',
         est.tiers.find((t) => t.id === est.selectedTier)?.name || "active",
         '" tier and any checked upgrades. This total is what the customer sees.'
-      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LineItemEditor, { items: est.items, setItems: (items) => setEst({ items }), locked }),
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LineItemEditor, { items: est.items, setItems: (items) => setEst({ items }), locked, priceList }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
         display: "flex",
         justifyContent: "space-between",
@@ -21718,7 +21779,8 @@ function SupremeCRM() {
         onDelete: isAdmin ? deleteJobs : null,
         openTab: jobOpenTab,
         features,
-        onOpenCodeLookup: openCodeLookup
+        onOpenCodeLookup: openCodeLookup,
+        priceList
       }
     ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       liveDb() && jobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { margin: "14px 16px 0", background: "#EAF6EE", border: "1px solid #CDE8D6", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "#177245", lineHeight: 1.5 }, children: "Fresh database \u2014 no demo customers here. Everything you create now saves for real. Have a Roofr export? More \u2192 Import jobs pulls your whole pipeline in." }),

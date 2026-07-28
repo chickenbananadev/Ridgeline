@@ -6433,7 +6433,7 @@ const JOB_TAB_GROUPS = [
 ];
 
 function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [], ccToken = null,
-  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null, features = {}, onOpenCodeLookup = () => {} }) {
+  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null, features = {}, onOpenCodeLookup = () => {}, priceList = [] }) {
   const [tab, setTab] = useState(openTab || "overview");
   /* Every section starts collapsed so the job opens as a clean, scannable
      stack; the rep expands what they need. A deep link still opens its own
@@ -6630,7 +6630,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
               case "materials": return <TabMaterials job={job} mut={mut} toast={toast} />;
               case "estimate": return <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
-                estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} />;
+                estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} priceList={priceList} />;
               case "contract": return (<>
                 <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast} />
                 {/* Countersign queue + signature audit trail live with the
@@ -11394,8 +11394,19 @@ function SupplementCheck({ job }) {
    used, hoisted so each Good/Better/Best tier can reuse it too instead
    of three copy-pasted editors. Purely controlled: given items + a
    setItems callback, knows nothing about tiers, packages, or upgrades. */
-function LineItemEditor({ items, setItems, locked, addLabel = "Add line item" }) {
+function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", priceList = [] }) {
   const setItem = (id, k, v) => setItems(items.map((it) => (it.id === id ? { ...it, [k]: v } : it)));
+  const [pick, setPick] = useState(false);
+  const [pq, setPq] = useState("");
+  const catalog = (priceList || []).filter((r) => {
+    const q = pq.trim().toLowerCase();
+    if (!q) return true;
+    return `${r.item} ${r.sku || ""} ${r.category || ""}`.toLowerCase().includes(q);
+  });
+  const addFromCatalog = (r) => {
+    setItems([...items, { id: uid("e"), desc: r.item, qty: 1, unit: r.unit || "EA", price: num(r.price), cost: num(r.cost) }]);
+    setPick(false); setPq("");
+  };
   const lineMargin = (it) => {
     const cost = num(it.cost), price = num(it.price);
     return price > 0 && cost > 0 ? (((price - cost) / price) * 100).toFixed(0) : null;
@@ -11437,16 +11448,44 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item" })
         </div>
       ))}
       {!locked && (
-        <Btn kind="soft" small style={{ marginTop: 12 }}
-          onClick={() => setItems([...items, { id: uid("e"), desc: "", qty: 1, unit: "EA", price: 0 }])}>
-          <Plus size={14} /> {addLabel}
-        </Btn>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+          <Btn kind="soft" small
+            onClick={() => setItems([...items, { id: uid("e"), desc: "", qty: 1, unit: "EA", price: 0 }])}>
+            <Plus size={14} /> {addLabel}
+          </Btn>
+          {(priceList || []).length > 0 && (
+            <Btn kind="ghost" small onClick={() => { setPick(true); setPq(""); }}>
+              <Package size={14} /> From price list
+            </Btn>
+          )}
+        </div>
       )}
+      <Sheet open={pick} onClose={() => setPick(false)} title="Add from price list">
+        <input style={{ ...inputStyle, marginBottom: 10 }} value={pq} autoFocus
+          placeholder="Search materials…" onChange={(e) => setPq(e.target.value)} />
+        {catalog.length === 0 && <div style={{ fontSize: 13, color: S.sub }}>Nothing matches that.</div>}
+        {catalog.slice(0, 60).map((r) => (
+          <button key={r.id} onClick={() => addFromCatalog(r)} style={{
+            display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+            border: "none", borderTop: `1px solid ${S.line}`, background: "none", cursor: "pointer",
+            padding: "11px 2px", fontFamily: "inherit",
+          }}>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: S.ink }}>{r.item}</span>
+              <span style={{ display: "block", fontSize: 11.5, color: S.sub }}>
+                {r.category || "Uncategorized"} · {r.unit || "EA"}{r.supplier ? ` · ${r.supplier}` : ""}
+              </span>
+            </span>
+            <span style={{ fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{money(num(r.price))}</span>
+            <Plus size={15} color={T.accent} />
+          </button>
+        ))}
+      </Sheet>
     </>
   );
 }
 
-function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {} }) {
+function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {}, priceList = [] }) {
   /* job.estimate for any REAL job created before tiers/upgrades
      existed has neither field at all (undefined, not []) — this
      JSONB blob is exactly what was last saved, and mkEstimate()'s
@@ -11697,7 +11736,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
               <div key={t.id}>
                 <LineItemEditor items={t.items} locked={locked}
                   setItems={(items) => setTierItems(t.id, items)}
-                  addLabel={`Add line to ${t.name}`} />
+                  addLabel={`Add line to ${t.name}`} priceList={priceList} />
                 {!locked && est.selectedTier !== t.id && (
                   <Btn kind="ghost" small style={{ marginTop: 4 }} onClick={() => selectTier(t.id)}>
                     Show customer this tier instead
@@ -11727,7 +11766,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
             Managed above — editing the "{est.tiers.find((t) => t.id === est.selectedTier)?.name || "active"}" tier and any checked upgrades. This total is what the customer sees.
           </div>
         ) : (
-          <LineItemEditor items={est.items} setItems={(items) => setEst({ items })} locked={locked} />
+          <LineItemEditor items={est.items} setItems={(items) => setEst({ items })} locked={locked} priceList={priceList} />
         )}
         <div style={{
           display: "flex", justifyContent: "space-between", paddingTop: 14, marginTop: 8,
@@ -19741,7 +19780,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} setBrand={setBrand}
           onLog={logAct} leadSources={leadSources} activity={activity} ccToken={ccToken}
           onDelete={isAdmin ? deleteJobs : null} openTab={jobOpenTab} features={features}
-          onOpenCodeLookup={openCodeLookup} />
+          onOpenCodeLookup={openCodeLookup} priceList={priceList} />
       ) : nav === "home" ? (
         <>
           {liveDb() && jobs.length === 0 && (
