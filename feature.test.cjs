@@ -85,6 +85,8 @@ function clickFieldChoice(labelText, choiceText) {
 
   assert(!document.querySelector('[data-testid="create-lead"]'), "Lead sheet should close after creation");
   assert(document.body.textContent.includes("Test Flatroof"), "Created lead should open");
+  // Sections start collapsed now; expand Overview to see its intake content.
+  clickButton("Overview");
   assert(document.body.textContent.includes("Active leak"), "Intake reason should appear in the job");
   assert(document.body.textContent.includes("Roof replacement"), "Requested work should appear in the job");
 

@@ -61,7 +61,7 @@ clickText("Sign in"); // marketing page -> auth screen
 clickText("Sign in");
 clickText("Jacob Henderson");
 clickText("More");
-check("Dispatch board opens with no fetch available", clickText("Dispatch board"));
+check("Dispatch board opens with no fetch available", clickText("Dispatch"));
 check("Dispatch board rendered", /Dispatch/.test(document.body.textContent));
 
 /* Case 2: fetch rejects (offline) — still must not throw or hang. */
@@ -73,7 +73,7 @@ clickText("Sign in"); // marketing page -> auth screen
 clickText("Sign in");
 clickText("Jacob Henderson");
 clickText("More");
-check("Dispatch board opens with fetch rejecting", clickText("Dispatch board"));
+check("Dispatch board opens with fetch rejecting", clickText("Dispatch"));
 
 /* Case 3: fetch resolves with a canned forecast — still must not throw. */
 global.fetch = () => Promise.resolve({
@@ -94,7 +94,7 @@ clickText("Sign in"); // marketing page -> auth screen
 clickText("Sign in");
 clickText("Jacob Henderson");
 clickText("More");
-check("Dispatch board opens with fetch resolving", clickText("Dispatch board"));
+check("Dispatch board opens with fetch resolving", clickText("Dispatch"));
 
 console.error = realErr;
 const real = errs.filter((e) => !/not wrapped in act/.test(e));

@@ -1276,6 +1276,7 @@ const PORTAL_SECTIONS = [
   ["sign", "Documents to sign"],
   ["requests", "Quotes & future projects"],
   ["messages", "Messages"],
+  ["review", "Rate your experience"],
   ["yourinfo", "Your contact details"],
   ["contact", "Questions?"],
 ];
@@ -1295,14 +1296,14 @@ const DEFAULT_PORTAL_SETTINGS = {
   /* Every section is switchable, not just the document ones. A company
      that does not want a tracker or a messaging thread in front of its
      customers can turn them off. */
-  tracker: true, updates: true, messages: true, yourinfo: true, contact: true, requests: true, sign: true,
+  tracker: true, updates: true, messages: true, yourinfo: true, contact: true, requests: true, sign: true, review: true,
 };
 /* Section id -> settings key. Most match by name; the ones that predate
    the registry keep their original keys so saved jobs are unaffected. */
 const PORTAL_SECTION_KEY = {
   tracker: "tracker", rep: "showRep", updates: "updates", estimate: "estimate",
   contract: "contract", invoice: "invoice", documents: "documents", photos: "photos",
-  requests: "requests", messages: "messages", yourinfo: "yourinfo", contact: "contact", sign: "sign",
+  requests: "requests", messages: "messages", yourinfo: "yourinfo", contact: "contact", sign: "sign", review: "review",
 };
 function portalSectionOn(portal, sid) {
   const key = PORTAL_SECTION_KEY[sid];
@@ -2307,6 +2308,74 @@ function generateRoofingMaterials(m) {
     { item: "Coil nails 1-1/4 in.", qty: Math.max(1, Math.ceil(sq / 18)), unit: "boxes", note: "about 18 SQ per box" },
     { item: "Cap nails", qty: Math.max(1, Math.ceil(sq / 30)), unit: "boxes", note: "underlayment fastening" },
   ];
+}
+
+/* Total squares of material actually going on the roof — field shingles plus
+   ridge/hip cap and starter, each at three units per square (e.g. 5 cap
+   bundles = 1.66 sq, 2 starter = 0.66 sq, 66 shingle bundles = 22 sq → 24.3
+   sq). Returns the per-line breakdown and the total so the work order can show
+   its work, and so a sub's pay can be figured off installed squares. */
+const WO_COVERAGE_PER_UNIT = {
+  "Architectural shingles": 1 / 3,
+  "Hip & ridge cap": 1 / 3,
+  "Starter strip": 1 / 3,
+};
+function installedSquares(mats) {
+  if (!mats) return null;
+  const lines = mats
+    .map((x) => ({ item: x.item, qty: x.qty, unit: x.unit, sq: (WO_COVERAGE_PER_UNIT[x.item] || 0) * x.qty }))
+    .filter((l) => l.sq > 0);
+  const total = lines.reduce((a, l) => a + l.sq, 0);
+  return { lines, total: Math.round(total * 100) / 100 };
+}
+
+/* Map a free-text price-sheet row to a known pay code, so an uploaded
+   subcontractor sheet drives pay automatically. Anything unrecognized is
+   kept as a flat add-on. */
+function subCodeFor(text) {
+  const s = String(text || "").toLowerCase();
+  if (/steep|pitch/.test(s)) return "steep_per_square";
+  if (/tear|layer|rip/.test(s)) return "tearoff_per_square";
+  if (/(3|three|3\+).*stor/.test(s)) return "story_3";
+  if (/(2|two|second).*stor/.test(s)) return "story_2";
+  if (/chimney|flash/.test(s)) {
+    if (/small|sm\b/.test(s)) return "chimney_small";
+    if (/large|lg\b|lrg/.test(s)) return "chimney_large";
+    return "chimney_medium";
+  }
+  if (/install|per\s*sq|square|field|labor|base/.test(s)) return "per_square";
+  return null;
+}
+const SUB_RATE_LABELS = {
+  per_square: "Install (per square)", steep_per_square: "Steep charge (per square)",
+  tearoff_per_square: "Tear-off (per square, per extra layer)", story_2: "2-story adder",
+  story_3: "3+ story adder", chimney_small: "Chimney — small", chimney_medium: "Chimney — medium",
+  chimney_large: "Chimney — large",
+};
+function subRate(crew, code) {
+  const row = ((crew && crew.rateCard) || []).find((r) => r.code === code);
+  return row ? num(row.price) : 0;
+}
+/* Figure a subcontractor's pay for a job from their uploaded rate card and
+   the job's installed squares + conditions. Returns a transparent line
+   breakdown so the office can see exactly how the number was built. */
+function computeSubPay(job, crew) {
+  if (!crew || !((crew.rateCard || []).length)) return null;
+  const cov = installedSquares(generateRoofingMaterials(job.measurements));
+  const sq = cov ? cov.total : 0;
+  const wo = job.workOrder || {};
+  const lines = [];
+  const per = subRate(crew, "per_square");
+  if (per && sq) lines.push({ label: `Install ${sq} sq @ ${money(per)}/sq`, amt: per * sq });
+  if (wo.steep) { const s = subRate(crew, "steep_per_square"); if (s && sq) lines.push({ label: `Steep ${sq} sq @ ${money(s)}/sq`, amt: s * sq }); }
+  const layers = parseInt(wo.layers || job.checklist.layers, 10) || 1;
+  if (layers > 1) { const t = subRate(crew, "tearoff_per_square"); if (t && sq) lines.push({ label: `Tear-off ${layers} layers, ${sq} sq @ ${money(t)}/sq`, amt: t * sq * (layers - 1) }); }
+  if (wo.stories === "2") { const a = subRate(crew, "story_2"); if (a) lines.push({ label: "2-story adder", amt: a }); }
+  if (wo.stories === "3+") { const a = subRate(crew, "story_3"); if (a) lines.push({ label: "3+ story adder", amt: a }); }
+  const chim = (wo.chimney || {}).size;
+  if (chim && chim !== "none") { const a = subRate(crew, `chimney_${chim}`); if (a) lines.push({ label: `Chimney flashing (${chim})`, amt: a }); }
+  const total = lines.reduce((a, l) => a + l.amt, 0);
+  return { lines, total: Math.round(total * 100) / 100, squares: sq };
 }
 
 /* ================================================================
@@ -3731,6 +3800,23 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
   const ar = jobs.map((j) => paymentsSummary(j)).filter((p) => p.balance > 0.01 && p.contract > 0);
   const arTotal = ar.reduce((s, p) => s + p.balance, 0);
   const openTasks = jobs.flatMap((j) => j.tasks.filter((t) => !t.done).map((t) => ({ job: j, t })));
+  /* Money-forward company metrics, in the shape a ServiceTitan dashboard
+     leads with. All derived from jobs already in memory. */
+  const wonCount = approvedPlus.length;
+  const avgSale = wonCount ? signedValue / wonCount : 0;
+  const collected = jobs.reduce((s, j) => s + paymentsSummary(j).received, 0);
+  const closeRate = jobs.length ? wonCount / jobs.length : 0;
+  /* Reviews in the daily workflow: real funnel status across sold/completed
+     jobs. "Posted" is who has actually left one; "recover" is a 1–3★ that
+     needs a call before anything public. */
+  const reviewJobs = jobs.filter((j) => WON_STAGES.includes(j.stageId) || j.stageId === "s10");
+  const rev = { posted: 0, recover: 0, rated: 0, asked: 0, notasked: 0 };
+  reviewJobs.forEach((j) => {
+    const k = reviewState(j).key;
+    if (k === "posted") rev.posted++; else if (k === "recover") rev.recover++;
+    else if (k === "rated") rev.rated++; else if (k === "sent" || k === "clicked") rev.asked++;
+    else rev.notasked++;
+  });
 
   return (
     <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
@@ -4031,32 +4117,9 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         );
       })()}
 
-      {/* Calendar and dispatch live on the home screen, using the same
-          components as the full screens — an appointment added here is
-          the same record as one added under More, not a copy. */}
-      {setAppointments && (
-        <Card style={{ marginTop: 16 }}>
-          <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
-            {[["calendar", "Calendar"], ["dispatch", "Dispatch"]].map(([id, label]) => (
-              <button key={id} onClick={() => setHomeBoard(id)} style={{
-                flex: 1, border: `1.5px solid ${homeBoard === id ? T.accent : S.line}`,
-                background: homeBoard === id ? T.accentSoft : "#fff",
-                color: homeBoard === id ? T.accent : S.ink,
-                borderRadius: 999, padding: "8px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer",
-              }}>{label}</button>
-            ))}
-          </div>
-          {homeBoard === "calendar" ? (
-            <CalendarView embedded jobs={jobs} onOpenJob={onOpenJob} appointments={appointments}
-              setAppointments={setAppointments} apptTypes={apptTypes} setApptTypes={setApptTypes}
-              toast={toast} onQueueMessage={onQueueMessage} onLog={onLog} users={users}
-              onBack={() => go("calendar")} />
-          ) : (
-            <DispatchBoard embedded jobs={jobs} crews={crews} mutJob={mutJob}
-              onOpenJob={onOpenJob} toast={toast} onBack={() => go("dispatch")} />
-          )}
-        </Card>
-      )}
+      {/* Calendar and dispatch are one tap away under their own screens; the
+          home page stays focused on money and what needs attention rather
+          than embedding a whole scheduler. */}
 
       <Sheet open={!!quick} onClose={closeQuick}
         title={quick === "task" ? "New task" : quick === "call" ? "Log a call" : "Add a note"}
@@ -4085,78 +4148,59 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         )}
       </Sheet>
 
+      {/* Team chat lives in the Inbox, not on the home page. */}
       <FocusList jobs={jobs} onOpenJob={onOpenJob} />
 
-      {/* Team chat — the last few messages and a composer, so a quick
-          reply does not cost a trip to another screen. */}
-      {onSendChat && (() => {
-        const recent = (chatMsgs || []).slice(-4);
-        const AV = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
-        const colorOf = (n) => AV[Math.abs(String(n || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV.length];
-        const initials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
-        const mine = (m) => m.by === userName;
-        return (
-          <Card style={{ marginTop: 16 }}>
-            <CardTitle right={<button style={linkBtn} onClick={() => go("chat")}>Open chat →</button>}>Team chat</CardTitle>
-            {recent.length === 0 && (
-              <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>No messages yet — say something.</div>
-            )}
-            {recent.map((m) => (
-              <div key={m.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 0" }}>
-                <span style={{
-                  width: 26, height: 26, borderRadius: 99, flexShrink: 0,
-                  background: mine(m) ? T.primary : colorOf(m.by), color: "#fff",
-                  display: "grid", placeItems: "center", fontSize: 10, fontWeight: 800,
-                }}>{initials(m.by)}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 700, color: colorOf(m.by) }}>
-                    {m.by} <span style={{ color: S.sub, fontWeight: 400 }}>{String(m.at || "").slice(11, 16)}</span>
-                  </div>
-                  <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                    {m.text}
-                  </div>
-                  {m.reactions && Object.keys(m.reactions).length > 0 && (
-                    <div style={{ display: "flex", gap: 4, marginTop: 3 }}>
-                      {Object.entries(m.reactions).map(([e2, who]) => (
-                        <span key={e2} style={{ fontSize: 11, background: S.soft, borderRadius: 99, padding: "1px 6px" }}>
-                          {e2} {(who || []).length}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <input style={{ ...inputStyle, flex: 1, minHeight: 40 }} value={homeChat}
-                placeholder="Message the team…"
-                onChange={(e) => setHomeChat(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && homeChat.trim()) { onSendChat(homeChat.trim()); setHomeChat(""); }
-                }} />
-              <Btn disabled={!homeChat.trim()} onClick={() => { onSendChat(homeChat.trim()); setHomeChat(""); }}>
-                <Send size={15} />
-              </Btn>
-            </div>
-          </Card>
-        );
-      })()}
-
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 18 }}>
+      {/* Business at a glance — the money-forward company metrics a
+          ServiceTitan dashboard leads with. */}
+      <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: S.sub, margin: "22px 4px 10px" }}>
+        Business at a glance
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
         {[
-          ["Pipeline value", money(totalPipeline), "Open jobs, all stages"],
-          ["Signed value", money(signedValue), "Approved and beyond"],
-          ["Accounts receivable", money(arTotal), `${ar.length} open balance${ar.length === 1 ? "" : "s"}`],
-          ["Stale jobs", String(stale.length), "14+ days untouched"],
-        ].map(([l, v, sub]) => (
-          <Card key={l} pad={16}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: S.ink }}>{v}</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: S.ink, marginTop: 4 }}>{l}</div>
-            <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>{sub}</div>
+          ["Sold", money(signedValue), `${wonCount} won`, T.accent],
+          ["Avg sale", money(avgSale), "per won job", S.ink],
+          ["Collected", money(collected), "cash received", "#177245"],
+          ["Pipeline", money(totalPipeline), "open value", S.ink],
+          ["A/R", money(arTotal), `${ar.length} open`, arTotal > 0 ? "#9A6B00" : S.ink],
+          ["Close rate", pct1(closeRate), `${wonCount}/${jobs.length}`, S.ink],
+        ].map(([l, v, sub, color]) => (
+          <Card key={l} pad={13}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: S.sub }}>{l}</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color, marginTop: 5, fontVariantNumeric: "tabular-nums", overflow: "hidden", textOverflow: "ellipsis" }}>{v}</div>
+            <div style={{ fontSize: 11, color: S.sub, marginTop: 2 }}>{sub}</div>
           </Card>
         ))}
       </div>
+      {stale.length > 0 && (
+        <button onClick={() => go("jobs")} style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", fontSize: 12.5, color: "#9A6B00", padding: "10px 4px 0" }}>
+          {stale.length} stale job{stale.length === 1 ? "" : "s"} — 14+ days untouched →
+        </button>
+      )}
+
+      {reviewJobs.length > 0 && (
+        <Card style={{ marginTop: 14 }}>
+          <CardTitle right={<button style={linkBtn} onClick={() => go("reviews")}>Manage →</button>}>Reviews</CardTitle>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: rev.recover || rev.notasked ? 10 : 0 }}>
+            {[["Posted", rev.posted, "green"], ["Rated", rev.rated, "amber"], ["Asked", rev.asked, "gray"], ["Not asked", rev.notasked, "blue"], ["Needs a call", rev.recover, "red"]]
+              .filter(([, n]) => n > 0).map(([l, n, tone]) => (
+                <span key={l} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}>
+                  <Chip tone={tone}>{n}</Chip> {l}
+                </span>
+              ))}
+          </div>
+          {rev.recover > 0 && (
+            <div style={{ fontSize: 12.5, color: "#B3261E", lineHeight: 1.5 }}>
+              {rev.recover} customer{rev.recover === 1 ? "" : "s"} rated you 3★ or below — call before asking for anything public.
+            </div>
+          )}
+          {rev.recover === 0 && rev.notasked > 0 && (
+            <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
+              {rev.notasked} sold/finished job{rev.notasked === 1 ? "" : "s"} not yet asked for a review.
+            </div>
+          )}
+        </Card>
+      )}
 
       <Card style={{ marginTop: 14 }}>
         <CardTitle right={
@@ -4414,7 +4458,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast 
 
   return (
     <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
-      <SubHeader title="Performance" onBack={onBack} />
+      <SubHeader title="Financials & performance" onBack={onBack} />
 
       <Card style={{ marginTop: 14 }}>
         <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginBottom: 8 }}>VIEWING</div>
@@ -4973,7 +5017,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
           <Btn small onClick={() => openAdd(null)}><Plus size={14} /> Add</Btn>
         </div>
       ) : (
-        <SubHeader title="Calendar" onBack={onBack}
+        <SubHeader title="Schedule" onBack={onBack}
           right={<Btn small onClick={() => openAdd(null)}><Plus size={14} /> Add</Btn>} />
       )}
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -6345,26 +6389,38 @@ const JOB_TABS = [
    labelled headers beats hunting sideways through tabs, and several
    can be open at once. Each renders exactly the component the tab
    did. */
+/* Ordered as the job is actually worked — Inspect → Sell → Claim →
+   Build → Money → Customer — instead of front-loading post-sale
+   sections. The 4th tuple element is the group; the accordion prints a
+   divider whenever the group changes, so the stack reads as a timeline.
+   Groups mirror JOB_TAB_GROUPS, extended to cover the three sell-side
+   sections (change orders, signatures, handoff) that never lived in the
+   old tab list. */
 const JOB_SECTIONS = [
-  ["overview", "Overview", ClipboardList],
-  ["claim", "Insurance claim", Shield],
-  ["handoff", "Sold & handoff", Share2],
-  ["changeorders", "Change orders", ScrollText],
-  ["signatures", "Signatures", PenLine],
-  ["checklist", "Inspection checklist", CheckCircle2],
-  ["ventilation", "Ventilation", Wrench],
-  ["measure", "Measurements", Package],
-  ["photos", "Photos", Camera],
-  ["estimate", "Estimate", FileText],
-  ["contract", "Contract", PenLine],
-  ["materials", "Materials", Package],
-  ["report", "Report", ScrollText],
-  ["workorder", "Work order", ClipboardList],
-  ["tasks", "Tasks", CheckCircle2],
-  ["files", "Attachments", Layers],
-  ["financials", "Financials", DollarSign],
-  ["messages", "Messages", MessageCircle],
-  ["portal", "Client portal", Share2],
+  // Inspect
+  ["overview", "Overview", ClipboardList, "Inspect"],
+  ["checklist", "Inspection checklist", CheckCircle2, "Inspect"],
+  ["ventilation", "Ventilation", Wrench, "Inspect"],
+  ["measure", "Measurements", Package, "Inspect"],
+  ["photos", "Photos", Camera, "Inspect"],
+  // Sell
+  ["estimate", "Estimate", FileText, "Sell"],
+  ["contract", "Contract", PenLine, "Sell"],
+  ["changeorders", "Change orders", ScrollText, "Sell"],
+  ["materials", "Materials", Package, "Sell"],
+  ["report", "Report", ScrollText, "Sell"],
+  // Claim (insurance jobs only — gated in the render filter)
+  ["claim", "Insurance claim", Shield, "Claim"],
+  // Build
+  ["workorder", "Work order", ClipboardList, "Build"],
+  ["handoff", "Sold & handoff", Share2, "Build"],
+  ["tasks", "Tasks", CheckCircle2, "Build"],
+  ["files", "Attachments", Layers, "Build"],
+  // Money
+  ["financials", "Financials", DollarSign, "Money"],
+  // Customer
+  ["messages", "Messages", MessageCircle, "Customer"],
+  ["portal", "Client portal", Share2, "Customer"],
 ];
 
 /* Retained: the tab groups still drive which sections a seat may see. */
@@ -6377,11 +6433,12 @@ const JOB_TAB_GROUPS = [
 ];
 
 function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [], ccToken = null,
-  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null, features = {} }) {
+  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null, features = {}, onOpenCodeLookup = () => {} }) {
   const [tab, setTab] = useState(openTab || "overview");
-  /* Which sections are expanded. Overview opens by default; a deep link
-     opens its own section too so the caller lands on real content. */
-  const [open, setOpen] = useState(() => ({ overview: true, ...(openTab ? { [openTab]: true } : {}) }));
+  /* Every section starts collapsed so the job opens as a clean, scannable
+     stack; the rep expands what they need. A deep link still opens its own
+     section so the caller lands on real content. */
+  const [open, setOpen] = useState(() => (openTab ? { [openTab]: true } : {}));
   const [activityOpen, setActivityOpen] = useState(false);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const jumpToSection = (id) => {
@@ -6412,13 +6469,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
             right={
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <Chip tone="blue">{stage ? stage.name : "—"}</Chip>
-                {isAdmin && onDelete && (
-                  <button aria-label="Delete job" onClick={() => { setDelTyped(""); setDelOpen(true); }}
-                    style={{ border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
-                      width: 34, height: 34, display: "grid", placeItems: "center", cursor: "pointer", color: "#B3261E" }}>
-                    <Trash2 size={15} />
-                  </button>
-                )}
+                {/* Delete lives once, in the footer, behind a type-DELETE guard. */}
               </div>
             } />
           <div style={{ fontSize: 13, color: S.sub, margin: "8px 0 2px", display: "flex", alignItems: "center", gap: 6 }}>
@@ -6440,14 +6491,8 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
             }}>
               <Clock size={17} />
             </button>
-            {job.address && (
-              <a href={directionsLink(job.address)} target="_blank" rel="noreferrer" aria-label="Directions" style={{
-                width: 38, height: 38, borderRadius: 999, background: T.accentSoft,
-                display: "grid", placeItems: "center", color: T.accent, textDecoration: "none",
-              }}>
-                <MapPin size={17} />
-              </a>
-            )}
+            {/* Directions lives in the Call·Text·Directions·Upload row below;
+                a second icon-only copy here was redundant. */}
             {(() => {
               /* The control is a real toggle, and says which way it will
                  go — a button permanently labelled "Expand all" reads as
@@ -6491,7 +6536,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
                   <Act href={tel ? `tel:${tel}` : null} icon={Phone} label="Call" disabled={!tel} />
                   <Act href={tel ? `sms:${tel}` : null} icon={MessageCircle} label="Text" disabled={!tel} />
                   <Act href={directionsLink(job.address)} icon={MapPin} label="Directions" disabled={!job.address} />
-                  <Act onClick={() => setTab("files")} icon={Upload} label="Upload" />
+                  <Act onClick={() => jumpToSection("files")} icon={Upload} label="Upload" />
                 </>
               );
             })()}
@@ -6516,7 +6561,6 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           {[
             ["estimate", "Estimate", FileText],
             ["contract", "Contract", PenLine],
-            ["signatures", "Signatures", PenLine],
             ["materials", "Materials", Package],
             ["workorder", "Work order", ClipboardList],
             ["financials", "Financials", DollarSign],
@@ -6575,19 +6619,24 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           const render = (id) => {
             switch (id) {
               case "overview": return <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand}
-                currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} users={users} isAdmin={isAdmin} />;
+                currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} users={users} isAdmin={isAdmin}
+                onOpenCodeLookup={onOpenCodeLookup} />;
               case "claim": return <TabClaim job={job} mut={mut} toast={toast} brand={brand} />;
               case "handoff": return <TabHandoff job={job} mut={mut} toast={toast} isAdmin={isAdmin}
                 currentUser={currentUser} stages={stages} onMoveStage={onMoveStage} />;
               case "changeorders": return <TabChangeOrders job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />;
-              case "signatures": return <TabSignatures job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />;
               case "checklist": return <TabChecklist job={job} mut={mut} toast={toast} />;
               case "ventilation": return <TabVentilation job={job} mut={mut} toast={toast} />;
               case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
               case "materials": return <TabMaterials job={job} mut={mut} toast={toast} />;
               case "estimate": return <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
                 estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} />;
-              case "contract": return <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast} />;
+              case "contract": return (<>
+                <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast} />
+                {/* Countersign queue + signature audit trail live with the
+                    contract now, not in a separate section. */}
+                <TabSignatures job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />
+              </>);
               case "report": return <TabReport job={job} brand={brand} juris={juris} />;
               case "messages": return <TabMessages job={job} mut={mut} toast={toast} brand={brand}
                 templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />;
@@ -6607,7 +6656,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           const relevant = JOB_SECTIONS.filter(([id]) => {
             if (!featureOn(features, id)) return false;
             if (id === "claim") return job.claimType === "Insurance";
-            if (id === "handoff" || id === "changeorders" || id === "signatures") return true;
+            if (id === "handoff" || id === "changeorders") return true;
             return allowed.has(id);
           });
           /* A few sections carry a hint in the header, because a
@@ -6615,9 +6664,27 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
              for. */
           const HINTS = {
             claim: "Carrier money and supplements",
-            signatures: "Sign and countersign",
           };
-          return relevant.map(([id, label, Icon]) => {
+          /* Interleave a group divider before the first visible section
+             of each group, so the accordion reads Inspect → Sell → …
+             even after filtering hides some sections. */
+          const rows = [];
+          let lastGroup = null;
+          relevant.forEach((sec) => {
+            const group = sec[3];
+            if (group && group !== lastGroup) { rows.push({ divider: group }); lastGroup = group; }
+            rows.push({ sec });
+          });
+          return rows.map((row) => {
+            if (row.divider) {
+              return (
+                <div key={`grp-${row.divider}`} style={{
+                  fontSize: 11.5, fontWeight: 800, letterSpacing: ".09em", textTransform: "uppercase",
+                  color: S.sub, margin: "18px 4px 8px",
+                }}>{row.divider}</div>
+              );
+            }
+            const [id, label, Icon] = row.sec;
             const isOpen = !!open[id];
             return (
               <div key={id} id={`jobsec-${id}`} style={{
@@ -6691,7 +6758,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
 }
 
 /* ---------- Overview ---------- */
-function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false }) {
+function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false, onOpenCodeLookup = () => {} }) {
   const notes = job.notes || [];
   const [noteTxt, setNoteTxt] = useState("");
   const [noteVisible, setNoteVisible] = useState(false);
@@ -6730,7 +6797,8 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
   };
   const cap = computeCapOut(job);
   const pay = paymentsSummary(job);
-  const canReview = (job.consent.sms.granted || job.consent.email.granted) && !job.review.sent;
+  const rv = job.review || {};
+  const hasConsent = job.consent.sms.granted || job.consent.email.granted;
   return (
     <>
       <Card style={{ marginBottom: 12 }}>
@@ -7018,6 +7086,11 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
               {juris.state === "IL" ? " Illinois adoption is municipal, so the local ordinance must be confirmed before this goes in a supplement." : " Confirm the local building department and any amendments before relying on it."}
             </Callout>
           )}
+          {/* Verify/correct the building department without leaving the job:
+              opens the Code lookup already primed with this address's zip. */}
+          <button style={{ ...linkBtn, marginTop: 10 }} onClick={() => onOpenCodeLookup(job.zip)}>
+            Verify / edit building department →
+          </button>
         </Card>
       )}
 
@@ -7033,23 +7106,42 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={
-          job.review.posted ? <Chip tone="green">Review posted</Chip> :
-          job.review.sent ? <Chip tone="blue">Request sent</Chip> : null
+          rv.posted ? <Chip tone="green">Review posted</Chip> :
+          rv.rating >= 4 ? <Chip tone="green">{rv.rating}★ — happy</Chip> :
+          rv.rating ? <Chip tone="amber">{rv.rating}★ — recover</Chip> :
+          rv.sent ? <Chip tone="blue">Request sent</Chip> : null
         }>Review request</CardTitle>
-        <div style={{ fontSize: 13, color: S.sub, marginBottom: 12 }}>
-          {job.review.sent
-            ? `Google review request sent${job.review.clicked ? " and the link was opened" : ""}.`
-            : job.consent.sms.granted || job.consent.email.granted
-              ? `Sends the Google review link by ${[job.consent.sms.granted && "text", job.consent.email.granted && "email"].filter(Boolean).join(" and ")} (consent on file). Follow-up after ${reviewSettings.followUpDays} days if no click.`
-              : "No SMS or email consent on file — review requests are blocked for this client."}
+        {/* Feedback funnel: the customer rates first. 4–5★ routes to a public
+            Google review; 1–3★ is captured privately for the team so it never
+            lands on Google. The send is always available. */}
+        <div style={{ fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.55 }}>
+          {rv.feedback
+            ? `Private feedback (${rv.rating || "—"}★): "${rv.feedback}"`
+            : rv.rating >= 4
+              ? `Rated ${rv.rating}★ — routed to a public Google review${rv.posted ? " (posted)" : ""}.`
+              : rv.sent
+                ? "Request sent — waiting on the customer to rate in their portal."
+                : "Sends the customer to a quick “How did we do?” rating in their portal — happy customers to Google, unhappy to a private note for you."}
         </div>
-        <Btn small kind={canReview ? "primary" : "ghost"} disabled={!canReview}
-          onClick={() => {
-            mut((j) => ({ ...j, review: { ...j.review, sent: true } }));
-            toast("Review request queued");
-          }}>
-          <Star size={14} /> Send review request
-        </Btn>
+        {!hasConsent && !rv.sent && (
+          <div style={{ fontSize: 12, color: "#92600A", marginBottom: 10 }}>
+            No SMS or email consent on file — send it by hand, or capture consent first.
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Btn small kind="primary"
+            onClick={() => {
+              mut((j) => ({ ...j, review: { ...(j.review || {}), sent: true, sentAt: todayIso() } }));
+              toast(rv.sent ? "Review request re-sent" : "Review request sent");
+            }}>
+            <Star size={14} /> {rv.sent ? "Re-send request" : "Send review request"}
+          </Btn>
+          {rv.rating >= 4 && !rv.posted && brand.googleReviewLink && (
+            <Btn small kind="ghost" onClick={() => mut((j) => ({ ...j, review: { ...(j.review || {}), posted: true } }))}>
+              Mark posted
+            </Btn>
+          )}
+        </div>
       </Card>
     </>
   );
@@ -7560,6 +7652,100 @@ function PortalTracker({ step = 0, accent = T.accent, compact = false }) {
   );
 }
 
+/* Customer-facing review funnel. The homeowner rates first; 4–5 stars are
+   routed to a public Google review, 1–3 land as private feedback for the
+   team (via crm_portal_requests) and — when gating is on — never see the
+   Google link. Degrades gracefully with no database: the happy path still
+   opens Google, the private path just thanks them. */
+function PortalReview({ token, jobId, review, accent, company }) {
+  const [rating, setRating] = useState(0);
+  const [hover, setHover] = useState(0);
+  const [text, setText] = useState("");
+  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const db = DB();
+  const link = (review && review.googleLink) || "";
+  const gate = review ? review.gateNegative !== false : true;
+  const happy = rating >= 4;
+
+  const log = async () => {
+    if (!db || !token) return;
+    const row = {
+      id: uid("rev"), token, job_id: jobId, request_type: "review_feedback",
+      category: `Rated ${rating}★`, details: text.trim() || (happy ? "Positive rating" : ""),
+      status: "New", requested_by: "Customer",
+    };
+    try { await db.from("crm_portal_requests").insert(row); } catch (e) { /* non-fatal */ }
+  };
+  const finishHappy = async () => { setBusy(true); await log(); setBusy(false); setDone(true); if (link) window.open(link, "_blank", "noopener"); };
+  const finishUnhappy = async () => { if (!text.trim()) return; setBusy(true); await log(); setBusy(false); setDone(true); };
+
+  if (review && review.submitted && !done) {
+    return (
+      <Card>
+        <CardTitle>Rate your experience</CardTitle>
+        <div style={{ fontSize: 14, lineHeight: 1.6, color: S.sub }}>
+          You rated us {review.rating}★ — thank you for the feedback.
+        </div>
+      </Card>
+    );
+  }
+  if (done) {
+    return (
+      <Card>
+        <CardTitle>Thank you</CardTitle>
+        <div style={{ fontSize: 14, lineHeight: 1.6, color: S.sub }}>
+          {happy
+            ? (link ? "Thanks so much — your review page should have opened in a new tab." : "Thanks so much for the kind words!")
+            : `Thank you for being honest with us. Someone from ${company || "our team"} will reach out.`}
+        </div>
+      </Card>
+    );
+  }
+  return (
+    <Card>
+      <CardTitle>Rate your experience</CardTitle>
+      <div style={{ fontSize: 14, color: S.sub, marginBottom: 12 }}>How did we do?</div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button key={n} onClick={() => setRating(n)} onMouseEnter={() => setHover(n)} onMouseLeave={() => setHover(0)}
+            aria-label={`${n} star${n > 1 ? "s" : ""}`} style={{ border: "none", background: "none", cursor: "pointer", padding: 2 }}>
+            <Star size={30} color={(hover || rating) >= n ? "#E8B931" : "#D3D8DE"} fill={(hover || rating) >= n ? "#E8B931" : "none"} />
+          </button>
+        ))}
+      </div>
+      {rating > 0 && happy && (
+        <>
+          <div style={{ fontSize: 14, lineHeight: 1.6, marginBottom: 12 }}>
+            Wonderful — thank you! Would you mind sharing it publicly? It genuinely helps.
+          </div>
+          <Btn onClick={finishHappy} disabled={busy} style={{ background: accent, borderColor: accent }}>
+            {link ? "Leave a Google review" : "Submit rating"}
+          </Btn>
+        </>
+      )}
+      {rating > 0 && !happy && (
+        <>
+          <div style={{ fontSize: 14, lineHeight: 1.6, marginBottom: 10 }}>
+            We’re sorry we fell short. Tell us what happened — this goes straight to the team, privately.
+          </div>
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4}
+            placeholder="What could we have done better?"
+            style={{ ...inputStyle, width: "100%", minHeight: 90, marginBottom: 10 }} />
+          <Btn onClick={finishUnhappy} disabled={busy || !text.trim()} style={{ background: accent, borderColor: accent }}>
+            Send private feedback
+          </Btn>
+          {!gate && link && (
+            <div style={{ marginTop: 10, fontSize: 12.5 }}>
+              <a href={link} target="_blank" rel="noreferrer" style={{ color: accent }}>Or leave a public review anyway →</a>
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
 function PortalRequestCenter({ token, jobId, role, customerName, accent, allowQuoteChanges = true, allowAddOns = true }) {
   const [requests, setRequests] = useState([]);
   const [kind, setKind] = useState("quote_change");
@@ -7742,6 +7928,12 @@ function buildPortalSnapshot(job, brand, token) {
       estimate: portal.estimate ? { number: job.estimate.number, date: job.estimate.date, total: estimateTotal(job.estimate), items: job.estimate.items } : null,
       contract: portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
       invoice: portal.invoice ? { contract: pay.contract, received: pay.received, balance: pay.balance } : null,
+      review: portal.review !== false ? {
+        googleLink: brand.googleReviewLink || "",
+        gateNegative: brand.gateNegativeReviews === true,
+        rating: (job.review || {}).rating || null,
+        submitted: !!(job.review || {}).rating,
+      } : null,
       schedDate: job.schedDate || null,
       updatedAt: new Date().toISOString(),
     },
@@ -8435,6 +8627,10 @@ function PublicPortal({ token }) {
               <PortalThread token={token} meRole="customer" meName={d.name} accent={prim} />
             </Card>
           );
+
+          if (sid === "review") return d.review ? wrap(
+            <PortalReview token={token} jobId={d.jobId || null} review={d.review} accent={prim} company={d.company} />
+          ) : null;
 
           if (sid === "sign") return wrap(
             <PortalSignCenter token={token} jobId={d.jobId || null} customer={d.customer || {}}
@@ -12978,7 +13174,18 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
   const crew = crews.find((c) => c.id === job.crewId) || null;
   const m = job.measurements;
   const mats = generateRoofingMaterials(m);
+  const coverage = installedSquares(mats);
+  const subPay = crew ? computeSubPay(job, crew) : null;
+  const addSubToCosts = () => {
+    if (!subPay) return;
+    const line = { id: uid("l"), label: `Sub labor — ${crew.name} (${subPay.squares} sq)`, amt: subPay.total, by: crew.name };
+    mut((j) => ({ ...j, fin: { ...(j.fin || {}), labor: [...(((j.fin || {}).labor) || []), line] } }));
+    toast("Added to job costs");
+  };
   const wo = job.workOrder || { number: "", sentAt: null, status: "Draft", notes: "" };
+  const setWo = (patch) => mut((j) => ({ ...j, workOrder: { ...(j.workOrder || {}), ...patch } }));
+  const chimney = wo.chimney || { size: "none", notes: "" };
+  const CHIMNEY_SIZES = [["none", "None"], ["small", "Small"], ["medium", "Medium"], ["large", "Large"], ["custom", "Custom"]];
 
   const assign = (c) => {
     mut((j) => ({ ...j, crewId: c.id }));
@@ -13043,6 +13250,40 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
         )}
       </Card>
 
+      {/* Office-only: the sub's pay, figured live from their uploaded rate
+          card and this job's installed squares + conditions. Never shown on
+          the crew-facing document below. */}
+      {crew && canSeeMoney(currentUser) && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={subPay ? <Chip tone="green">{money(subPay.total)}</Chip> : <Chip tone="gray">No rate sheet</Chip>}>
+            Sub pay — {crew.name}
+          </CardTitle>
+          {subPay && subPay.lines.length > 0 ? (
+            <>
+              {subPay.lines.map((l, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+                  <span style={{ fontSize: 13, color: S.ink }}>{l.label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{money(l.amt)}</span>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 0 0", borderTop: `2px solid ${S.line}`, marginTop: 6 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 800 }}>Total sub pay</span>
+                <span style={{ fontSize: 14.5, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>{money(subPay.total)}</span>
+              </div>
+              <Btn kind="ghost" small style={{ marginTop: 12 }} onClick={addSubToCosts}>
+                <Plus size={13} /> Add to job costs
+              </Btn>
+            </>
+          ) : (
+            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+              {(crew.rateCard || []).length
+                ? "This job has no installed squares yet — add measurements to price the sub's pay."
+                : <>No price sheet on file for {crew.name}. Upload one in <b>Crews</b> and their pay fills in here automatically.</>}
+            </div>
+          )}
+        </Card>
+      )}
+
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="gray">No pricing</Chip>}>Work order — {wo.number || "unassigned"}</CardTitle>
         <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
@@ -13052,13 +13293,82 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
         <KV k="Address" v={job.address} />
         <KV k="Customer phone" v={fmtPhone(job.phone)} />
         <KV k="Scheduled" v={job.schedDate || "Not scheduled"} />
-        <KV k="Squares" v={m.squares || "—"} />
+        <KV k="Measured squares" v={m.squares || "—"} />
+        <KV k="Installed squares" v={coverage ? `${coverage.total} sq` : "—"} />
         <KV k="Pitch" v={m.pitch || "—"} />
-        <KV k="Layers to remove" v={job.checklist.layers || "—"} />
+        <KV k="Stories" v={wo.stories || "—"} />
+        <KV k="Layers to remove" v={wo.layers || job.checklist.layers || "—"} />
+        <KV k="Steep / access" v={wo.steep ? "Steep — extra crew/staging" : "Standard"} />
+        <KV k="Chimney flashing" v={chimney.size === "none" ? "None" : `${chimney.size[0].toUpperCase()}${chimney.size.slice(1)}${chimney.notes ? ` — ${chimney.notes}` : ""}`} />
         <KV k="Decking" v={job.checklist.deckingType || "—"} />
         <a href={directionsLink(job.address)} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
           <Btn kind="ghost" small style={{ width: "100%", marginTop: 10 }}><MapPin size={13} /> Directions to site</Btn>
         </a>
+      </Card>
+
+      {coverage && coverage.lines.length > 0 && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={<Chip tone="blue">{coverage.total} sq</Chip>}>Installed coverage</CardTitle>
+          <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
+            Total squares of material going on the roof — field, cap and starter added up.
+          </div>
+          {coverage.lines.map((l, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+              <span style={{ fontSize: 13, color: S.ink }}>{l.item} <span style={{ color: S.sub }}>({l.qty} {l.unit})</span></span>
+              <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{Math.round(l.sq * 100) / 100} sq</span>
+            </div>
+          ))}
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 0 0", borderTop: `2px solid ${S.line}`, marginTop: 6 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 800, color: S.ink }}>Total installed</span>
+            <span style={{ fontSize: 14.5, fontWeight: 800, color: T.accent, fontVariantNumeric: "tabular-nums" }}>{coverage.total} sq</span>
+          </div>
+        </Card>
+      )}
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Job conditions</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
+          What the crew is walking into — these also drive the sub's pay when a price sheet is on file.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <Field label="Stories">
+            <select style={selStyle} value={wo.stories || ""} onChange={(e) => setWo({ stories: e.target.value })}>
+              <option value="">—</option>
+              <option value="1">1 story</option>
+              <option value="2">2 story</option>
+              <option value="3+">3+ story</option>
+            </select>
+          </Field>
+          <Field label="Layers to remove">
+            <select style={selStyle} value={wo.layers || job.checklist.layers || ""} onChange={(e) => setWo({ layers: e.target.value })}>
+              <option value="">—</option>
+              <option value="1">1 layer</option>
+              <option value="2">2 layers</option>
+              <option value="3+">3+ layers</option>
+            </select>
+          </Field>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+          <Toggle on={!!wo.steep} onClick={() => setWo({ steep: !wo.steep })} />
+          <span style={{ fontSize: 13.5, color: S.ink }}>Steep pitch — extra crew, staging or roof jacks</span>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <Field label="Chimney flashing">
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {CHIMNEY_SIZES.map(([id, label]) => (
+                <button key={id} onClick={() => setWo({ chimney: { ...chimney, size: id } })} style={{
+                  border: `1.5px solid ${chimney.size === id ? T.accent : S.line}`,
+                  background: chimney.size === id ? T.accentSoft : "#fff", color: chimney.size === id ? T.accent : S.ink,
+                  borderRadius: 8, padding: "7px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                }}>{label}</button>
+              ))}
+            </div>
+          </Field>
+          {chimney.size !== "none" && (
+            <input style={{ ...inputStyle, marginTop: 8 }} placeholder="Chimney notes — size, condition, cricket needed…"
+              value={chimney.notes || ""} onChange={(e) => setWo({ chimney: { ...chimney, notes: e.target.value } })} />
+          )}
+        </div>
       </Card>
 
       <Card style={{ marginTop: 12 }}>
@@ -13803,9 +14113,9 @@ function LetterTemplates() {
   );
 }
 
-function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {} }) {
-  const [tab, setTab] = useState("clients");
-  const [zip, setZip] = useState("");
+function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {}, seed = null, onConsumeSeed = () => {} }) {
+  const [tab, setTab] = useState(seed && seed.zip ? "codes" : "clients");
+  const [zip, setZip] = useState(seed ? seed.zip || "" : "");
   const [tplState, setTplState] = useState("OH");
   const [openTpl, setOpenTpl] = useState(null);
   const [resourcePage, setResourcePage] = useState(null);
@@ -13817,9 +14127,19 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
   const [kbQ, setKbQ] = useState("");
   const [kbSys, setKbSys] = useState("all");
   const [openKb, setOpenKb] = useState(null);
+  /* A deep link from a job primes the Code lookup with that address's zip.
+     Apply it once, then clear it upstream so a later plain visit opens on
+     Clients as usual. */
+  useEffect(() => {
+    if (seed) {
+      setTab("codes");
+      if (seed.zip) setZip(seed.zip);
+      onConsumeSeed();
+    }
+  }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["search", "Search"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
 
   /* One index across codes, terms and supplement triggers, so a rep
      types what they half-remember rather than guessing which tab it
@@ -14007,6 +14327,15 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
             </Card>
           ))}
           {insJobs.length === 0 && <div style={{ fontSize: 14, color: S.sub, marginTop: 8 }}>No insurance jobs yet.</div>}
+        </div>
+      )}
+
+      {/* Claims = the company-wide carrier-money roll-up, folded in from
+          the old standalone Claims destination so insurance lives in one
+          place. */}
+      {tab === "claims" && (
+        <div style={{ marginTop: 14 }}>
+          <ClaimsDashboard jobs={jobs} onOpenJob={onOpenJob} embedded />
         </div>
       )}
 
@@ -14585,15 +14914,14 @@ function Toggle({ on, onClick }) {
    sequence rather than one message, sentiment captured before the ask,
    and every customer tracked through the funnel.
 
-   One deliberate departure. Those tools became known for "review
-   gating" — asking how it went, then routing only the happy customers
-   to Google and diverting the unhappy ones to a private form. Google
-   prohibits it outright and the FTC treats it as a deceptive practice;
-   both vendors have had to walk it back. So this asks for sentiment
-   because it is genuinely useful — an unhappy customer should hear
-   from a human before anything else happens — but the public review
-   link is offered to everyone. What sentiment changes is the timing
-   and who gets told, never whether the customer is allowed to review.
+   Sentiment is captured first because it is genuinely useful — an
+   unhappy customer should hear from a human before anything else. By
+   default the public review link is still offered to everyone; sentiment
+   changes timing and who gets a call, not eligibility. Whether to go
+   further and withhold the public link from unhappy customers ("review
+   gating") is a per-company switch (brand.gateNegativeReviews, default
+   off), because Google prohibits it and the FTC treats suppressing
+   negative reviews as deceptive — see the warning by that toggle.
 ================================================================== */
 const REVIEW_STEPS = [
   { id: "ask", delay: 1, channel: "sms",
@@ -14624,6 +14952,26 @@ function reviewState(job) {
   if (r.clicked) return { key: "clicked", label: "Opened link", tone: "amber" };
   if (r.sent) return { key: "sent", label: "Requested", tone: "gray" };
   return { key: "ready", label: "Not asked", tone: "blue" };
+}
+
+/* Live public-review pull, wired for later. The Google Business Profile API
+   can't be called with the browser anon key, so this hits a server function
+   (deploy supabase/functions/google-reviews with an API key). Returns
+   [{ authorName, rating, text, time }] or [] until that function exists, so
+   callers degrade to the portal-funnel review status. Match authorName /
+   time against completed jobs to mark job.review.posted for who actually
+   left a review. */
+async function fetchGoogleReviews(placeId) {
+  if (!placeId) return [];
+  try {
+    const sb = (typeof window !== "undefined" && window.__SUPABASE__) || null;
+    if (!sb) return [];
+    const { data, error } = await sb.functions.invoke("google-reviews", { body: { placeId } });
+    if (error || !data) return [];
+    return Array.isArray(data.reviews) ? data.reviews : [];
+  } catch (e) {
+    return [];
+  }
 }
 
 /* The step that is due next for a job, given when the sequence started. */
@@ -14781,15 +15129,29 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
         <Field label="BBB profile link">
           <input style={inputStyle} value={settings.bbbLink || ""} onChange={(e) => set("bbbLink")(e.target.value)} />
         </Field>
-        <Callout label="A word on review gating" tone="amber">
-          NiceJob and Birdeye became known for asking how it went and then
-          only sending happy customers to Google. Google prohibits that
-          outright and the FTC treats it as deceptive — both vendors have had
-          to walk it back. So the rating here changes <b>timing</b> and who
-          gets a phone call, never whether someone is allowed to review. It is
-          also simply better business: a fixed complaint often becomes the
-          most convincing review you own.
-        </Callout>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, borderTop: `1px solid ${S.line}`, paddingTop: 14, marginTop: 4 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>Only send happy customers to Google</div>
+            <div style={{ fontSize: 13, color: S.sub, marginTop: 3, lineHeight: 1.5 }}>
+              When on, customers who rate 1–3★ in their portal are routed only to a
+              private feedback form and never shown the public Google link. When off,
+              everyone can still choose to leave a public review; unhappy customers are
+              simply invited to tell you privately first.
+            </div>
+          </div>
+          <Toggle on={brand.gateNegativeReviews === true}
+            onClick={() => setBrandFromReviews && setBrandFromReviews({ ...brand, gateNegativeReviews: !(brand.gateNegativeReviews === true) })} />
+        </div>
+        {brand.gateNegativeReviews === true && (
+          <Callout label="Heads up — this is review gating" tone="red">
+            Google's review policies prohibit soliciting reviews only from customers
+            you expect to be positive, and the FTC treats suppressing negative reviews
+            as a deceptive practice — it can get reviews removed or your Business
+            Profile penalized. Asking for feedback first is fine and good business;
+            hiding the public link from unhappy customers is the part that carries risk.
+            Leave this off unless you understand that trade-off.
+          </Callout>
+        )}
       </Card>
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="blue">{completed.length} completed</Chip>}>Review requests</CardTitle>
@@ -16201,6 +16563,49 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const [customTrade, setCustomTrade] = useState("");
   const [range, setRange] = useState("all");
   const docRef = useRef(null);
+  const priceRef = useRef(null);
+  /* Read a subcontractor's uploaded price sheet (CSV: an item/description
+     column and a price/rate column) and map each row to a known pay code so
+     it drives pay automatically. Unrecognized rows are kept as flat add-ons. */
+  const parseSubSheet = (text) => {
+    const rows0 = String(text).split(/\r?\n/).filter((l) => l.trim());
+    if (!rows0.length) return [];
+    const split = (l) => {
+      const out = []; let cur = "", inQ = false;
+      for (let i = 0; i < l.length; i++) {
+        const ch = l[i];
+        if (ch === '"') { if (inQ && l[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ; }
+        else if (ch === "," && !inQ) { out.push(cur); cur = ""; } else cur += ch;
+      }
+      out.push(cur); return out.map((x) => x.trim());
+    };
+    const head = split(rows0[0]).map((h) => h.toLowerCase().replace(/[^a-z]/g, ""));
+    const idx = (names) => { for (const n of names) { const k = head.indexOf(n); if (k >= 0) return k; } return -1; };
+    const cItem = idx(["item", "description", "service", "name", "type", "line"]);
+    const cPrice = idx(["price", "rate", "cost", "amount", "persquare", "persq", "unitprice"]);
+    const cUnit = idx(["unit", "uom", "per"]);
+    if (cItem < 0 || cPrice < 0) return [];
+    return rows0.slice(1).map((l) => {
+      const c = split(l); const item = c[cItem] || ""; const code = subCodeFor(item);
+      return {
+        id: uid("rc"), code: code || "custom", label: item,
+        unit: cUnit >= 0 ? c[cUnit] : (code && code.endsWith("per_square") ? "sq" : "flat"),
+        price: num(String(c[cPrice]).replace(/[$,]/g, "")),
+      };
+    }).filter((r) => r.label && r.price > 0);
+  };
+  const onPriceFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const r = new FileReader();
+    r.onload = () => {
+      const rows = parseSubSheet(String(r.result));
+      if (rows.length) { setF((prev) => ({ ...prev, rateCard: rows })); toast(`${rows.length} price rows loaded`); }
+      else toast("Couldn't read that sheet — needs an item column and a price column");
+    };
+    r.readAsText(file);
+    e.target.value = "";
+  };
   const paidFor = (crewId) => {
     const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 86400000;
     return jobs.filter((j) => j.crewId === crewId).reduce((sum, j) => {
@@ -16295,6 +16700,31 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
           ))}
           <Btn kind="ghost" small style={{ marginTop: 8 }} onClick={() => docRef.current && docRef.current.click()}>
             <Upload size={13} /> Add document
+          </Btn>
+        </Field>
+        <Field label="Pricing sheet" hint="Upload this sub's price sheet (CSV with an item and a price column). Rates drive their pay automatically off each job's installed squares and conditions.">
+          <input ref={priceRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={onPriceFile} />
+          {(f.rateCard || []).length > 0 ? (
+            <div style={{ border: `1px solid ${S.line}`, borderRadius: 10, overflow: "hidden", marginBottom: 8 }}>
+              {(f.rateCard || []).map((r) => (
+                <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: `1px solid ${S.line}` }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, color: S.ink }}>{r.label}</div>
+                    <div style={{ fontSize: 11.5, color: S.sub }}>{SUB_RATE_LABELS[r.code] || "Flat add-on"}{r.unit === "sq" ? " · per square" : ""}</div>
+                  </div>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{money(r.price)}{r.unit === "sq" ? "/sq" : ""}</span>
+                  <button onClick={() => setF({ ...f, rateCard: (f.rateCard || []).filter((x) => x.id !== r.id) })}
+                    style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={14} color="#B42318" /></button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
+              No price sheet yet. Recognized rows: install/steep/tear-off per square, 2- and 3-story adders, and chimney small/medium/large.
+            </div>
+          )}
+          <Btn kind="ghost" small onClick={() => priceRef.current && priceRef.current.click()}>
+            <Upload size={13} /> {(f.rateCard || []).length ? "Replace price sheet" : "Upload price sheet"}
           </Btn>
         </Field>
         <Field label="Trades">
@@ -16697,6 +17127,48 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           </span>
         </label>
       </Card>
+
+      {/* Google Business Profile — scaffold. Storing the Place ID and marking
+          the connection is done here; actually pulling live posted reviews to
+          match them to customers needs the Business Profile API through a
+          server function (the anon key can't call it), so fetchGoogleReviews
+          is stubbed until that Edge Function is deployed. */}
+      {(() => {
+        const g = integrations.googleReviews || {};
+        return (
+          <Card style={{ marginTop: 12 }}>
+            <CardTitle right={g.connected ? <Chip tone="green">Connected</Chip> : <Chip tone="gray">Not connected</Chip>}>
+              Google reviews
+            </CardTitle>
+            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 10 }}>
+              Connect your Google Business Profile so review status can reflect who has
+              actually posted a public review, not just who was asked. Paste your Place ID
+              (Google Business Profile → the URL, or the Place ID Finder).
+            </div>
+            {g.connected ? (
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ flex: 1, fontSize: 13.5 }}>Connected · Place ID <b>{g.placeId}</b></div>
+                <Btn small kind="danger" onClick={() => { setIntegrations({ ...integrations, googleReviews: { connected: false } }); toast && toast("Google reviews disconnected"); }}>Disconnect</Btn>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 8 }}>
+                <input style={{ ...inputStyle, flex: 1 }} placeholder="ChIJ… (Google Place ID)"
+                  value={g.draft || ""} onChange={(e) => setIntegrations({ ...integrations, googleReviews: { ...g, draft: e.target.value } })} />
+                <Btn small disabled={!(g.draft || "").trim()}
+                  onClick={() => { setIntegrations({ ...integrations, googleReviews: { connected: true, placeId: (g.draft || "").trim(), at: new Date().toISOString().slice(0, 10) } }); toast && toast("Google reviews connected"); }}>
+                  Connect
+                </Btn>
+              </div>
+            )}
+            <Callout label="Live sync needs a server step" tone="amber">
+              Reading actual posted reviews from Google requires the Business Profile API,
+              which must run server-side (deploy a <code>google-reviews</code> Edge Function
+              with an API key). Until then the connection is stored and the review workflow
+              runs on the real ratings customers submit in their portal.
+            </Callout>
+          </Card>
+        );
+      })()}
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle>On the roadmap</CardTitle>
@@ -17268,7 +17740,7 @@ function detectAnomaly(events, now) {
    "what is the carrier sitting on across the whole book", which is the
    number that actually gets chased.
 ================================================================== */
-function ClaimsDashboard({ jobs, onBack, onOpenJob }) {
+function ClaimsDashboard({ jobs, onBack, onOpenJob, embedded = false }) {
   const [stage, setStage] = useState("all");
   const claims = jobs.filter((j) => j.claimType === "Insurance" && (j.claim || j.insurance));
   const rows = claims.map((j) => ({ j, m: claimMath(j), st: (j.claim || {}).stage || "filed" }));
@@ -17282,8 +17754,8 @@ function ClaimsDashboard({ jobs, onBack, onOpenJob }) {
   const unwaived = rows.filter((r) => r.m.deductible - r.m.deductibleCollected > 0).length;
 
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
-      <SubHeader title="Claims" onBack={onBack} />
+    <div style={{ padding: embedded ? 0 : "20px 16px 110px", background: embedded ? "transparent" : S.bg, minHeight: embedded ? undefined : "100vh" }}>
+      {!embedded && <SubHeader title="Claims" onBack={onBack} />}
 
       <Card style={{ marginTop: 14, borderLeft: `4px solid ${owed > 0 ? "#E8B931" : S.line}` }}>
         <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }}>OWED BY CARRIERS</div>
@@ -18094,46 +18566,48 @@ function HelpDesk({ onBack, brand }) {
 }
 
 function MoreMenu({ onNav, onLogout, brand, currentUser }) {
+  const admin = currentUser && currentUser.role === "admin";
   const groups = [
-    ["Sales", [
+    ["Schedule & production", [
+      ["calendar", CalIcon, "Schedule", "Appointments, inspections & material drops"],
+      ["dispatch", HardHat, "Dispatch", "Which crews are on which jobs, day by day"],
+      ["crews", Wrench, "Crews", "Your subs, their trades and pricing"],
+      ["pos", Package, "Purchase orders", "Order, receive and reconcile materials"],
+      ["warranties", Shield, "Warranties", "Every roof's labor and manufacturer terms"],
+    ]],
+    ["Sales & marketing", [
       ["activity", ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", Phone, "Calls & attribution", "Log calls, see which sources make money"],
-      ["performance", PieChart, "Performance", "Rep scoreboard & funnel"],
       ["contacts", Users, "Contacts", "Every client, with consent status"],
-      ["leadsources", Filter, "Lead sources", "Add, remove, and reorder the options"],
-      ["reviews", Star, "Review automation", "Google review requests"],
+      ["leadsources", Filter, "Lead sources", "Add, remove and reorder the options"],
+      ["reviews", Star, "Reviews", "Funnel, follow-ups, and who's actually left one"],
     ]],
-    ["Production", [
-      ["dispatch", HardHat, "Dispatch board", "Who's on which roof, day by day"],
-      ["calendar", CalIcon, "Calendar", "Schedule & material drops"],
-      ["pos", Package, "Purchase orders", "Order, receive, reconcile materials"],
-      ["crews", Wrench, "Crews", "Dispatch directory for work orders"],
-      ["warranties", Shield, "Warranties", "Every roof's labor and manufacturer terms"],
-      ["insurance", Shield, "Insurance", "Clients, supplements, code lookup"],
-    ]],
-    ["Company", [
-      ["inbox", MessageCircle, "Team chat", "Now in the Inbox — @ someone, tag a job"],
-      ["announcements", Megaphone, "Company announcements", "Posted to everyone's home screen"],
-      ["team", HardHat, "Team & seats", canManageSeats(currentUser) ? "Add users, roles, logins" : "Who's on the team"],
-      ["documents", FileText, "Documents", "Contracts, COIs, licenses, warranties"],
-      ["vendors", Building2, "Vendors & suppliers", "Material suppliers and account details"],
+    ["Money", [
+      ["performance", PieChart, "Financials & performance", "Company money, commission, rep scoreboard"],
       ["pricelist", Package, "Price list", "Material costs and margins — CSV import"],
+      admin && ["crewpay", HardHat, "Crew payouts", "What each crew is owed and has been paid"],
+    ]],
+    ["Customers & documents", [
+      ["insurance", Shield, "Insurance", "Clients, supplements and code lookup"],
+      ["documents", FileText, "Documents", "Contracts, COIs, licenses, warranties"],
       ["templates", ScrollText, "Message templates", "Email and text, customer and crew"],
+      ["announcements", Megaphone, "Announcements", "Posted to everyone's home screen"],
     ]],
     ["Setup", [
-      ["help", BookOpen, "Help & guides", "How every part of the app works"],
+      ["team", HardHat, "Team & seats", canManageSeats(currentUser) ? "Add users, roles, logins" : "Who's on the team"],
+      ["vendors", Building2, "Vendors & suppliers", "Material suppliers and account details"],
       ["branding", Settings, "Company branding", "Name, logo, colors, what prints on documents"],
-      ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam"],
+      ["workflow", ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
+      ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam, Google reviews"],
       ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
-      ["password", Lock, "Change my password", "Update your sign-in password"],
-      ["claims", Shield, "Claims", "Every open claim and what carriers owe"],
-      currentUser && currentUser.role === "admin" && ["crewpay", HardHat, "Crew payouts", "What each crew is owed and has been paid"],
-      currentUser && currentUser.role === "admin" && ["admin", Shield, "Admin controls", "Feature switches, security and the audit log"],
-      currentUser && currentUser.role === "admin" && ["setupkeys", Lock, "Setup & keys", "API keys and services still to connect"],
+      admin && ["admin", Shield, "Admin controls", "Feature switches, security and the audit log"],
+      admin && ["setupkeys", Lock, "Setup & keys", "API keys and services still to connect"],
       ["syscheck", AlertTriangle, "System check", "Test the database connection and setup"],
+      ["help", BookOpen, "Help & guides", "How every part of the app works"],
+      ["password", Lock, "Change my password", "Update your sign-in password"],
     ]],
   ];
-  const [open, setOpen] = useState({ Sales: true, Production: true, Company: false, Setup: false });
+  const [open, setOpen] = useState({ "Schedule & production": true, "Sales & marketing": true, Money: false, "Customers & documents": false, Setup: false });
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
   /* Searching flattens the groups — hunting through four accordions on
@@ -18860,6 +19334,7 @@ export default function SupremeCRM() {
   const [openJobId, setOpenJobId] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
+  const [codeSeed, setCodeSeed] = useState(null);
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [quickTaskOpen, setQuickTaskOpen] = useState(false);
   const [quickJobId, setQuickJobId] = useState(null);
@@ -19250,6 +19725,11 @@ export default function SupremeCRM() {
     setOpenJobId(id); setJobOpenTab(tab); setNav("jobs");
   };
   const backToBoard = () => setOpenJobId(null);
+  /* Deep link from a job's jurisdiction card into the Insurance hub's
+     Code lookup, primed with the job's zip — so verifying/correcting the
+     building department for that address doesn't mean leaving the job and
+     re-typing the zip. */
+  const openCodeLookup = (zip) => { setCodeSeed({ zip: zip || "" }); setOpenJobId(null); setNav("insurance"); };
 
   return (
     <div style={{ fontFamily: "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif", background: S.bg, minHeight: "100vh" }}>
@@ -19260,7 +19740,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           crews={crews} setCrews={setCrews} templates={templates} integrations={integrations} users={users}
           estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} setBrand={setBrand}
           onLog={logAct} leadSources={leadSources} activity={activity} ccToken={ccToken}
-          onDelete={isAdmin ? deleteJobs : null} openTab={jobOpenTab} features={features} />
+          onDelete={isAdmin ? deleteJobs : null} openTab={jobOpenTab} features={features}
+          onOpenCodeLookup={openCodeLookup} />
       ) : nav === "home" ? (
         <>
           {liveDb() && jobs.length === 0 && (
@@ -19307,7 +19788,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             if (db) db.from("crm_chat").delete().eq("id", id).then(() => {}, () => {});
           }} />
       ) : nav === "more" ? (
-        <MoreMenu brand={brand} onNav={(id) => (id === "password" ? setChangePwOpen(true) : setNav(id))} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
+        <MoreMenu brand={brand} onNav={(id) => (id === "password" ? setChangePwOpen(true) : id === "workflow" ? setWorkflowOpen(true) : setNav(id))} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
       ) : nav === "insurance" ? (
         <InsuranceHub jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} toast={toast}
           onSaveDept={(zip, dept) => {
@@ -19325,7 +19806,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             toast(rec.needsContact
               ? "Saved — add the permit office when you have it"
               : "Saved with its building department");
-          }} />
+          }}
+          seed={codeSeed} onConsumeSeed={() => setCodeSeed(null)} />
       ) : nav === "performance" ? (
         <Performance jobs={jobs} stages={stages} users={users} onBack={() => setNav("more")}
           isAdmin={isAdmin} currentUser={liveUser} toast={toast} />
@@ -19361,20 +19843,6 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onCreateLead={(seed) => { setNewLeadOpen(true); setLeadSeed(seed); }} />
       ) : nav === "activity" ? (
         <ActivityFeed activity={activity} currentUser={liveUser} onOpenJob={openJobScreen} onBack={() => setNav("more")} />
-      ) : nav === "chat" ? (
-        /* Chat lives in the Inbox now. Anything still pointing here —
-           the More menu, an old deep link — lands in the right place. */
-        <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)}
-          chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} users={users} currentUser={liveUser}
-          unreadChat={Math.max(0, chatMsgs.length - chatSeenCount)}
-          onSeenChat={() => setChatSeenCount(chatMsgs.length)}
-          onDeleteMsg={(id) => {
-            /* Remove the row for real. Failure is non-fatal: the message
-               is already gone locally and will not come back unless a
-               refresh re-hydrates it, which surfaces the problem. */
-            const db = DB();
-            if (db) db.from("crm_chat").delete().eq("id", id).then(() => {}, () => {});
-          }} />
       ) : nav === "vendors" ? (
         <VendorManager vendors={vendors} setVendors={setVendors} currentUser={liveUser}
           onBack={() => setNav("more")} toast={toast} />

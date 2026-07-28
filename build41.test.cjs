@@ -102,8 +102,8 @@ check("activity content appears once opened via the clock",
 check("Quick actions button opens the sheet", clickText("Quick actions"));
 check("grid includes real RoofStride sections (Estimate, Materials, Work order, Tasks)",
   ["Estimate", "Materials", "Work order", "Tasks"].every((t) => document.body.textContent.includes(t)));
-check("tapping an action (Signatures) jumps there and closes the sheet", clickText("Signatures"));
-check("the Signatures section is now open", document.body.textContent.includes("Signature record"));
+check("tapping an action (Contract) jumps there and closes the sheet", clickText("Contract"));
+check("the contract section carries the signature record", document.body.textContent.includes("Signature record"));
 
 console.error = realErr;
 const real = errs.filter((e) => !/not wrapped in act/.test(e));

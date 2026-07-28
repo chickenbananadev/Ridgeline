@@ -37,15 +37,14 @@ ok(src.includes("setActionsFor(showActions ? null : m.id)"), "tapping a message 
 ok(src.includes("reactions: r.reactions || {}"), "reactions hydrate from the database");
 ok(src.includes('db.from("crm_chat").update({ reactions:'), "reactions sync back");
 ok(src.includes("const reactionSig"), "only changed reaction maps are written");
-ok(src.includes("onSendChat"), "home screen can send chat");
-ok(src.includes("Open chat →"), "home chat links to the full screen");
+ok(src.includes("Team chat lives in the Inbox"), "team chat moved off the home page to the Inbox");
 ok(src.includes("setEmojiOpen"), "composer has an emoji tray");
 
 /* --- chat consolidated into the Inbox --- */
 ok(src.includes('[["team", "Team chat"], ["customers", "Customers"]]'), "inbox has team and customer panes");
 ok(src.includes("unreadChat"), "inbox tracks unread team messages");
 ok(src.includes('label="Inbox" badge={Math.max(0, chatMsgs.length - chatSeenCount)}'), "nav badge counts unread chat");
-ok(src.includes('["inbox", MessageCircle, "Team chat"'), "More menu points team chat at the inbox");
+ok(src.includes('"Schedule", "Appointments'), "More menu leads with a Schedule entry (calendar lives here)");
 ok(src.includes("embedded = false, onDeleteMsg }"), "TeamChat is embeddable and can delete");
 ok(!src.includes('onBack={() => { setChatSeenCount(chatMsgs.length); setNav("more"); }} />'),
   "standalone chat route no longer renders a separate screen");

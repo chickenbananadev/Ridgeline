@@ -85,9 +85,9 @@ function setControl(selector, value) {
   assert(!document.querySelector('[data-testid="quick-note"]'), "Quick panel should close after saving");
 
   clickText("More");
-  clickText("Calendar");
+  clickText("Schedule");
   for (const label of ["All", "Sales", "Production", "Issues", "Delivery"]) {
-    assert([...document.querySelectorAll("button")].some((button) => button.textContent.trim() === label), `Calendar view missing: ${label}`);
+    assert([...document.querySelectorAll("button")].some((button) => button.textContent.trim() === label), `Schedule view missing: ${label}`);
   }
 
   console.log("build 2 tests passed");

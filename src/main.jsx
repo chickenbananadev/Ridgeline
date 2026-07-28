@@ -14,7 +14,30 @@ const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
 /* When both are present the app runs on real auth. When they're absent
    (artifact preview, local sketching) it falls back to the demo picker. */
 if (url && anon) {
-  const supabase = createClient(url, anon);
+  /* Persist the session so an installed home-screen web app stays signed in
+     between launches instead of asking for a password every time. Supabase
+     keeps a long-lived refresh token in localStorage and silently refreshes
+     the short-lived access token; on iOS the standalone app keeps that store
+     until its storage is evicted (roughly a week of no use under Safari's
+     tracking-prevention), after which the user signs in again — the one-week
+     "keep me logged in, then relogin" behavior we want. A stable storageKey
+     keeps the session tied to this app. */
+  const supabase = createClient(url, anon, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: window.localStorage,
+      storageKey: "roofstride.auth",
+    },
+  });
+  /* Re-check the session whenever the app is brought back to the foreground —
+     iOS freezes a standalone web app rather than reloading it, so without this
+     a token that expired while backgrounded wouldn't refresh until a manual
+     reload. */
+  const revalidate = () => { if (document.visibilityState === "visible") supabase.auth.getSession(); };
+  document.addEventListener("visibilitychange", revalidate);
+  window.addEventListener("focus", revalidate);
   window.__SUPABASE__ = supabase;
   window.__AUTH__ = {
     async signIn(email, password) {

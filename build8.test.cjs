@@ -15,7 +15,7 @@ ok(!src.includes('disabled={!name.trim()} onClick={() => {\n          mut((j) =>
 ok(src.includes('href={tel ? `tel:${tel}` : null} icon={Phone} label="Call"'), "job quick-call action");
 ok(src.includes('href={tel ? `sms:${tel}` : null} icon={MessageCircle} label="Text"'), "job quick-text action");
 ok(src.includes('icon={MapPin} label="Directions"'), "job directions action");
-ok(src.includes('onClick={() => setTab("files")} icon={Upload} label="Upload"'), "job upload jumps to files");
+ok(src.includes('onClick={() => jumpToSection("files")} icon={Upload} label="Upload"'), "job upload jumps to files");
 
 ok(src.includes("onToggleTask"), "home passes a task-toggle handler");
 ok(src.includes('aria-label={t.done ? "Mark not done" : "Mark done"}'), "home task rows have a completion control");

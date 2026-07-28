@@ -68,7 +68,7 @@ ok(src.includes("function TabClaim"), "claim section exists");
 ok(src.includes("function claimMath"), "settlement maths is a separate function");
 ok(src.includes("const CLAIM_STAGES"), "claim pipeline defined");
 ok(src.includes("OWED BY CARRIER"), "owed-by-carrier is the headline");
-ok(src.includes('["claim", "Insurance claim", Shield]'), "claim is a job section");
+ok(src.includes('["claim", "Insurance claim", Shield, "Claim"]'), "claim is a job section");
 ok(src.includes('if (id === "claim") return job.claimType === "Insurance"'),
   "the claim section only appears on insurance jobs");
 ok(src.includes("const SUPPLEMENT_STATUS"), "supplements carry a status");
