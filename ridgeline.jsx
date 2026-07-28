@@ -6053,6 +6053,16 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
     : [];
   const dupBlocked = dupes.length > 0;
 
+  /* Same-homeowner guard by phone/email — a soft warning (not a block),
+     since the same customer legitimately has a second property or re-inquiry.
+     Offers to switch to their existing record instead of a stray duplicate. */
+  const normPhone = (v) => String(v || "").replace(/\D/g, "");
+  const normEmail = (v) => String(v || "").trim().toLowerCase();
+  const tp = normPhone(f.phone), te = normEmail(f.email);
+  const contactDupes = (f.contactMode === "new" && (tp.length >= 10 || te))
+    ? contacts.filter((c) => (tp.length >= 10 && normPhone(c.phone) === tp) || (te && normEmail(c.email) === te))
+    : [];
+
   return (
     <Sheet open={open} onClose={onClose} title="New lead" wide
       footer={
@@ -6080,6 +6090,22 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
             <strong> Existing customer</strong> above and pick the property
             from their list instead.
           </div>
+        </Callout>
+      )}
+      {!dupBlocked && contactDupes.length > 0 && (
+        <Callout label="Looks like an existing customer" tone="amber">
+          <div style={{ marginBottom: 8 }}>
+            The {tp.length >= 10 ? "phone" : "email"} you entered matches {contactDupes.length === 1 ? "a contact" : contactDupes.length + " contacts"} already in {PRODUCT.name}. Add a project to their record instead of a new duplicate?
+          </div>
+          {contactDupes.slice(0, 3).map((c) => (
+            <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <div style={{ flex: 1, fontSize: 12.5, minWidth: 0 }}>
+                <strong>{c.first} {c.last}</strong>{c.phone ? ` · ${fmtPhone(c.phone)}` : ""}{c.email ? ` · ${c.email}` : ""}
+              </div>
+              <Btn small onClick={() => selectContact(c.id)}>Use this customer</Btn>
+            </div>
+          ))}
+          <div style={{ fontSize: 12, color: S.sub, marginTop: 4 }}>Or keep going to add them as a new customer.</div>
         </Callout>
       )}
       {contacts.length > 0 && (

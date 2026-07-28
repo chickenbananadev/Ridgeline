@@ -7143,6 +7143,10 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
     return fp && fp === typedFp;
   }) : [];
   const dupBlocked = dupes.length > 0;
+  const normPhone = (v) => String(v || "").replace(/\D/g, "");
+  const normEmail = (v) => String(v || "").trim().toLowerCase();
+  const tp = normPhone(f.phone), te = normEmail(f.email);
+  const contactDupes = f.contactMode === "new" && (tp.length >= 10 || te) ? contacts.filter((c) => tp.length >= 10 && normPhone(c.phone) === tp || te && normEmail(c.email) === te) : [];
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
     Sheet,
     {
@@ -7181,6 +7185,30 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: " Existing customer" }),
             " above and pick the property from their list instead."
           ] })
+        ] }),
+        !dupBlocked && contactDupes.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Looks like an existing customer", tone: "amber", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 8 }, children: [
+            "The ",
+            tp.length >= 10 ? "phone" : "email",
+            " you entered matches ",
+            contactDupes.length === 1 ? "a contact" : contactDupes.length + " contacts",
+            " already in ",
+            PRODUCT.name,
+            ". Add a project to their record instead of a new duplicate?"
+          ] }),
+          contactDupes.slice(0, 3).map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, fontSize: 12.5, minWidth: 0 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("strong", { children: [
+                c.first,
+                " ",
+                c.last
+              ] }),
+              c.phone ? ` \xB7 ${fmtPhone(c.phone)}` : "",
+              c.email ? ` \xB7 ${c.email}` : ""
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, onClick: () => selectContact(c.id), children: "Use this customer" })
+          ] }, c.id)),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 4 }, children: "Or keep going to add them as a new customer." })
         ] }),
         contacts.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: "#F7F8FA", border: `1px solid ${S.line}`, borderRadius: 12, padding: 12, margin: "4px 0 16px" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginBottom: f.contactMode === "existing" ? 10 : 0 }, children: [
