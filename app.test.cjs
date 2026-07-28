@@ -16675,6 +16675,74 @@ function LetterTemplates() {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Before sending", children: "Replace every bracketed field \u2014 an unfilled placeholder in front of an adjuster costs credibility on the whole letter. Attach the photos, measurements, and manufacturer bulletin you reference. Keep a copy in the job's Files tab." })
   ] });
 }
+function PolicyProvisions() {
+  const [open, setOpen] = (0, import_react.useState)(null);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }, children: "Tap a provision to read it. Check the declarations page and endorsements before making any promises." }),
+    POLICY_CARDS.map((c, i) => {
+      const isOpen = open === i;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 0, style: { marginTop: i ? 10 : 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setOpen(isOpen ? null : i), style: { width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "14px 15px", display: "flex", alignItems: "center", gap: 10, fontFamily: "inherit" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { flex: 1, fontSize: 15, fontWeight: 800, color: S.ink }, children: c.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronDown, { size: 18, color: S.sub, style: { transform: isOpen ? "none" : "rotate(-90deg)", transition: "transform .15s", flexShrink: 0 } })
+        ] }),
+        isOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "0 15px 15px" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.ink, lineHeight: 1.6 }, children: c.body }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: c.callout.label, children: c.callout.text })
+        ] })
+      ] }, i);
+    })
+  ] });
+}
+function ManufacturerSpecs() {
+  const [sel, setSel] = (0, import_react.useState)((MFR_SPECS[0] || {}).mfr || "");
+  const m = MFR_SPECS.find((x) => x.mfr === sel) || MFR_SPECS[0];
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 12 }, children: "Pick a manufacturer to pull its flagship spec \u2014 used to show current product is not equivalent to what's on the roof. Attach the manufacturer's own bulletin (tech-services line below); your summary is not the evidence, theirs is." }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 14 }, children: MFR_SPECS.map((x) => {
+      const on = x.mfr === sel;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setSel(x.mfr), style: {
+        border: `1px solid ${on ? T.accent : S.line}`,
+        background: on ? T.accentSoft : "#fff",
+        color: on ? T.accent : S.sub,
+        borderRadius: 999,
+        padding: "7px 14px",
+        fontSize: 13,
+        fontWeight: 700,
+        cursor: "pointer",
+        fontFamily: "inherit"
+      }, children: x.mfr }, x.mfr);
+    }) }),
+    m && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: m.mfr }), children: m.flagship }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Width", v: m.w }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Length", v: m.l }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Exposure", v: m.exp }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Wind warranty", v: m.wind }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Algae warranty", v: m.algae }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Limited warranty", v: m.warranty }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Class 4 (UL 2218)", v: m.class4 }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Do not mix", children: m.dnm })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Vinyl siding \u2014 the matching reality" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 8 }, children: [
+        "Major makers: ",
+        SIDING_MATCHING.makers
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.ink, lineHeight: 1.55 }, children: "Even with a current SKU in a current color, a ten-year-old wall will not match new stock. Four reasons:" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Bullets, { items: SIDING_MATCHING.points }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "The argument", tone: "green", children: SIDING_MATCHING.argument })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Technical services lines" }),
+      KEY_CONTACTS.map(([name, phone, web], i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: name }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 2 }, children: [phone, web].filter(Boolean).join("  \xB7  ") })
+      ] }, i))
+    ] })
+  ] });
+}
 function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2, onSaveDept = () => {
 }, onSaveJurisdiction = () => {
 }, seed = null, onConsumeSeed = () => {
@@ -17224,37 +17292,7 @@ Authority: ${c.cite}`;
         " Resources"
       ] }),
       resourcePage === "shingles" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ShingleFinder, {}),
-      resourcePage === "specs" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }, children: "Used to show that current product is not equivalent to what's on the roof. Pull the manufacturer's own bulletin from their tech services line and attach it to the supplement \u2014 your summary is not the evidence, theirs is." }),
-        MFR_SPECS.map((m, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: i ? 14 : 0 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: m.mfr }), children: m.flagship }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Width", v: m.w }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Length", v: m.l }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Exposure", v: m.exp }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Wind warranty", v: m.wind }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Algae warranty", v: m.algae }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Limited warranty", v: m.warranty }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Class 4 (UL 2218)", v: m.class4 }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Do not mix", children: m.dnm })
-        ] }, i)),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Vinyl siding \u2014 the matching reality" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 8 }, children: [
-            "Major makers: ",
-            SIDING_MATCHING.makers
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.ink, lineHeight: 1.55 }, children: "Even with a current SKU in a current color, a ten-year-old wall will not match new stock. Four reasons:" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Bullets, { items: SIDING_MATCHING.points }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "The argument", tone: "green", children: SIDING_MATCHING.argument })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Technical services lines" }),
-          KEY_CONTACTS.map(([name, phone, web], i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: name }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 2 }, children: [phone, web].filter(Boolean).join("  \xB7  ") })
-          ] }, i))
-        ] })
-      ] }),
+      resourcePage === "specs" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ManufacturerSpecs, {}),
       resourcePage === "letters" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LetterTemplates, {}),
       resourcePage === "law" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
         LAW_ITEMS.map((it, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: i ? 14 : 0 }, children: [
@@ -17271,14 +17309,7 @@ Authority: ${c.cite}`;
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Guidance, not legal advice", children: "Summaries for field use, current as compiled. Confirm the text at the linked official source before relying on any of it in a dispute, and route anything adversarial to counsel." })
       ] }),
-      resourcePage === "policy" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }, children: "Three coverages that turn a partial claim into a full one. Check the declarations page and endorsements before making any promises." }),
-        POLICY_CARDS.map((c, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: i ? 14 : 0 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: c.title }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.ink, lineHeight: 1.6, marginTop: 8 }, children: c.body }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: c.callout.label, children: c.callout.text })
-        ] }, i))
-      ] }),
+      resourcePage === "policy" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PolicyProvisions, {}),
       resourcePage === "docs" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }, children: "If it wasn't photographed and measured, it didn't happen. The adjuster reads the file, not your memory." }),
         DOC_GROUPS.map((g, gi) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: gi ? 14 : 0 }, children: [

@@ -15000,6 +15000,93 @@ function LetterTemplates() {
   );
 }
 
+/* Policy provisions — collapsed to titles; tap one to read it. Keeps the
+   reference scannable instead of a wall of always-open cards. */
+function PolicyProvisions() {
+  const [open, setOpen] = useState(null);
+  return (
+    <div>
+      <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }}>
+        Tap a provision to read it. Check the declarations page and endorsements before making any promises.
+      </div>
+      {POLICY_CARDS.map((c, i) => {
+        const isOpen = open === i;
+        return (
+          <Card key={i} pad={0} style={{ marginTop: i ? 10 : 0 }}>
+            <button onClick={() => setOpen(isOpen ? null : i)} style={{ width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "14px 15px", display: "flex", alignItems: "center", gap: 10, fontFamily: "inherit" }}>
+              <span style={{ flex: 1, fontSize: 15, fontWeight: 800, color: S.ink }}>{c.title}</span>
+              <ChevronDown size={18} color={S.sub} style={{ transform: isOpen ? "none" : "rotate(-90deg)", transition: "transform .15s", flexShrink: 0 }} />
+            </button>
+            {isOpen && (
+              <div style={{ padding: "0 15px 15px" }}>
+                <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.6 }}>{c.body}</div>
+                <Callout label={c.callout.label}>{c.callout.text}</Callout>
+              </div>
+            )}
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+/* Manufacturer specs — pick a manufacturer, see its flagship spec.
+   Beats a flat wall of every maker's card always open. */
+function ManufacturerSpecs() {
+  const [sel, setSel] = useState((MFR_SPECS[0] || {}).mfr || "");
+  const m = MFR_SPECS.find((x) => x.mfr === sel) || MFR_SPECS[0];
+  return (
+    <div>
+      <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 12 }}>
+        Pick a manufacturer to pull its flagship spec — used to show current product is not equivalent to what's on the roof.
+        Attach the manufacturer's own bulletin (tech-services line below); your summary is not the evidence, theirs is.
+      </div>
+      <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 14 }}>
+        {MFR_SPECS.map((x) => {
+          const on = x.mfr === sel;
+          return (
+            <button key={x.mfr} onClick={() => setSel(x.mfr)} style={{
+              border: `1px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : "#fff",
+              color: on ? T.accent : S.sub, borderRadius: 999, padding: "7px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+            }}>{x.mfr}</button>
+          );
+        })}
+      </div>
+      {m && (
+        <Card>
+          <CardTitle right={<Chip tone="blue">{m.mfr}</Chip>}>{m.flagship}</CardTitle>
+          <KV k="Width" v={m.w} />
+          <KV k="Length" v={m.l} />
+          <KV k="Exposure" v={m.exp} />
+          <KV k="Wind warranty" v={m.wind} />
+          <KV k="Algae warranty" v={m.algae} />
+          <KV k="Limited warranty" v={m.warranty} />
+          <KV k="Class 4 (UL 2218)" v={m.class4} />
+          <Callout label="Do not mix">{m.dnm}</Callout>
+        </Card>
+      )}
+      <Card style={{ marginTop: 14 }}>
+        <CardTitle>Vinyl siding — the matching reality</CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, marginBottom: 8 }}>Major makers: {SIDING_MATCHING.makers}</div>
+        <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.55 }}>
+          Even with a current SKU in a current color, a ten-year-old wall will not match new stock. Four reasons:
+        </div>
+        <Bullets items={SIDING_MATCHING.points} />
+        <Callout label="The argument" tone="green">{SIDING_MATCHING.argument}</Callout>
+      </Card>
+      <Card style={{ marginTop: 14 }}>
+        <CardTitle>Technical services lines</CardTitle>
+        {KEY_CONTACTS.map(([name, phone, web], i) => (
+          <div key={i} style={{ padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{name}</div>
+            <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>{[phone, web].filter(Boolean).join("  ·  ")}</div>
+          </div>
+        ))}
+      </Card>
+    </div>
+  );
+}
+
 function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {}, seed = null, onConsumeSeed = () => {} }) {
   const [tab, setTab] = useState(seed && seed.zip ? "codes" : "clients");
   const [zip, setZip] = useState(seed ? seed.zip || "" : "");
@@ -15555,47 +15642,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                 color: T.accent, fontWeight: 700, fontSize: 14, cursor: "pointer", padding: "4px 0 12px",
               }}><ChevronLeft size={16} /> Resources</button>
               {resourcePage === "shingles" && <ShingleFinder />}
-              {resourcePage === "specs" && (
-                <div>
-                  <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }}>
-                    Used to show that current product is not equivalent to what's on the roof. Pull the manufacturer's own
-                    bulletin from their tech services line and attach it to the supplement — your summary is not the evidence, theirs is.
-                  </div>
-                  {MFR_SPECS.map((m, i) => (
-                    <Card key={i} style={{ marginTop: i ? 14 : 0 }}>
-                      <CardTitle right={<Chip tone="blue">{m.mfr}</Chip>}>{m.flagship}</CardTitle>
-                      <KV k="Width" v={m.w} />
-                      <KV k="Length" v={m.l} />
-                      <KV k="Exposure" v={m.exp} />
-                      <KV k="Wind warranty" v={m.wind} />
-                      <KV k="Algae warranty" v={m.algae} />
-                      <KV k="Limited warranty" v={m.warranty} />
-                      <KV k="Class 4 (UL 2218)" v={m.class4} />
-                      <Callout label="Do not mix">{m.dnm}</Callout>
-                    </Card>
-                  ))}
-                  <Card style={{ marginTop: 14 }}>
-                    <CardTitle>Vinyl siding — the matching reality</CardTitle>
-                    <div style={{ fontSize: 13, color: S.sub, marginBottom: 8 }}>Major makers: {SIDING_MATCHING.makers}</div>
-                    <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.55 }}>
-                      Even with a current SKU in a current color, a ten-year-old wall will not match new stock. Four reasons:
-                    </div>
-                    <Bullets items={SIDING_MATCHING.points} />
-                    <Callout label="The argument" tone="green">{SIDING_MATCHING.argument}</Callout>
-                  </Card>
-                  <Card style={{ marginTop: 14 }}>
-                    <CardTitle>Technical services lines</CardTitle>
-                    {KEY_CONTACTS.map(([name, phone, web], i) => (
-                      <div key={i} style={{ padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{name}</div>
-                        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>
-                          {[phone, web].filter(Boolean).join("  ·  ")}
-                        </div>
-                      </div>
-                    ))}
-                  </Card>
-                </div>
-              )}
+              {resourcePage === "specs" && <ManufacturerSpecs />}
               {resourcePage === "letters" && <LetterTemplates />}
               {resourcePage === "law" && (
                 <div>
@@ -15621,20 +15668,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                   </Callout>
                 </div>
               )}
-              {resourcePage === "policy" && (
-                <div>
-                  <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }}>
-                    Three coverages that turn a partial claim into a full one. Check the declarations page and endorsements before making any promises.
-                  </div>
-                  {POLICY_CARDS.map((c, i) => (
-                    <Card key={i} style={{ marginTop: i ? 14 : 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>{c.title}</div>
-                      <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.6, marginTop: 8 }}>{c.body}</div>
-                      <Callout label={c.callout.label}>{c.callout.text}</Callout>
-                    </Card>
-                  ))}
-                </div>
-              )}
+              {resourcePage === "policy" && <PolicyProvisions />}
               {resourcePage === "docs" && (
                 <div>
                   <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }}>
