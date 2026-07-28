@@ -18801,7 +18801,7 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast: toast2
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.phone, inputMode: "tel", onChange: (e) => setF({ ...f, phone: formatPhone(e.target.value) }) }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: f.email, onChange: (e) => setF({ ...f, email: e.target.value }) }) })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Documents", hint: "Certificates of insurance, W-9s, licenses \u2014 anything you need on file.", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Documents", hint: "COIs, W-9s, licenses. Add an expiry date and the app warns you before paying a sub whose paperwork has lapsed.", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
               "input",
               {
@@ -18811,34 +18811,83 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast: toast2
                 onChange: (e) => {
                   const file = e.target.files && e.target.files[0];
                   if (!file) return;
-                  setF({ ...f, docs: [...f.docs || [], { id: uid("cd"), name: file.name, at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) }] });
+                  setF({ ...f, docs: [...f.docs || [], { id: uid("cd"), name: file.name, at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), type: "", expires: "" }] });
                   e.target.value = "";
                 }
               }
             ),
-            (f.docs || []).map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${S.line}` }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5 }, children: [
-                d.name,
-                " ",
-                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub, fontSize: 12 }, children: [
-                  "\xB7 ",
-                  d.at
+            (f.docs || []).map((d) => {
+              const expired = d.expires && d.expires < todayIso();
+              const setDoc = (patch) => setF({ ...f, docs: (f.docs || []).map((x) => x.id === d.id ? { ...x, ...patch } : x) });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "9px 0", borderBottom: `1px solid ${S.line}` }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, flex: 1, minWidth: 0 }, children: [
+                    d.name,
+                    " ",
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub, fontSize: 12 }, children: [
+                      "\xB7 ",
+                      d.at
+                    ] })
+                  ] }),
+                  d.expires && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: expired ? "red" : "green", children: expired ? "Expired" : "Valid" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                    "button",
+                    {
+                      onClick: () => setF({ ...f, docs: (f.docs || []).filter((x) => x.id !== d.id) }),
+                      style: { border: "none", background: "none", cursor: "pointer" },
+                      children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14, color: "#B42318" })
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 6 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: { ...selStyle, flex: 1 }, value: d.type || "", onChange: (e) => setDoc({ type: e.target.value }), children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Type\u2026" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "COI" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "W-9" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "License" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Contract" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Other" })
+                  ] }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "date", style: dateInputStyle, value: d.expires || "", onChange: (e) => setDoc({ expires: e.target.value }) })
                 ] })
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                "button",
-                {
-                  onClick: () => setF({ ...f, docs: (f.docs || []).filter((x) => x.id !== d.id) }),
-                  style: { border: "none", background: "none", cursor: "pointer" },
-                  children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14, color: "#B42318" })
-                }
-              )
-            ] }, d.id)),
+              ] }, d.id);
+            }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { marginTop: 8 }, onClick: () => docRef.current && docRef.current.click(), children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
               " Add document"
             ] })
           ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Payment details", hint: "How this sub gets paid \u2014 stored on their file for accounting. Keep it to a handle or last 4, not full bank/SSN.", children: (() => {
+            const pay = f.payment || {};
+            const setPay = (patch) => setF({ ...f, payment: { ...pay, ...patch } });
+            return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginBottom: 4 }, children: "Method" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: pay.method || "", onChange: (e) => setPay({ method: e.target.value }), children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "\u2014" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Check" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "ACH" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Zelle" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Venmo" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Other" })
+                  ] })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginBottom: 4 }, children: "Terms" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: pay.terms || "Net 15", onChange: (e) => setPay({ terms: e.target.value }), children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Due on receipt" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Net 7" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Net 15" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "Net 30" })
+                  ] })
+                ] })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, marginTop: 8 }, placeholder: "Payee / business name", value: pay.payeeName || "", onChange: (e) => setPay({ payeeName: e.target.value }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, marginTop: 8 }, placeholder: "Account handle or last 4 (Zelle #, pay to\u2026, ACH last 4)", value: pay.accountRef || "", onChange: (e) => setPay({ accountRef: e.target.value }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, marginTop: 8 }, placeholder: "Tax ID / W-9 (EIN \u2014 never store a full SSN)", value: pay.taxId || "", onChange: (e) => setPay({ taxId: e.target.value }) })
+            ] });
+          })() }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Pricing sheet", hint: "Upload this sub's full price menu (CSV: category, labor_type, price, unit, notes). Install/steep/tear-off/chimney lines auto-fill a job's sub invoice; every other row is on the menu to add by hand.", children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: priceRef, type: "file", accept: ".csv,text/csv", style: { display: "none" }, onChange: onPriceFile }),
             (f.rateCard || []).length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 10, overflow: "hidden", marginBottom: 8 }, children: [...new Set((f.rateCard || []).map((r) => r.category || "Other"))].map((cat) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [

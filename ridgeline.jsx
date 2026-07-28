@@ -2415,6 +2415,16 @@ function computeSubPay(job, crew) {
   const total = lines.reduce((a, l) => a + l.amt, 0);
   return { lines, total: Math.round(total * 100) / 100, squares: sq };
 }
+/* Compliance docs (W-9, COI, license) that are expired or expiring within 30
+   days, so a sub with lapsed paperwork gets flagged before they're paid. */
+function crewDocAlerts(crew, today) {
+  const t = today || todayIso();
+  const soon = isoLocal(new Date(new Date(t + "T12:00:00").getTime() + 30 * 86400000));
+  return ((crew && crew.docs) || [])
+    .filter((d) => d.expires)
+    .map((d) => ({ name: d.name, type: d.type || "", expires: d.expires, status: d.expires < t ? "expired" : (d.expires <= soon ? "expiring" : "ok") }))
+    .filter((d) => d.status !== "ok");
+}
 
 /* ================================================================
    AUTH ADAPTER
@@ -16927,24 +16937,64 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
           <Field label="Phone"><input style={inputStyle} value={f.phone} inputMode="tel" onChange={(e) => setF({ ...f, phone: formatPhone(e.target.value) })} /></Field>
           <Field label="Email"><input style={inputStyle} type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Field>
         </div>
-        <Field label="Documents" hint="Certificates of insurance, W-9s, licenses — anything you need on file.">
+        <Field label="Documents" hint="COIs, W-9s, licenses. Add an expiry date and the app warns you before paying a sub whose paperwork has lapsed.">
           <input ref={docRef} type="file" style={{ display: "none" }}
             onChange={(e) => {
               const file = e.target.files && e.target.files[0];
               if (!file) return;
-              setF({ ...f, docs: [...(f.docs || []), { id: uid("cd"), name: file.name, at: new Date().toISOString().slice(0, 10) }] });
+              setF({ ...f, docs: [...(f.docs || []), { id: uid("cd"), name: file.name, at: new Date().toISOString().slice(0, 10), type: "", expires: "" }] });
               e.target.value = "";
             }} />
-          {(f.docs || []).map((d) => (
-            <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${S.line}` }}>
-              <span style={{ fontSize: 13.5 }}>{d.name} <span style={{ color: S.sub, fontSize: 12 }}>· {d.at}</span></span>
-              <button onClick={() => setF({ ...f, docs: (f.docs || []).filter((x) => x.id !== d.id) })}
-                style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={14} color="#B42318" /></button>
-            </div>
-          ))}
+          {(f.docs || []).map((d) => {
+            const expired = d.expires && d.expires < todayIso();
+            const setDoc = (patch) => setF({ ...f, docs: (f.docs || []).map((x) => (x.id === d.id ? { ...x, ...patch } : x)) });
+            return (
+              <div key={d.id} style={{ padding: "9px 0", borderBottom: `1px solid ${S.line}` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 13.5, flex: 1, minWidth: 0 }}>{d.name} <span style={{ color: S.sub, fontSize: 12 }}>· {d.at}</span></span>
+                  {d.expires && <Chip tone={expired ? "red" : "green"}>{expired ? "Expired" : "Valid"}</Chip>}
+                  <button onClick={() => setF({ ...f, docs: (f.docs || []).filter((x) => x.id !== d.id) })}
+                    style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={14} color="#B42318" /></button>
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  <select style={{ ...selStyle, flex: 1 }} value={d.type || ""} onChange={(e) => setDoc({ type: e.target.value })}>
+                    <option value="">Type…</option><option>COI</option><option>W-9</option><option>License</option><option>Contract</option><option>Other</option>
+                  </select>
+                  <input type="date" style={dateInputStyle} value={d.expires || ""} onChange={(e) => setDoc({ expires: e.target.value })} />
+                </div>
+              </div>
+            );
+          })}
           <Btn kind="ghost" small style={{ marginTop: 8 }} onClick={() => docRef.current && docRef.current.click()}>
             <Upload size={13} /> Add document
           </Btn>
+        </Field>
+        <Field label="Payment details" hint="How this sub gets paid — stored on their file for accounting. Keep it to a handle or last 4, not full bank/SSN.">
+          {(() => {
+            const pay = f.payment || {};
+            const setPay = (patch) => setF({ ...f, payment: { ...pay, ...patch } });
+            return (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: S.sub, marginBottom: 4 }}>Method</div>
+                    <select style={selStyle} value={pay.method || ""} onChange={(e) => setPay({ method: e.target.value })}>
+                      <option value="">—</option><option>Check</option><option>ACH</option><option>Zelle</option><option>Venmo</option><option>Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: S.sub, marginBottom: 4 }}>Terms</div>
+                    <select style={selStyle} value={pay.terms || "Net 15"} onChange={(e) => setPay({ terms: e.target.value })}>
+                      <option>Due on receipt</option><option>Net 7</option><option>Net 15</option><option>Net 30</option>
+                    </select>
+                  </div>
+                </div>
+                <input style={{ ...inputStyle, marginTop: 8 }} placeholder="Payee / business name" value={pay.payeeName || ""} onChange={(e) => setPay({ payeeName: e.target.value })} />
+                <input style={{ ...inputStyle, marginTop: 8 }} placeholder="Account handle or last 4 (Zelle #, pay to…, ACH last 4)" value={pay.accountRef || ""} onChange={(e) => setPay({ accountRef: e.target.value })} />
+                <input style={{ ...inputStyle, marginTop: 8 }} placeholder="Tax ID / W-9 (EIN — never store a full SSN)" value={pay.taxId || ""} onChange={(e) => setPay({ taxId: e.target.value })} />
+              </>
+            );
+          })()}
         </Field>
         <Field label="Pricing sheet" hint="Upload this sub's full price menu (CSV: category, labor_type, price, unit, notes). Install/steep/tear-off/chimney lines auto-fill a job's sub invoice; every other row is on the menu to add by hand.">
           <input ref={priceRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={onPriceFile} />
