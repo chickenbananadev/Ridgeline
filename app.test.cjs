@@ -5003,47 +5003,6 @@ function Dashboard({
         ] })
       ] });
     })(),
-    setAppointments && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, marginBottom: 14 }, children: [["calendar", "Calendar"], ["dispatch", "Dispatch"]].map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setHomeBoard(id), style: {
-        flex: 1,
-        border: `1.5px solid ${homeBoard === id ? T.accent : S.line}`,
-        background: homeBoard === id ? T.accentSoft : "#fff",
-        color: homeBoard === id ? T.accent : S.ink,
-        borderRadius: 999,
-        padding: "8px 12px",
-        fontSize: 13,
-        fontWeight: 700,
-        cursor: "pointer"
-      }, children: label }, id)) }),
-      homeBoard === "calendar" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        CalendarView,
-        {
-          embedded: true,
-          jobs,
-          onOpenJob,
-          appointments,
-          setAppointments,
-          apptTypes,
-          setApptTypes,
-          toast: toast2,
-          onQueueMessage,
-          onLog,
-          users,
-          onBack: () => go("calendar")
-        }
-      ) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        DispatchBoard,
-        {
-          embedded: true,
-          jobs,
-          crews,
-          mutJob,
-          onOpenJob,
-          toast: toast2,
-          onBack: () => go("dispatch")
-        }
-      )
-    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
       Sheet,
       {
@@ -5080,65 +5039,6 @@ function Dashboard({
       }
     ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FocusList, { jobs, onOpenJob }),
-    onSendChat && (() => {
-      const recent = (chatMsgs || []).slice(-4);
-      const AV = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
-      const colorOf = (n) => AV[Math.abs(String(n || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV.length];
-      const initials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
-      const mine = (m) => m.by === userName;
-      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("inbox"), children: "Open chat \u2192" }), children: "Team chat" }),
-        recent.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10 }, children: "No messages yet \u2014 say something." }),
-        recent.map((m) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 0" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
-            width: 26,
-            height: 26,
-            borderRadius: 99,
-            flexShrink: 0,
-            background: mine(m) ? T.primary : colorOf(m.by),
-            color: "#fff",
-            display: "grid",
-            placeItems: "center",
-            fontSize: 10,
-            fontWeight: 800
-          }, children: initials(m.by) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, fontWeight: 700, color: colorOf(m.by) }, children: [
-              m.by,
-              " ",
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontWeight: 400 }, children: String(m.at || "").slice(11, 16) })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }, children: m.text }),
-            m.reactions && Object.keys(m.reactions).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 4, marginTop: 3 }, children: Object.entries(m.reactions).map(([e2, who]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11, background: S.soft, borderRadius: 99, padding: "1px 6px" }, children: [
-              e2,
-              " ",
-              (who || []).length
-            ] }, e2)) })
-          ] })
-        ] }, m.id)),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 10 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "input",
-            {
-              style: { ...inputStyle, flex: 1, minHeight: 40 },
-              value: homeChat,
-              placeholder: "Message the team\u2026",
-              onChange: (e) => setHomeChat(e.target.value),
-              onKeyDown: (e) => {
-                if (e.key === "Enter" && homeChat.trim()) {
-                  onSendChat(homeChat.trim());
-                  setHomeChat("");
-                }
-              }
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { disabled: !homeChat.trim(), onClick: () => {
-            onSendChat(homeChat.trim());
-            setHomeChat("");
-          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }) })
-        ] })
-      ] });
-    })(),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 18 }, children: [
       ["Pipeline value", money(totalPipeline), "Open jobs, all stages"],
       ["Signed value", money(signedValue), "Approved and beyond"],

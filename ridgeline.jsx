@@ -4100,32 +4100,9 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         );
       })()}
 
-      {/* Calendar and dispatch live on the home screen, using the same
-          components as the full screens — an appointment added here is
-          the same record as one added under More, not a copy. */}
-      {setAppointments && (
-        <Card style={{ marginTop: 16 }}>
-          <div style={{ display: "flex", gap: 7, marginBottom: 14 }}>
-            {[["calendar", "Calendar"], ["dispatch", "Dispatch"]].map(([id, label]) => (
-              <button key={id} onClick={() => setHomeBoard(id)} style={{
-                flex: 1, border: `1.5px solid ${homeBoard === id ? T.accent : S.line}`,
-                background: homeBoard === id ? T.accentSoft : "#fff",
-                color: homeBoard === id ? T.accent : S.ink,
-                borderRadius: 999, padding: "8px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer",
-              }}>{label}</button>
-            ))}
-          </div>
-          {homeBoard === "calendar" ? (
-            <CalendarView embedded jobs={jobs} onOpenJob={onOpenJob} appointments={appointments}
-              setAppointments={setAppointments} apptTypes={apptTypes} setApptTypes={setApptTypes}
-              toast={toast} onQueueMessage={onQueueMessage} onLog={onLog} users={users}
-              onBack={() => go("calendar")} />
-          ) : (
-            <DispatchBoard embedded jobs={jobs} crews={crews} mutJob={mutJob}
-              onOpenJob={onOpenJob} toast={toast} onBack={() => go("dispatch")} />
-          )}
-        </Card>
-      )}
+      {/* Calendar and dispatch are one tap away under their own screens; the
+          home page stays focused on money and what needs attention rather
+          than embedding a whole scheduler. */}
 
       <Sheet open={!!quick} onClose={closeQuick}
         title={quick === "task" ? "New task" : quick === "call" ? "Log a call" : "Add a note"}
@@ -4154,63 +4131,8 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         )}
       </Sheet>
 
+      {/* Team chat lives in the Inbox, not on the home page. */}
       <FocusList jobs={jobs} onOpenJob={onOpenJob} />
-
-      {/* Team chat — the last few messages and a composer, so a quick
-          reply does not cost a trip to another screen. */}
-      {onSendChat && (() => {
-        const recent = (chatMsgs || []).slice(-4);
-        const AV = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
-        const colorOf = (n) => AV[Math.abs(String(n || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV.length];
-        const initials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
-        const mine = (m) => m.by === userName;
-        return (
-          <Card style={{ marginTop: 16 }}>
-            <CardTitle right={<button style={linkBtn} onClick={() => go("inbox")}>Open chat →</button>}>Team chat</CardTitle>
-            {recent.length === 0 && (
-              <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>No messages yet — say something.</div>
-            )}
-            {recent.map((m) => (
-              <div key={m.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 0" }}>
-                <span style={{
-                  width: 26, height: 26, borderRadius: 99, flexShrink: 0,
-                  background: mine(m) ? T.primary : colorOf(m.by), color: "#fff",
-                  display: "grid", placeItems: "center", fontSize: 10, fontWeight: 800,
-                }}>{initials(m.by)}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 700, color: colorOf(m.by) }}>
-                    {m.by} <span style={{ color: S.sub, fontWeight: 400 }}>{String(m.at || "").slice(11, 16)}</span>
-                  </div>
-                  <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                    {m.text}
-                  </div>
-                  {m.reactions && Object.keys(m.reactions).length > 0 && (
-                    <div style={{ display: "flex", gap: 4, marginTop: 3 }}>
-                      {Object.entries(m.reactions).map(([e2, who]) => (
-                        <span key={e2} style={{ fontSize: 11, background: S.soft, borderRadius: 99, padding: "1px 6px" }}>
-                          {e2} {(who || []).length}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <input style={{ ...inputStyle, flex: 1, minHeight: 40 }} value={homeChat}
-                placeholder="Message the team…"
-                onChange={(e) => setHomeChat(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && homeChat.trim()) { onSendChat(homeChat.trim()); setHomeChat(""); }
-                }} />
-              <Btn disabled={!homeChat.trim()} onClick={() => { onSendChat(homeChat.trim()); setHomeChat(""); }}>
-                <Send size={15} />
-              </Btn>
-            </div>
-          </Card>
-        );
-      })()}
-
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 18 }}>
         {[

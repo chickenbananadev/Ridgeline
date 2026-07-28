@@ -7,7 +7,17 @@ import { createClient } from "@supabase/supabase-js";
 const url = import.meta.env.VITE_SUPABASE_URL;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = url && anonKey ? createClient(url, anonKey) : null;
+/* persistSession + a stable storageKey keep an installed home-screen web app
+   signed in between launches (see src/main.jsx for the full rationale). */
+export const supabase = url && anonKey ? createClient(url, anonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: typeof window !== "undefined" ? window.localStorage : undefined,
+    storageKey: "roofstride.auth",
+  },
+}) : null;
 export const backendReady = () => !!supabase;
 
 /* ---------------- auth ---------------- */

@@ -14,7 +14,7 @@ check("no leftover blue default accent in any brand-accent fallback",
   !/accent: "#1B6DE0"/.test(src) && !/accent = "#1B6DE0"/.test(src)
     && !/brand\.accent \|\| "#1B6DE0"/.test(src));
 check("avatar color palette (unrelated to branding) is untouched",
-  (src.match(/"#1B6DE0", "#177245", "#92600A"/g) || []).length === 2);
+  (src.match(/"#1B6DE0", "#177245", "#92600A"/g) || []).length === 1);
 check("login email placeholder is generic, not Jacob's own domain",
   /placeholder="you@yourcompany\.com"/.test(src));
 check("no remaining supremebuildinggroup.com in any placeholder attribute",
