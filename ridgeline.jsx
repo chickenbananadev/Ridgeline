@@ -15835,7 +15835,7 @@ function ManufacturerSpecs() {
 }
 
 function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {}, seed = null, onConsumeSeed = () => {} }) {
-  const [tab, setTab] = useState(seed && seed.zip ? "codes" : "clients");
+  const [tab, setTab] = useState(seed && seed.tab ? seed.tab : (seed && seed.zip ? "codes" : "clients"));
   const [zip, setZip] = useState(seed ? seed.zip || "" : "");
   const [tplState, setTplState] = useState("OH");
   const [openTpl, setOpenTpl] = useState(null);
@@ -15853,7 +15853,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
      Clients as usual. */
   useEffect(() => {
     if (seed) {
-      setTab("codes");
+      setTab(seed.tab || "codes");
       if (seed.zip) setZip(seed.zip);
       onConsumeSeed();
     }
@@ -20425,8 +20425,12 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
       ["pricelist", Package, "Price list", "Material costs and margins — CSV import"],
       admin && ["crewpay", HardHat, "Crew payouts", "What each crew is owed and has been paid"],
     ]],
+    ["Insurance & resources", [
+      ["insurance", Shield, "Insurance & claims", "Clients, claims, supplements & depreciation"],
+      ["insurance:codes", ScrollText, "Code lookup", "Adopted code & building department by zip"],
+      ["insurance:resources", BookOpen, "Roofing resources", "Manufacturer specs, policy provisions, letters, playbook"],
+    ]],
     ["Customers & documents", [
-      ["insurance", Shield, "Insurance", "Clients, supplements and code lookup"],
       ["documents", FileText, "Documents", "Contracts, COIs, licenses, warranties"],
       ["templates", ScrollText, "Message templates", "Email and text, customer and crew"],
       ["announcements", Megaphone, "Announcements", "Posted to everyone's home screen"],
@@ -20445,7 +20449,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
       ["password", Lock, "Change my password", "Update your sign-in password"],
     ]],
   ];
-  const [open, setOpen] = useState({ "Schedule & production": true, "Sales & marketing": true, Money: false, "Customers & documents": false, Setup: false });
+  const [open, setOpen] = useState({ "Schedule & production": true, "Sales & marketing": true, Money: false, "Insurance & resources": false, "Customers & documents": false, Setup: false });
   const [q, setQ] = useState("");
   const needle = q.trim().toLowerCase();
   /* Searching flattens the groups — hunting through four accordions on
@@ -21646,7 +21650,13 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             if (db) db.from("crm_chat").delete().eq("id", id).then(() => {}, () => {});
           }} />
       ) : nav === "more" ? (
-        <MoreMenu brand={brand} onNav={(id) => (id === "password" ? setChangePwOpen(true) : id === "workflow" ? setWorkflowOpen(true) : setNav(id))} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
+        <MoreMenu brand={brand} onNav={(id) => {
+          if (id === "password") return setChangePwOpen(true);
+          if (id === "workflow") return setWorkflowOpen(true);
+          if (id === "insurance:codes") { setCodeSeed({ tab: "codes" }); return setNav("insurance"); }
+          if (id === "insurance:resources") { setCodeSeed({ tab: "resources" }); return setNav("insurance"); }
+          return setNav(id);
+        }} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
       ) : nav === "insurance" ? (
         <InsuranceHub jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} toast={toast}
           onSaveDept={(zip, dept) => {

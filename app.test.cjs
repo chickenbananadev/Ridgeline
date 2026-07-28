@@ -17663,7 +17663,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2, onSaveDept = () 
 }, onSaveJurisdiction = () => {
 }, seed = null, onConsumeSeed = () => {
 } }) {
-  const [tab, setTab] = (0, import_react.useState)(seed && seed.zip ? "codes" : "clients");
+  const [tab, setTab] = (0, import_react.useState)(seed && seed.tab ? seed.tab : seed && seed.zip ? "codes" : "clients");
   const [zip, setZip] = (0, import_react.useState)(seed ? seed.zip || "" : "");
   const [tplState, setTplState] = (0, import_react.useState)("OH");
   const [openTpl, setOpenTpl] = (0, import_react.useState)(null);
@@ -17678,7 +17678,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast: toast2, onSaveDept = () 
   const [openKb, setOpenKb] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
     if (seed) {
-      setTab("codes");
+      setTab(seed.tab || "codes");
       if (seed.zip) setZip(seed.zip);
       onConsumeSeed();
     }
@@ -22543,8 +22543,12 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
       ["pricelist", import_lucide_react.Package, "Price list", "Material costs and margins \u2014 CSV import"],
       admin && ["crewpay", import_lucide_react.HardHat, "Crew payouts", "What each crew is owed and has been paid"]
     ]],
+    ["Insurance & resources", [
+      ["insurance", import_lucide_react.Shield, "Insurance & claims", "Clients, claims, supplements & depreciation"],
+      ["insurance:codes", import_lucide_react.ScrollText, "Code lookup", "Adopted code & building department by zip"],
+      ["insurance:resources", import_lucide_react.BookOpen, "Roofing resources", "Manufacturer specs, policy provisions, letters, playbook"]
+    ]],
     ["Customers & documents", [
-      ["insurance", import_lucide_react.Shield, "Insurance", "Clients, supplements and code lookup"],
       ["documents", import_lucide_react.FileText, "Documents", "Contracts, COIs, licenses, warranties"],
       ["templates", import_lucide_react.ScrollText, "Message templates", "Email and text, customer and crew"],
       ["announcements", import_lucide_react.Megaphone, "Announcements", "Posted to everyone's home screen"]
@@ -22563,7 +22567,7 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
       ["password", import_lucide_react.Lock, "Change my password", "Update your sign-in password"]
     ]]
   ];
-  const [open, setOpen] = (0, import_react.useState)({ "Schedule & production": true, "Sales & marketing": true, Money: false, "Customers & documents": false, Setup: false });
+  const [open, setOpen] = (0, import_react.useState)({ "Schedule & production": true, "Sales & marketing": true, Money: false, "Insurance & resources": false, "Customers & documents": false, Setup: false });
   const [q, setQ] = (0, import_react.useState)("");
   const needle = q.trim().toLowerCase();
   const matches = needle ? groups.flatMap(([, items]) => items.filter(Boolean).filter(([, , label, sub]) => (label + " " + (sub || "")).toLowerCase().includes(needle))) : null;
@@ -23857,7 +23861,19 @@ function SupremeCRM() {
           });
         }
       }
-    ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand: brand2, onNav: (id) => id === "password" ? setChangePwOpen(true) : id === "workflow" ? setWorkflowOpen(true) : setNav(id), onLogout: async () => {
+    ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand: brand2, onNav: (id) => {
+      if (id === "password") return setChangePwOpen(true);
+      if (id === "workflow") return setWorkflowOpen(true);
+      if (id === "insurance:codes") {
+        setCodeSeed({ tab: "codes" });
+        return setNav("insurance");
+      }
+      if (id === "insurance:resources") {
+        setCodeSeed({ tab: "resources" });
+        return setNav("insurance");
+      }
+      return setNav(id);
+    }, onLogout: async () => {
       const a = AUTH();
       if (a) {
         try {
