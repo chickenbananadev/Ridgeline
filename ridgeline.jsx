@@ -19813,12 +19813,47 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
 
   const [saving, setSaving] = useState(false);
   const [seatErr, setSeatErr] = useState("");
+  const [billingBusy, setBillingBusy] = useState(false);
+
+  /* Read the tenant's plan so we can show and enforce the seat allowance. */
+  const [tenant, setTenant] = useState(null);
+  useEffect(() => {
+    const auth = AUTH();
+    if (!auth || !auth.myTenant) return;
+    let alive = true;
+    auth.myTenant().then((t) => { if (alive) setTenant(t); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const activeCount = users.filter((u) => u.active).length;
+  const plan = tenant && tenant.plan;
+  /* Per-seat: base seats plus any extra paid seats. Unlimited: flat cap. */
+  const seatsIncluded = tenant
+    ? (plan === "unlimited" ? PRODUCT.unlimitedSeatCap : PRODUCT.baseSeats + (tenant.seats_paid || 0))
+    : null;
+  const atLimit = seatsIncluded != null && activeCount >= seatsIncluded;
+
+  const manageBilling = async () => {
+    const auth = AUTH();
+    if (!auth || !auth.manageBilling) { toast("Billing portal isn't available yet — contact support@roofstride.com"); return; }
+    setBillingBusy(true);
+    try { await auth.manageBilling(); }
+    catch (e) { toast(e && e.message ? e.message : "Couldn't open the billing portal"); }
+    setBillingBusy(false);
+  };
 
   const save = async () => {
     const auth = AUTH();
     setSeatErr(""); setSaving(true);
     try {
       if (editing === "new") {
+        /* Enforce the plan's seat allowance before creating a billable seat. */
+        if (atLimit) {
+          setSeatErr(plan === "unlimited"
+            ? `Your Unlimited plan covers up to ${seatsIncluded} seats and all ${activeCount} are in use. Deactivate a seat or contact support to raise the cap.`
+            : `Your plan includes ${seatsIncluded} seat${seatsIncluded === 1 ? "" : "s"} and all are in use. Add a seat to your subscription in Manage billing, then invite this person.`);
+          setSaving(false);
+          return;
+        }
         if (auth) {
           const payload = {
             name: f.name.trim(), email: f.email.trim(), role: f.role,
@@ -19922,10 +19957,39 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
           {!liveAuth() && " Demo mode — no backend connected, so invites are not actually sent."}
         </div>
         <div style={{ display: "flex", gap: 16, marginTop: 12 }}>
-          <div><div style={{ fontSize: 20, fontWeight: 800 }}>{users.filter((u) => u.active).length}</div><div style={{ fontSize: 12, color: S.sub }}>Active seats</div></div>
+          <div><div style={{ fontSize: 20, fontWeight: 800 }}>{activeCount}</div><div style={{ fontSize: 12, color: S.sub }}>Active seats</div></div>
           <div><div style={{ fontSize: 20, fontWeight: 800 }}>{users.filter((u) => !u.active).length}</div><div style={{ fontSize: 12, color: S.sub }}>Deactivated</div></div>
+          {seatsIncluded != null && (
+            <div><div style={{ fontSize: 20, fontWeight: 800, color: atLimit ? "#B42318" : S.ink }}>{activeCount} / {seatsIncluded}</div><div style={{ fontSize: 12, color: S.sub }}>Seats used</div></div>
+          )}
         </div>
       </Card>
+
+      {tenant && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={<Chip tone={tenant.status === "active" ? "green" : tenant.status === "past_due" || tenant.status === "canceled" ? "red" : "amber"}>
+            {tenant.status === "trialing" ? `Trial${tenant.days_left != null ? ` — ${tenant.days_left}d left` : ""}` : (tenant.status || "—")}
+          </Chip>}>Subscription</CardTitle>
+          <KV k="Plan" v={plan === "unlimited" ? `Unlimited — up to ${PRODUCT.unlimitedSeatCap} seats` : `Team — ${PRODUCT.baseSeats} seats + ${tenant.seats_paid || 0} added`} />
+          <KV k="Seats" v={`${activeCount} used of ${seatsIncluded} included`} />
+          {atLimit && (
+            <Callout label="Seat limit reached" tone="amber">
+              {plan === "unlimited"
+                ? "Every seat on your plan is in use. Deactivate one to free it up, or contact support to raise the cap."
+                : "Add a seat to your subscription in Manage billing, then invite the new person."}
+            </Callout>
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            <Btn kind="soft" small onClick={manageBilling} disabled={billingBusy}>
+              {billingBusy ? "Opening…" : "Manage billing"}
+            </Btn>
+          </div>
+          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
+            Manage billing opens the secure Stripe portal to change your plan, add or remove seats,
+            update your card, or cancel. It's the only place a subscription can be changed.
+          </div>
+        </Card>
+      )}
 
       {users.map((u) => {
         const assigned = jobs.filter((j) => j.assignee === u.name).length;

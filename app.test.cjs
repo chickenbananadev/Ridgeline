@@ -22031,12 +22031,49 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast: toast2
   const valid = f.name.trim() && /\S+@\S+\.\S+/.test(f.email.trim()) && !emailTaken;
   const [saving, setSaving] = (0, import_react.useState)(false);
   const [seatErr, setSeatErr] = (0, import_react.useState)("");
+  const [billingBusy, setBillingBusy] = (0, import_react.useState)(false);
+  const [tenant, setTenant] = (0, import_react.useState)(null);
+  (0, import_react.useEffect)(() => {
+    const auth = AUTH();
+    if (!auth || !auth.myTenant) return;
+    let alive = true;
+    auth.myTenant().then((t) => {
+      if (alive) setTenant(t);
+    }).catch(() => {
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const activeCount = users.filter((u) => u.active).length;
+  const plan = tenant && tenant.plan;
+  const seatsIncluded = tenant ? plan === "unlimited" ? PRODUCT.unlimitedSeatCap : PRODUCT.baseSeats + (tenant.seats_paid || 0) : null;
+  const atLimit = seatsIncluded != null && activeCount >= seatsIncluded;
+  const manageBilling = async () => {
+    const auth = AUTH();
+    if (!auth || !auth.manageBilling) {
+      toast2("Billing portal isn't available yet \u2014 contact support@roofstride.com");
+      return;
+    }
+    setBillingBusy(true);
+    try {
+      await auth.manageBilling();
+    } catch (e) {
+      toast2(e && e.message ? e.message : "Couldn't open the billing portal");
+    }
+    setBillingBusy(false);
+  };
   const save = async () => {
     const auth = AUTH();
     setSeatErr("");
     setSaving(true);
     try {
       if (editing === "new") {
+        if (atLimit) {
+          setSeatErr(plan === "unlimited" ? `Your Unlimited plan covers up to ${seatsIncluded} seats and all ${activeCount} are in use. Deactivate a seat or contact support to raise the cap.` : `Your plan includes ${seatsIncluded} seat${seatsIncluded === 1 ? "" : "s"} and all are in use. Add a seat to your subscription in Manage billing, then invite this person.`);
+          setSaving(false);
+          return;
+        }
         if (auth) {
           const payload = {
             name: f.name.trim(),
@@ -22139,14 +22176,30 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast: toast2
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 16, marginTop: 12 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800 }, children: users.filter((u) => u.active).length }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800 }, children: activeCount }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: "Active seats" })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800 }, children: users.filter((u) => !u.active).length }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: "Deactivated" })
+        ] }),
+        seatsIncluded != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 20, fontWeight: 800, color: atLimit ? "#B42318" : S.ink }, children: [
+            activeCount,
+            " / ",
+            seatsIncluded
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: "Seats used" })
         ] })
       ] })
+    ] }),
+    tenant && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: tenant.status === "active" ? "green" : tenant.status === "past_due" || tenant.status === "canceled" ? "red" : "amber", children: tenant.status === "trialing" ? `Trial${tenant.days_left != null ? ` \u2014 ${tenant.days_left}d left` : ""}` : tenant.status || "\u2014" }), children: "Subscription" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Plan", v: plan === "unlimited" ? `Unlimited \u2014 up to ${PRODUCT.unlimitedSeatCap} seats` : `Team \u2014 ${PRODUCT.baseSeats} seats + ${tenant.seats_paid || 0} added` }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Seats", v: `${activeCount} used of ${seatsIncluded} included` }),
+      atLimit && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Seat limit reached", tone: "amber", children: plan === "unlimited" ? "Every seat on your plan is in use. Deactivate one to free it up, or contact support to raise the cap." : "Add a seat to your subscription in Manage billing, then invite the new person." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "soft", small: true, onClick: manageBilling, disabled: billingBusy, children: billingBusy ? "Opening\u2026" : "Manage billing" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: "Manage billing opens the secure Stripe portal to change your plan, add or remove seats, update your card, or cancel. It's the only place a subscription can be changed." })
     ] }),
     users.map((u) => {
       const assigned = jobs.filter((j) => j.assignee === u.name).length;

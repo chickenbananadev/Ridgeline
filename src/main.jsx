@@ -117,6 +117,17 @@ if (url && anon) {
       if (!data?.url) throw new Error("Stripe did not return a checkout link.");
       window.location.href = data.url;
     },
+    /* Opens the Stripe Billing Portal for the current tenant so the owner can
+       change plan, add/remove seats, update the card, or cancel. Requires the
+       create-portal-session Edge Function (see DEPLOY.md). */
+    async manageBilling() {
+      const { data, error } = await supabase.functions.invoke("create-portal-session", {
+        body: { return_url: window.location.origin + "/" },
+      });
+      if (error) throw new Error(error.message || "Couldn't open the billing portal");
+      if (!data?.url) throw new Error("Billing portal isn't configured yet.");
+      window.location.href = data.url;
+    },
     /* Called once, when the browser lands back on the app with
        ?checkout=success&session_id=... in the URL. */
     async completeSignupAfterCheckout(sessionId) {
