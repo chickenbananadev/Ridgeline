@@ -88,5 +88,10 @@ ok(/function CoverThumb\(/.test(src) && /<CoverThumb style=\{s\.id\}/.test(src),
 ok(/\.cover img\.hero \{[^}]*object-fit: cover/.test(src), "print cover image is height-constrained");
 ok(/height: 240, objectFit: "cover"/.test(src), "builder cover image is height-constrained");
 
+/* P10 — Activity opens as a centered dialog, not a bottom sheet */
+ok(/function Sheet\(\{[^}]*center/.test(src), "Sheet supports a center (dialog) variant");
+ok(/alignItems: center \? "center" : "flex-end"/.test(src), "center variant vertically centers");
+ok(/open=\{activityOpen\}[\s\S]{0,80}title="Activity" center/.test(src), "Activity uses the centered dialog");
+
 if (fails) { console.log("\nbuild 46: " + fails + " FAILED"); process.exit(1); }
 console.log("build 46 tests passed");

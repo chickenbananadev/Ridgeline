@@ -3644,7 +3644,7 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
     )) })
   ] });
 }
-function Sheet({ open, onClose, title, children, footer, wide, tall }) {
+function Sheet({ open, onClose, title, children, footer, wide, tall, center }) {
   if (!open) return null;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
     position: "fixed",
@@ -3652,17 +3652,20 @@ function Sheet({ open, onClose, title, children, footer, wide, tall }) {
     zIndex: 60,
     background: "rgba(17,24,39,.45)",
     display: "flex",
-    alignItems: "flex-end",
-    justifyContent: "center"
+    alignItems: center ? "center" : "flex-end",
+    justifyContent: "center",
+    padding: center ? 20 : 0,
+    boxSizing: "border-box"
   }, onClick: onClose, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { onClick: (e) => e.stopPropagation(), style: {
     background: S.card,
     width: "100%",
     maxWidth: wide ? 760 : 560,
-    maxHeight: "90vh",
+    maxHeight: center ? "82vh" : "90vh",
     minHeight: tall ? "55vh" : void 0,
-    borderRadius: "18px 18px 0 0",
+    borderRadius: center ? 18 : "18px 18px 0 0",
     display: "flex",
-    flexDirection: "column"
+    flexDirection: "column",
+    boxShadow: center ? "0 24px 60px rgba(17,24,39,.28)" : void 0
   }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 12px" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 700, color: S.ink }, children: title }),
@@ -8523,7 +8526,7 @@ function JobDetail({
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Icon, { size: 19, color: T.accent }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: label })
     ] }, id)) }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: activityOpen, onClose: () => setActivityOpen(false), title: "Activity", children: (() => {
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: activityOpen, onClose: () => setActivityOpen(false), title: "Activity", center: true, children: (() => {
       const mine = (activity || []).filter((a) => a.jobId === job.id);
       if (!mine.length) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "Nothing logged on this job yet." });
       return mine.map((a, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "10px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }, children: [

@@ -2993,16 +2993,22 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
   );
 }
 
-function Sheet({ open, onClose, title, children, footer, wide, tall }) {
+function Sheet({ open, onClose, title, children, footer, wide, tall, center }) {
   if (!open) return null;
+  /* `center` renders a floating, vertically-centered dialog (rounded on all
+     sides, insets from the screen edges) instead of the default bottom sheet
+     that's anchored to the bottom edge. */
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 60, background: "rgba(17,24,39,.45)",
-      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      display: "flex", alignItems: center ? "center" : "flex-end", justifyContent: "center",
+      padding: center ? 20 : 0, boxSizing: "border-box",
     }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
-        background: S.card, width: "100%", maxWidth: wide ? 760 : 560, maxHeight: "90vh", minHeight: tall ? "55vh" : undefined,
-        borderRadius: "18px 18px 0 0", display: "flex", flexDirection: "column",
+        background: S.card, width: "100%", maxWidth: wide ? 760 : 560,
+        maxHeight: center ? "82vh" : "90vh", minHeight: tall ? "55vh" : undefined,
+        borderRadius: center ? 18 : "18px 18px 0 0", display: "flex", flexDirection: "column",
+        boxShadow: center ? "0 24px 60px rgba(17,24,39,.28)" : undefined,
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 12px" }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: S.ink }}>{title}</div>
@@ -7179,7 +7185,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
         </div>
       </Sheet>
 
-      <Sheet open={activityOpen} onClose={() => setActivityOpen(false)} title="Activity">
+      <Sheet open={activityOpen} onClose={() => setActivityOpen(false)} title="Activity" center>
         {(() => {
           const mine = (activity || []).filter((a) => a.jobId === job.id);
           if (!mine.length) return <div style={{ fontSize: 13.5, color: S.sub }}>Nothing logged on this job yet.</div>;
