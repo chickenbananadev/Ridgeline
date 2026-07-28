@@ -9743,20 +9743,24 @@ function SystemCheck({ currentUser, onBack }) {
           out.push({ label: human, ok: false, detail: String((e && e.message) || e) });
         }
       }
-      /* Write test against a throwaway row. Each run picks a fresh random
-         id rather than the old shared id=99 — with tenant-scoped RLS,
-         a fixed shared id meant only the FIRST tenant to ever run this
-         check could write it; every other company would see a false
-         "write blocked" here even though their real data saves fine. */
-      const probeId = 1000 + Math.floor(Math.random() * 2000000000);
+      /* Non-destructive write test. The real save path (useBrandSync) upserts
+         the tenant's own crm_brand row on tenant_id; mirror that exactly here
+         so the probe exercises the same RLS path. Touching only updated_at via
+         ON CONFLICT (tenant_id) leaves the row's data (logo/colors/company)
+         untouched. The old raw insert set a random id but no tenant_id — a
+         trigger stamped the tenant, and any company that had ever saved
+         branding then collided on crm_brand_tenant_id_key, producing a false
+         "write blocked" even though their settings save fine. */
       try {
-        const { error } = await db.from("crm_brand").insert({ id: probeId, data: { _probe: Date.now() }, updated_at: new Date().toISOString() });
+        const write = (currentUser && currentUser.tenantId)
+          ? db.from("crm_brand").upsert({ tenant_id: currentUser.tenantId, updated_at: new Date().toISOString() }, { onConflict: "tenant_id" })
+          : db.from("crm_brand").upsert({ id: 1, updated_at: new Date().toISOString() }, { onConflict: "id" });
+        const { error } = await write;
         out.push({
           label: "Can save settings",
           ok: !error,
           detail: error ? `Write blocked: ${error.message}` : "Write succeeded",
         });
-        if (!error) await db.from("crm_brand").delete().eq("id", probeId);
       } catch (e) {
         out.push({ label: "Can save settings", ok: false, detail: String((e && e.message) || e) });
       }

@@ -11196,15 +11196,14 @@ function SystemCheck({ currentUser, onBack }) {
           out.push({ label: human, ok: false, detail: String(e && e.message || e) });
         }
       }
-      const probeId = 1e3 + Math.floor(Math.random() * 2e9);
       try {
-        const { error } = await db.from("crm_brand").insert({ id: probeId, data: { _probe: Date.now() }, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+        const write = currentUser && currentUser.tenantId ? db.from("crm_brand").upsert({ tenant_id: currentUser.tenantId, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "tenant_id" }) : db.from("crm_brand").upsert({ id: 1, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "id" });
+        const { error } = await write;
         out.push({
           label: "Can save settings",
           ok: !error,
           detail: error ? `Write blocked: ${error.message}` : "Write succeeded"
         });
-        if (!error) await db.from("crm_brand").delete().eq("id", probeId);
       } catch (e) {
         out.push({ label: "Can save settings", ok: false, detail: String(e && e.message || e) });
       }
