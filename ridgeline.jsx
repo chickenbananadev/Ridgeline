@@ -8,7 +8,7 @@ import {
   BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat, CloudRain,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
   Scale, Lightbulb, ExternalLink, Lock, Layers, Smile
-, Filter , Megaphone, Clock, Zap } from "lucide-react";
+, Filter , Megaphone, Clock, Zap, Sun, Moon } from "lucide-react";
 
 /* ================================================================
    BRANDING — single source of company identity. Everything company-
@@ -2671,7 +2671,11 @@ const toProfile = (u) => ({
 /* ================================================================
    SHARED UI
    ================================================================ */
-const S = { ink: "#111827", sub: "#6B7280", line: "#E5E7EB", bg: "#F7F8FA", soft: "#F3F4F6" };
+/* Neutral tokens resolve to CSS variables (defined in index.html) so a
+   dark/light switch is a single data-theme flip on <html> — every S.* read
+   and every captured style const (inputStyle etc.) repaints via the cascade,
+   with no re-render. `card` is the surface white that darkens in dark mode. */
+const S = { ink: "var(--rl-ink)", sub: "var(--rl-sub)", line: "var(--rl-line)", bg: "var(--rl-bg)", soft: "var(--rl-soft)", card: "var(--rl-card)" };
 /* Live theme. The root component copies brand colors in on every render,
    and because inline styles read these properties at render time, a color
    change in Branding repaints the whole app immediately. */
@@ -2710,7 +2714,7 @@ function DonutChart({ data, size = 132, thickness = 18, centerLabel, centerValue
         background: gradient, flexShrink: 0,
       }}>
         <div style={{
-          position: "absolute", inset: thickness, borderRadius: "50%", background: "#fff",
+          position: "absolute", inset: thickness, borderRadius: "50%", background: S.card,
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
         }}>
           {centerValue != null && <div style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>{centerValue}</div>}
@@ -2766,9 +2770,9 @@ function Btn({ children, kind = "primary", onClick, style, small, disabled, ...p
   const kinds = {
     primary: { background: T.accent, color: "#fff" },
     dark: { background: T.primary, color: "#fff" },
-    ghost: { background: "#fff", color: S.ink, border: `1px solid ${S.line}` },
+    ghost: { background: S.card, color: S.ink, border: `1px solid ${S.line}` },
     soft: { background: T.accentSoft, color: T.accent },
-    danger: { background: "#fff", color: "#B42318", border: `1px solid ${S.line}` },
+    danger: { background: S.card, color: "#B42318", border: `1px solid ${S.line}` },
     green: { background: "#177245", color: "#fff" },
   };
   return (
@@ -2789,7 +2793,7 @@ function Field({ label, children, hint }) {
 }
 const inputStyle = {
   width: "100%", boxSizing: "border-box", padding: "11px 13px", fontSize: 15,
-  border: `1px solid ${S.line}`, borderRadius: 10, background: "#fff", color: S.ink, outline: "none",
+  border: `1px solid ${S.line}`, borderRadius: 10, background: S.card, color: S.ink, outline: "none",
   fontFamily: "inherit",
 };
 const selStyle = { ...inputStyle, appearance: "auto" };
@@ -2803,7 +2807,7 @@ const dateInputStyle = {
 
 function Card({ children, style, pad = 18, onClick }) {
   return (
-    <div onClick={onClick} style={{ background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }}>
+    <div onClick={onClick} style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }}>
       {children}
     </div>
   );
@@ -2854,7 +2858,7 @@ function SourceLink({ srcId }) {
     <a href={s.url} target="_blank" rel="noreferrer" style={{
       display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none",
       border: `1px solid ${S.line}`, borderRadius: 999, padding: "6px 12px",
-      fontSize: 12.5, fontWeight: 700, color: T.accent, background: "#fff", marginTop: 8, marginRight: 8,
+      fontSize: 12.5, fontWeight: 700, color: T.accent, background: S.card, marginTop: 8, marginRight: 8,
     }}>
       <ExternalLink size={13} /> {s.name}
     </a>
@@ -2884,7 +2888,7 @@ function AssistLink({ href, children }) {
     <a href={href} target="_blank" rel="noreferrer" style={{
       display: "inline-flex", alignItems: "center", gap: 6, textDecoration: "none",
       border: `1px solid ${S.line}`, borderRadius: 999, padding: "6px 12px",
-      fontSize: 12.5, fontWeight: 700, color: T.accent, background: "#fff", marginTop: 8, marginRight: 8,
+      fontSize: 12.5, fontWeight: 700, color: T.accent, background: S.card, marginTop: 8, marginRight: 8,
     }}>
       <ExternalLink size={13} /> {children}
     </a>
@@ -2958,7 +2962,7 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
       {open && items.length > 0 && (
         <div style={{
           position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 30,
-          background: "#fff", border: `1px solid ${S.line}`, borderRadius: 12,
+          background: S.card, border: `1px solid ${S.line}`, borderRadius: 12,
           boxShadow: "0 10px 28px rgba(17,24,39,.14)", overflow: "hidden", maxHeight: 260, overflowY: "auto",
         }}>
           {items.map((it, i) => (
@@ -2997,7 +3001,7 @@ function Sheet({ open, onClose, title, children, footer, wide, tall }) {
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
-        background: "#fff", width: "100%", maxWidth: wide ? 760 : 560, maxHeight: "90vh", minHeight: tall ? "55vh" : undefined,
+        background: S.card, width: "100%", maxWidth: wide ? 760 : 560, maxHeight: "90vh", minHeight: tall ? "55vh" : undefined,
         borderRadius: "18px 18px 0 0", display: "flex", flexDirection: "column",
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 12px" }}>
@@ -3093,7 +3097,7 @@ function SignaturePad({ open, onClose, title, onApply }) {
         onTouchStart={start} onTouchMove={move} onTouchEnd={end}
         style={{
           width: "100%", height: 190, border: `1.5px dashed ${S.line}`, borderRadius: 12,
-          touchAction: "none", background: "#fff", display: "block",
+          touchAction: "none", background: S.card, display: "block",
         }}
       />
     </Sheet>
@@ -3320,7 +3324,7 @@ function Marketing({ onSignIn, onStartTrial }) {
     ["E", "Empowerment", "We give roofing professionals the visibility, tools, and control to operate with confidence.", "stride-empowerment.jpg"],
   ];
   return (
-    <div id="top" style={{ background: "#fff" }}>
+    <div id="top" style={{ background: S.card }}>
       <style>{`
         @media (max-width: 760px) {
           .mkt-row { flex-direction: column !important; padding: 40px 20px !important; gap: 32px !important; }
@@ -3471,7 +3475,7 @@ function Marketing({ onSignIn, onStartTrial }) {
       {/* ---------- A few more reasons, in the format sales reps already
          hand customers — quick-hit panels rather than another full row
          each. ---------- */}
-      <div style={{ padding: "64px 20px", background: "#fff" }}>
+      <div style={{ padding: "64px 20px", background: S.card }}>
         <Reveal style={{ maxWidth: 1100, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 32 }}>
             <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
@@ -3550,7 +3554,7 @@ function Marketing({ onSignIn, onStartTrial }) {
           </div>
           <div className="mkt-pricing-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, textAlign: "left", marginBottom: 28 }}>
             <div style={{
-              background: "#fff", borderRadius: 20, padding: "30px 26px", border: `1px solid ${MKT.line}`,
+              background: S.card, borderRadius: 20, padding: "30px 26px", border: `1px solid ${MKT.line}`,
               boxShadow: "0 20px 50px rgba(32,36,42,.06)",
             }}>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: MKT.sub, marginBottom: 6 }}>Pay per seat</div>
@@ -3588,7 +3592,7 @@ function Marketing({ onSignIn, onStartTrial }) {
             </div>
           </div>
           <div style={{
-            background: "#fff", borderRadius: 16, padding: "22px 24px", border: `1px solid ${MKT.line}`, textAlign: "left",
+            background: S.card, borderRadius: 16, padding: "22px 24px", border: `1px solid ${MKT.line}`, textAlign: "left",
           }}>
             <div style={{ fontSize: 13, color: MKT.sub, marginBottom: 14 }}>
               7-day free trial, card required. Cancel anytime before it ends and you won't be charged. Every plan includes:
@@ -3608,7 +3612,7 @@ function Marketing({ onSignIn, onStartTrial }) {
       </div>
 
       {/* ---------- FAQ ---------- */}
-      <div id="faq" style={{ padding: "72px 20px", background: "#fff" }}>
+      <div id="faq" style={{ padding: "72px 20px", background: S.card }}>
         <Reveal style={{ maxWidth: 760, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 32 }}>
             <div style={{ fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }}>
@@ -3641,7 +3645,7 @@ function Marketing({ onSignIn, onStartTrial }) {
             Ready to run roofing operations with clarity?
           </div>
           <button onClick={onStartTrial} style={{
-            border: "none", background: "#fff", color: MKT.tealDark, fontWeight: 700,
+            border: "none", background: S.card, color: MKT.tealDark, fontWeight: 700,
             fontSize: 16, cursor: "pointer", fontFamily: "inherit", padding: "15px 30px", borderRadius: 10,
           }}>Start your free trial</button>
         </Reveal>
@@ -3757,7 +3761,7 @@ function Login({ brand, users, onLogin, initialMode = "login", selectedPlan = "p
       <div style={{ minHeight: "100vh", background: brand.primary, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
         <div style={{ width: "100%", maxWidth: 420 }}>
           <div style={{ textAlign: "center", marginBottom: 22 }}>
-            <div style={{ width: 56, height: 56, borderRadius: 14, background: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+            <div style={{ width: 56, height: 56, borderRadius: 14, background: S.card, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
               <Shield size={28} color={brand.primary} />
             </div>
             <div style={{ fontSize: 22, fontWeight: 800, color: "#fff" }}>{brand.company}</div>
@@ -3797,7 +3801,7 @@ function Login({ brand, users, onLogin, initialMode = "login", selectedPlan = "p
 
   return (
     <div style={{
-      minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column",
+      minHeight: "100vh", background: S.card, display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center", padding: 24, position: "relative",
     }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
@@ -3856,7 +3860,7 @@ function Login({ brand, users, onLogin, initialMode = "login", selectedPlan = "p
                   New company? Try {PRODUCT.name} free for {PRODUCT.trialDays} days — no card.
                 </div>
                 <button onClick={() => { setErr(""); setMode("signup"); }} style={{
-                  border: `1.5px solid ${T.accent}`, background: "#fff", color: T.accent,
+                  border: `1.5px solid ${T.accent}`, background: S.card, color: T.accent,
                   fontWeight: 700, fontSize: 14, cursor: "pointer", borderRadius: 10,
                   padding: "10px 18px",
                 }}>Create an account</button>
@@ -4191,7 +4195,7 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         ].map(([label, Icon, fn]) => (
           <button key={label} onClick={fn} style={{
             flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
-            border: `1px solid ${S.line}`, background: "#fff", borderRadius: 12,
+            border: `1px solid ${S.line}`, background: S.card, borderRadius: 12,
             padding: "11px 0", cursor: "pointer", color: T.accent, fontSize: 11.5, fontWeight: 700,
             fontFamily: "inherit",
           }}>
@@ -5155,7 +5159,7 @@ function SubHeader({ title, onBack, right }) {
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <button onClick={onBack} style={{
-          border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
+          border: `1px solid ${S.line}`, background: S.card, borderRadius: 999,
           width: 36, height: 36, display: "grid", placeItems: "center", cursor: "pointer",
         }}><ChevronLeft size={18} /></button>
         <div style={{ fontSize: 22, fontWeight: 800, color: S.ink }}>{title}</div>
@@ -5664,10 +5668,10 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
 
                 {/* Call / Text */}
                 <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                  <a href={vTel ? telHref(vJob.phone) : undefined} style={{ ...actLink, background: "#fff", color: S.ink, ...(vTel ? {} : off) }}>
+                  <a href={vTel ? telHref(vJob.phone) : undefined} style={{ ...actLink, background: S.card, color: S.ink, ...(vTel ? {} : off) }}>
                     <Phone size={15} /> Call
                   </a>
-                  <a href={vTel ? smsHref(vJob.phone) : undefined} style={{ ...actLink, background: "#fff", color: S.ink, ...(vTel ? {} : off) }}>
+                  <a href={vTel ? smsHref(vJob.phone) : undefined} style={{ ...actLink, background: S.card, color: S.ink, ...(vTel ? {} : off) }}>
                     <MessageCircle size={15} /> Text
                   </a>
                 </div>
@@ -5680,7 +5684,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
                     return (
                       <a key={p.id} href={addr ? p.link(addr) : undefined} target="_blank" rel="noreferrer"
                         onClick={() => { setMapPref(p.id); setMapPrefState(p.id); }}
-                        style={{ ...actLink, flex: "1 1 30%", ...(on ? { background: T.accent, color: "#fff", border: "1px solid transparent" } : { background: "#fff", color: S.ink }), ...(addr ? {} : off) }}>
+                        style={{ ...actLink, flex: "1 1 30%", ...(on ? { background: T.accent, color: "#fff", border: "1px solid transparent" } : { background: S.card, color: S.ink }), ...(addr ? {} : off) }}>
                         <MapPin size={14} /> {p.name}
                       </a>
                     );
@@ -5746,7 +5750,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
                     };
                     const first = String(jb.name || "").split(" ")[0];
                     return (
-                      <div style={{ background: "#fff", border: `1px solid ${S.line}`, borderRadius: 9, padding: "9px 11px", marginTop: 8 }}>
+                      <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 9, padding: "9px 11px", marginTop: 8 }}>
                         <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: ".05em", color: S.sub, marginBottom: 4 }}>
                           {notifyNow ? "THEY WILL RECEIVE" : "DAY BEFORE"}
                         </div>
@@ -6576,7 +6580,7 @@ function WorkflowEditor({ open, onClose, stages, setStages }) {
     </Sheet>
   );
 }
-const arrowBtn = { border: "1px solid #E5E7EB", background: "#fff", borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14 };
+const arrowBtn = { border: "1px solid #E5E7EB", background: S.card, borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14 };
 
 function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppointments, calls, setCalls, currentUser, toast, onLog, apptTypes }) {
   const [mode, setMode] = useState("note");
@@ -6735,7 +6739,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       onDragStart={() => (dragJob.current = job.id)}
       onClick={() => onOpenJob(job.id)}
       style={{
-        background: "#fff", border: `1px solid ${S.line}`, borderRadius: 12,
+        background: S.card, border: `1px solid ${S.line}`, borderRadius: 12,
         padding: 14, marginBottom: 10, cursor: "pointer",
       }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
@@ -6802,7 +6806,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
             <button key={s.id}
               onClick={() => { onMoveStage(job.id, s.id); setMoveMenuFor(null); }}
               style={{
-                border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
+                border: `1px solid ${S.line}`, background: S.card, borderRadius: 999,
                 padding: "6px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer", color: S.ink,
               }}>{s.name}</button>
           ))}
@@ -6813,7 +6817,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
 
   return (
     <div style={{ paddingBottom: 100 }}>
-      <div style={{ padding: "18px 16px 0", background: "#fff" }}>
+      <div style={{ padding: "18px 16px 0", background: S.card }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>Jobs</div>
@@ -6856,7 +6860,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
           <div style={{ position: "relative" }}>
             <Btn small kind="soft" onClick={() => setBulkMenu(bulkMenu === "stage" ? null : "stage")}>Move to…</Btn>
             {bulkMenu === "stage" && (
-              <div style={{ position: "absolute", top: "110%", left: 0, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }}>
+              <div style={{ position: "absolute", top: "110%", left: 0, background: S.card, border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }}>
                 {stages.map((st) => (
                   <button key={st.id} onClick={() => { selected.forEach((id) => onMoveStage(id, st.id)); clearSel(); }}
                     style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", padding: "10px 14px", fontSize: 13.5, color: S.ink, cursor: "pointer", fontFamily: "inherit" }}>{st.name}</button>
@@ -6867,7 +6871,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
           <div style={{ position: "relative" }}>
             <Btn small kind="soft" onClick={() => setBulkMenu(bulkMenu === "assign" ? null : "assign")}>Assign…</Btn>
             {bulkMenu === "assign" && (
-              <div style={{ position: "absolute", top: "110%", left: 0, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }}>
+              <div style={{ position: "absolute", top: "110%", left: 0, background: S.card, border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }}>
                 {assigneeOptions.map((nm) => (
                   <button key={nm} onClick={() => { onBulkUpdate([...selected], { assignee: nm }); clearSel(); }}
                     style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", padding: "10px 14px", fontSize: 13.5, color: S.ink, cursor: "pointer", fontFamily: "inherit" }}>{nm}</button>
@@ -6937,7 +6941,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
           )}
           {filtered.map((j) => selecting ? (
             <div key={j.id} onClick={() => toggleSel(j.id)} style={{
-              display: "flex", alignItems: "center", gap: 12, background: "#fff", cursor: "pointer",
+              display: "flex", alignItems: "center", gap: 12, background: S.card, cursor: "pointer",
               border: `1px solid ${selected.has(j.id) ? T.accent : S.line}`, borderRadius: 12, padding: 14, marginBottom: 10,
             }}>
               <span style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, border: `2px solid ${selected.has(j.id) ? T.accent : S.line}`, background: selected.has(j.id) ? T.accent : "#fff", display: "grid", placeItems: "center" }}>
@@ -7057,7 +7061,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
   const juris = jurisdictionForZip(job.zip);
   return (
     <div style={{ background: S.bg, minHeight: "100vh", paddingBottom: 110 }}>
-      <div style={{ background: "#fff", borderBottom: `1px solid ${S.line}` }}>
+      <div style={{ background: S.card, borderBottom: `1px solid ${S.line}` }}>
         <div style={{ padding: "16px 16px 0" }}>
           <SubHeader title={job.name} onBack={onBack}
             right={
@@ -7165,7 +7169,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           ].map(([id, label, Icon]) => (
             <button key={id} onClick={() => jumpToSection(id)} style={{
               display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8,
-              border: `1px solid ${S.line}`, background: "#fff", borderRadius: 12,
+              border: `1px solid ${S.line}`, background: S.card, borderRadius: 12,
               padding: "14px 12px", cursor: "pointer", fontFamily: "inherit", textAlign: "left",
             }}>
               <Icon size={19} color={T.accent} />
@@ -7285,7 +7289,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
             return (
               <div key={id} id={`jobsec-${id}`} style={{
                 border: `1px solid ${S.line}`, borderRadius: 12, marginBottom: 10,
-                background: "#fff", overflow: "hidden",
+                background: S.card, overflow: "hidden",
               }}>
                 <button onClick={() => setOpen((o) => ({ ...o, [id]: !o[id] }))} style={{
                   display: "flex", alignItems: "center", gap: 11, width: "100%",
@@ -8890,7 +8894,7 @@ function SignatureField({ label = "Sign here", value, onChange, accent = "#0A9E9
             onTouchStart={start} onTouchMove={move} onTouchEnd={end}
             style={{
               width: "100%", height: 150, border: "1.5px dashed #C7CBD1", borderRadius: 11,
-              background: "#fff", touchAction: "none", display: "block", cursor: "crosshair",
+              background: S.card, touchAction: "none", display: "block", cursor: "crosshair",
             }} />
           {!value && (
             <div style={{
@@ -8904,7 +8908,7 @@ function SignatureField({ label = "Sign here", value, onChange, accent = "#0A9E9
           <input
             style={{
               width: "100%", boxSizing: "border-box", padding: "14px 13px", fontSize: 26,
-              border: "1.5px dashed #C7CBD1", borderRadius: 11, background: "#fff",
+              border: "1.5px dashed #C7CBD1", borderRadius: 11, background: S.card,
               color: "#101828", outline: "none", fontFamily: font, textAlign: "center",
             }}
             value={typed} placeholder="Type your full name"
@@ -9106,7 +9110,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
         {openDoc && (
           <div>
             {/* What they are agreeing to, in full, above the signature. */}
-            <div style={{ border: `1px solid ${S.line}`, borderRadius: 11, padding: 14, marginBottom: 14, background: "#fff" }}>
+            <div style={{ border: `1px solid ${S.line}`, borderRadius: 11, padding: 14, marginBottom: 14, background: S.card }}>
               {(openDoc.lines || []).map((l, i2) => (
                 <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5, padding: "6px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }}>
                   <span style={{ color: S.ink }}>{l.label}</span>
@@ -9610,7 +9614,7 @@ function CheckoutReturnScreen({ sessionId, onDone }) {
     return () => { alive = false; };
   }, [sessionId]);
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff", padding: 24 }}>
+    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: S.card, padding: 24 }}>
       <div style={{ textAlign: "center", maxWidth: 360 }}>
         {err ? (
           <>
@@ -11585,7 +11589,7 @@ function TabSignatures({ job, mut, toast, currentUser, brand }) {
               </Chip>
             </div>
 
-            <div style={{ background: "#fff", border: `1px solid ${S.line}`, borderRadius: 9, padding: "8px 10px", marginTop: 9 }}>
+            <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 9, padding: "8px 10px", marginTop: 9 }}>
               <SignatureMark sig={r} height={44} />
             </div>
 
@@ -13186,7 +13190,7 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
       <input ref={coverRef} type="file" accept="image/*" onChange={onCover} style={{ display: "none" }} />
       <input ref={pdfRef} type="file" accept="application/pdf" onChange={onPdf} style={{ display: "none" }} />
       {/* Page header */}
-      <div style={{ position: "sticky", top: 0, zIndex: 2, background: "#fff", borderBottom: `1px solid ${S.line}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 2, background: S.card, borderBottom: `1px solid ${S.line}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }}>
         <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", padding: 6, display: "flex" }}><ChevronLeft size={22} color={S.ink} /></button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: S.ink }}>Proposal builder</div>
@@ -13321,7 +13325,7 @@ function ProposalPreview({ job, brand, est, doc, total }) {
     : style === "minimal" ? { padding: "6px 2px" } : { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" };
   const onDark = style === "bold";
   return (
-    <div style={{ background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }}>
+    <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }}>
       {doc.sections.map((sec) => {
         if (sec === "cover" && photoHero) return (
           <div key={sec} style={{ marginBottom: 16, position: "relative", borderRadius: 14, overflow: "hidden", minHeight: 300, background: `#111 url(${JSON.stringify(doc.coverImage)}) center/cover no-repeat` }}>
@@ -13414,12 +13418,12 @@ function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
       {list.map((t) => (
         <span key={t.id} style={{ display: "inline-flex", alignItems: "center", border: `1px solid ${S.line}`, borderRadius: 999, overflow: "hidden" }}>
           <button type="button" onClick={() => onApply(t.body)} disabled={locked} style={{
-            border: "none", background: "#fff", color: T.accent, fontSize: 12, fontWeight: 700,
+            border: "none", background: S.card, color: T.accent, fontSize: 12, fontWeight: 700,
             padding: "5px 10px", cursor: locked ? "not-allowed" : "pointer", fontFamily: "inherit",
           }}>{t.name}</button>
           {!locked && (
             <button type="button" onClick={() => setList(list.filter((x) => x.id !== t.id))} title="Delete template" style={{
-              border: "none", borderLeft: `1px solid ${S.line}`, background: "#fff", color: "#B42318",
+              border: "none", borderLeft: `1px solid ${S.line}`, background: S.card, color: "#B42318",
               padding: "5px 8px", cursor: "pointer", fontSize: 12, lineHeight: 1,
             }}>×</button>
           )}
@@ -13435,7 +13439,7 @@ function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
         </span>
       ) : (
         <button type="button" onClick={() => setNaming(true)} disabled={!String(value || "").trim()} style={{
-          border: `1px dashed ${S.line}`, background: "#fff", color: String(value || "").trim() ? T.accent : S.sub,
+          border: `1px dashed ${S.line}`, background: S.card, color: String(value || "").trim() ? T.accent : S.sub,
           borderRadius: 999, padding: "5px 10px", fontSize: 12, fontWeight: 700,
           cursor: String(value || "").trim() ? "pointer" : "not-allowed", fontFamily: "inherit",
         }}>+ Save current</button>
@@ -14068,7 +14072,7 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
             <label style={{
               cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
               border: `1px solid ${S.line}`, borderRadius: 10, padding: "7px 12px",
-              fontSize: 13, fontWeight: 600, color: S.ink, background: "#fff",
+              fontSize: 13, fontWeight: 600, color: S.ink, background: S.card,
             }}>
               <Upload size={14} /> Upload PDF
               <input type="file" accept="application/pdf" style={{ display: "none" }}
@@ -14420,7 +14424,7 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
             <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
               {available.map((t) => (
                 <button key={t.id} type="button" onClick={() => applyTemplate(t)} style={{
-                  border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
+                  border: `1px solid ${S.line}`, background: S.card, borderRadius: 999,
                   padding: "7px 12px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", color: S.ink,
                 }}>{t.name} <span style={{ color: S.sub }}>· {t.audience}</span></button>
               ))}
@@ -15981,12 +15985,12 @@ function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "" }) {
                 {sub && <div style={{ fontSize: 12, color: S.sub }}>{sub}</div>}
               </div>
               <button aria-label={`Move ${label} up`} disabled={idx === 0} onClick={() => move(-1)}
-                style={{ border: `1px solid ${S.line}`, background: "#fff", borderRadius: 7, width: 28, height: 28,
+                style={{ border: `1px solid ${S.line}`, background: S.card, borderRadius: 7, width: 28, height: 28,
                   display: "grid", placeItems: "center", cursor: idx === 0 ? "default" : "pointer", opacity: idx === 0 ? 0.3 : 1 }}>
                 <ChevronUp size={13} />
               </button>
               <button aria-label={`Move ${label} down`} disabled={idx === arr.length - 1} onClick={() => move(1)}
-                style={{ border: `1px solid ${S.line}`, background: "#fff", borderRadius: 7, width: 28, height: 28,
+                style={{ border: `1px solid ${S.line}`, background: S.card, borderRadius: 7, width: 28, height: 28,
                   display: "grid", placeItems: "center", cursor: idx === arr.length - 1 ? "default" : "pointer", opacity: idx === arr.length - 1 ? 0.3 : 1 }}>
                 <ChevronDown size={13} />
               </button>
@@ -15994,7 +15998,7 @@ function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "" }) {
                 width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer", flexShrink: 0,
                 background: on ? T.accent : "#D6D9DE", position: "relative", transition: "background .15s",
               }}>
-                <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" }} />
+                <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: S.card, transition: "left .15s" }} />
               </button>
             </div>
           );
@@ -16433,7 +16437,7 @@ function ClaimAssistant() {
         <Card style={{ marginTop: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", marginBottom: 8 }}>TRY ASKING</div>
           {SUGGESTIONS.map((s) => (
-            <button key={s} onClick={() => ask(s)} style={{ display: "block", width: "100%", textAlign: "left", border: `1px solid ${S.line}`, background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 8, fontSize: 13, color: S.ink, cursor: "pointer", fontFamily: "inherit", lineHeight: 1.4 }}>{s}</button>
+            <button key={s} onClick={() => ask(s)} style={{ display: "block", width: "100%", textAlign: "left", border: `1px solid ${S.line}`, background: S.card, borderRadius: 10, padding: "10px 12px", marginBottom: 8, fontSize: 13, color: S.ink, cursor: "pointer", fontFamily: "inherit", lineHeight: 1.4 }}>{s}</button>
           ))}
         </Card>
       )}
@@ -17040,7 +17044,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                 const Icon = sec.icon;
                 return (
                   <button key={sec.id} onClick={() => setResourcePage(sec.id)} style={{
-                    textAlign: "left", background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14,
+                    textAlign: "left", background: S.card, border: `1px solid ${S.line}`, borderRadius: 14,
                     padding: 16, cursor: "pointer", display: "flex", flexDirection: "column", gap: 8,
                   }}>
                     <div style={{ width: 36, height: 36, borderRadius: 10, background: T.accentSoft, display: "grid", placeItems: "center" }}>
@@ -17243,7 +17247,7 @@ function Toggle({ on, onClick }) {
       width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer",
       background: on ? T.accent : "#D6D9DE", position: "relative", flexShrink: 0,
     }}>
-      <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" }} />
+      <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: S.card, transition: "left .15s" }} />
     </button>
   );
 }
@@ -17720,7 +17724,7 @@ function EmojiPicker({ onPick, onClose }) {
     : (EMOJI_GROUPS.find(([g]) => g === group) || EMOJI_GROUPS[0])[1];
   return (
     <div style={{
-      border: `1px solid ${S.line}`, borderRadius: 12, background: "#fff",
+      border: `1px solid ${S.line}`, borderRadius: 12, background: S.card,
       boxShadow: "0 8px 24px rgba(16,24,40,.12)", padding: 10, marginBottom: 8,
     }}>
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
@@ -17924,7 +17928,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
 
                 {j && (
                   <button onClick={(e) => { e.stopPropagation(); onOpenJob(j.id); }} style={{
-                    marginTop: 6, border: `1px solid ${S.line}`, background: "#fff",
+                    marginTop: 6, border: `1px solid ${S.line}`, background: S.card,
                     borderLeft: `3px solid ${T.accent}`, borderRadius: 7, padding: "7px 10px",
                     fontSize: 12.5, cursor: "pointer", display: "flex", gap: 7, alignItems: "center",
                     color: S.ink, fontFamily: "inherit", textAlign: "left",
@@ -17961,17 +17965,17 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
                   }}>
                     {CHAT_EMOJI.map((e2) => (
                       <button key={e2} onClick={() => toggleReaction(m.id, e2)} style={{
-                        border: `1px solid ${S.line}`, background: "#fff", borderRadius: 8,
+                        border: `1px solid ${S.line}`, background: S.card, borderRadius: 8,
                         width: 32, height: 32, fontSize: 16, cursor: "pointer", lineHeight: 1,
                       }}>{e2}</button>
                     ))}
                     <button onClick={() => setReactFor(reactFor === m.id ? null : m.id)} aria-label="More reactions" style={{
-                      border: `1px solid ${S.line}`, background: "#fff", borderRadius: 8,
+                      border: `1px solid ${S.line}`, background: S.card, borderRadius: 8,
                       width: 32, height: 32, cursor: "pointer", display: "grid", placeItems: "center", color: S.sub,
                     }}><Plus size={14} /></button>
                     {canEdit(m) && (
                       <button onClick={() => { setEditing({ id: m.id, text: m.text }); setActionsFor(null); }} style={{
-                        border: `1px solid ${S.line}`, background: "#fff", borderRadius: 8,
+                        border: `1px solid ${S.line}`, background: S.card, borderRadius: 8,
                         height: 32, padding: "0 10px", cursor: "pointer", fontSize: 12, fontWeight: 700,
                         color: S.ink, display: "flex", gap: 5, alignItems: "center", fontFamily: "inherit",
                       }}><Pencil size={12} /> Edit</button>
@@ -18008,10 +18012,10 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
            keeps the composer in the same visual spot regardless of how
            much is above it, matching the standalone layout used
            elsewhere in the app. */
-        position: "fixed", left: 0, right: 0, bottom: 86, background: "#fff",
+        position: "fixed", left: 0, right: 0, bottom: 86, background: S.card,
         borderTop: `1px solid ${S.line}`, padding: "10px 16px", zIndex: 40,
       } : {
-        position: "fixed", left: 0, right: 0, bottom: 86, background: "#fff",
+        position: "fixed", left: 0, right: 0, bottom: 86, background: S.card,
         borderTop: `1px solid ${S.line}`, padding: "10px 16px",
       }}>
         {tagged && (
@@ -18026,7 +18030,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
             onClose={() => setEmojiOpen(false)} />
         )}
         {/* Composer as one bordered box, with its tools inside it. */}
-        <div style={{ border: `1px solid ${S.line}`, borderRadius: 12, background: "#fff", overflow: "hidden" }}>
+        <div style={{ border: `1px solid ${S.line}`, borderRadius: 12, background: S.card, overflow: "hidden" }}>
           <textarea ref={inputRef} rows={1}
             style={{
               width: "100%", boxSizing: "border-box", border: "none", outline: "none",
@@ -18290,7 +18294,7 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
         <Field label="Logo" hint="Shows on the login screen, the loading screen, and document headers. PNG with a transparent background works best.">
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             {brand.logo ? (
-              <img src={brand.logo} alt="Company logo" style={{ height: 56, maxWidth: 160, objectFit: "contain", borderRadius: 8, border: `1px solid ${S.line}`, padding: 4, background: "#fff" }} />
+              <img src={brand.logo} alt="Company logo" style={{ height: 56, maxWidth: 160, objectFit: "contain", borderRadius: 8, border: `1px solid ${S.line}`, padding: 4, background: S.card }} />
             ) : (
               <div style={{ width: 56, height: 56, borderRadius: 14, background: T.primary, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }}>{brand.short}</div>
             )}
@@ -18340,7 +18344,7 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
                 width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer",
                 background: on ? T.accent : "#D6D9DE", position: "relative",
               }}>
-                <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" }} />
+                <span style={{ position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: S.card, transition: "left .15s" }} />
               </button>
             </div>
           );
@@ -18885,7 +18889,7 @@ function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {MERGE_FIELDS.map(([token, label]) => (
             <button key={token} type="button" title={label} onClick={() => insertField(token)} style={{
-              border: `1px solid ${S.line}`, background: "#fff", borderRadius: 999,
+              border: `1px solid ${S.line}`, background: S.card, borderRadius: 999,
               padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer", color: T.accent,
             }}>{token}</button>
           ))}
@@ -21341,7 +21345,7 @@ function HelpDesk({ onBack, brand }) {
   );
 }
 
-function MoreMenu({ onNav, onLogout, brand, currentUser }) {
+function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setTheme = () => {} }) {
   const admin = currentUser && currentUser.role === "admin";
   const groups = [
     ["Schedule & production", [
@@ -21410,6 +21414,23 @@ function MoreMenu({ onNav, onLogout, brand, currentUser }) {
       <div style={{ margin: "12px 0 4px" }}>
         <input style={inputStyle} value={q} onChange={(e) => setQ(e.target.value)}
           placeholder="Search settings and screens" />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, background: S.card, border: `1px solid ${S.line}`, borderRadius: 12, padding: "10px 12px", marginBottom: 4 }}>
+        {theme === "dark" ? <Moon size={17} color={S.sub} /> : <Sun size={17} color={S.sub} />}
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>Appearance</div>
+          <div style={{ fontSize: 12, color: S.sub }}>{theme === "dark" ? "Dark" : "Light"} mode</div>
+        </div>
+        <div style={{ display: "flex", background: S.soft, borderRadius: 999, padding: 3 }}>
+          {[["light", "Light"], ["dark", "Dark"]].map(([id, label]) => (
+            <button key={id} onClick={() => setTheme(id)} style={{
+              border: "none", cursor: "pointer", borderRadius: 999, padding: "6px 14px",
+              fontSize: 12.5, fontWeight: 700, fontFamily: "inherit",
+              background: theme === id ? T.accent : "transparent",
+              color: theme === id ? "#fff" : S.sub,
+            }}>{label}</button>
+          ))}
+        </div>
       </div>
       {matches && (
         <Card pad={0} style={{ overflow: "hidden", marginTop: 8 }}>
@@ -21981,7 +22002,10 @@ export default function SupremeCRM() {
      runs before any auth state is considered. */
   const portalToken = typeof window !== "undefined"
     ? new URLSearchParams(window.location.search).get("portal") : null;
-  if (portalToken) return <PublicPortal token={portalToken} />;
+  /* The homeowner-facing portal always renders light, regardless of the rep's
+     app theme — data-theme="light" re-defines the CSS neutral variables to
+     their light values for this subtree. */
+  if (portalToken) return <div data-theme="light" style={{ background: S.bg, minHeight: "100vh" }}><PublicPortal token={portalToken} /></div>;
 
   /* Password reset: Supabase sends the user back with either
      ?recovery=1 or a #type=recovery fragment. Either way we show the
@@ -22138,6 +22162,23 @@ export default function SupremeCRM() {
   useEffect(() => {
     try { localStorage.setItem("rl_board_view", boardView); } catch (e) { /* private mode */ }
   }, [boardView]);
+  /* Dark/light appearance. Follows the OS until the user picks one, then the
+     choice persists on the device. Flipping data-theme on <html> repaints the
+     whole app via the CSS variables in index.html. */
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem("rl_theme")
+        || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    } catch (e) { return "light"; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("rl_theme", theme); } catch (e) { /* private mode */ }
+    try {
+      document.documentElement.dataset.theme = theme;
+      const m = document.querySelector('meta[name="theme-color"]');
+      if (m) m.setAttribute("content", theme === "dark" ? "#0F1216" : "#20242A");
+    } catch (e) { /* non-browser test env */ }
+  }, [theme]);
   const [leadSeed, setLeadSeed] = useState(null);
   const [qt, setQt] = useState({ jobId: "", label: "", due: "", time: "" });
   const [toastMsg, setToastMsg] = useState("");
@@ -22483,7 +22524,7 @@ export default function SupremeCRM() {
   }
   if (booting || (liveAuth() && currentUser && !hydrated)) {
     return (
-      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff" }}>
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: S.card }}>
         <div style={{ textAlign: "center" }}>
           {brand.logo ? (
             <img src={brand.logo} alt={brand.company} style={{ height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" }} />
@@ -22624,7 +22665,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           if (id === "insurance:codes") { setCodeSeed({ tab: "codes" }); return setNav("insurance"); }
           if (id === "insurance:resources") { setCodeSeed({ tab: "resources" }); return setNav("insurance"); }
           return setNav(id);
-        }} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} />
+        }} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} theme={theme} setTheme={setTheme} />
       ) : nav === "insurance" ? (
         <InsuranceHub jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} toast={toast}
           onSaveDept={(zip, dept) => {
@@ -22756,7 +22797,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
          icon, flush with the other four. */}
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50,
-        background: "#fff", borderTop: `1px solid ${S.line}`,
+        background: S.card, borderTop: `1px solid ${S.line}`,
         display: "flex", alignItems: "stretch", paddingBottom: "env(safe-area-inset-bottom)",
       }}>
         <NavBtn id="home" icon={Home} label="Home" active={nav === "home" && !openJob}

@@ -12,6 +12,14 @@ window.__PROPERTY_KEY__ = import.meta.env.VITE_PROPERTY_KEY || "";
    SECRET lives only in the gmail-oauth / gmail-send Edge Functions. */
 window.__GOOGLE_CLIENT_ID__ = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 
+/* Apply the saved theme before React mounts so there's no flash of the wrong
+   appearance. With no saved choice we leave data-theme unset and let the CSS
+   prefers-color-scheme rule pick, matching the app's first-run default. */
+try {
+  const saved = localStorage.getItem("rl_theme");
+  if (saved === "dark" || saved === "light") document.documentElement.dataset.theme = saved;
+} catch (e) { /* private mode / SSR */ }
+
 const url = import.meta.env.VITE_SUPABASE_URL;
 const anon = import.meta.env.VITE_SUPABASE_ANON_KEY;
 

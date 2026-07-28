@@ -71,5 +71,15 @@ ok(/state=gmail&code|qs\.get\("state"\) !== "gmail"/.test(src) || /state.*gmail/
 ok(/auth\.sendGmail\(\{ to: addr, subject, body \}\)/.test(src), "composer sends email via the rep's Gmail");
 ok(/__GOOGLE_CLIENT_ID__/.test(main), "Google client id exposed for the redirect");
 
+/* P8 — System-check probe fix + dark/light theme */
+ok(/\.upsert\(\{ tenant_id: currentUser\.tenantId, updated_at/.test(src), "settings probe upserts on tenant_id (no raw random-id insert)");
+ok(!/id: probeId, data: \{ _probe/.test(src), "old colliding probe insert removed");
+ok(/--rl-bg:/.test(html) && /--rl-card:/.test(html) && /\[data-theme="dark"\]/.test(html), "theme CSS variables + dark override in index.html");
+ok(/ink: "var\(--rl-ink\)"/.test(src) && /card: "var\(--rl-card\)"/.test(src), "S tokens resolve to CSS variables");
+ok(/localStorage\.getItem\("rl_theme"\)/.test(src) && /document\.documentElement\.dataset\.theme = theme/.test(src), "theme persists + flips data-theme");
+ok(/setTheme\(id\)/.test(src) && /Appearance/.test(src), "MoreMenu has an appearance toggle");
+ok(/data-theme="light"[\s\S]{0,120}<PublicPortal/.test(src), "client portal pinned light");
+ok(/rl_theme/.test(main), "main.jsx applies saved theme pre-mount");
+
 if (fails) { console.log("\nbuild 46: " + fails + " FAILED"); process.exit(1); }
 console.log("build 46 tests passed");

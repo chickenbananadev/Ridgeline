@@ -3309,7 +3309,7 @@ var toProfile = (u) => ({
   commission_rate: u.commissionRate ?? 60,
   active: u.active
 });
-var S = { ink: "#111827", sub: "#6B7280", line: "#E5E7EB", bg: "#F7F8FA", soft: "#F3F4F6" };
+var S = { ink: "var(--rl-ink)", sub: "var(--rl-sub)", line: "var(--rl-line)", bg: "var(--rl-bg)", soft: "var(--rl-soft)", card: "var(--rl-card)" };
 var T = { primary: "#20242A", accent: "#0A9E98", accentSoft: "#E3F5F4" };
 function softOf(hex) {
   try {
@@ -3343,7 +3343,7 @@ function DonutChart({ data, size = 132, thickness = 18, centerLabel, centerValue
       position: "absolute",
       inset: thickness,
       borderRadius: "50%",
-      background: "#fff",
+      background: S.card,
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
@@ -3407,9 +3407,9 @@ function Btn({ children, kind = "primary", onClick, style, small, disabled, ...p
   const kinds = {
     primary: { background: T.accent, color: "#fff" },
     dark: { background: T.primary, color: "#fff" },
-    ghost: { background: "#fff", color: S.ink, border: `1px solid ${S.line}` },
+    ghost: { background: S.card, color: S.ink, border: `1px solid ${S.line}` },
     soft: { background: T.accentSoft, color: T.accent },
-    danger: { background: "#fff", color: "#B42318", border: `1px solid ${S.line}` },
+    danger: { background: S.card, color: "#B42318", border: `1px solid ${S.line}` },
     green: { background: "#177245", color: "#fff" }
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { ...props, disabled, onClick: disabled ? void 0 : onClick, style: { ...base, ...kinds[kind], ...style }, children });
@@ -3428,7 +3428,7 @@ var inputStyle = {
   fontSize: 15,
   border: `1px solid ${S.line}`,
   borderRadius: 10,
-  background: "#fff",
+  background: S.card,
   color: S.ink,
   outline: "none",
   fontFamily: "inherit"
@@ -3445,7 +3445,7 @@ var dateInputStyle = {
   minWidth: 0
 };
 function Card({ children, style, pad = 18, onClick }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { onClick, style: { background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }, children });
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { onClick, style: { background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }, children });
 }
 function CardTitle({ children, right }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }, children: [
@@ -3488,7 +3488,7 @@ function SourceLink({ srcId }) {
     fontSize: 12.5,
     fontWeight: 700,
     color: T.accent,
-    background: "#fff",
+    background: S.card,
     marginTop: 8,
     marginRight: 8
   }, children: [
@@ -3519,7 +3519,7 @@ function AssistLink({ href, children }) {
     fontSize: 12.5,
     fontWeight: 700,
     color: T.accent,
-    background: "#fff",
+    background: S.card,
     marginTop: 8,
     marginRight: 8
   }, children: [
@@ -3606,7 +3606,7 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
       left: 0,
       right: 0,
       zIndex: 30,
-      background: "#fff",
+      background: S.card,
       border: `1px solid ${S.line}`,
       borderRadius: 12,
       boxShadow: "0 10px 28px rgba(17,24,39,.14)",
@@ -3655,7 +3655,7 @@ function Sheet({ open, onClose, title, children, footer, wide, tall }) {
     alignItems: "flex-end",
     justifyContent: "center"
   }, onClick: onClose, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { onClick: (e) => e.stopPropagation(), style: {
-    background: "#fff",
+    background: S.card,
     width: "100%",
     maxWidth: wide ? 760 : 560,
     maxHeight: "90vh",
@@ -3781,7 +3781,7 @@ function SignaturePad({ open, onClose, title, onApply }) {
               border: `1.5px dashed ${S.line}`,
               borderRadius: 12,
               touchAction: "none",
-              background: "#fff",
+              background: S.card,
               display: "block"
             }
           }
@@ -3955,7 +3955,7 @@ function Marketing({ onSignIn, onStartTrial }) {
     ["D", "Dependability", "Roofing doesn't stop when conditions get difficult. RoofStride stays reliable in the office and in the field.", "stride-dependability.jpg"],
     ["E", "Empowerment", "We give roofing professionals the visibility, tools, and control to operate with confidence.", "stride-empowerment.jpg"]
   ];
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { id: "top", style: { background: "#fff" }, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { id: "top", style: { background: S.card }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("style", { children: `
         @media (max-width: 760px) {
           .mkt-row { flex-direction: column !important; padding: 40px 20px !important; gap: 32px !important; }
@@ -4130,7 +4130,7 @@ function Marketing({ onSignIn, onStartTrial }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: MKT_DISPLAY_FONT, fontSize: 24, fontWeight: 700, color: "#fff", lineHeight: 1.28, letterSpacing: -0.2 }, children: "Every screen in this app was shaped by what actually happens between a knock on the door and a signed job." })
       ] }) }) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "64px 20px", background: "#fff" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Reveal, { style: { maxWidth: 1100, margin: "0 auto" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "64px 20px", background: S.card }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Reveal, { style: { maxWidth: 1100, margin: "0 auto" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center", marginBottom: 32 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }, children: "And more, day to day" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: MKT_DISPLAY_FONT, fontSize: 27, fontWeight: 700, color: MKT.ink, letterSpacing: -0.2 }, children: "The parts that keep everyone moving" })
@@ -4193,7 +4193,7 @@ function Marketing({ onSignIn, onStartTrial }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, color: MKT.sub, marginBottom: 34, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }, children: "No feature gates, no tiers to unlock \u2014 the only choice is how you'd rather pay for seats." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "mkt-pricing-grid", style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, textAlign: "left", marginBottom: 28 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
-          background: "#fff",
+          background: S.card,
           borderRadius: 20,
           padding: "30px 26px",
           border: `1px solid ${MKT.line}`,
@@ -4271,7 +4271,7 @@ function Marketing({ onSignIn, onStartTrial }) {
         ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
-        background: "#fff",
+        background: S.card,
         borderRadius: 16,
         padding: "22px 24px",
         border: `1px solid ${MKT.line}`,
@@ -4291,7 +4291,7 @@ function Marketing({ onSignIn, onStartTrial }) {
         ] }, i)) })
       ] })
     ] }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { id: "faq", style: { padding: "72px 20px", background: "#fff" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Reveal, { style: { maxWidth: 760, margin: "0 auto" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { id: "faq", style: { padding: "72px 20px", background: S.card }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Reveal, { style: { maxWidth: 760, margin: "0 auto" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center", marginBottom: 32 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }, children: "Questions" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: MKT_DISPLAY_FONT, fontSize: 30, fontWeight: 700, color: MKT.ink, letterSpacing: -0.3 }, children: "Straight answers" })
@@ -4323,7 +4323,7 @@ function Marketing({ onSignIn, onStartTrial }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: MKT_DISPLAY_FONT, fontSize: 27, fontWeight: 700, color: "#fff", marginBottom: 18, letterSpacing: -0.2 }, children: "Ready to run roofing operations with clarity?" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onStartTrial, style: {
         border: "none",
-        background: "#fff",
+        background: S.card,
         color: MKT.tealDark,
         fontWeight: 700,
         fontSize: 16,
@@ -4459,7 +4459,7 @@ function Login({ brand: brand2, users, onLogin, initialMode = "login", selectedP
   if (!live && mode === "account") {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", background: brand2.primary, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "100%", maxWidth: 420 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center", marginBottom: 22 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Shield, { size: 28, color: brand2.primary }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: S.card, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Shield, { size: 28, color: brand2.primary }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800, color: "#fff" }, children: brand2.company }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 4 }, children: brand2.slogan })
       ] }),
@@ -4504,7 +4504,7 @@ function Login({ brand: brand2, users, onLogin, initialMode = "login", selectedP
   }
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
     minHeight: "100vh",
-    background: "#fff",
+    background: S.card,
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
@@ -4627,7 +4627,7 @@ function Login({ brand: brand2, users, onLogin, initialMode = "login", selectedP
             setMode("signup");
           }, style: {
             border: `1.5px solid ${T.accent}`,
-            background: "#fff",
+            background: S.card,
             color: T.accent,
             fontWeight: 700,
             fontSize: 14,
@@ -5034,7 +5034,7 @@ function Dashboard({
       alignItems: "center",
       gap: 5,
       border: `1px solid ${S.line}`,
-      background: "#fff",
+      background: S.card,
       borderRadius: 12,
       padding: "11px 0",
       cursor: "pointer",
@@ -6051,7 +6051,7 @@ function SubHeader({ title, onBack, right }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onBack, style: {
         border: `1px solid ${S.line}`,
-        background: "#fff",
+        background: S.card,
         borderRadius: 999,
         width: 36,
         height: 36,
@@ -6618,11 +6618,11 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
             (vAp.assignedTo || vJob?.assignee) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Assigned to", v: vAp.assignedTo || vJob.assignee }),
             vAp.notes && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, lineHeight: 1.5, marginTop: 8, whiteSpace: "pre-wrap" }, children: vAp.notes }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 14 }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: vTel ? telHref(vJob.phone) : void 0, style: { ...actLink, background: "#fff", color: S.ink, ...vTel ? {} : off }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: vTel ? telHref(vJob.phone) : void 0, style: { ...actLink, background: S.card, color: S.ink, ...vTel ? {} : off }, children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Phone, { size: 15 }),
                 " Call"
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: vTel ? smsHref(vJob.phone) : void 0, style: { ...actLink, background: "#fff", color: S.ink, ...vTel ? {} : off }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: vTel ? smsHref(vJob.phone) : void 0, style: { ...actLink, background: S.card, color: S.ink, ...vTel ? {} : off }, children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MessageCircle, { size: 15 }),
                 " Text"
               ] })
@@ -6640,7 +6640,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
                     setMapPref(p.id);
                     setMapPrefState(p.id);
                   },
-                  style: { ...actLink, flex: "1 1 30%", ...on ? { background: T.accent, color: "#fff", border: "1px solid transparent" } : { background: "#fff", color: S.ink }, ...addr ? {} : off },
+                  style: { ...actLink, flex: "1 1 30%", ...on ? { background: T.accent, color: "#fff", border: "1px solid transparent" } : { background: S.card, color: S.ink }, ...addr ? {} : off },
                   children: [
                     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 14 }),
                     " ",
@@ -6734,7 +6734,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
                   type: String(f.type || "appointment").toLowerCase()
                 };
                 const first = String(jb.name || "").split(" ")[0];
-                return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: "#fff", border: `1px solid ${S.line}`, borderRadius: 9, padding: "9px 11px", marginTop: 8 }, children: [
+                return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.card, border: `1px solid ${S.line}`, borderRadius: 9, padding: "9px 11px", marginTop: 8 }, children: [
                   /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, fontWeight: 800, letterSpacing: ".05em", color: S.sub, marginBottom: 4 }, children: notifyNow ? "THEY WILL RECEIVE" : "DAY BEFORE" }),
                   /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.ink, lineHeight: 1.5 }, children: [
                     "Hi ",
@@ -7687,7 +7687,7 @@ function WorkflowEditor({ open, onClose, stages, setStages }) {
     }
   );
 }
-var arrowBtn = { border: "1px solid #E5E7EB", background: "#fff", borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14 };
+var arrowBtn = { border: "1px solid #E5E7EB", background: S.card, borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 14 };
 function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppointments, calls, setCalls, currentUser, toast: toast2, onLog, apptTypes }) {
   const [mode, setMode] = (0, import_react.useState)("note");
   const [note, setNote] = (0, import_react.useState)("");
@@ -7911,7 +7911,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       onDragStart: () => dragJob.current = job.id,
       onClick: () => onOpenJob(job.id),
       style: {
-        background: "#fff",
+        background: S.card,
         border: `1px solid ${S.line}`,
         borderRadius: 12,
         padding: 14,
@@ -8031,7 +8031,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
             },
             style: {
               border: `1px solid ${S.line}`,
-              background: "#fff",
+              background: S.card,
               borderRadius: 999,
               padding: "6px 10px",
               fontSize: 12,
@@ -8047,7 +8047,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
     }
   );
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { paddingBottom: 100 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "18px 16px 0", background: "#fff" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "18px 16px 0", background: S.card }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 24, fontWeight: 800, color: S.ink }, children: "Jobs" }),
@@ -8117,7 +8117,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "relative" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "soft", onClick: () => setBulkMenu(bulkMenu === "stage" ? null : "stage"), children: "Move to\u2026" }),
-        bulkMenu === "stage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", top: "110%", left: 0, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }, children: stages.map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        bulkMenu === "stage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", top: "110%", left: 0, background: S.card, border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }, children: stages.map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "button",
           {
             onClick: () => {
@@ -8132,7 +8132,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "relative" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "soft", onClick: () => setBulkMenu(bulkMenu === "assign" ? null : "assign"), children: "Assign\u2026" }),
-        bulkMenu === "assign" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", top: "110%", left: 0, background: "#fff", border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }, children: assigneeOptions.map((nm) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        bulkMenu === "assign" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", top: "110%", left: 0, background: S.card, border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }, children: assigneeOptions.map((nm) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "button",
           {
             onClick: () => {
@@ -8239,7 +8239,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
         display: "flex",
         alignItems: "center",
         gap: 12,
-        background: "#fff",
+        background: S.card,
         cursor: "pointer",
         border: `1px solid ${selected.has(j.id) ? T.accent : S.line}`,
         borderRadius: 12,
@@ -8381,7 +8381,7 @@ function JobDetail({
   const stage = stages.find((s) => s.id === job.stageId);
   const juris = jurisdictionForZip(job.zip);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.bg, minHeight: "100vh", paddingBottom: 110 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: "#fff", borderBottom: `1px solid ${S.line}` }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 0" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: S.card, borderBottom: `1px solid ${S.line}` }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 0" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         SubHeader,
         {
@@ -8513,7 +8513,7 @@ function JobDetail({
       alignItems: "flex-start",
       gap: 8,
       border: `1px solid ${S.line}`,
-      background: "#fff",
+      background: S.card,
       borderRadius: 12,
       padding: "14px 12px",
       cursor: "pointer",
@@ -8754,7 +8754,7 @@ function JobDetail({
             border: `1px solid ${S.line}`,
             borderRadius: 12,
             marginBottom: 10,
-            background: "#fff",
+            background: S.card,
             overflow: "hidden"
           }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setOpen((o) => ({ ...o, [id]: !o[id] })), style: {
@@ -10334,7 +10334,7 @@ function SignatureField({ label = "Sign here", value, onChange, accent = "#0A9E9
             height: 150,
             border: "1.5px dashed #C7CBD1",
             borderRadius: 11,
-            background: "#fff",
+            background: S.card,
             touchAction: "none",
             display: "block",
             cursor: "crosshair"
@@ -10361,7 +10361,7 @@ function SignatureField({ label = "Sign here", value, onChange, accent = "#0A9E9
             fontSize: 26,
             border: "1.5px dashed #C7CBD1",
             borderRadius: 11,
-            background: "#fff",
+            background: S.card,
             color: "#101828",
             outline: "none",
             fontFamily: font,
@@ -10573,7 +10573,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
           )
         ] }),
         children: openDoc2 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 11, padding: 14, marginBottom: 14, background: "#fff" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 11, padding: 14, marginBottom: 14, background: S.card }, children: [
             (openDoc2.lines || []).map((l, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5, padding: "6px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.ink }, children: l.label }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.ink, fontWeight: 600, whiteSpace: "nowrap" }, children: l.value })
@@ -11051,7 +11051,7 @@ function CheckoutReturnScreen({ sessionId, onDone }) {
       alive = false;
     };
   }, [sessionId]);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff", padding: 24 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { textAlign: "center", maxWidth: 360 }, children: err ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", background: S.card, padding: 24 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { textAlign: "center", maxWidth: 360 }, children: err ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 16, fontWeight: 700, color: S.ink, marginBottom: 8 }, children: "Something didn't go through" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.5, marginBottom: 16 }, children: err }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub }, children: [
@@ -12992,7 +12992,7 @@ function TabSignatures({ job, mut, toast: toast2, currentUser, brand: brand2 }) 
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: r.voided_at ? "red" : r.signer_role === "customer" ? "blue" : "green", children: r.voided_at ? "Voided" : r.signer_role === "customer" ? "Signed" : "Countersigned" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: "#fff", border: `1px solid ${S.line}`, borderRadius: 9, padding: "8px 10px", marginTop: 9 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SignatureMark, { sig: r, height: 44 }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: S.card, border: `1px solid ${S.line}`, borderRadius: 9, padding: "8px 10px", marginTop: 9 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SignatureMark, { sig: r, height: 44 }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 9, fontSize: 11.5, color: S.sub, lineHeight: 1.6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
             "Signed ",
@@ -14668,7 +14668,7 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast: toast
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "fixed", inset: 0, background: S.bg, zIndex: 60, overflowY: "auto", WebkitOverflowScrolling: "touch" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: coverRef, type: "file", accept: "image/*", onChange: onCover, style: { display: "none" } }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: pdfRef, type: "file", accept: "application/pdf", onChange: onPdf, style: { display: "none" } }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "sticky", top: 0, zIndex: 2, background: "#fff", borderBottom: `1px solid ${S.line}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "sticky", top: 0, zIndex: 2, background: S.card, borderBottom: `1px solid ${S.line}`, padding: "12px 16px", display: "flex", alignItems: "center", gap: 10 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onClose, style: { border: "none", background: "none", cursor: "pointer", padding: 6, display: "flex" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronLeft, { size: 22, color: S.ink }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 16, fontWeight: 800, color: S.ink }, children: "Proposal builder" }),
@@ -14839,7 +14839,7 @@ function ProposalPreview({ job, brand: brand2, est, doc, total }) {
   const photoHero = style === "photo" && doc.coverImage;
   const coverWrap = style === "bold" ? { background: T.primary, color: "#fff", padding: 22, borderRadius: 14 } : style === "minimal" ? { padding: "6px 2px" } : { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" };
   const onDark = style === "bold";
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: "#fff", border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }, children: doc.sections.map((sec) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }, children: doc.sections.map((sec) => {
     if (sec === "cover" && photoHero) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginBottom: 16, position: "relative", borderRadius: 14, overflow: "hidden", minHeight: 300, background: `#111 url(${JSON.stringify(doc.coverImage)}) center/cover no-repeat` }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "absolute", left: 0, right: 0, bottom: 0, padding: 18, background: "linear-gradient(transparent, rgba(0,0,0,.78))", color: "#fff" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800 }, children: title }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 10, fontSize: 13.5 }, children: [
@@ -14924,7 +14924,7 @@ function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
     list.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", border: `1px solid ${S.line}`, borderRadius: 999, overflow: "hidden" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => onApply(t.body), disabled: locked, style: {
         border: "none",
-        background: "#fff",
+        background: S.card,
         color: T.accent,
         fontSize: 12,
         fontWeight: 700,
@@ -14935,7 +14935,7 @@ function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
       !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => setList(list.filter((x) => x.id !== t.id)), title: "Delete template", style: {
         border: "none",
         borderLeft: `1px solid ${S.line}`,
-        background: "#fff",
+        background: S.card,
         color: "#B42318",
         padding: "5px 8px",
         cursor: "pointer",
@@ -14971,7 +14971,7 @@ function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
       }, style: { border: "none", background: "none", color: S.sub, cursor: "pointer", fontSize: 12 }, children: "Cancel" })
     ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", onClick: () => setNaming(true), disabled: !String(value || "").trim(), style: {
       border: `1px dashed ${S.line}`,
-      background: "#fff",
+      background: S.card,
       color: String(value || "").trim() ? T.accent : S.sub,
       borderRadius: 999,
       padding: "5px 10px",
@@ -15722,7 +15722,7 @@ function TabContract({ job, brand: brand2, setBrand = () => {
           fontSize: 13,
           fontWeight: 600,
           color: S.ink,
-          background: "#fff"
+          background: S.card
         }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 14 }),
           " Upload PDF",
@@ -16121,7 +16121,7 @@ function TabMessages({ job, mut, toast: toast2, brand: brand2, templates, crews,
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: T.primary, margin: "8px 0" }, children: "START FROM A TEMPLATE" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }, children: available.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { type: "button", onClick: () => applyTemplate(t), style: {
               border: `1px solid ${S.line}`,
-              background: "#fff",
+              background: S.card,
               borderRadius: 999,
               padding: "7px 12px",
               fontSize: 12.5,
@@ -17947,7 +17947,7 @@ function TabPortal({ job, brand: brand2, mut, toast: toast2, currentUser, stageL
               onClick: () => move(-1),
               style: {
                 border: `1px solid ${S.line}`,
-                background: "#fff",
+                background: S.card,
                 borderRadius: 7,
                 width: 28,
                 height: 28,
@@ -17967,7 +17967,7 @@ function TabPortal({ job, brand: brand2, mut, toast: toast2, currentUser, stageL
               onClick: () => move(1),
               style: {
                 border: `1px solid ${S.line}`,
-                background: "#fff",
+                background: S.card,
                 borderRadius: 7,
                 width: 28,
                 height: 28,
@@ -17989,7 +17989,7 @@ function TabPortal({ job, brand: brand2, mut, toast: toast2, currentUser, stageL
             background: on ? T.accent : "#D6D9DE",
             position: "relative",
             transition: "background .15s"
-          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" } }) })
+          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: S.card, transition: "left .15s" } }) })
         ] }, sid);
       }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -18393,7 +18393,7 @@ function ClaimAssistant() {
     ] }),
     msgs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", marginBottom: 8 }, children: "TRY ASKING" }),
-      SUGGESTIONS.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => ask(s), style: { display: "block", width: "100%", textAlign: "left", border: `1px solid ${S.line}`, background: "#fff", borderRadius: 10, padding: "10px 12px", marginBottom: 8, fontSize: 13, color: S.ink, cursor: "pointer", fontFamily: "inherit", lineHeight: 1.4 }, children: s }, s))
+      SUGGESTIONS.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => ask(s), style: { display: "block", width: "100%", textAlign: "left", border: `1px solid ${S.line}`, background: S.card, borderRadius: 10, padding: "10px 12px", marginBottom: 8, fontSize: 13, color: S.ink, cursor: "pointer", fontFamily: "inherit", lineHeight: 1.4 }, children: s }, s))
     ] }),
     msgs.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { ref: scrollRef, style: { marginTop: 12, maxHeight: "56vh", overflowY: "auto" }, children: [
       msgs.map((m, i) => m.role === "user" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", margin: "8px 0" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: T.accent, color: "#fff", borderRadius: "14px 14px 3px 14px", padding: "9px 13px", fontSize: 13.5, maxWidth: "85%", lineHeight: 1.45 }, children: m.text }) }, i) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { margin: "8px 0" }, children: [
@@ -18964,7 +18964,7 @@ Authority: ${c.cite}`;
       const Icon = sec.icon;
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setResourcePage(sec.id), style: {
         textAlign: "left",
-        background: "#fff",
+        background: S.card,
         border: `1px solid ${S.line}`,
         borderRadius: 14,
         padding: 16,
@@ -19140,7 +19140,7 @@ function Toggle({ on, onClick }) {
     background: on ? T.accent : "#D6D9DE",
     position: "relative",
     flexShrink: 0
-  }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" } }) });
+  }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: S.card, transition: "left .15s" } }) });
 }
 var REVIEW_STEPS = [
   {
@@ -19580,7 +19580,7 @@ function EmojiPicker({ onPick, onClose }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
     border: `1px solid ${S.line}`,
     borderRadius: 12,
-    background: "#fff",
+    background: S.card,
     boxShadow: "0 8px 24px rgba(16,24,40,.12)",
     padding: 10,
     marginBottom: 8
@@ -19791,7 +19791,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
                 }, style: {
                   marginTop: 6,
                   border: `1px solid ${S.line}`,
-                  background: "#fff",
+                  background: S.card,
                   borderLeft: `3px solid ${T.accent}`,
                   borderRadius: 7,
                   padding: "7px 10px",
@@ -19850,7 +19850,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
                 }, children: [
                   CHAT_EMOJI.map((e2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => toggleReaction(m.id, e2), style: {
                     border: `1px solid ${S.line}`,
-                    background: "#fff",
+                    background: S.card,
                     borderRadius: 8,
                     width: 32,
                     height: 32,
@@ -19860,7 +19860,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
                   }, children: e2 }, e2)),
                   /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setReactFor(reactFor === m.id ? null : m.id), "aria-label": "More reactions", style: {
                     border: `1px solid ${S.line}`,
-                    background: "#fff",
+                    background: S.card,
                     borderRadius: 8,
                     width: 32,
                     height: 32,
@@ -19874,7 +19874,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
                     setActionsFor(null);
                   }, style: {
                     border: `1px solid ${S.line}`,
-                    background: "#fff",
+                    background: S.card,
                     borderRadius: 8,
                     height: 32,
                     padding: "0 10px",
@@ -19931,7 +19931,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
       left: 0,
       right: 0,
       bottom: 86,
-      background: "#fff",
+      background: S.card,
       borderTop: `1px solid ${S.line}`,
       padding: "10px 16px",
       zIndex: 40
@@ -19940,7 +19940,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
       left: 0,
       right: 0,
       bottom: 86,
-      background: "#fff",
+      background: S.card,
       borderTop: `1px solid ${S.line}`,
       padding: "10px 16px"
     }, children: [
@@ -19959,7 +19959,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
           onClose: () => setEmojiOpen(false)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 12, background: "#fff", overflow: "hidden" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 12, background: S.card, overflow: "hidden" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "textarea",
           {
@@ -20361,7 +20361,7 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast: toast2, brandE
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 14 }, children: "One place for company identity. Login, documents, the client portal, and review messages all read from here \u2014 colors repaint the whole app the moment you change them." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Logo", hint: "Shows on the login screen, the loading screen, and document headers. PNG with a transparent background works best.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 14 }, children: [
-        brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "Company logo", style: { height: 56, maxWidth: 160, objectFit: "contain", borderRadius: 8, border: `1px solid ${S.line}`, padding: 4, background: "#fff" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: T.primary, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }, children: brand2.short }),
+        brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "Company logo", style: { height: 56, maxWidth: 160, objectFit: "contain", borderRadius: 8, border: `1px solid ${S.line}`, padding: 4, background: S.card } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: T.primary, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }, children: brand2.short }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => logoRef.current && logoRef.current.click(), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
@@ -20414,7 +20414,7 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast: toast2, brandE
             cursor: "pointer",
             background: on ? T.accent : "#D6D9DE",
             position: "relative"
-          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" } }) })
+          }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: on ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: S.card, transition: "left .15s" } }) })
         ] }, k);
       })
     ] }),
@@ -21016,7 +21016,7 @@ function TemplateManager({ templates, setTemplates, currentUser, onBack, toast: 
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: T.primary, marginBottom: 8 }, children: "INSERT A MERGE FIELD" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 6 }, children: MERGE_FIELDS.map(([token, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { type: "button", title: label, onClick: () => insertField(token), style: {
             border: `1px solid ${S.line}`,
-            background: "#fff",
+            background: S.card,
             borderRadius: 999,
             padding: "6px 11px",
             fontSize: 12,
@@ -23603,7 +23603,8 @@ function HelpDesk({ onBack, brand: brand2 }) {
     })
   ] });
 }
-function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
+function MoreMenu({ onNav, onLogout, brand: brand2, currentUser, theme = "light", setTheme = () => {
+} }) {
   const admin = currentUser && currentUser.role === "admin";
   const groups = [
     ["Schedule & production", [
@@ -23670,6 +23671,27 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser }) {
         placeholder: "Search settings and screens"
       }
     ) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, background: S.card, border: `1px solid ${S.line}`, borderRadius: 12, padding: "10px 12px", marginBottom: 4 }, children: [
+      theme === "dark" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Moon, { size: 17, color: S.sub }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Sun, { size: 17, color: S.sub }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, color: S.ink }, children: "Appearance" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub }, children: [
+          theme === "dark" ? "Dark" : "Light",
+          " mode"
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", background: S.soft, borderRadius: 999, padding: 3 }, children: [["light", "Light"], ["dark", "Dark"]].map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setTheme(id), style: {
+        border: "none",
+        cursor: "pointer",
+        borderRadius: 999,
+        padding: "6px 14px",
+        fontSize: 12.5,
+        fontWeight: 700,
+        fontFamily: "inherit",
+        background: theme === id ? T.accent : "transparent",
+        color: theme === id ? "#fff" : S.sub
+      }, children: label }, id)) })
+    ] }),
     matches && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 0, style: { overflow: "hidden", marginTop: 8 }, children: [
       matches.map(([id, Icon, label, sub], i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onNav(id), style: {
         display: "flex",
@@ -24222,7 +24244,7 @@ function NavBtn({ id, icon: Icon, label, badge = 0, active, onPress }) {
 }
 function SupremeCRM() {
   const portalToken = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("portal") : null;
-  if (portalToken) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PublicPortal, { token: portalToken });
+  if (portalToken) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { "data-theme": "light", style: { background: S.bg, minHeight: "100vh" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PublicPortal, { token: portalToken }) });
   const authFlow = (() => {
     if (typeof window === "undefined") return null;
     const qs = new URLSearchParams(window.location.search);
@@ -24358,6 +24380,25 @@ function SupremeCRM() {
     } catch (e) {
     }
   }, [boardView]);
+  const [theme, setTheme] = (0, import_react.useState)(() => {
+    try {
+      return localStorage.getItem("rl_theme") || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    } catch (e) {
+      return "light";
+    }
+  });
+  (0, import_react.useEffect)(() => {
+    try {
+      localStorage.setItem("rl_theme", theme);
+    } catch (e) {
+    }
+    try {
+      document.documentElement.dataset.theme = theme;
+      const m = document.querySelector('meta[name="theme-color"]');
+      if (m) m.setAttribute("content", theme === "dark" ? "#0F1216" : "#20242A");
+    } catch (e) {
+    }
+  }, [theme]);
   const [leadSeed, setLeadSeed] = (0, import_react.useState)(null);
   const [qt, setQt] = (0, import_react.useState)({ jobId: "", label: "", due: "", time: "" });
   const [toastMsg, setToastMsg] = (0, import_react.useState)("");
@@ -24751,7 +24792,7 @@ function SupremeCRM() {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PasswordSetScreen, { brand: brand2, mode: "change", toast: toast2, onDone: () => setChangePwOpen(false) });
   }
   if (booting || liveAuth() && currentUser && !hydrated) {
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", background: "#fff" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center" }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", background: S.card }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center" }, children: [
       brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: brand2.company, style: { height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
         width: 56,
         height: 56,
@@ -25000,7 +25041,7 @@ function SupremeCRM() {
         }
       }
       setCurrentUser(null);
-    }, currentUser: liveUser }) : nav === "insurance" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    }, currentUser: liveUser, theme, setTheme }) : nav === "insurance" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       InsuranceHub,
       {
         jobs,
@@ -25276,7 +25317,7 @@ function SupremeCRM() {
       left: 0,
       right: 0,
       zIndex: 50,
-      background: "#fff",
+      background: S.card,
       borderTop: `1px solid ${S.line}`,
       display: "flex",
       alignItems: "stretch",

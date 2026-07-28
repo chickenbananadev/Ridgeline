@@ -28,6 +28,31 @@
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.json" />
+    <!-- Theme tokens. The app's neutral colors (S.*) resolve to these CSS
+         variables, so flipping data-theme on <html> repaints the whole app
+         with no re-render. Light by default; follows the OS until the user
+         picks a theme (which stamps data-theme and persists it). Printed
+         documents and the client portal are pinned light elsewhere. -->
+    <style>
+      :root {
+        --rl-bg:#F7F8FA; --rl-card:#FFFFFF; --rl-soft:#F3F4F6;
+        --rl-line:#E5E7EB; --rl-ink:#111827; --rl-sub:#6B7280;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme]) {
+          --rl-bg:#0F1216; --rl-card:#171B21; --rl-soft:#1F242B;
+          --rl-line:#2A2F37; --rl-ink:#E7EAEE; --rl-sub:#9BA3AE;
+        }
+      }
+      :root[data-theme="dark"], [data-theme="dark"] {
+        --rl-bg:#0F1216; --rl-card:#171B21; --rl-soft:#1F242B;
+        --rl-line:#2A2F37; --rl-ink:#E7EAEE; --rl-sub:#9BA3AE;
+      }
+      [data-theme="light"] {
+        --rl-bg:#F7F8FA; --rl-card:#FFFFFF; --rl-soft:#F3F4F6;
+        --rl-line:#E5E7EB; --rl-ink:#111827; --rl-sub:#6B7280;
+      }
+    </style>
     <!-- Structured data so search engines understand what RoofStride is and
          how it's priced. Kept in sync with the PRODUCT constants in the app. -->
     <script type="application/ld+json">
