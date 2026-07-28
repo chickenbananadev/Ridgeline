@@ -4355,6 +4355,25 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         );
       })()}
 
+      {/* Recoverable depreciation waiting to be chased — the most common
+          unclaimed money on an insurance job. */}
+      {(() => {
+        const depJobs = jobs.filter((j) => j.claimType === "Insurance" && claimMath(j).depOutstanding > 0 && (j.claim?.depStatus || "held") !== "released");
+        if (!depJobs.length) return null;
+        const depTotal = depJobs.reduce((x, j) => x + claimMath(j).depOutstanding, 0);
+        return (
+          <Card style={{ marginTop: 12 }}>
+            <button onClick={() => onOpenJob(depJobs[0].id, "claim")} style={{
+              display: "block", width: "100%", textAlign: "left",
+              border: "1px solid #F0D9A8", background: "#FFF6E5", borderRadius: 9,
+              padding: "11px 13px", cursor: "pointer", fontSize: 13, color: S.ink, fontFamily: "inherit", lineHeight: 1.5,
+            }}>
+              <strong>{money(depTotal)}</strong> in recoverable depreciation across {depJobs.length} {depJobs.length === 1 ? "claim" : "claims"} — request release on the completed invoices.
+            </button>
+          </Card>
+        );
+      })()}
+
       {/* Calendar and dispatch are one tap away under their own screens; the
           home page stays focused on money and what needs attention rather
           than embedding a whole scheduler. */}
@@ -11407,6 +11426,17 @@ function TabClaim({ job, mut, toast, brand }) {
   const setIns = (k) => (v) => mut((j) => ({ ...j, insurance: { ...(j.insurance || {}), [k]: v } }));
   const stageIdx = Math.max(0, CLAIM_STAGES.findIndex(([id]) => id === (c.stage || "filed")));
 
+  /* Recoverable-depreciation release tracking: held → requested → released,
+     stamping the date the first time each step is set. */
+  const setDepStatus = (st) => mut((j) => {
+    const cl = j.claim || {};
+    const patch = { depStatus: st };
+    const today = new Date().toISOString().slice(0, 10);
+    if (st === "requested" && !cl.depRequestedAt) patch.depRequestedAt = today;
+    if (st === "released" && !cl.depReleasedAt) patch.depReleasedAt = today;
+    return { ...j, claim: { ...cl, ...patch } };
+  });
+
   const addSup = () => mut((j) => ({
     ...j,
     claim: {
@@ -11453,6 +11483,35 @@ function TabClaim({ job, mut, toast, brand }) {
           </div>
         </div>
       </Card>
+
+      {/* Recoverable depreciation — track it to release so it stops being the
+          most common unclaimed money. */}
+      {m.recoverable > 0 && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={<Chip tone={c.depStatus === "released" ? "green" : c.depStatus === "requested" ? "amber" : "gray"}>
+            {c.depStatus === "released" ? "Released" : c.depStatus === "requested" ? "Requested" : "Held"}
+          </Chip>}>Recoverable depreciation</CardTitle>
+          <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+            {money(m.recoverable)} recoverable{m.depOutstanding > 0 ? ` · ${money(m.depOutstanding)} still outstanding` : " · received"}. Released by the carrier once the completed invoice is submitted.
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {[["held", "Held"], ["requested", "Requested"], ["released", "Released"]].map(([id, label]) => {
+              const on = (c.depStatus || "held") === id;
+              return (
+                <button key={id} onClick={() => setDepStatus(id)} style={{
+                  flex: 1, border: `1.5px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : "#fff",
+                  color: on ? T.accent : S.ink, borderRadius: 10, padding: "9px 0", fontWeight: 800, fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+                }}>{label}</button>
+              );
+            })}
+          </div>
+          {(c.depRequestedAt || c.depReleasedAt) && (
+            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 8 }}>
+              {c.depRequestedAt ? `Requested ${c.depRequestedAt}` : ""}{c.depRequestedAt && c.depReleasedAt ? " · " : ""}{c.depReleasedAt ? `Released ${c.depReleasedAt}` : ""}
+            </div>
+          )}
+        </Card>
+      )}
 
       <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
         <Card style={{ flex: 1 }} pad={14}>

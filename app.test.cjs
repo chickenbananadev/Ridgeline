@@ -5280,6 +5280,32 @@ function Dashboard({
         ] })
       ] });
     })(),
+    (() => {
+      const depJobs = jobs.filter((j) => j.claimType === "Insurance" && claimMath(j).depOutstanding > 0 && (j.claim?.depStatus || "held") !== "released");
+      if (!depJobs.length) return null;
+      const depTotal = depJobs.reduce((x, j) => x + claimMath(j).depOutstanding, 0);
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(depJobs[0].id, "claim"), style: {
+        display: "block",
+        width: "100%",
+        textAlign: "left",
+        border: "1px solid #F0D9A8",
+        background: "#FFF6E5",
+        borderRadius: 9,
+        padding: "11px 13px",
+        cursor: "pointer",
+        fontSize: 13,
+        color: S.ink,
+        fontFamily: "inherit",
+        lineHeight: 1.5
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: money(depTotal) }),
+        " in recoverable depreciation across ",
+        depJobs.length,
+        " ",
+        depJobs.length === 1 ? "claim" : "claims",
+        " \u2014 request release on the completed invoices."
+      ] }) });
+    })(),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
       Sheet,
       {
@@ -12775,6 +12801,14 @@ function TabClaim({ job, mut, toast: toast2, brand: brand2 }) {
   const set = (k) => (v) => mut((j) => ({ ...j, claim: { ...j.claim || {}, [k]: v } }));
   const setIns = (k) => (v) => mut((j) => ({ ...j, insurance: { ...j.insurance || {}, [k]: v } }));
   const stageIdx = Math.max(0, CLAIM_STAGES.findIndex(([id]) => id === (c.stage || "filed")));
+  const setDepStatus = (st) => mut((j) => {
+    const cl = j.claim || {};
+    const patch = { depStatus: st };
+    const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+    if (st === "requested" && !cl.depRequestedAt) patch.depRequestedAt = today;
+    if (st === "released" && !cl.depReleasedAt) patch.depReleasedAt = today;
+    return { ...j, claim: { ...cl, ...patch } };
+  });
   const addSup = () => mut((j) => ({
     ...j,
     claim: {
@@ -12813,6 +12847,35 @@ function TabClaim({ job, mut, toast: toast2, brand: brand2 }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub }, children: "SUPPLEMENTS" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, color: S.ink, marginTop: 2 }, children: money(m.supOutstanding) })
         ] })
+      ] })
+    ] }),
+    m.recoverable > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: c.depStatus === "released" ? "green" : c.depStatus === "requested" ? "amber" : "gray", children: c.depStatus === "released" ? "Released" : c.depStatus === "requested" ? "Requested" : "Held" }), children: "Recoverable depreciation" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: [
+        money(m.recoverable),
+        " recoverable",
+        m.depOutstanding > 0 ? ` \xB7 ${money(m.depOutstanding)} still outstanding` : " \xB7 received",
+        ". Released by the carrier once the completed invoice is submitted."
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8 }, children: [["held", "Held"], ["requested", "Requested"], ["released", "Released"]].map(([id, label]) => {
+        const on = (c.depStatus || "held") === id;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setDepStatus(id), style: {
+          flex: 1,
+          border: `1.5px solid ${on ? T.accent : S.line}`,
+          background: on ? T.accentSoft : "#fff",
+          color: on ? T.accent : S.ink,
+          borderRadius: 10,
+          padding: "9px 0",
+          fontWeight: 800,
+          fontSize: 13,
+          cursor: "pointer",
+          fontFamily: "inherit"
+        }, children: label }, id);
+      }) }),
+      (c.depRequestedAt || c.depReleasedAt) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 8 }, children: [
+        c.depRequestedAt ? `Requested ${c.depRequestedAt}` : "",
+        c.depRequestedAt && c.depReleasedAt ? " \xB7 " : "",
+        c.depReleasedAt ? `Released ${c.depReleasedAt}` : ""
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 12 }, children: [
