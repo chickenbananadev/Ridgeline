@@ -49,10 +49,13 @@ const mktIdx = src.indexOf("const mkt = MARKET_JURISDICTIONS[z];");
 ok(exactIdx > 0 && learnedIdx > exactIdx, "hand-verified records take precedence over learned ones");
 ok(learnedIdx > 0 && mktIdx > learnedIdx, "learned records are checked before the market fallback");
 
-/* --- out-of-area honesty --- */
-ok(src.includes("unsupported: true"), "states without code data are flagged");
-ok(src.includes("Code data is only held for Ohio, Kentucky and Illinois"),
-  "an out-of-state ZIP is refused rather than given an Ohio code basis");
+/* --- out-of-area honesty: any US state now resolves to its adopted-code
+   family, but non-OH/KY/IL results are flagged "verify locally" rather than
+   presented as a validated Ohio basis. --- */
+ok(src.includes("curated: !!STATE_DEFAULTS[state]"), "results carry a curated flag for OH/KY/IL vs everywhere else");
+ok(src.includes("!lookupResult.curated") && /Verify locally/.test(src),
+  "an out-of-state ZIP resolves but is flagged to verify locally");
+ok(src.includes("function codeNameForState"), "the adopted-code name resolves for any state");
 ok(src.includes("Could not reach the lookup service"), "a network failure is reported plainly");
 
 if (fails) { console.log("\nbuild 22: " + fails + " FAILED"); process.exit(1); }

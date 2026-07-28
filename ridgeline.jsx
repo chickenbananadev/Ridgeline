@@ -2551,7 +2551,14 @@ function subCodeFor(text) {
     if (/large/.test(s)) return "chimney_large";
     return "chimney_medium";
   }
-  if (/install/.test(s) && /(shingle|roof)/.test(s)) return "per_square";
+  /* Base install = an install line for the field/roof (optionally naming a
+     pitch range like "2/12 to 8/12"), but NOT an accessory install (skylight,
+     vent, flashing…). This catches "Shingle install, 2/12 to 8/12 pitch" and
+     "Install, 2/12 to 8/12 pitch" without misreading either as a steep charge. */
+  if (/install/.test(s)
+      && /(shingle|roof|field|base|\d+\s*\/\s*\d+)/.test(s)
+      && !/skylight|vent|flash|boot|pipe|jack|drip|ridge|starter|solar|gutter|siding|fascia|soffit|chimney/.test(s))
+    return "per_square";
   if (/steep|pitch/.test(s)) return "steep_per_square";
   return null;
 }
@@ -2577,7 +2584,7 @@ function computeSubPay(job, crew) {
   const per = subRate(crew, "per_square");
   if (per && sq) lines.push({ label: `Install ${sq} sq @ ${money(per)}/sq`, amt: per * sq });
   if (wo.steep) { const s = subRate(crew, "steep_per_square"); if (s && sq) lines.push({ label: `Steep ${sq} sq @ ${money(s)}/sq`, amt: s * sq }); }
-  const layers = parseInt(wo.layers || job.checklist.layers, 10) || 1;
+  const layers = parseInt(wo.layers || (job.checklist || {}).layers, 10) || 1;
   if (layers > 1) { const t = subRate(crew, "tearoff_per_square"); if (t && sq) lines.push({ label: `Tear-off ${layers} layers, ${sq} sq @ ${money(t)}/sq`, amt: t * sq * (layers - 1) }); }
   if (wo.stories === "2") { const a = subRate(crew, "story_2"); if (a) lines.push({ label: "2-story adder", amt: a }); }
   if (wo.stories === "3+") { const a = subRate(crew, "story_3"); if (a) lines.push({ label: "3+ story adder", amt: a }); }
@@ -2628,7 +2635,7 @@ function buildSubInvoiceDraft(job, crew) {
   const add = (category, label, qty, unit, price) => { if (price && qty) lines.push({ id: uid("sil"), category, label, qty, unit, price, notes: "", reimbursable: false, source: "auto" }); };
   add("Shingle Installation", "Shingle install", sq, "SQ", subRate(crew, "per_square"));
   if (wo.steep) add("Shingle Installation", "Steep charge", sq, "SQ", subRate(crew, "steep_per_square"));
-  const layers = parseInt(wo.layers || job.checklist.layers, 10) || 1;
+  const layers = parseInt(wo.layers || (job.checklist || {}).layers, 10) || 1;
   if (layers > 1) add("Shingle Installation", `Additional layer removal (${layers - 1})`, sq * (layers - 1), "SQ", subRate(crew, "tearoff_per_square"));
   const chim = (wo.chimney || {}).size;
   if (chim && chim !== "none") add("Chimney Flashing", `Chimney flashing (${chim})`, 1, "job", subRate(crew, `chimney_${chim}`));
@@ -7512,7 +7519,7 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
         <KV k="Reason for calling" v={job.intake?.reasonForCalling || "Not captured"} />
         <KV k="Roof type" v={(job.intake?.roofTypes || (Array.isArray(job.checklist?.roofType) ? job.checklist.roofType : [job.checklist?.roofType]).filter(Boolean)).join(", ") || "Not captured"} />
         <KV k="Approximate age" v={(job.intake?.roofAge || job.checklist?.roofAge) ? `${job.intake?.roofAge || job.checklist?.roofAge} years` : "Not captured"} />
-        <KV k="Existing layers" v={job.intake?.layers || (Array.isArray(job.checklist?.layers) ? job.checklist.layers.join(", ") : job.checklist?.layers) || "Not captured"} />
+        <KV k="Existing layers" v={job.intake?.layers || (Array.isArray(job.checklist?.layers) ? (job.checklist || {}).layers.join(", ") : job.checklist?.layers) || "Not captured"} />
         <KV k="Property use" v={job.intake?.propertyUse || job.property?.use || "Not captured"} />
         <KV k="Decision timeline" v={job.intake?.decisionTimeline || "Not captured"} />
         <div style={{ marginTop: 10 }}>
@@ -12543,7 +12550,18 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
   const addToEstimate = (f) => {
     if (!mut || !f.line) return;
     const row = { id: uid("e"), desc: f.line.desc, qty: f.line.qty || 1, unit: f.line.unit || "EA", price: 0 };
-    mut((j) => ({ ...j, estimate: { ...(j.estimate || {}), items: [...((j.estimate || {}).items || []), row] } }));
+    mut((j) => {
+      const est = j.estimate || {};
+      const tiers = est.tiers || [];
+      /* When Good/Better/Best is on, append to the active tier and re-flatten —
+         writing straight to est.items would be discarded on the next recompute. */
+      if (tiers.length && est.selectedTier) {
+        const nextTiers = tiers.map((t) => t.id === est.selectedTier ? { ...t, items: [...(t.items || []), row] } : t);
+        const next = { ...est, tiers: nextTiers };
+        return { ...j, estimate: { ...next, items: applyEstimateSelection(next) } };
+      }
+      return { ...j, estimate: { ...est, items: [...(est.items || []), row] } };
+    });
     setDone((d) => ({ ...d, [f.title]: "estimate" }));
     toast && toast(`Added "${f.line.desc}" — set its price`);
   };
@@ -13149,7 +13167,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
        catalog per-unit price into the line's unit (shingles 3 bundles/SQ,
        ridge cap 25 LF/bundle → ÷25, underlayment 10 SQ/roll → ÷10, etc.). */
     const spec = [
-      { desc: `Tear-off & disposal — ${job.checklist.layers || "1 layer"}`, qty: num(m.squares), unit: "SQ", kw: ["tear-off", "tear off", "disposal", "dumpster"], factor: 1 },
+      { desc: `Tear-off & disposal — ${(job.checklist || {}).layers || "1 layer"}`, qty: num(m.squares), unit: "SQ", kw: ["tear-off", "tear off", "disposal", "dumpster"], factor: 1 },
       { desc: "Ice & water shield — eaves & valleys", qty: Math.round(((num(m.eaves) + num(m.valleys)) * 3) / 100 * 10) / 10, unit: "SQ", kw: ["ice & water", "ice and water", "ice&water", "i&w"], factor: 1 / 2 },
       { desc: "Synthetic underlayment — field", qty: num(m.squares), unit: "SQ", kw: ["underlayment", "synthetic", "felt"], factor: 1 / 10 },
       { desc: "Drip edge — eaves & rakes", qty: num(m.eaves) + num(m.rakes), unit: "LF", kw: ["drip edge", "drip"], factor: 1 / 10 },
@@ -14931,7 +14949,7 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
         <KV k="Installed squares" v={coverage ? `${coverage.total} sq` : "—"} />
         <KV k="Pitch" v={m.pitch || "—"} />
         <KV k="Stories" v={wo.stories || "—"} />
-        <KV k="Layers to remove" v={wo.layers || job.checklist.layers || "—"} />
+        <KV k="Layers to remove" v={wo.layers || (job.checklist || {}).layers || "—"} />
         <KV k="Steep / access" v={wo.steep ? "Steep — extra crew/staging" : "Standard"} />
         <KV k="Chimney flashing" v={chimney.size === "none" ? "None" : `${chimney.size[0].toUpperCase()}${chimney.size.slice(1)}${chimney.notes ? ` — ${chimney.notes}` : ""}`} />
         <KV k="Decking" v={job.checklist.deckingType || "—"} />
@@ -14974,7 +14992,7 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
             </select>
           </Field>
           <Field label="Layers to remove">
-            <select style={selStyle} value={wo.layers || job.checklist.layers || ""} onChange={(e) => setWo({ layers: e.target.value })}>
+            <select style={selStyle} value={wo.layers || (job.checklist || {}).layers || ""} onChange={(e) => setWo({ layers: e.target.value })}>
               <option value="">—</option>
               <option value="1">1 layer</option>
               <option value="2">2 layers</option>
@@ -16337,12 +16355,18 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
               </Card>
               <Card style={{ marginTop: 12 }}>
                 <CardTitle>Key roofing provisions — {juris.state}</CardTitle>
-                {Object.entries(CODE_PROVISIONS[juris.state]).map(([topic, p]) => (
-                  <div key={topic} style={{ padding: "10px 0", borderBottom: `1px solid ${S.line}` }}>
-                    <Chip tone={p.verified ? "blue" : "amber"}>{p.cite}</Chip>
-                    <div style={{ fontSize: 13, color: S.ink, marginTop: 6, lineHeight: 1.5 }}>{p.note}</div>
-                  </div>
-                ))}
+                {["iceBarrier", "tearOff", "dripEdge", "underlayment", "ventilation", "fastening", "decking"].map((topic) => {
+                  /* citeFor resolves any state — curated (OH/KY/IL) or an IRC
+                     fallback labeled with the state's adopted code — so this
+                     never indexes CODE_PROVISIONS with a missing state. */
+                  const p = citeFor(juris.state, topic);
+                  return (
+                    <div key={topic} style={{ padding: "10px 0", borderBottom: `1px solid ${S.line}` }}>
+                      <Chip tone={p.verified ? "blue" : "amber"}>{p.cite}</Chip>
+                      <div style={{ fontSize: 13, color: S.ink, marginTop: 6, lineHeight: 1.5 }}>{p.note}</div>
+                    </div>
+                  );
+                })}
               </Card>
               {juris.state === "OH" && (
                 <Card style={{ marginTop: 12 }}>

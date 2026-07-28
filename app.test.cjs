@@ -3228,7 +3228,8 @@ function subCodeFor(text) {
     if (/large/.test(s)) return "chimney_large";
     return "chimney_medium";
   }
-  if (/install/.test(s) && /(shingle|roof)/.test(s)) return "per_square";
+  if (/install/.test(s) && /(shingle|roof|field|base|\d+\s*\/\s*\d+)/.test(s) && !/skylight|vent|flash|boot|pipe|jack|drip|ridge|starter|solar|gutter|siding|fascia|soffit|chimney/.test(s))
+    return "per_square";
   if (/steep|pitch/.test(s)) return "steep_per_square";
   return null;
 }
@@ -3277,7 +3278,7 @@ function buildSubInvoiceDraft(job, crew2) {
   };
   add("Shingle Installation", "Shingle install", sq, "SQ", subRate(crew2, "per_square"));
   if (wo.steep) add("Shingle Installation", "Steep charge", sq, "SQ", subRate(crew2, "steep_per_square"));
-  const layers = parseInt(wo.layers || job.checklist.layers, 10) || 1;
+  const layers = parseInt(wo.layers || (job.checklist || {}).layers, 10) || 1;
   if (layers > 1) add("Shingle Installation", `Additional layer removal (${layers - 1})`, sq * (layers - 1), "SQ", subRate(crew2, "tearoff_per_square"));
   const chim = (wo.chimney || {}).size;
   if (chim && chim !== "none") add("Chimney Flashing", `Chimney flashing (${chim})`, 1, "job", subRate(crew2, `chimney_${chim}`));
@@ -9007,7 +9008,7 @@ function TabOverview({ job, juris, mut, toast: toast2, reviewSettings, brand: br
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Reason for calling", v: job.intake?.reasonForCalling || "Not captured" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Roof type", v: (job.intake?.roofTypes || (Array.isArray(job.checklist?.roofType) ? job.checklist.roofType : [job.checklist?.roofType]).filter(Boolean)).join(", ") || "Not captured" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Approximate age", v: job.intake?.roofAge || job.checklist?.roofAge ? `${job.intake?.roofAge || job.checklist?.roofAge} years` : "Not captured" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Existing layers", v: job.intake?.layers || (Array.isArray(job.checklist?.layers) ? job.checklist.layers.join(", ") : job.checklist?.layers) || "Not captured" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Existing layers", v: job.intake?.layers || (Array.isArray(job.checklist?.layers) ? (job.checklist || {}).layers.join(", ") : job.checklist?.layers) || "Not captured" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Property use", v: job.intake?.propertyUse || job.property?.use || "Not captured" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Decision timeline", v: job.intake?.decisionTimeline || "Not captured" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 10 }, children: [
@@ -13912,7 +13913,16 @@ function SupplementCheck({ job, mut, toast: toast2, locked = false }) {
   const addToEstimate = (f) => {
     if (!mut || !f.line) return;
     const row = { id: uid("e"), desc: f.line.desc, qty: f.line.qty || 1, unit: f.line.unit || "EA", price: 0 };
-    mut((j) => ({ ...j, estimate: { ...j.estimate || {}, items: [...(j.estimate || {}).items || [], row] } }));
+    mut((j) => {
+      const est = j.estimate || {};
+      const tiers = est.tiers || [];
+      if (tiers.length && est.selectedTier) {
+        const nextTiers = tiers.map((t) => t.id === est.selectedTier ? { ...t, items: [...t.items || [], row] } : t);
+        const next = { ...est, tiers: nextTiers };
+        return { ...j, estimate: { ...next, items: applyEstimateSelection(next) } };
+      }
+      return { ...j, estimate: { ...est, items: [...est.items || [], row] } };
+    });
     setDone((d) => ({ ...d, [f.title]: "estimate" }));
     toast2 && toast2(`Added "${f.line.desc}" \u2014 set its price`);
   };
@@ -14566,7 +14576,7 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
     }
     const sqW = num((num(m.squares) * (1 + num(m.waste) / 100)).toFixed(1));
     const spec = [
-      { desc: `Tear-off & disposal \u2014 ${job.checklist.layers || "1 layer"}`, qty: num(m.squares), unit: "SQ", kw: ["tear-off", "tear off", "disposal", "dumpster"], factor: 1 },
+      { desc: `Tear-off & disposal \u2014 ${(job.checklist || {}).layers || "1 layer"}`, qty: num(m.squares), unit: "SQ", kw: ["tear-off", "tear off", "disposal", "dumpster"], factor: 1 },
       { desc: "Ice & water shield \u2014 eaves & valleys", qty: Math.round((num(m.eaves) + num(m.valleys)) * 3 / 100 * 10) / 10, unit: "SQ", kw: ["ice & water", "ice and water", "ice&water", "i&w"], factor: 1 / 2 },
       { desc: "Synthetic underlayment \u2014 field", qty: num(m.squares), unit: "SQ", kw: ["underlayment", "synthetic", "felt"], factor: 1 / 10 },
       { desc: "Drip edge \u2014 eaves & rakes", qty: num(m.eaves) + num(m.rakes), unit: "LF", kw: ["drip edge", "drip"], factor: 1 / 10 },
@@ -16693,7 +16703,7 @@ function TabWorkOrder({ job, mut, toast: toast2, brand: brand2, crews, templates
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Installed squares", v: coverage ? `${coverage.total} sq` : "\u2014" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Pitch", v: m.pitch || "\u2014" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Stories", v: wo.stories || "\u2014" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Layers to remove", v: wo.layers || job.checklist.layers || "\u2014" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Layers to remove", v: wo.layers || (job.checklist || {}).layers || "\u2014" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Steep / access", v: wo.steep ? "Steep \u2014 extra crew/staging" : "Standard" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Chimney flashing", v: chimney.size === "none" ? "None" : `${chimney.size[0].toUpperCase()}${chimney.size.slice(1)}${chimney.notes ? ` \u2014 ${chimney.notes}` : ""}` }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Decking", v: job.checklist.deckingType || "\u2014" }),
@@ -16743,7 +16753,7 @@ function TabWorkOrder({ job, mut, toast: toast2, brand: brand2, crews, templates
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "2", children: "2 story" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "3+", children: "3+ story" })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Layers to remove", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: wo.layers || job.checklist.layers || "", onChange: (e) => setWo({ layers: e.target.value }), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Layers to remove", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: wo.layers || (job.checklist || {}).layers || "", onChange: (e) => setWo({ layers: e.target.value }), children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "\u2014" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "1", children: "1 layer" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "2", children: "2 layers" }),
@@ -18155,10 +18165,13 @@ Authority: ${c.cite}`;
             "Key roofing provisions \u2014 ",
             juris.state
           ] }),
-          Object.entries(CODE_PROVISIONS[juris.state]).map(([topic, p]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "10px 0", borderBottom: `1px solid ${S.line}` }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: p.verified ? "blue" : "amber", children: p.cite }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, marginTop: 6, lineHeight: 1.5 }, children: p.note })
-          ] }, topic))
+          ["iceBarrier", "tearOff", "dripEdge", "underlayment", "ventilation", "fastening", "decking"].map((topic) => {
+            const p = citeFor(juris.state, topic);
+            return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "10px 0", borderBottom: `1px solid ${S.line}` }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: p.verified ? "blue" : "amber", children: p.cite }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, marginTop: 6, lineHeight: 1.5 }, children: p.note })
+            ] }, topic);
+          })
         ] }),
         juris.state === "OH" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Full provision reference" }),
