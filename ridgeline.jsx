@@ -2059,10 +2059,18 @@ const geoReady = () => !!(GEO_PROVIDER.apiKey && GEO_PROVIDER.name === "geoapify
 
 /* Type-ahead address suggestions. Returns [] on any failure so the form
    always stays usable — a dead API must never block writing a lead. */
+/* Proximity bias for address search — the rep works one metro, so ranking
+   results near where they already work fixes "it found the wrong city."
+   Seeded from existing jobs on load and updated to each address they pick. */
+let GEO_BIAS = null;
+function setGeoBias(lat, lng) {
+  if (lat != null && lng != null && !isNaN(+lat) && !isNaN(+lng)) GEO_BIAS = { lat: +lat, lng: +lng };
+}
 async function geoAutocomplete(text, signal) {
   if (!geoReady() || !text || text.trim().length < 3) return [];
+  const bias = GEO_BIAS ? `&bias=proximity:${GEO_BIAS.lng},${GEO_BIAS.lat}` : "";
   const url = `${GEO_PROVIDER.base}/autocomplete?text=${encodeURIComponent(text)}`
-    + `&filter=countrycode:${GEO_PROVIDER.countries}&limit=6&format=json&apiKey=${GEO_PROVIDER.apiKey}`;
+    + `&filter=countrycode:${GEO_PROVIDER.countries}&limit=8${bias}&format=json&apiKey=${GEO_PROVIDER.apiKey}`;
   try {
     const res = await fetch(url, { signal });
     if (!res.ok) return [];
@@ -2821,6 +2829,7 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
 
   const choose = (it) => {
     setOpen(false); setItems([]);
+    setGeoBias(it.lat, it.lng); // next search biases toward where this rep just worked
     onPick(it);
   };
 
@@ -2881,7 +2890,7 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
   );
 }
 
-function Sheet({ open, onClose, title, children, footer, wide }) {
+function Sheet({ open, onClose, title, children, footer, wide, tall }) {
   if (!open) return null;
   return (
     <div style={{
@@ -2889,7 +2898,7 @@ function Sheet({ open, onClose, title, children, footer, wide }) {
       display: "flex", alignItems: "flex-end", justifyContent: "center",
     }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
-        background: "#fff", width: "100%", maxWidth: wide ? 760 : 560, maxHeight: "90vh",
+        background: "#fff", width: "100%", maxWidth: wide ? 760 : 560, maxHeight: "90vh", minHeight: tall ? "55vh" : undefined,
         borderRadius: "18px 18px 0 0", display: "flex", flexDirection: "column",
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 12px" }}>
@@ -5908,6 +5917,15 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
       emailConsent: consentJobs.some((j) => j.consent?.email?.granted),
     });
   }, [open, seed]); // eslint-disable-line
+  /* Seed the address-search proximity bias from where this company already
+     works, so the very first lookup ranks local results first. */
+  useEffect(() => {
+    if (!open || GEO_BIAS) return;
+    const withCoords = jobs.find((j) => (j.lat ?? j.property?.lat) != null && (j.lng ?? j.property?.lng) != null);
+    if (withCoords) { setGeoBias(withCoords.lat ?? withCoords.property?.lat, withCoords.lng ?? withCoords.property?.lng); return; }
+    const z = (jobs.find((j) => j.zip) || {}).zip;
+    if (z) geocodeZip(z).then((g) => { if (g) setGeoBias(g.lat, g.lng); });
+  }, [open]); // eslint-disable-line
   const set = (k) => (e) => setF({ ...f, [k]: e.target ? (e.target.type === "checkbox" ? e.target.checked : e.target.value) : e });
   const existingContact = contacts.find((c) => c.id === f.existingContactId);
   const selectContact = (id) => {
@@ -6034,7 +6052,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
             ...p,
             street: it.street || it.formatted,
             city: it.city || p.city,
-            stateSel: ["OH", "KY", "IL"].includes(it.state) ? it.state : p.stateSel,
+            stateSel: it.state || p.stateSel,
             zip: it.zip || p.zip,
             lat: it.lat, lng: it.lng,
           }))}
@@ -6044,7 +6062,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
         <Field label="City"><input style={inputStyle} value={f.city} onChange={set("city")} /></Field>
         <Field label="State">
           <select style={selStyle} value={f.stateSel} onChange={set("stateSel")}>
-            <option>OH</option><option>KY</option><option>IL</option>
+            {US_STATES.map(([ab]) => <option key={ab} value={ab}>{ab}</option>)}
           </select>
         </Field>
         <Field label="Zip *"><input data-testid="lead-zip" style={inputStyle} value={f.zip} onChange={set("zip")} /></Field>
@@ -12916,7 +12934,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
         </div>
       </Sheet>
 
-      <Sheet open={upgradesSheet} onClose={() => setUpgradesSheet(false)} title="Optional upgrades">
+      <Sheet open={upgradesSheet} onClose={() => setUpgradesSheet(false)} title="Optional upgrades" tall>
         <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 14, lineHeight: 1.5 }}>
           Add-ons the customer can check on or off — the total updates as they choose. Shown on the {tiersOn ? "active package" : "estimate"} in the client portal.
         </div>
@@ -12952,7 +12970,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
         )}
       </Sheet>
 
-      <Sheet open={tplSheet} onClose={() => setTplSheet(false)} title="Estimate templates">
+      <Sheet open={tplSheet} onClose={() => setTplSheet(false)} title="Estimate templates" tall>
         <Field label="Save current lines as">
           <div style={{ display: "flex", gap: 8 }}>
             <input style={{ ...inputStyle, flex: 1 }} value={tplName} placeholder="Full replacement — architectural"

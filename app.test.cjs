@@ -2751,9 +2751,14 @@ var GEO_PROVIDER = {
   countries: "us"
 };
 var geoReady = () => !!(GEO_PROVIDER.apiKey && GEO_PROVIDER.name === "geoapify");
+var GEO_BIAS = null;
+function setGeoBias(lat, lng) {
+  if (lat != null && lng != null && !isNaN(+lat) && !isNaN(+lng)) GEO_BIAS = { lat: +lat, lng: +lng };
+}
 async function geoAutocomplete(text, signal) {
   if (!geoReady() || !text || text.trim().length < 3) return [];
-  const url = `${GEO_PROVIDER.base}/autocomplete?text=${encodeURIComponent(text)}&filter=countrycode:${GEO_PROVIDER.countries}&limit=6&format=json&apiKey=${GEO_PROVIDER.apiKey}`;
+  const bias = GEO_BIAS ? `&bias=proximity:${GEO_BIAS.lng},${GEO_BIAS.lat}` : "";
+  const url = `${GEO_PROVIDER.base}/autocomplete?text=${encodeURIComponent(text)}&filter=countrycode:${GEO_PROVIDER.countries}&limit=8${bias}&format=json&apiKey=${GEO_PROVIDER.apiKey}`;
   try {
     const res = await fetch(url, { signal });
     if (!res.ok) return [];
@@ -3475,6 +3480,7 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
   const choose = (it) => {
     setOpen(false);
     setItems([]);
+    setGeoBias(it.lat, it.lng);
     onPick(it);
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "relative" }, children: [
@@ -3555,7 +3561,7 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
     )) })
   ] });
 }
-function Sheet({ open, onClose, title, children, footer, wide }) {
+function Sheet({ open, onClose, title, children, footer, wide, tall }) {
   if (!open) return null;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
     position: "fixed",
@@ -3570,6 +3576,7 @@ function Sheet({ open, onClose, title, children, footer, wide }) {
     width: "100%",
     maxWidth: wide ? 760 : 560,
     maxHeight: "90vh",
+    minHeight: tall ? "55vh" : void 0,
     borderRadius: "18px 18px 0 0",
     display: "flex",
     flexDirection: "column"
@@ -6992,6 +6999,18 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
       emailConsent: consentJobs.some((j) => j.consent?.email?.granted)
     });
   }, [open, seed]);
+  (0, import_react.useEffect)(() => {
+    if (!open || GEO_BIAS) return;
+    const withCoords = jobs.find((j) => (j.lat ?? j.property?.lat) != null && (j.lng ?? j.property?.lng) != null);
+    if (withCoords) {
+      setGeoBias(withCoords.lat ?? withCoords.property?.lat, withCoords.lng ?? withCoords.property?.lng);
+      return;
+    }
+    const z = (jobs.find((j) => j.zip) || {}).zip;
+    if (z) geocodeZip(z).then((g) => {
+      if (g) setGeoBias(g.lat, g.lng);
+    });
+  }, [open]);
   const set = (k) => (e) => setF({ ...f, [k]: e.target ? e.target.type === "checkbox" ? e.target.checked : e.target.value : e });
   const existingContact = contacts.find((c) => c.id === f.existingContactId);
   const selectContact = (id) => {
@@ -7144,7 +7163,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
               ...p,
               street: it.street || it.formatted,
               city: it.city || p.city,
-              stateSel: ["OH", "KY", "IL"].includes(it.state) ? it.state : p.stateSel,
+              stateSel: it.state || p.stateSel,
               zip: it.zip || p.zip,
               lat: it.lat,
               lng: it.lng
@@ -7153,11 +7172,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
         ) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "City", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.city, onChange: set("city") }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "State", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: f.stateSel, onChange: set("stateSel"), children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "OH" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "KY" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: "IL" })
-          ] }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "State", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: f.stateSel, onChange: set("stateSel"), children: US_STATES.map(([ab]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: ab, children: ab }, ab)) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Zip *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { "data-testid": "lead-zip", style: inputStyle, value: f.zip, onChange: set("zip") }) })
         ] }),
         juris && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: T.accentSoft, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }, children: [
@@ -14277,7 +14292,7 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
         }, disabled: locked, children: "Apply" })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open: upgradesSheet, onClose: () => setUpgradesSheet(false), title: "Optional upgrades", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open: upgradesSheet, onClose: () => setUpgradesSheet(false), title: "Optional upgrades", tall: true, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 14, lineHeight: 1.5 }, children: [
         "Add-ons the customer can check on or off \u2014 the total updates as they choose. Shown on the ",
         tiersOn ? "active package" : "estimate",
@@ -14339,7 +14354,7 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
         " Add upgrade option"
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open: tplSheet, onClose: () => setTplSheet(false), title: "Estimate templates", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open: tplSheet, onClose: () => setTplSheet(false), title: "Estimate templates", tall: true, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Save current lines as", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "input",
