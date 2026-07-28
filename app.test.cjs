@@ -9323,7 +9323,26 @@ function buildPortalSnapshot(job, brand2, token) {
         date: file.at,
         url: file.url || null
       })) : [],
-      estimate: portal.estimate ? { number: job.estimate.number, date: job.estimate.date, total: estimateTotal(job.estimate), items: job.estimate.items } : null,
+      estimate: portal.estimate ? (() => {
+        const est = job.estimate;
+        const tiers = (est.tiers || []).map((t) => ({
+          id: t.id,
+          name: t.name,
+          items: (t.items || []).map((it) => ({ desc: it.desc, qty: it.qty, unit: it.unit, price: num(it.price) })),
+          total: (t.items || []).reduce((a, it) => a + num(it.qty) * num(it.price), 0)
+        }));
+        const upgrades = (est.upgrades || []).map((u) => ({ id: u.id, desc: u.desc, price: num(u.price) }));
+        return {
+          number: est.number,
+          date: est.date,
+          total: estimateTotal(est),
+          items: est.items,
+          scope: est.scope || "",
+          tiers,
+          upgrades,
+          defaultTier: est.selectedTier || tiers[0] && tiers[0].id || null
+        };
+      })() : null,
       contract: portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
       invoice: portal.invoice ? { contract: pay.contract, received: pay.received, balance: pay.balance } : null,
       review: portal.review !== false ? {
@@ -9842,8 +9861,113 @@ function PortalContactCard({ token, jobId, customer, accent }) {
     ] })
   ] });
 }
+function PortalProposal({ estimate, accent, onSelect = () => {
+} }) {
+  const tiers = estimate.tiers || [];
+  const upgrades = estimate.upgrades || [];
+  const [tier, setTier] = (0, import_react.useState)(estimate.defaultTier || tiers[0] && tiers[0].id || null);
+  const [ups, setUps] = (0, import_react.useState)({});
+  const tierObj = tiers.find((t) => t.id === tier) || null;
+  const upTotal = upgrades.filter((u) => ups[u.id]).reduce((a, u) => a + num(u.price), 0);
+  const total = (tierObj ? tierObj.total : estimate.total) + upTotal;
+  (0, import_react.useEffect)(() => {
+    onSelect({ tierId: tier, tierName: tierObj ? tierObj.name : null, upgradeIds: upgrades.filter((u) => ups[u.id]).map((u) => u.id), total });
+  }, [tier, ups]);
+  if (!tiers.length) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800 }, children: money(estimate.total) }), children: "Your estimate" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8 }, children: [
+        estimate.number,
+        " \xB7 ",
+        estimate.date
+      ] }),
+      (estimate.items || []).map((it, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13.5, padding: "7px 0", borderTop: `1px solid ${S.line}` }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+          it.desc,
+          " \u2014 ",
+          it.qty,
+          " ",
+          it.unit
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 600, whiteSpace: "nowrap" }, children: money(num(it.qty) * num(it.price)) })
+      ] }, i2))
+    ] });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800 }, children: money(total) }), children: "Choose your option" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 10 }, children: [
+      estimate.number,
+      estimate.date ? ` \xB7 ${estimate.date}` : ""
+    ] }),
+    estimate.scope && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }, children: estimate.scope }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gap: 8, marginBottom: 14 }, children: tiers.map((t) => {
+      const on = t.id === tier;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setTier(t.id), style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 10,
+        border: `2px solid ${on ? accent : S.line}`,
+        background: on ? `${accent}12` : "#fff",
+        borderRadius: 12,
+        padding: "13px 15px",
+        cursor: "pointer",
+        textAlign: "left",
+        fontFamily: "inherit"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 15, fontWeight: 800, color: S.ink }, children: t.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "block", fontSize: 11.5, color: S.sub }, children: [
+            (t.items || []).length,
+            " item",
+            (t.items || []).length === 1 ? "" : "s"
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 15, fontWeight: 800, color: on ? accent : S.ink }, children: money(t.total) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 20, height: 20, borderRadius: 99, border: `2px solid ${on ? accent : S.line}`, display: "grid", placeItems: "center" }, children: on && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 10, height: 10, borderRadius: 99, background: accent } }) })
+        ] })
+      ] }, t.id);
+    }) }),
+    tierObj && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginBottom: upgrades.length ? 14 : 0 }, children: (tierObj.items || []).map((it, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, padding: "6px 0", borderTop: `1px solid ${S.line}`, color: S.sub }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+        it.desc,
+        " \u2014 ",
+        it.qty,
+        " ",
+        it.unit
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { whiteSpace: "nowrap" }, children: money(num(it.qty) * num(it.price)) })
+    ] }, i2)) }),
+    upgrades.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, marginBottom: 8 }, children: "Add-ons" }),
+      upgrades.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${S.line}`, cursor: "pointer" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: !!ups[u.id],
+            onChange: (e) => setUps((p) => ({ ...p, [u.id]: e.target.checked })),
+            style: { width: 18, height: 18, accentColor: accent }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { flex: 1, fontSize: 13.5, color: S.ink }, children: u.desc }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, fontWeight: 700, whiteSpace: "nowrap" }, children: [
+          "+",
+          money(u.price)
+        ] })
+      ] }, u.id))
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, paddingTop: 12, borderTop: `2px solid ${S.line}` }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 800, color: S.ink }, children: "Your total" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 20, fontWeight: 800, color: accent }, children: money(total) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: "Pick the option that fits \u2014 you'll confirm it when you sign, and nothing is final until then." })
+  ] });
+}
 function PublicPortal({ token }) {
   const [state, setState] = (0, import_react.useState)({ loading: true, data: null, err: "" });
+  const [estSel, setEstSel] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
     const db = DB();
     if (!db) {
@@ -9939,24 +10063,7 @@ function PublicPortal({ token }) {
         ] })
       ) : null;
       if (sid === "estimate") return d.estimate ? wrap(
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800 }, children: money(d.estimate.total) }), children: "Your estimate" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8 }, children: [
-            d.estimate.number,
-            " \xB7 ",
-            d.estimate.date
-          ] }),
-          (d.estimate.items || []).map((it, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13.5, padding: "7px 0", borderTop: `1px solid ${S.line}` }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-              it.desc,
-              " \u2014 ",
-              it.qty,
-              " ",
-              it.unit
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 600, whiteSpace: "nowrap" }, children: money(num(it.qty) * num(it.price)) })
-          ] }, i2))
-        ] })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PortalProposal, { estimate: d.estimate, accent: prim, onSelect: setEstSel })
       ) : null;
       if (sid === "contract") return d.contract ? wrap(
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [

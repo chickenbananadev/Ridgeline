@@ -7940,7 +7940,23 @@ function buildPortalSnapshot(job, brand, token) {
       documents: portal.documents ? (job.files || []).filter((file) => file.shared).map((file) => ({
         name: file.name, category: file.cat, date: file.at, url: file.url || null,
       })) : [],
-      estimate: portal.estimate ? { number: job.estimate.number, date: job.estimate.date, total: estimateTotal(job.estimate), items: job.estimate.items } : null,
+      estimate: portal.estimate ? (() => {
+        const est = job.estimate;
+        /* Send the Good/Better/Best tiers and optional upgrades UNFLATTENED so
+           the homeowner chooses in the portal. `items` stays for back-compat
+           (jobs with no tiers) and as the fallback list. */
+        const tiers = (est.tiers || []).map((t) => ({
+          id: t.id, name: t.name,
+          items: (t.items || []).map((it) => ({ desc: it.desc, qty: it.qty, unit: it.unit, price: num(it.price) })),
+          total: (t.items || []).reduce((a, it) => a + num(it.qty) * num(it.price), 0),
+        }));
+        const upgrades = (est.upgrades || []).map((u) => ({ id: u.id, desc: u.desc, price: num(u.price) }));
+        return {
+          number: est.number, date: est.date, total: estimateTotal(est), items: est.items,
+          scope: est.scope || "", tiers, upgrades,
+          defaultTier: est.selectedTier || (tiers[0] && tiers[0].id) || null,
+        };
+      })() : null,
       contract: portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
       invoice: portal.invoice ? { contract: pay.contract, received: pay.received, balance: pay.balance } : null,
       review: portal.review !== false ? {
@@ -8470,8 +8486,102 @@ function PortalContactCard({ token, jobId, customer, accent }) {
   );
 }
 
+/* Customer-facing interactive proposal: the homeowner picks Good/Better/Best
+   and toggles add-ons, and the total updates live. Falls back to a plain
+   read-only list for estimates with no tiers configured. Reports the current
+   selection up so it can travel into the e-sign step. */
+function PortalProposal({ estimate, accent, onSelect = () => {} }) {
+  const tiers = estimate.tiers || [];
+  const upgrades = estimate.upgrades || [];
+  const [tier, setTier] = useState(estimate.defaultTier || (tiers[0] && tiers[0].id) || null);
+  const [ups, setUps] = useState({});
+  const tierObj = tiers.find((t) => t.id === tier) || null;
+  const upTotal = upgrades.filter((u) => ups[u.id]).reduce((a, u) => a + num(u.price), 0);
+  const total = (tierObj ? tierObj.total : estimate.total) + upTotal;
+  useEffect(() => {
+    onSelect({ tierId: tier, tierName: tierObj ? tierObj.name : null, upgradeIds: upgrades.filter((u) => ups[u.id]).map((u) => u.id), total });
+  }, [tier, ups]); // eslint-disable-line
+
+  if (!tiers.length) {
+    return (
+      <Card>
+        <CardTitle right={<span style={{ fontWeight: 800 }}>{money(estimate.total)}</span>}>Your estimate</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>{estimate.number} · {estimate.date}</div>
+        {(estimate.items || []).map((it, i2) => (
+          <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13.5, padding: "7px 0", borderTop: `1px solid ${S.line}` }}>
+            <span>{it.desc} — {it.qty} {it.unit}</span>
+            <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{money(num(it.qty) * num(it.price))}</span>
+          </div>
+        ))}
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardTitle right={<span style={{ fontWeight: 800 }}>{money(total)}</span>}>Choose your option</CardTitle>
+      <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10 }}>{estimate.number}{estimate.date ? ` · ${estimate.date}` : ""}</div>
+      {estimate.scope && <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }}>{estimate.scope}</div>}
+      <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
+        {tiers.map((t) => {
+          const on = t.id === tier;
+          return (
+            <button key={t.id} onClick={() => setTier(t.id)} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+              border: `2px solid ${on ? accent : S.line}`, background: on ? `${accent}12` : "#fff",
+              borderRadius: 12, padding: "13px 15px", cursor: "pointer", textAlign: "left", fontFamily: "inherit",
+            }}>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: S.ink }}>{t.name}</span>
+                <span style={{ display: "block", fontSize: 11.5, color: S.sub }}>{(t.items || []).length} item{(t.items || []).length === 1 ? "" : "s"}</span>
+              </span>
+              <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: on ? accent : S.ink }}>{money(t.total)}</span>
+                <span style={{ width: 20, height: 20, borderRadius: 99, border: `2px solid ${on ? accent : S.line}`, display: "grid", placeItems: "center" }}>
+                  {on && <span style={{ width: 10, height: 10, borderRadius: 99, background: accent }} />}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {tierObj && (
+        <div style={{ marginBottom: upgrades.length ? 14 : 0 }}>
+          {(tierObj.items || []).map((it, i2) => (
+            <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, padding: "6px 0", borderTop: `1px solid ${S.line}`, color: S.sub }}>
+              <span>{it.desc} — {it.qty} {it.unit}</span>
+              <span style={{ whiteSpace: "nowrap" }}>{money(num(it.qty) * num(it.price))}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {upgrades.length > 0 && (
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, marginBottom: 8 }}>Add-ons</div>
+          {upgrades.map((u) => (
+            <label key={u.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${S.line}`, cursor: "pointer" }}>
+              <input type="checkbox" checked={!!ups[u.id]} onChange={(e) => setUps((p) => ({ ...p, [u.id]: e.target.checked }))}
+                style={{ width: 18, height: 18, accentColor: accent }} />
+              <span style={{ flex: 1, fontSize: 13.5, color: S.ink }}>{u.desc}</span>
+              <span style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: "nowrap" }}>+{money(u.price)}</span>
+            </label>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, paddingTop: 12, borderTop: `2px solid ${S.line}` }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: S.ink }}>Your total</span>
+        <span style={{ fontSize: 20, fontWeight: 800, color: accent }}>{money(total)}</span>
+      </div>
+      <div style={{ fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+        Pick the option that fits — you'll confirm it when you sign, and nothing is final until then.
+      </div>
+    </Card>
+  );
+}
+
 function PublicPortal({ token }) {
   const [state, setState] = useState({ loading: true, data: null, err: "" });
+  const [estSel, setEstSel] = useState(null);
   useEffect(() => {
     const db = DB();
     if (!db) { setState({ loading: false, data: null, err: "This link needs a live connection." }); return; }
@@ -8566,16 +8676,7 @@ function PublicPortal({ token }) {
           ) : null;
 
           if (sid === "estimate") return d.estimate ? wrap(
-            <Card>
-              <CardTitle right={<span style={{ fontWeight: 800 }}>{money(d.estimate.total)}</span>}>Your estimate</CardTitle>
-              <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>{d.estimate.number} · {d.estimate.date}</div>
-              {(d.estimate.items || []).map((it, i2) => (
-                <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13.5, padding: "7px 0", borderTop: `1px solid ${S.line}` }}>
-                  <span>{it.desc} — {it.qty} {it.unit}</span>
-                  <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{money(num(it.qty) * num(it.price))}</span>
-                </div>
-              ))}
-            </Card>
+            <PortalProposal estimate={d.estimate} accent={prim} onSelect={setEstSel} />
           ) : null;
 
           if (sid === "contract") return d.contract ? wrap(
