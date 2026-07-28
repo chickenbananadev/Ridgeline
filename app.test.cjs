@@ -2727,7 +2727,14 @@ function resolveJurisdiction(zip) {
   }
   const st = stateForZip(z);
   if (!st) return null;
-  const d = STATE_DEFAULTS[st];
+  const adopt = STATE_CODE_ADOPTION[st];
+  const d = STATE_DEFAULTS[st] || {
+    codeName: codeNameForState(st),
+    codeEdition: "Verify the adopted edition",
+    adoption: adopt && adopt.local ? "Adopted locally \u2014 confirm the adopting jurisdiction." : "Confirm the current adopted edition and local amendments.",
+    permit: "Confirm permit requirements with the local building department.",
+    sources: ["ICC"]
+  };
   return {
     zip: z,
     city: "",
@@ -2840,9 +2847,6 @@ async function geoLookupZip(zip) {
     const r = (data.results || [])[0];
     if (!r) return null;
     const state = r.state_code || "";
-    if (!STATE_DEFAULTS[state]) {
-      return { unsupported: true, state, city: r.city || "", county: r.county || "" };
-    }
     const rawCounty = r.county || "";
     const county = rawCounty && !/county$/i.test(rawCounty) ? `${rawCounty} County` : rawCounty;
     return {
@@ -2850,14 +2854,24 @@ async function geoLookupZip(zip) {
       city: r.city || r.town || r.village || "",
       county,
       state,
-      dept: COUNTY_DEPARTMENTS[county] || null
+      dept: COUNTY_DEPARTMENTS[county] || null,
+      /* Ohio/Kentucky/Illinois have a validated code library; everywhere else
+         we still resolve the state's adopted code, just flagged to verify. */
+      curated: !!STATE_DEFAULTS[state]
     };
   } catch {
     return null;
   }
 }
 function jurisdictionFromLookup(hit) {
-  const d = STATE_DEFAULTS[hit.state];
+  const adopt = STATE_CODE_ADOPTION[hit.state];
+  const d = STATE_DEFAULTS[hit.state] || {
+    codeName: codeNameForState(hit.state),
+    codeEdition: "Verify the adopted edition",
+    adoption: adopt && adopt.local ? "Adopted locally \u2014 confirm the adopting municipality/county for this address." : "Confirm the current adopted edition and any local amendments.",
+    permit: "Confirm permit requirements with the local building department.",
+    sources: ["ICC"]
+  };
   const dept = hit.dept;
   return {
     zip: hit.zip,
@@ -3163,6 +3177,9 @@ function downloadCsv(name, rows) {
 }
 function jurisdictionForZip(zip) {
   return resolveJurisdiction(zip);
+}
+function codeNameForState(st) {
+  return STATE_DEFAULTS[st] && STATE_DEFAULTS[st].codeName || STATE_CODE_ADOPTION[st] && STATE_CODE_ADOPTION[st].code || "Adopted IRC \u2014 verify locally";
 }
 function citeFor(state, topic) {
   if (CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic]) return CODE_PROVISIONS[state][topic];
@@ -17992,10 +18009,6 @@ Authority: ${c.cite}`;
                   setLookupErr("Could not reach the lookup service. Check the connection and try again.");
                   return;
                 }
-                if (hit.unsupported) {
-                  setLookupErr(`${zip.trim()} resolves to ${[hit.city, hit.state].filter(Boolean).join(", ") || "outside our states"}. Code data is only held for Ohio, Kentucky and Illinois, so nothing would be reliable here.`);
-                  return;
-                }
                 setLookupResult(hit);
               },
               "data-testid": "lookup-zip",
@@ -18006,7 +18019,13 @@ Authority: ${c.cite}`;
         lookupResult && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: lookupResult.dept ? "green" : "amber", children: lookupResult.dept ? "Department known" : "Office needed" }), children: [lookupResult.city, lookupResult.state].filter(Boolean).join(", ") }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "County", v: lookupResult.county || "\u2014" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Building code", v: STATE_DEFAULTS[lookupResult.state].codeName }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Building code", v: codeNameForState(lookupResult.state) }),
+          !lookupResult.curated && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Verify locally", tone: "amber", children: [
+            [lookupResult.city, lookupResult.state].filter(Boolean).join(", "),
+            " is outside our validated OH/KY/IL library. The adopted-code family above is correct to start from, but confirm the current edition",
+            STATE_CODE_ADOPTION[lookupResult.state]?.local ? " and the local adopting ordinance" : "",
+            " and the building department before you cite it."
+          ] }),
           lookupResult.dept ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: `1px solid ${S.line}`, marginTop: 10, paddingTop: 10 }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Permits", v: lookupResult.dept.office }),

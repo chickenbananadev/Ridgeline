@@ -2035,7 +2035,15 @@ function resolveJurisdiction(zip) {
   }
   const st = stateForZip(z);
   if (!st) return null;
-  const d = STATE_DEFAULTS[st];
+  /* OH/KY/IL have validated defaults; every other state falls back to its
+     adopted-code family so a job anywhere still resolves (no crash). */
+  const adopt = STATE_CODE_ADOPTION[st];
+  const d = STATE_DEFAULTS[st] || {
+    codeName: codeNameForState(st), codeEdition: "Verify the adopted edition",
+    adoption: adopt && adopt.local ? "Adopted locally — confirm the adopting jurisdiction." : "Confirm the current adopted edition and local amendments.",
+    permit: "Confirm permit requirements with the local building department.",
+    sources: ["ICC"],
+  };
   return {
     zip: z, city: "", county: "", state: st,
     codeName: d.codeName, codeEdition: d.codeEdition, adoption: d.adoption, permit: d.permit,
@@ -2161,12 +2169,6 @@ async function geoLookupZip(zip) {
     const r = (data.results || [])[0];
     if (!r) return null;
     const state = r.state_code || "";
-    if (!STATE_DEFAULTS[state]) {
-      /* Outside the three states we hold code data for. Honest failure
-         is better than presenting an Ohio code basis for an Indiana
-         address. */
-      return { unsupported: true, state, city: r.city || "", county: r.county || "" };
-    }
     /* Geoapify returns "Hamilton County" or sometimes "Hamilton"; both
        are normalised so the department map matches either way. */
     const rawCounty = r.county || "";
@@ -2174,13 +2176,27 @@ async function geoLookupZip(zip) {
     return {
       zip: z, city: r.city || r.town || r.village || "", county, state,
       dept: COUNTY_DEPARTMENTS[county] || null,
+      /* Ohio/Kentucky/Illinois have a validated code library; everywhere else
+         we still resolve the state's adopted code, just flagged to verify. */
+      curated: !!STATE_DEFAULTS[state],
     };
   } catch { return null; }
 }
 
-/* Build a jurisdiction record from a lookup result, ready to save. */
+/* Build a jurisdiction record from a lookup result, ready to save. Works for
+   any state: curated states (OH/KY/IL) use the validated defaults; the rest
+   fall back to the state's adopted-code family with a verify note. */
 function jurisdictionFromLookup(hit) {
-  const d = STATE_DEFAULTS[hit.state];
+  const adopt = STATE_CODE_ADOPTION[hit.state];
+  const d = STATE_DEFAULTS[hit.state] || {
+    codeName: codeNameForState(hit.state),
+    codeEdition: "Verify the adopted edition",
+    adoption: adopt && adopt.local
+      ? "Adopted locally — confirm the adopting municipality/county for this address."
+      : "Confirm the current adopted edition and any local amendments.",
+    permit: "Confirm permit requirements with the local building department.",
+    sources: ["ICC"],
+  };
   const dept = hit.dept;
   return {
     zip: hit.zip, city: hit.city, county: hit.county, state: hit.state,
@@ -2461,6 +2477,13 @@ function downloadCsv(name, rows) {
   }
 }
 function jurisdictionForZip(zip) { return resolveJurisdiction(zip); }
+/* Adopted-code display name for any state, curated set first, then the
+   50-state adoption map, then a safe generic. */
+function codeNameForState(st) {
+  return (STATE_DEFAULTS[st] && STATE_DEFAULTS[st].codeName)
+    || (STATE_CODE_ADOPTION[st] && STATE_CODE_ADOPTION[st].code)
+    || "Adopted IRC — verify locally";
+}
 function citeFor(state, topic) {
   if (CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic]) return CODE_PROVISIONS[state][topic];
   /* Any state without a curated set gets the IRC base cite, labeled with the
@@ -16147,10 +16170,6 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                       const hit = await geoLookupZip(zip.trim());
                       setLookingUp(false);
                       if (!hit) { setLookupErr("Could not reach the lookup service. Check the connection and try again."); return; }
-                      if (hit.unsupported) {
-                        setLookupErr(`${zip.trim()} resolves to ${[hit.city, hit.state].filter(Boolean).join(", ") || "outside our states"}. Code data is only held for Ohio, Kentucky and Illinois, so nothing would be reliable here.`);
-                        return;
-                      }
                       setLookupResult(hit);
                     }} data-testid="lookup-zip">
                     {lookingUp ? "Looking up…" : "Look up this zip"}
@@ -16165,7 +16184,13 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                     {[lookupResult.city, lookupResult.state].filter(Boolean).join(", ")}
                   </CardTitle>
                   <KV k="County" v={lookupResult.county || "—"} />
-                  <KV k="Building code" v={STATE_DEFAULTS[lookupResult.state].codeName} />
+                  <KV k="Building code" v={codeNameForState(lookupResult.state)} />
+                  {!lookupResult.curated && (
+                    <Callout label="Verify locally" tone="amber">
+                      {[lookupResult.city, lookupResult.state].filter(Boolean).join(", ")} is outside our validated OH/KY/IL library.
+                      The adopted-code family above is correct to start from, but confirm the current edition{STATE_CODE_ADOPTION[lookupResult.state]?.local ? " and the local adopting ordinance" : ""} and the building department before you cite it.
+                    </Callout>
+                  )}
                   {lookupResult.dept ? (
                     <>
                       <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 10, paddingTop: 10 }}>
