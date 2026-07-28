@@ -14488,10 +14488,10 @@ function CompanyCamJobCard({ job, mut, toast, ccToken }) {
       )}
       {err && <Callout label="CompanyCam" tone="red">{err}</Callout>}
       {cors && (
-        <Callout label="Your browser blocked the request" tone="amber">
-          CompanyCam did not send the cross-origin headers a browser needs to
-          call it directly. This needs a small Edge Function to relay the
-          calls server-side — say the word and I will write it.
+        <Callout label="Needs the CompanyCam relay" tone="amber">
+          CompanyCam doesn't send the cross-origin headers a browser needs to
+          call it directly. Deploy the <b>companycam-proxy</b> Edge Function
+          (see DEPLOY.md) and this connects.
         </Callout>
       )}
     </Card>
@@ -19170,6 +19170,35 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
 const CC_API = "https://api.companycam.com/v2";
 
 async function ccFetch(token, path, opts = {}) {
+  /* When a Supabase backend is present, route through the companycam-proxy
+     Edge Function — a direct browser call to api.companycam.com is CORS-
+     blocked. The proxy always answers 200 and carries CompanyCam's real
+     status in the payload so we can still tell a bad token from a 404. */
+  const sb = typeof window !== "undefined" ? window.__SUPABASE__ : null;
+  if (sb && sb.functions) {
+    const { data, error } = await sb.functions.invoke("companycam-proxy", {
+      body: {
+        token, path, method: opts.method || "GET",
+        payload: opts.body ? (() => { try { return JSON.parse(opts.body); } catch { return opts.body; } })() : undefined,
+      },
+    });
+    if (error) {
+      const msg = (error && error.message) || "";
+      /* Proxy not deployed yet — flag it like a CORS block so the UI names
+         the same fix. */
+      if (/not found|Failed to send|FunctionsFetch|404|Failed to fetch/i.test(msg)) {
+        const err = new Error("blocked"); err.cors = true; throw err;
+      }
+      throw new Error(msg || "CompanyCam proxy error");
+    }
+    const status = data && data.status;
+    if (status === 401 || status === 403) throw new Error("That token was rejected by CompanyCam.");
+    if (data && data.error) throw new Error(data.error);
+    if (status != null && (status < 200 || status >= 300)) throw new Error("CompanyCam returned " + status + ".");
+    if (status === 204) return null;
+    return data ? data.body : null;
+  }
+  /* No backend (demo / local) — direct call, which may be CORS-blocked. */
   let res;
   try {
     res = await fetch(CC_API + path, {
@@ -19286,12 +19315,12 @@ function CompanyCamConnect({ onConnect }) {
       </div>
       {err && <Callout label="CompanyCam rejected that" tone="red">{err}</Callout>}
       {cors && (
-        <Callout label="Your browser blocked the request" tone="amber">
-          The token may be perfectly good — CompanyCam did not send the
-          cross-origin headers a browser needs to call it directly from a
-          web app. This one needs a small Edge Function to relay the calls
-          from the server side. Tell me and I will write it; it is the same
-          shape as the Twilio one.
+        <Callout label="Needs the CompanyCam relay" tone="amber">
+          The token may be perfectly good — CompanyCam doesn't send the
+          cross-origin headers a browser needs to call it directly, so the app
+          routes through a small server relay. Deploy the <b>companycam-proxy</b>
+          Edge Function (see DEPLOY.md) and this connects. It's the same shape
+          as the Twilio one.
         </Callout>
       )}
     </div>

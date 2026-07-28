@@ -16216,7 +16216,11 @@ function CompanyCamJobCard({ job, mut, toast: toast2, ccToken }) {
       )
     ] }),
     err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "CompanyCam", tone: "red", children: err }),
-    cors && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Your browser blocked the request", tone: "amber", children: "CompanyCam did not send the cross-origin headers a browser needs to call it directly. This needs a small Edge Function to relay the calls server-side \u2014 say the word and I will write it." })
+    cors && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Needs the CompanyCam relay", tone: "amber", children: [
+      "CompanyCam doesn't send the cross-origin headers a browser needs to call it directly. Deploy the ",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "companycam-proxy" }),
+      " Edge Function (see DEPLOY.md) and this connects."
+    ] })
   ] });
 }
 function TabPhotos({ job, mut, toast: toast2, ccToken }) {
@@ -21387,6 +21391,38 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast: toast2
 }
 var CC_API = "https://api.companycam.com/v2";
 async function ccFetch(token, path, opts = {}) {
+  const sb = typeof window !== "undefined" ? window.__SUPABASE__ : null;
+  if (sb && sb.functions) {
+    const { data, error } = await sb.functions.invoke("companycam-proxy", {
+      body: {
+        token,
+        path,
+        method: opts.method || "GET",
+        payload: opts.body ? (() => {
+          try {
+            return JSON.parse(opts.body);
+          } catch {
+            return opts.body;
+          }
+        })() : void 0
+      }
+    });
+    if (error) {
+      const msg = error && error.message || "";
+      if (/not found|Failed to send|FunctionsFetch|404|Failed to fetch/i.test(msg)) {
+        const err = new Error("blocked");
+        err.cors = true;
+        throw err;
+      }
+      throw new Error(msg || "CompanyCam proxy error");
+    }
+    const status = data && data.status;
+    if (status === 401 || status === 403) throw new Error("That token was rejected by CompanyCam.");
+    if (data && data.error) throw new Error(data.error);
+    if (status != null && (status < 200 || status >= 300)) throw new Error("CompanyCam returned " + status + ".");
+    if (status === 204) return null;
+    return data ? data.body : null;
+  }
   let res;
   try {
     res = await fetch(CC_API + path, {
@@ -21500,7 +21536,11 @@ function CompanyCamConnect({ onConnect }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, disabled: !token.trim() || busy, onClick: connect, children: busy ? "Checking\u2026" : "Connect" })
     ] }),
     err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "CompanyCam rejected that", tone: "red", children: err }),
-    cors && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Your browser blocked the request", tone: "amber", children: "The token may be perfectly good \u2014 CompanyCam did not send the cross-origin headers a browser needs to call it directly from a web app. This one needs a small Edge Function to relay the calls from the server side. Tell me and I will write it; it is the same shape as the Twilio one." })
+    cors && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Needs the CompanyCam relay", tone: "amber", children: [
+      "The token may be perfectly good \u2014 CompanyCam doesn't send the cross-origin headers a browser needs to call it directly, so the app routes through a small server relay. Deploy the ",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "companycam-proxy" }),
+      "Edge Function (see DEPLOY.md) and this connects. It's the same shape as the Twilio one."
+    ] })
   ] });
 }
 function Integrations({ integrations, setIntegrations, currentUser, users = [], onBack, toast: toast2, ccAutoCreate = true, setCcAutoCreate = () => {
