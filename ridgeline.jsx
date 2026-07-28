@@ -1366,6 +1366,21 @@ function applyEstimateSelection(est) {
   }));
   return [...base, ...upgradeItems];
 }
+/* Price one generated estimate line from the price list, converting the
+   catalog's per-unit price into the line's unit with `factor` (the coverage
+   constants: 3 bundles per SQ of shingles, 25 LF of cap per bundle, etc.).
+   Returns null when nothing in the catalog matches, so the caller can leave
+   the price at 0 and flag it rather than inventing a number. */
+function catalogUnitPrice(priceList, keywords, factor) {
+  if (!Array.isArray(priceList) || !priceList.length) return null;
+  const hit = priceList.find((r) => {
+    const hay = `${r.item || ""} ${r.sku || ""} ${r.category || ""}`.toLowerCase();
+    return keywords.some((k) => hay.includes(k));
+  });
+  const base = hit ? num(hit.price) : 0;
+  if (!base) return null;
+  return Math.round(base * factor * 100) / 100;
+}
 function mkContract(over = {}) {
   return {
     number: "", price: 0, depositPct: 50, status: "Not started",
@@ -2119,6 +2134,24 @@ const nowStamp = () =>
 
 function estimateTotal(est) {
   return est.items.reduce((s, it) => s + num(it.qty) * num(it.price), 0);
+}
+/* Turn an accepted estimate into a contract: copy the total, the scope and the
+   accepted line items across as structured data (not a re-typed price). Invoice
+   and A/R then follow automatically via paymentsSummary, which reads the
+   contract price. Preserves an already-signed contract untouched. */
+function convertEstimateToContract(job) {
+  const est = job.estimate || {};
+  const con = job.contract || mkContract();
+  if (con.status === "Signed") return con;
+  return {
+    ...con,
+    number: con.number || `CON-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
+    price: estimateTotal(est),
+    scope: con.scope || (est.scope || `Per accepted estimate ${est.number || ""}`.trim()),
+    items: (est.items || []).map((it) => ({ id: it.id || uid("ci"), desc: it.desc, qty: it.qty, unit: it.unit, price: num(it.price) })),
+    status: con.status === "Not started" || !con.status ? "Ready to sign" : con.status,
+    fromEstimate: est.number || true,
+  };
 }
 function computeFin(fin) {
   const sum = (a) => a.reduce((s, x) => s + x.amt, 0);
@@ -6433,7 +6466,7 @@ const JOB_TAB_GROUPS = [
 ];
 
 function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, reviewSettings, currentUser, isAdmin, showMoney = true, crews = [], templates = [], integrations = { gmail: {}, sms: {} }, users = [], ccToken = null,
-  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null, features = {}, onOpenCodeLookup = () => {} }) {
+  estimateTemplates = [], setEstimateTemplates = () => {}, setBrand = () => {}, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], onDelete = null, openTab = null, features = {}, onOpenCodeLookup = () => {}, priceList = [] }) {
   const [tab, setTab] = useState(openTab || "overview");
   /* Every section starts collapsed so the job opens as a clean, scannable
      stack; the rep expands what they need. A deep link still opens its own
@@ -6630,7 +6663,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
               case "materials": return <TabMaterials job={job} mut={mut} toast={toast} />;
               case "estimate": return <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
-                estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} />;
+                estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} priceList={priceList} />;
               case "contract": return (<>
                 <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast} />
                 {/* Countersign queue + signature audit trail live with the
@@ -7925,7 +7958,24 @@ function buildPortalSnapshot(job, brand, token) {
       documents: portal.documents ? (job.files || []).filter((file) => file.shared).map((file) => ({
         name: file.name, category: file.cat, date: file.at, url: file.url || null,
       })) : [],
-      estimate: portal.estimate ? { number: job.estimate.number, date: job.estimate.date, total: estimateTotal(job.estimate), items: job.estimate.items } : null,
+      estimate: portal.estimate ? (() => {
+        const est = job.estimate;
+        /* Send the Good/Better/Best tiers and optional upgrades UNFLATTENED so
+           the homeowner chooses in the portal. `items` stays for back-compat
+           (jobs with no tiers) and as the fallback list. */
+        const tiers = (est.tiers || []).map((t) => ({
+          id: t.id, name: t.name,
+          items: (t.items || []).map((it) => ({ desc: it.desc, qty: it.qty, unit: it.unit, price: num(it.price) })),
+          total: (t.items || []).reduce((a, it) => a + num(it.qty) * num(it.price), 0),
+        }));
+        const upgrades = (est.upgrades || []).map((u) => ({ id: u.id, desc: u.desc, price: num(u.price) }));
+        return {
+          number: est.number, date: est.date, total: estimateTotal(est), items: est.items,
+          scope: est.scope || "", tiers, upgrades,
+          defaultTier: est.selectedTier || (tiers[0] && tiers[0].id) || null,
+          doc: est.doc ? { coverImage: est.doc.coverImage || null, notes: est.doc.notes || "", terms: est.doc.terms || "" } : null,
+        };
+      })() : null,
       contract: portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
       invoice: portal.invoice ? { contract: pay.contract, received: pay.received, balance: pay.balance } : null,
       review: portal.review !== false ? {
@@ -8192,7 +8242,7 @@ function SignConsent({ checked, onChange, what, accent = "#0A9E98" }) {
    signed. The signature row is written by the portal itself so the
    server stamps the time and IP; nothing about the timestamp comes
    from the customer's device. */
-function PortalSignCenter({ token, jobId, customer, docs, accent, brand }) {
+function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSelection = null }) {
   const [openDoc, setOpenDoc] = useState(null);
   const [sig, setSig] = useState(null);
   const [consent, setConsent] = useState(false);
@@ -8217,14 +8267,20 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand }) {
     const db = DB();
     if (!db) { setErr("No connection. Please try again in a moment."); return; }
     setBusy(true); setErr("");
+    /* Bind an estimate signature to the option the customer actually chose in
+       the proposal above, not the rep's default, so what they sign is what
+       they picked and the team can apply it on countersign. */
+    const snapshot = (openDoc.type === "estimate" && estSelection)
+      ? { ...openDoc.snapshot, selection: estSelection, total: estSelection.total }
+      : openDoc.snapshot;
     const row = {
       id: uid("sig"),
       job_id: jobId,
       doc_type: openDoc.type,
       doc_id: String(openDoc.id || ""),
       doc_title: openDoc.title,
-      doc_hash: docHash(openDoc.snapshot),
-      doc_snapshot: openDoc.snapshot,
+      doc_hash: docHash(snapshot),
+      doc_snapshot: snapshot,
       signer_role: "customer",
       signer_name: customer.name || "Customer",
       signer_email: customer.email || null,
@@ -8455,8 +8511,110 @@ function PortalContactCard({ token, jobId, customer, accent }) {
   );
 }
 
+/* Customer-facing interactive proposal: the homeowner picks Good/Better/Best
+   and toggles add-ons, and the total updates live. Falls back to a plain
+   read-only list for estimates with no tiers configured. Reports the current
+   selection up so it can travel into the e-sign step. */
+function PortalProposal({ estimate, accent, onSelect = () => {} }) {
+  const tiers = estimate.tiers || [];
+  const upgrades = estimate.upgrades || [];
+  const [tier, setTier] = useState(estimate.defaultTier || (tiers[0] && tiers[0].id) || null);
+  const [ups, setUps] = useState({});
+  const tierObj = tiers.find((t) => t.id === tier) || null;
+  const upTotal = upgrades.filter((u) => ups[u.id]).reduce((a, u) => a + num(u.price), 0);
+  const total = (tierObj ? tierObj.total : estimate.total) + upTotal;
+  useEffect(() => {
+    onSelect({ tierId: tier, tierName: tierObj ? tierObj.name : null, upgradeIds: upgrades.filter((u) => ups[u.id]).map((u) => u.id), total });
+  }, [tier, ups]); // eslint-disable-line
+
+  if (!tiers.length) {
+    return (
+      <Card>
+        <CardTitle right={<span style={{ fontWeight: 800 }}>{money(estimate.total)}</span>}>Your estimate</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>{estimate.number} · {estimate.date}</div>
+        {(estimate.items || []).map((it, i2) => (
+          <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13.5, padding: "7px 0", borderTop: `1px solid ${S.line}` }}>
+            <span>{it.desc} — {it.qty} {it.unit}</span>
+            <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{money(num(it.qty) * num(it.price))}</span>
+          </div>
+        ))}
+      </Card>
+    );
+  }
+
+  const doc = estimate.doc || {};
+  return (
+    <Card>
+      {doc.coverImage && (
+        <img src={doc.coverImage} alt="" style={{ width: "100%", borderRadius: 10, marginBottom: 12, display: "block", objectFit: "cover", maxHeight: 200 }} />
+      )}
+      <CardTitle right={<span style={{ fontWeight: 800 }}>{money(total)}</span>}>Choose your option</CardTitle>
+      <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10 }}>{estimate.number}{estimate.date ? ` · ${estimate.date}` : ""}</div>
+      {estimate.scope && <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }}>{estimate.scope}</div>}
+      {doc.notes && <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }}>{doc.notes}</div>}
+      <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
+        {tiers.map((t) => {
+          const on = t.id === tier;
+          return (
+            <button key={t.id} onClick={() => setTier(t.id)} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+              border: `2px solid ${on ? accent : S.line}`, background: on ? `${accent}12` : "#fff",
+              borderRadius: 12, padding: "13px 15px", cursor: "pointer", textAlign: "left", fontFamily: "inherit",
+            }}>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: S.ink }}>{t.name}</span>
+                <span style={{ display: "block", fontSize: 11.5, color: S.sub }}>{(t.items || []).length} item{(t.items || []).length === 1 ? "" : "s"}</span>
+              </span>
+              <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: on ? accent : S.ink }}>{money(t.total)}</span>
+                <span style={{ width: 20, height: 20, borderRadius: 99, border: `2px solid ${on ? accent : S.line}`, display: "grid", placeItems: "center" }}>
+                  {on && <span style={{ width: 10, height: 10, borderRadius: 99, background: accent }} />}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {tierObj && (
+        <div style={{ marginBottom: upgrades.length ? 14 : 0 }}>
+          {(tierObj.items || []).map((it, i2) => (
+            <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, padding: "6px 0", borderTop: `1px solid ${S.line}`, color: S.sub }}>
+              <span>{it.desc} — {it.qty} {it.unit}</span>
+              <span style={{ whiteSpace: "nowrap" }}>{money(num(it.qty) * num(it.price))}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {upgrades.length > 0 && (
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, marginBottom: 8 }}>Add-ons</div>
+          {upgrades.map((u) => (
+            <label key={u.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${S.line}`, cursor: "pointer" }}>
+              <input type="checkbox" checked={!!ups[u.id]} onChange={(e) => setUps((p) => ({ ...p, [u.id]: e.target.checked }))}
+                style={{ width: 18, height: 18, accentColor: accent }} />
+              <span style={{ flex: 1, fontSize: 13.5, color: S.ink }}>{u.desc}</span>
+              <span style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: "nowrap" }}>+{money(u.price)}</span>
+            </label>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, paddingTop: 12, borderTop: `2px solid ${S.line}` }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: S.ink }}>Your total</span>
+        <span style={{ fontSize: 20, fontWeight: 800, color: accent }}>{money(total)}</span>
+      </div>
+      <div style={{ fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+        Pick the option that fits — you'll confirm it when you sign, and nothing is final until then.
+      </div>
+      {doc.terms && (
+        <div style={{ fontSize: 11, color: S.sub, marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}`, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{doc.terms}</div>
+      )}
+    </Card>
+  );
+}
+
 function PublicPortal({ token }) {
   const [state, setState] = useState({ loading: true, data: null, err: "" });
+  const [estSel, setEstSel] = useState(null);
   useEffect(() => {
     const db = DB();
     if (!db) { setState({ loading: false, data: null, err: "This link needs a live connection." }); return; }
@@ -8551,16 +8709,7 @@ function PublicPortal({ token }) {
           ) : null;
 
           if (sid === "estimate") return d.estimate ? wrap(
-            <Card>
-              <CardTitle right={<span style={{ fontWeight: 800 }}>{money(d.estimate.total)}</span>}>Your estimate</CardTitle>
-              <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>{d.estimate.number} · {d.estimate.date}</div>
-              {(d.estimate.items || []).map((it, i2) => (
-                <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13.5, padding: "7px 0", borderTop: `1px solid ${S.line}` }}>
-                  <span>{it.desc} — {it.qty} {it.unit}</span>
-                  <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{money(num(it.qty) * num(it.price))}</span>
-                </div>
-              ))}
-            </Card>
+            <PortalProposal estimate={d.estimate} accent={prim} onSelect={setEstSel} />
           ) : null;
 
           if (sid === "contract") return d.contract ? wrap(
@@ -8634,7 +8783,7 @@ function PublicPortal({ token }) {
 
           if (sid === "sign") return wrap(
             <PortalSignCenter token={token} jobId={d.jobId || null} customer={d.customer || {}}
-              docs={d.signDocs || []} accent={prim} brand={d} />
+              docs={d.signDocs || []} accent={prim} brand={d} estSelection={estSel} />
           );
 
           if (sid === "yourinfo") return wrap(
@@ -10361,7 +10510,28 @@ function TabSignatures({ job, mut, toast, currentUser, brand }) {
     if (signing.doc_type === "contract") {
       mut((j) => ({ ...j, contract: { ...(j.contract || {}), status: "Signed", signedAt: todayIso() } }));
     }
-    toast("Countersigned");
+    /* An accepted estimate applies the customer's chosen tier + add-ons
+       (recorded in the signature snapshot), flips the estimate to Signed, and
+       converts it into a contract ready to execute. */
+    if (signing.doc_type === "estimate") {
+      const sel = (signing.doc_snapshot || {}).selection || null;
+      mut((j) => {
+        let est = { ...(j.estimate || {}) };
+        if (sel) {
+          if (sel.tierId) est.selectedTier = sel.tierId;
+          if (Array.isArray(sel.upgradeIds)) {
+            est.upgrades = (est.upgrades || []).map((u) => ({ ...u, selected: sel.upgradeIds.includes(u.id) }));
+          }
+          est.items = applyEstimateSelection(est);
+        }
+        est.status = "Signed";
+        est.clientSig = est.clientSig || "signed";
+        est.sigAt = todayIso();
+        const withEst = { ...j, estimate: est };
+        return { ...withEst, contract: convertEstimateToContract(withEst) };
+      });
+    }
+    toast(signing.doc_type === "estimate" ? "Estimate accepted — contract ready" : "Countersigned");
     setSigning(null); setSig(null); setConsent(false);
     load();
   };
@@ -11394,8 +11564,19 @@ function SupplementCheck({ job }) {
    used, hoisted so each Good/Better/Best tier can reuse it too instead
    of three copy-pasted editors. Purely controlled: given items + a
    setItems callback, knows nothing about tiers, packages, or upgrades. */
-function LineItemEditor({ items, setItems, locked, addLabel = "Add line item" }) {
+function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", priceList = [] }) {
   const setItem = (id, k, v) => setItems(items.map((it) => (it.id === id ? { ...it, [k]: v } : it)));
+  const [pick, setPick] = useState(false);
+  const [pq, setPq] = useState("");
+  const catalog = (priceList || []).filter((r) => {
+    const q = pq.trim().toLowerCase();
+    if (!q) return true;
+    return `${r.item} ${r.sku || ""} ${r.category || ""}`.toLowerCase().includes(q);
+  });
+  const addFromCatalog = (r) => {
+    setItems([...items, { id: uid("e"), desc: r.item, qty: 1, unit: r.unit || "EA", price: num(r.price), cost: num(r.cost) }]);
+    setPick(false); setPq("");
+  };
   const lineMargin = (it) => {
     const cost = num(it.cost), price = num(it.price);
     return price > 0 && cost > 0 ? (((price - cost) / price) * 100).toFixed(0) : null;
@@ -11437,16 +11618,44 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item" })
         </div>
       ))}
       {!locked && (
-        <Btn kind="soft" small style={{ marginTop: 12 }}
-          onClick={() => setItems([...items, { id: uid("e"), desc: "", qty: 1, unit: "EA", price: 0 }])}>
-          <Plus size={14} /> {addLabel}
-        </Btn>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+          <Btn kind="soft" small
+            onClick={() => setItems([...items, { id: uid("e"), desc: "", qty: 1, unit: "EA", price: 0 }])}>
+            <Plus size={14} /> {addLabel}
+          </Btn>
+          {(priceList || []).length > 0 && (
+            <Btn kind="ghost" small onClick={() => { setPick(true); setPq(""); }}>
+              <Package size={14} /> From price list
+            </Btn>
+          )}
+        </div>
       )}
+      <Sheet open={pick} onClose={() => setPick(false)} title="Add from price list">
+        <input style={{ ...inputStyle, marginBottom: 10 }} value={pq} autoFocus
+          placeholder="Search materials…" onChange={(e) => setPq(e.target.value)} />
+        {catalog.length === 0 && <div style={{ fontSize: 13, color: S.sub }}>Nothing matches that.</div>}
+        {catalog.slice(0, 60).map((r) => (
+          <button key={r.id} onClick={() => addFromCatalog(r)} style={{
+            display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+            border: "none", borderTop: `1px solid ${S.line}`, background: "none", cursor: "pointer",
+            padding: "11px 2px", fontFamily: "inherit",
+          }}>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: S.ink }}>{r.item}</span>
+              <span style={{ display: "block", fontSize: 11.5, color: S.sub }}>
+                {r.category || "Uncategorized"} · {r.unit || "EA"}{r.supplier ? ` · ${r.supplier}` : ""}
+              </span>
+            </span>
+            <span style={{ fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{money(num(r.price))}</span>
+            <Plus size={15} color={T.accent} />
+          </button>
+        ))}
+      </Sheet>
     </>
   );
 }
 
-function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {} }) {
+function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {}, priceList = [] }) {
   /* job.estimate for any REAL job created before tiers/upgrades
      existed has neither field at all (undefined, not []) — this
      JSONB blob is exactly what was last saved, and mkEstimate()'s
@@ -11540,7 +11749,9 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
     if (!name || items.length === 0) return;
     setEstimateTemplates([
       ...estimateTemplates.filter((t) => t.name.toLowerCase() !== name.toLowerCase()),
-      { id: uid("etpl"), name, items: items.map(({ id, ...rest }) => rest) },
+      /* Templates now carry the scope and terms too, not just line items, so a
+         saved template seeds a whole proposal rather than a bare price list. */
+      { id: uid("etpl"), name, items: items.map(({ id, ...rest }) => rest), scope: est.scope || "", terms: (est.doc && est.doc.terms) || "" },
     ]);
     setTplName(""); setTplSheet(false);
     toast(`Template "${name}" saved`);
@@ -11552,6 +11763,12 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
     } else {
       setEst({ items: [...est.items, ...newItems] });
     }
+    /* Bring the template's scope/terms across when the estimate doesn't have its
+       own yet — never overwrite what a rep already wrote. */
+    const patch = {};
+    if (t.scope && !est.scope) patch.scope = t.scope;
+    if (t.terms && !(est.doc && est.doc.terms)) patch.doc = { ...(est.doc || {}), terms: t.terms };
+    if (Object.keys(patch).length) setEst(patch);
     setTplSheet(false);
     toast(`"${t.name}" added — ${t.items.length} lines${tiersOn ? ` to ${est.tiers.find((x) => x.id === tierTab)?.name || "this tier"}` : ""}`);
   };
@@ -11580,22 +11797,34 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
   const m = job.measurements;
   const prefillFromMeasurements = () => {
     if (!num(m.squares)) { toast("Enter measurements first"); return; }
-    const sqW = (num(m.squares) * (1 + num(m.waste) / 100)).toFixed(1);
+    const sqW = num((num(m.squares) * (1 + num(m.waste) / 100)).toFixed(1));
+    /* Each line names how its unit relates to the catalog's: `factor` turns a
+       catalog per-unit price into the line's unit (shingles 3 bundles/SQ,
+       ridge cap 25 LF/bundle → ÷25, underlayment 10 SQ/roll → ÷10, etc.). */
+    const spec = [
+      { desc: `Tear-off & disposal — ${job.checklist.layers || "1 layer"}`, qty: num(m.squares), unit: "SQ", kw: ["tear-off", "tear off", "disposal", "dumpster"], factor: 1 },
+      { desc: "Ice & water shield — eaves & valleys", qty: Math.round(((num(m.eaves) + num(m.valleys)) * 3) / 100 * 10) / 10, unit: "SQ", kw: ["ice & water", "ice and water", "ice&water", "i&w"], factor: 1 / 2 },
+      { desc: "Synthetic underlayment — field", qty: num(m.squares), unit: "SQ", kw: ["underlayment", "synthetic", "felt"], factor: 1 / 10 },
+      { desc: "Drip edge — eaves & rakes", qty: num(m.eaves) + num(m.rakes), unit: "LF", kw: ["drip edge", "drip"], factor: 1 / 10 },
+      { desc: "Architectural shingles (incl. waste)", qty: sqW, unit: "SQ", kw: ["shingle", "laminate", "architectural"], factor: 3 },
+      { desc: "Hip & ridge cap", qty: num(m.ridges) + num(m.hips), unit: "LF", kw: ["ridge cap", "hip & ridge", "hip and ridge", "seal-a-ridge", "z-ridge"], factor: 1 / 25 },
+      { desc: "Ridge ventilation", qty: num(m.ridges), unit: "LF", kw: ["ridge vent", "ventilation", "cobra", "shinglevent"], factor: 1 / 4 },
+      { desc: "Pipe jacks at penetrations", qty: num(m.penetrations), unit: "EA", kw: ["pipe jack", "pipe boot", "boot", "flashing collar"], factor: 1 },
+    ];
+    let priced = 0;
+    const items = spec.map((s) => {
+      const p = catalogUnitPrice(priceList, s.kw, s.factor);
+      if (p != null) priced++;
+      return { id: uid("e"), desc: s.desc, qty: s.qty, unit: s.unit, price: p != null ? p : 0 };
+    });
     setEst({
       number: est.number || `EST-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
       date: est.date || new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
-      items: [
-        { id: uid("e"), desc: `Tear-off & disposal — ${job.checklist.layers || "1 layer"}`, qty: num(m.squares), unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Ice & water shield — eaves & valleys", qty: Math.round(((num(m.eaves) + num(m.valleys)) * 3) / 100 * 10) / 10, unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Synthetic underlayment — field", qty: num(m.squares), unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Drip edge — eaves & rakes", qty: num(m.eaves) + num(m.rakes), unit: "LF", price: 0 },
-        { id: uid("e"), desc: "Architectural shingles (incl. waste)", qty: num(sqW), unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Hip & ridge cap", qty: num(m.ridges) + num(m.hips), unit: "LF", price: 0 },
-        { id: uid("e"), desc: "Ridge ventilation", qty: num(m.ridges), unit: "LF", price: 0 },
-        { id: uid("e"), desc: "Pipe jacks at penetrations", qty: num(m.penetrations), unit: "EA", price: 0 },
-      ],
+      items,
     });
-    toast("Line items generated from measurements");
+    toast(priced
+      ? `Generated — priced ${priced} of ${spec.length} lines from your price list`
+      : "Line items generated — add prices or upload a price list");
   };
   return (
     <>
@@ -11697,7 +11926,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
               <div key={t.id}>
                 <LineItemEditor items={t.items} locked={locked}
                   setItems={(items) => setTierItems(t.id, items)}
-                  addLabel={`Add line to ${t.name}`} />
+                  addLabel={`Add line to ${t.name}`} priceList={priceList} />
                 {!locked && est.selectedTier !== t.id && (
                   <Btn kind="ghost" small style={{ marginTop: 4 }} onClick={() => selectTier(t.id)}>
                     Show customer this tier instead
@@ -11727,7 +11956,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
             Managed above — editing the "{est.tiers.find((t) => t.id === est.selectedTier)?.name || "active"}" tier and any checked upgrades. This total is what the customer sees.
           </div>
         ) : (
-          <LineItemEditor items={est.items} setItems={(items) => setEst({ items })} locked={locked} />
+          <LineItemEditor items={est.items} setItems={(items) => setEst({ items })} locked={locked} priceList={priceList} />
         )}
         <div style={{
           display: "flex", justifyContent: "space-between", paddingTop: 14, marginTop: 8,
@@ -11777,7 +12006,12 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
         <Btn kind="ghost" onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand), toast)}><Printer size={15} /> PDF</Btn>
         {!locked && (
           <>
-            <Btn kind="ghost" onClick={() => { setEst({ status: "Sent" }); toast("Estimate emailed to client"); }}>
+            <Btn kind="ghost" onClick={() => {
+              setEst({ status: "Sent" });
+              toast(job.portalToken
+                ? "Sent — it's live in the client portal to choose and sign"
+                : "Marked sent — publish the client portal to share it");
+            }}>
               <Send size={15} /> Send
             </Btn>
             <Btn onClick={() => setSigOpen(true)}><PenLine size={15} /> Client signature</Btn>
@@ -12006,9 +12240,10 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast }) {
           <input style={{ ...inputStyle, width: 130, textAlign: "right" }} value={con.price} disabled={locked}
             inputMode="decimal" onChange={(e) => setCon({ price: num(e.target.value) })} />
         </div>
-        {!con.price && estTotal > 0 && !locked && (
-          <button style={{ ...linkBtn, marginBottom: 10 }} onClick={() => setCon({ price: estTotal })}>
-            Use estimate total — {money(estTotal)}
+        {estTotal > 0 && !locked && (
+          <button style={{ ...linkBtn, marginBottom: 10 }}
+            onClick={() => { mut((j) => ({ ...j, contract: convertEstimateToContract(j) })); toast("Contract built from the estimate"); }}>
+            {con.price ? "Rebuild from estimate" : "Build contract from estimate"} — {money(estTotal)}
           </button>
         )}
         <div style={{ marginBottom: 10 }}>
@@ -19741,7 +19976,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} setBrand={setBrand}
           onLog={logAct} leadSources={leadSources} activity={activity} ccToken={ccToken}
           onDelete={isAdmin ? deleteJobs : null} openTab={jobOpenTab} features={features}
-          onOpenCodeLookup={openCodeLookup} />
+          onOpenCodeLookup={openCodeLookup} priceList={priceList} />
       ) : nav === "home" ? (
         <>
           {liveDb() && jobs.length === 0 && (

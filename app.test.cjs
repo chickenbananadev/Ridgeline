@@ -1786,6 +1786,16 @@ function applyEstimateSelection(est) {
   }));
   return [...base, ...upgradeItems];
 }
+function catalogUnitPrice(priceList, keywords, factor) {
+  if (!Array.isArray(priceList) || !priceList.length) return null;
+  const hit = priceList.find((r) => {
+    const hay = `${r.item || ""} ${r.sku || ""} ${r.category || ""}`.toLowerCase();
+    return keywords.some((k) => hay.includes(k));
+  });
+  const base = hit ? num(hit.price) : 0;
+  if (!base) return null;
+  return Math.round(base * factor * 100) / 100;
+}
 function mkContract(over = {}) {
   return {
     number: "",
@@ -2732,6 +2742,20 @@ var uid = (p) => p + Math.random().toString(36).slice(2, 8);
 var nowStamp = () => (/* @__PURE__ */ new Date()).toLocaleString(void 0, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 function estimateTotal(est) {
   return est.items.reduce((s, it) => s + num(it.qty) * num(it.price), 0);
+}
+function convertEstimateToContract(job) {
+  const est = job.estimate || {};
+  const con = job.contract || mkContract();
+  if (con.status === "Signed") return con;
+  return {
+    ...con,
+    number: con.number || `CON-${(/* @__PURE__ */ new Date()).getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
+    price: estimateTotal(est),
+    scope: con.scope || (est.scope || `Per accepted estimate ${est.number || ""}`.trim()),
+    items: (est.items || []).map((it) => ({ id: it.id || uid("ci"), desc: it.desc, qty: it.qty, unit: it.unit, price: num(it.price) })),
+    status: con.status === "Not started" || !con.status ? "Ready to sign" : con.status,
+    fromEstimate: est.number || true
+  };
 }
 function computeFin(fin) {
   const sum = (a) => a.reduce((s, x) => s + x.amt, 0);
@@ -7658,7 +7682,8 @@ function JobDetail({
   openTab = null,
   features = {},
   onOpenCodeLookup = () => {
-  }
+  },
+  priceList = []
 }) {
   const [tab, setTab] = (0, import_react.useState)(openTab || "overview");
   const [open, setOpen] = (0, import_react.useState)(() => openTab ? { [openTab]: true } : {});
@@ -7948,7 +7973,8 @@ function JobDetail({
                   mut,
                   toast: toast2,
                   estimateTemplates,
-                  setEstimateTemplates
+                  setEstimateTemplates,
+                  priceList
                 }
               );
             case "contract":
@@ -9311,7 +9337,27 @@ function buildPortalSnapshot(job, brand2, token) {
         date: file.at,
         url: file.url || null
       })) : [],
-      estimate: portal.estimate ? { number: job.estimate.number, date: job.estimate.date, total: estimateTotal(job.estimate), items: job.estimate.items } : null,
+      estimate: portal.estimate ? (() => {
+        const est = job.estimate;
+        const tiers = (est.tiers || []).map((t) => ({
+          id: t.id,
+          name: t.name,
+          items: (t.items || []).map((it) => ({ desc: it.desc, qty: it.qty, unit: it.unit, price: num(it.price) })),
+          total: (t.items || []).reduce((a, it) => a + num(it.qty) * num(it.price), 0)
+        }));
+        const upgrades = (est.upgrades || []).map((u) => ({ id: u.id, desc: u.desc, price: num(u.price) }));
+        return {
+          number: est.number,
+          date: est.date,
+          total: estimateTotal(est),
+          items: est.items,
+          scope: est.scope || "",
+          tiers,
+          upgrades,
+          defaultTier: est.selectedTier || tiers[0] && tiers[0].id || null,
+          doc: est.doc ? { coverImage: est.doc.coverImage || null, notes: est.doc.notes || "", terms: est.doc.terms || "" } : null
+        };
+      })() : null,
       contract: portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
       invoice: portal.invoice ? { contract: pay.contract, received: pay.received, balance: pay.balance } : null,
       review: portal.review !== false ? {
@@ -9572,7 +9618,7 @@ function SignConsent({ checked, onChange, what, accent = "#0A9E98" }) {
     ] })
   ] });
 }
-function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2 }) {
+function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2, estSelection = null }) {
   const [openDoc2, setOpenDoc] = (0, import_react.useState)(null);
   const [sig, setSig] = (0, import_react.useState)(null);
   const [consent, setConsent] = (0, import_react.useState)(false);
@@ -9600,14 +9646,15 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2 
     }
     setBusy(true);
     setErr("");
+    const snapshot = openDoc2.type === "estimate" && estSelection ? { ...openDoc2.snapshot, selection: estSelection, total: estSelection.total } : openDoc2.snapshot;
     const row = {
       id: uid("sig"),
       job_id: jobId,
       doc_type: openDoc2.type,
       doc_id: String(openDoc2.id || ""),
       doc_title: openDoc2.title,
-      doc_hash: docHash(openDoc2.snapshot),
-      doc_snapshot: openDoc2.snapshot,
+      doc_hash: docHash(snapshot),
+      doc_snapshot: snapshot,
       signer_role: "customer",
       signer_name: customer.name || "Customer",
       signer_email: customer.email || null,
@@ -9830,8 +9877,117 @@ function PortalContactCard({ token, jobId, customer, accent }) {
     ] })
   ] });
 }
+function PortalProposal({ estimate, accent, onSelect = () => {
+} }) {
+  const tiers = estimate.tiers || [];
+  const upgrades = estimate.upgrades || [];
+  const [tier, setTier] = (0, import_react.useState)(estimate.defaultTier || tiers[0] && tiers[0].id || null);
+  const [ups, setUps] = (0, import_react.useState)({});
+  const tierObj = tiers.find((t) => t.id === tier) || null;
+  const upTotal = upgrades.filter((u) => ups[u.id]).reduce((a, u) => a + num(u.price), 0);
+  const total = (tierObj ? tierObj.total : estimate.total) + upTotal;
+  (0, import_react.useEffect)(() => {
+    onSelect({ tierId: tier, tierName: tierObj ? tierObj.name : null, upgradeIds: upgrades.filter((u) => ups[u.id]).map((u) => u.id), total });
+  }, [tier, ups]);
+  if (!tiers.length) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800 }, children: money(estimate.total) }), children: "Your estimate" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8 }, children: [
+        estimate.number,
+        " \xB7 ",
+        estimate.date
+      ] }),
+      (estimate.items || []).map((it, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13.5, padding: "7px 0", borderTop: `1px solid ${S.line}` }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+          it.desc,
+          " \u2014 ",
+          it.qty,
+          " ",
+          it.unit
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 600, whiteSpace: "nowrap" }, children: money(num(it.qty) * num(it.price)) })
+      ] }, i2))
+    ] });
+  }
+  const doc = estimate.doc || {};
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+    doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "", style: { width: "100%", borderRadius: 10, marginBottom: 12, display: "block", objectFit: "cover", maxHeight: 200 } }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800 }, children: money(total) }), children: "Choose your option" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 10 }, children: [
+      estimate.number,
+      estimate.date ? ` \xB7 ${estimate.date}` : ""
+    ] }),
+    estimate.scope && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }, children: estimate.scope }),
+    doc.notes && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 12, whiteSpace: "pre-wrap" }, children: doc.notes }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gap: 8, marginBottom: 14 }, children: tiers.map((t) => {
+      const on = t.id === tier;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setTier(t.id), style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 10,
+        border: `2px solid ${on ? accent : S.line}`,
+        background: on ? `${accent}12` : "#fff",
+        borderRadius: 12,
+        padding: "13px 15px",
+        cursor: "pointer",
+        textAlign: "left",
+        fontFamily: "inherit"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 15, fontWeight: 800, color: S.ink }, children: t.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "block", fontSize: 11.5, color: S.sub }, children: [
+            (t.items || []).length,
+            " item",
+            (t.items || []).length === 1 ? "" : "s"
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 15, fontWeight: 800, color: on ? accent : S.ink }, children: money(t.total) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 20, height: 20, borderRadius: 99, border: `2px solid ${on ? accent : S.line}`, display: "grid", placeItems: "center" }, children: on && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 10, height: 10, borderRadius: 99, background: accent } }) })
+        ] })
+      ] }, t.id);
+    }) }),
+    tierObj && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginBottom: upgrades.length ? 14 : 0 }, children: (tierObj.items || []).map((it, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13, padding: "6px 0", borderTop: `1px solid ${S.line}`, color: S.sub }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+        it.desc,
+        " \u2014 ",
+        it.qty,
+        " ",
+        it.unit
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { whiteSpace: "nowrap" }, children: money(num(it.qty) * num(it.price)) })
+    ] }, i2)) }),
+    upgrades.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, marginBottom: 8 }, children: "Add-ons" }),
+      upgrades.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: `1px solid ${S.line}`, cursor: "pointer" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: !!ups[u.id],
+            onChange: (e) => setUps((p) => ({ ...p, [u.id]: e.target.checked })),
+            style: { width: 18, height: 18, accentColor: accent }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { flex: 1, fontSize: 13.5, color: S.ink }, children: u.desc }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, fontWeight: 700, whiteSpace: "nowrap" }, children: [
+          "+",
+          money(u.price)
+        ] })
+      ] }, u.id))
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, paddingTop: 12, borderTop: `2px solid ${S.line}` }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 800, color: S.ink }, children: "Your total" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 20, fontWeight: 800, color: accent }, children: money(total) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: "Pick the option that fits \u2014 you'll confirm it when you sign, and nothing is final until then." }),
+    doc.terms && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub, marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}`, lineHeight: 1.5, whiteSpace: "pre-wrap" }, children: doc.terms })
+  ] });
+}
 function PublicPortal({ token }) {
   const [state, setState] = (0, import_react.useState)({ loading: true, data: null, err: "" });
+  const [estSel, setEstSel] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
     const db = DB();
     if (!db) {
@@ -9927,24 +10083,7 @@ function PublicPortal({ token }) {
         ] })
       ) : null;
       if (sid === "estimate") return d.estimate ? wrap(
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 800 }, children: money(d.estimate.total) }), children: "Your estimate" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8 }, children: [
-            d.estimate.number,
-            " \xB7 ",
-            d.estimate.date
-          ] }),
-          (d.estimate.items || []).map((it, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, fontSize: 13.5, padding: "7px 0", borderTop: `1px solid ${S.line}` }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-              it.desc,
-              " \u2014 ",
-              it.qty,
-              " ",
-              it.unit
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 600, whiteSpace: "nowrap" }, children: money(num(it.qty) * num(it.price)) })
-          ] }, i2))
-        ] })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PortalProposal, { estimate: d.estimate, accent: prim, onSelect: setEstSel })
       ) : null;
       if (sid === "contract") return d.contract ? wrap(
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
@@ -10022,7 +10161,8 @@ function PublicPortal({ token }) {
             customer: d.customer || {},
             docs: d.signDocs || [],
             accent: prim,
-            brand: d
+            brand: d,
+            estSelection: estSel
           }
         )
       );
@@ -11702,7 +11842,25 @@ function TabSignatures({ job, mut, toast: toast2, currentUser, brand: brand2 }) 
     if (signing.doc_type === "contract") {
       mut((j) => ({ ...j, contract: { ...j.contract || {}, status: "Signed", signedAt: todayIso() } }));
     }
-    toast2("Countersigned");
+    if (signing.doc_type === "estimate") {
+      const sel = (signing.doc_snapshot || {}).selection || null;
+      mut((j) => {
+        let est = { ...j.estimate || {} };
+        if (sel) {
+          if (sel.tierId) est.selectedTier = sel.tierId;
+          if (Array.isArray(sel.upgradeIds)) {
+            est.upgrades = (est.upgrades || []).map((u) => ({ ...u, selected: sel.upgradeIds.includes(u.id) }));
+          }
+          est.items = applyEstimateSelection(est);
+        }
+        est.status = "Signed";
+        est.clientSig = est.clientSig || "signed";
+        est.sigAt = todayIso();
+        const withEst = { ...j, estimate: est };
+        return { ...withEst, contract: convertEstimateToContract(withEst) };
+      });
+    }
+    toast2(signing.doc_type === "estimate" ? "Estimate accepted \u2014 contract ready" : "Countersigned");
     setSigning(null);
     setSig(null);
     setConsent(false);
@@ -12658,8 +12816,20 @@ function SupplementCheck({ job }) {
     ] })
   ] });
 }
-function LineItemEditor({ items, setItems, locked, addLabel = "Add line item" }) {
+function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", priceList = [] }) {
   const setItem = (id, k, v) => setItems(items.map((it) => it.id === id ? { ...it, [k]: v } : it));
+  const [pick, setPick] = (0, import_react.useState)(false);
+  const [pq, setPq] = (0, import_react.useState)("");
+  const catalog = (priceList || []).filter((r) => {
+    const q = pq.trim().toLowerCase();
+    if (!q) return true;
+    return `${r.item} ${r.sku || ""} ${r.category || ""}`.toLowerCase().includes(q);
+  });
+  const addFromCatalog = (r) => {
+    setItems([...items, { id: uid("e"), desc: r.item, qty: 1, unit: r.unit || "EA", price: num(r.price), cost: num(r.cost) }]);
+    setPick(false);
+    setPq("");
+  };
   const lineMargin = (it) => {
     const cost = num(it.cost), price = num(it.price);
     return price > 0 && cost > 0 ? ((price - cost) / price * 100).toFixed(0) : null;
@@ -12736,24 +12906,70 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item" })
         )
       ] })
     ] }, it.id)),
-    !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-      Btn,
-      {
-        kind: "soft",
-        small: true,
-        style: { marginTop: 12 },
-        onClick: () => setItems([...items, { id: uid("e"), desc: "", qty: 1, unit: "EA", price: 0 }]),
-        children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }),
-          " ",
-          addLabel
-        ]
-      }
-    )
+    !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+        Btn,
+        {
+          kind: "soft",
+          small: true,
+          onClick: () => setItems([...items, { id: uid("e"), desc: "", qty: 1, unit: "EA", price: 0 }]),
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }),
+            " ",
+            addLabel
+          ]
+        }
+      ),
+      (priceList || []).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => {
+        setPick(true);
+        setPq("");
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Package, { size: 14 }),
+        " From price list"
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open: pick, onClose: () => setPick(false), title: "Add from price list", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: { ...inputStyle, marginBottom: 10 },
+          value: pq,
+          autoFocus: true,
+          placeholder: "Search materials\u2026",
+          onChange: (e) => setPq(e.target.value)
+        }
+      ),
+      catalog.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "Nothing matches that." }),
+      catalog.slice(0, 60).map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => addFromCatalog(r), style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        width: "100%",
+        textAlign: "left",
+        border: "none",
+        borderTop: `1px solid ${S.line}`,
+        background: "none",
+        cursor: "pointer",
+        padding: "11px 2px",
+        fontFamily: "inherit"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 14, fontWeight: 600, color: S.ink }, children: r.item }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "block", fontSize: 11.5, color: S.sub }, children: [
+            r.category || "Uncategorized",
+            " \xB7 ",
+            r.unit || "EA",
+            r.supplier ? ` \xB7 ${r.supplier}` : ""
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }, children: money(num(r.price)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 15, color: T.accent })
+      ] }, r.id))
+    ] })
   ] });
 }
 function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates = [], setEstimateTemplates = () => {
-} }) {
+}, priceList = [] }) {
   const est = { ...job.estimate, tiers: job.estimate.tiers || [], upgrades: job.estimate.upgrades || [] };
   const [sigOpen, setSigOpen] = (0, import_react.useState)(false);
   const locked = est.status === "Signed";
@@ -12823,7 +13039,9 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
     if (!name || items.length === 0) return;
     setEstimateTemplates([
       ...estimateTemplates.filter((t) => t.name.toLowerCase() !== name.toLowerCase()),
-      { id: uid("etpl"), name, items: items.map(({ id, ...rest }) => rest) }
+      /* Templates now carry the scope and terms too, not just line items, so a
+         saved template seeds a whole proposal rather than a bare price list. */
+      { id: uid("etpl"), name, items: items.map(({ id, ...rest }) => rest), scope: est.scope || "", terms: est.doc && est.doc.terms || "" }
     ]);
     setTplName("");
     setTplSheet(false);
@@ -12836,6 +13054,10 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
     } else {
       setEst({ items: [...est.items, ...newItems] });
     }
+    const patch = {};
+    if (t.scope && !est.scope) patch.scope = t.scope;
+    if (t.terms && !(est.doc && est.doc.terms)) patch.doc = { ...est.doc || {}, terms: t.terms };
+    if (Object.keys(patch).length) setEst(patch);
     setTplSheet(false);
     toast2(`"${t.name}" added \u2014 ${t.items.length} lines${tiersOn ? ` to ${est.tiers.find((x) => x.id === tierTab)?.name || "this tier"}` : ""}`);
   };
@@ -12869,22 +13091,29 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
       toast2("Enter measurements first");
       return;
     }
-    const sqW = (num(m.squares) * (1 + num(m.waste) / 100)).toFixed(1);
+    const sqW = num((num(m.squares) * (1 + num(m.waste) / 100)).toFixed(1));
+    const spec = [
+      { desc: `Tear-off & disposal \u2014 ${job.checklist.layers || "1 layer"}`, qty: num(m.squares), unit: "SQ", kw: ["tear-off", "tear off", "disposal", "dumpster"], factor: 1 },
+      { desc: "Ice & water shield \u2014 eaves & valleys", qty: Math.round((num(m.eaves) + num(m.valleys)) * 3 / 100 * 10) / 10, unit: "SQ", kw: ["ice & water", "ice and water", "ice&water", "i&w"], factor: 1 / 2 },
+      { desc: "Synthetic underlayment \u2014 field", qty: num(m.squares), unit: "SQ", kw: ["underlayment", "synthetic", "felt"], factor: 1 / 10 },
+      { desc: "Drip edge \u2014 eaves & rakes", qty: num(m.eaves) + num(m.rakes), unit: "LF", kw: ["drip edge", "drip"], factor: 1 / 10 },
+      { desc: "Architectural shingles (incl. waste)", qty: sqW, unit: "SQ", kw: ["shingle", "laminate", "architectural"], factor: 3 },
+      { desc: "Hip & ridge cap", qty: num(m.ridges) + num(m.hips), unit: "LF", kw: ["ridge cap", "hip & ridge", "hip and ridge", "seal-a-ridge", "z-ridge"], factor: 1 / 25 },
+      { desc: "Ridge ventilation", qty: num(m.ridges), unit: "LF", kw: ["ridge vent", "ventilation", "cobra", "shinglevent"], factor: 1 / 4 },
+      { desc: "Pipe jacks at penetrations", qty: num(m.penetrations), unit: "EA", kw: ["pipe jack", "pipe boot", "boot", "flashing collar"], factor: 1 }
+    ];
+    let priced = 0;
+    const items = spec.map((s) => {
+      const p = catalogUnitPrice(priceList, s.kw, s.factor);
+      if (p != null) priced++;
+      return { id: uid("e"), desc: s.desc, qty: s.qty, unit: s.unit, price: p != null ? p : 0 };
+    });
     setEst({
       number: est.number || `EST-${(/* @__PURE__ */ new Date()).getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
       date: est.date || (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { month: "short", day: "numeric", year: "numeric" }),
-      items: [
-        { id: uid("e"), desc: `Tear-off & disposal \u2014 ${job.checklist.layers || "1 layer"}`, qty: num(m.squares), unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Ice & water shield \u2014 eaves & valleys", qty: Math.round((num(m.eaves) + num(m.valleys)) * 3 / 100 * 10) / 10, unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Synthetic underlayment \u2014 field", qty: num(m.squares), unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Drip edge \u2014 eaves & rakes", qty: num(m.eaves) + num(m.rakes), unit: "LF", price: 0 },
-        { id: uid("e"), desc: "Architectural shingles (incl. waste)", qty: num(sqW), unit: "SQ", price: 0 },
-        { id: uid("e"), desc: "Hip & ridge cap", qty: num(m.ridges) + num(m.hips), unit: "LF", price: 0 },
-        { id: uid("e"), desc: "Ridge ventilation", qty: num(m.ridges), unit: "LF", price: 0 },
-        { id: uid("e"), desc: "Pipe jacks at penetrations", qty: num(m.penetrations), unit: "EA", price: 0 }
-      ]
+      items
     });
-    toast2("Line items generated from measurements");
+    toast2(priced ? `Generated \u2014 priced ${priced} of ${spec.length} lines from your price list` : "Line items generated \u2014 add prices or upload a price list");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupplementCheck, { job }),
@@ -12986,7 +13215,8 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
               items: t.items,
               locked,
               setItems: (items) => setTierItems(t.id, items),
-              addLabel: `Add line to ${t.name}`
+              addLabel: `Add line to ${t.name}`,
+              priceList
             }
           ),
           !locked && est.selectedTier !== t.id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { marginTop: 4 }, onClick: () => selectTier(t.id), children: "Show customer this tier instead" })
@@ -13003,7 +13233,7 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
         'Managed above \u2014 editing the "',
         est.tiers.find((t) => t.id === est.selectedTier)?.name || "active",
         '" tier and any checked upgrades. This total is what the customer sees.'
-      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LineItemEditor, { items: est.items, setItems: (items) => setEst({ items }), locked }),
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LineItemEditor, { items: est.items, setItems: (items) => setEst({ items }), locked, priceList }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
         display: "flex",
         justifyContent: "space-between",
@@ -13060,7 +13290,7 @@ function TabEstimate({ job, brand: brand2, mut, toast: toast2, estimateTemplates
       !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => {
           setEst({ status: "Sent" });
-          toast2("Estimate emailed to client");
+          toast2(job.portalToken ? "Sent \u2014 it's live in the client portal to choose and sign" : "Marked sent \u2014 publish the client portal to share it");
         }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }),
           " Send"
@@ -13376,10 +13606,21 @@ function TabContract({ job, brand: brand2, setBrand = () => {
           }
         )
       ] }),
-      !con.price && estTotal > 0 && !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { style: { ...linkBtn, marginBottom: 10 }, onClick: () => setCon({ price: estTotal }), children: [
-        "Use estimate total \u2014 ",
-        money(estTotal)
-      ] }),
+      estTotal > 0 && !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+        "button",
+        {
+          style: { ...linkBtn, marginBottom: 10 },
+          onClick: () => {
+            mut((j) => ({ ...j, contract: convertEstimateToContract(j) }));
+            toast2("Contract built from the estimate");
+          },
+          children: [
+            con.price ? "Rebuild from estimate" : "Build contract from estimate",
+            " \u2014 ",
+            money(estTotal)
+          ]
+        }
+      ),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, marginBottom: 7 }, children: "Deposit" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }, children: [["50%", 50], ["1/3", 33.33], ["25%", 25], ["10%", 10]].map(([label, pct]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -21718,7 +21959,8 @@ function SupremeCRM() {
         onDelete: isAdmin ? deleteJobs : null,
         openTab: jobOpenTab,
         features,
-        onOpenCodeLookup: openCodeLookup
+        onOpenCodeLookup: openCodeLookup,
+        priceList
       }
     ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       liveDb() && jobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { margin: "14px 16px 0", background: "#EAF6EE", border: "1px solid #CDE8D6", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "#177245", lineHeight: 1.5 }, children: "Fresh database \u2014 no demo customers here. Everything you create now saves for real. Have a Roofr export? More \u2192 Import jobs pulls your whole pipeline in." }),
