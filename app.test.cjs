@@ -4642,6 +4642,10 @@ function Dashboard({
   const ar = jobs.map((j) => paymentsSummary(j)).filter((p) => p.balance > 0.01 && p.contract > 0);
   const arTotal = ar.reduce((s, p) => s + p.balance, 0);
   const openTasks = jobs.flatMap((j) => j.tasks.filter((t) => !t.done).map((t) => ({ job: j, t })));
+  const wonCount = approvedPlus.length;
+  const avgSale = wonCount ? signedValue / wonCount : 0;
+  const collected = jobs.reduce((s, j) => s + paymentsSummary(j).received, 0);
+  const closeRate = jobs.length ? wonCount / jobs.length : 0;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
@@ -5039,16 +5043,25 @@ function Dashboard({
       }
     ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FocusList, { jobs, onOpenJob }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 18 }, children: [
-      ["Pipeline value", money(totalPipeline), "Open jobs, all stages"],
-      ["Signed value", money(signedValue), "Approved and beyond"],
-      ["Accounts receivable", money(arTotal), `${ar.length} open balance${ar.length === 1 ? "" : "s"}`],
-      ["Stale jobs", String(stale.length), "14+ days untouched"]
-    ].map(([l, v, sub]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 16, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800, color: S.ink }, children: v }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.ink, marginTop: 4 }, children: l }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 2 }, children: sub })
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: S.sub, margin: "22px 4px 10px" }, children: "Business at a glance" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }, children: [
+      ["Sold", money(signedValue), `${wonCount} won`, T.accent],
+      ["Avg sale", money(avgSale), "per won job", S.ink],
+      ["Collected", money(collected), "cash received", "#177245"],
+      ["Pipeline", money(totalPipeline), "open value", S.ink],
+      ["A/R", money(arTotal), `${ar.length} open`, arTotal > 0 ? "#9A6B00" : S.ink],
+      ["Close rate", pct1(closeRate), `${wonCount}/${jobs.length}`, S.ink]
+    ].map(([l, v, sub, color]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 13, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: S.sub }, children: l }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, color, marginTop: 5, fontVariantNumeric: "tabular-nums", overflow: "hidden", textOverflow: "ellipsis" }, children: v }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub, marginTop: 2 }, children: sub })
     ] }, l)) }),
+    stale.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => go("jobs"), style: { display: "block", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", fontSize: 12.5, color: "#9A6B00", padding: "10px 4px 0" }, children: [
+      stale.length,
+      " stale job",
+      stale.length === 1 ? "" : "s",
+      " \u2014 14+ days untouched \u2192"
+    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => go("jobs"), style: { border: "none", background: "none", color: T.accent, fontWeight: 700, fontSize: 13, cursor: "pointer" }, children: "Open board" }), children: "Pipeline by stage" }),
       byStage.filter((s) => s.count > 0).map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 12 }, children: [

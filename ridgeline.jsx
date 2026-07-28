@@ -3800,6 +3800,12 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
   const ar = jobs.map((j) => paymentsSummary(j)).filter((p) => p.balance > 0.01 && p.contract > 0);
   const arTotal = ar.reduce((s, p) => s + p.balance, 0);
   const openTasks = jobs.flatMap((j) => j.tasks.filter((t) => !t.done).map((t) => ({ job: j, t })));
+  /* Money-forward company metrics, in the shape a ServiceTitan dashboard
+     leads with. All derived from jobs already in memory. */
+  const wonCount = approvedPlus.length;
+  const avgSale = wonCount ? signedValue / wonCount : 0;
+  const collected = jobs.reduce((s, j) => s + paymentsSummary(j).received, 0);
+  const closeRate = jobs.length ? wonCount / jobs.length : 0;
 
   return (
     <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
@@ -4134,20 +4140,32 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
       {/* Team chat lives in the Inbox, not on the home page. */}
       <FocusList jobs={jobs} onOpenJob={onOpenJob} />
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 18 }}>
+      {/* Business at a glance — the money-forward company metrics a
+          ServiceTitan dashboard leads with. */}
+      <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: S.sub, margin: "22px 4px 10px" }}>
+        Business at a glance
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
         {[
-          ["Pipeline value", money(totalPipeline), "Open jobs, all stages"],
-          ["Signed value", money(signedValue), "Approved and beyond"],
-          ["Accounts receivable", money(arTotal), `${ar.length} open balance${ar.length === 1 ? "" : "s"}`],
-          ["Stale jobs", String(stale.length), "14+ days untouched"],
-        ].map(([l, v, sub]) => (
-          <Card key={l} pad={16}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: S.ink }}>{v}</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: S.ink, marginTop: 4 }}>{l}</div>
-            <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>{sub}</div>
+          ["Sold", money(signedValue), `${wonCount} won`, T.accent],
+          ["Avg sale", money(avgSale), "per won job", S.ink],
+          ["Collected", money(collected), "cash received", "#177245"],
+          ["Pipeline", money(totalPipeline), "open value", S.ink],
+          ["A/R", money(arTotal), `${ar.length} open`, arTotal > 0 ? "#9A6B00" : S.ink],
+          ["Close rate", pct1(closeRate), `${wonCount}/${jobs.length}`, S.ink],
+        ].map(([l, v, sub, color]) => (
+          <Card key={l} pad={13}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: S.sub }}>{l}</div>
+            <div style={{ fontSize: 17, fontWeight: 800, color, marginTop: 5, fontVariantNumeric: "tabular-nums", overflow: "hidden", textOverflow: "ellipsis" }}>{v}</div>
+            <div style={{ fontSize: 11, color: S.sub, marginTop: 2 }}>{sub}</div>
           </Card>
         ))}
       </div>
+      {stale.length > 0 && (
+        <button onClick={() => go("jobs")} style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", fontSize: 12.5, color: "#9A6B00", padding: "10px 4px 0" }}>
+          {stale.length} stale job{stale.length === 1 ? "" : "s"} — 14+ days untouched →
+        </button>
+      )}
 
       <Card style={{ marginTop: 14 }}>
         <CardTitle right={
