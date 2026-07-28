@@ -2438,6 +2438,13 @@ function mkSubInvoice(over = {}) {
 function subInvoiceTotal(inv) {
   return ((inv && inv.lines) || []).reduce((a, l) => a + num(l.qty) * num(l.price), 0);
 }
+/* Due date from payment terms ("Net 15" → 15 days out; "Due on receipt" → now). */
+function dueFromTerms(terms, from) {
+  const base = from || todayIso();
+  const m = /net\s*(\d+)/i.exec(String(terms || ""));
+  const days = m ? parseInt(m[1], 10) : 0;
+  return isoLocal(new Date(new Date(base + "T12:00:00").getTime() + days * 86400000));
+}
 /* Seed the lines we CAN compute from the crew's rate card + the job's installed
    squares and work-order conditions; the rest are added from the priced menu by
    hand. Each seeded line stays fully editable (source: "auto"). */
@@ -3897,6 +3904,8 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
     else if (k === "rated") rev.rated++; else if (k === "sent" || k === "clicked") rev.asked++;
     else rev.notasked++;
   });
+  const subsReview = jobs.filter((j) => j.subInvoice && j.subInvoice.status === "needs_review").length;
+  const subsPay = jobs.filter((j) => j.subInvoice && ["confirmed", "submitted"].includes(j.subInvoice.status)).length;
 
   return (
     <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
@@ -4256,6 +4265,16 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         <button onClick={() => go("jobs")} style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", fontSize: 12.5, color: "#9A6B00", padding: "10px 4px 0" }}>
           {stale.length} stale job{stale.length === 1 ? "" : "s"} — 14+ days untouched →
         </button>
+      )}
+
+      {(subsReview > 0 || subsPay > 0) && (
+        <Card style={{ marginTop: 14 }}>
+          <CardTitle right={<button style={linkBtn} onClick={() => go("crewpay")}>Crew payouts →</button>}>Subcontractors</CardTitle>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {subsReview > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}><Chip tone="amber">{subsReview}</Chip> invoice{subsReview === 1 ? "" : "s"} to review</span>}
+            {subsPay > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}><Chip tone="blue">{subsPay}</Chip> to pay</span>}
+          </div>
+        </Card>
       )}
 
       {reviewJobs.length > 0 && (
@@ -13450,7 +13469,7 @@ function TabInvoice({ job, brand, mut, toast }) {
 /* Editable subcontractor invoice for a job. Seeds computable lines, lets the
    office add the rest from the sub's priced menu, capture reimbursables at
    actual cost, and post the total to job costs. Office-only. */
-function SubInvoiceCard({ job, crew, mut, toast }) {
+function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuQ, setMenuQ] = useState("");
   const inv = job.subInvoice || null;
@@ -13463,9 +13482,42 @@ function SubInvoiceCard({ job, crew, mut, toast }) {
   const addReimbursable = () => setInv({ lines: [...((inv && inv.lines) || []), { id: uid("sil"), category: "Reimbursable", label: "", qty: 1, unit: "ea", price: 0, notes: "at receipt cost", reimbursable: true, source: "manual" }] });
   const addBlank = () => setInv({ lines: [...((inv && inv.lines) || []), { id: uid("sil"), category: "Other", label: "", qty: 1, unit: "ea", price: 0, notes: "", reimbursable: false, source: "manual" }] });
   const total = subInvoiceTotal(inv);
+  const docAlerts = crewDocAlerts(crew);
   const postToCosts = () => {
     mut((j) => ({ ...j, fin: { ...(j.fin || {}), labor: [...(((j.fin || {}).labor) || []), { id: uid("l"), label: `Sub labor — ${crew.name} (invoice)`, amt: Math.round(subInvoiceTotal(j.subInvoice) * 100) / 100, by: crew.name }] } }));
     toast("Posted to job costs");
+  };
+  const confirmInv = () => {
+    setInv({ status: "confirmed", confirmedBy: (currentUser || {}).name || "", confirmedAt: todayIso(), dueDate: dueFromTerms(inv.terms) });
+    toast(docAlerts.length ? `Confirmed — heads up: ${crew.name} has ${docAlerts.length} expired/expiring doc(s)` : "Sub invoice confirmed");
+  };
+  const submitInv = () => {
+    const acct = (brand && brand.accountingEmail) || "";
+    mut((j) => {
+      const amt = subInvoiceTotal(j.subInvoice);
+      return {
+        ...j,
+        subInvoice: { ...(j.subInvoice || {}), status: "submitted", submittedAt: todayIso() },
+        messages: [...(j.messages || []), {
+          id: uid("m"), kind: "email", audience: "Accounting", to: acct || "accounting",
+          subject: `Sub payment due — ${crew.name} — ${j.name}`,
+          body: `${crew.name} is owed ${money(amt)} for ${j.name} (${j.address}). Terms ${(j.subInvoice || {}).terms || "—"}, due ${(j.subInvoice || {}).dueDate || "—"}. PO ${(j.subInvoice || {}).poNumber || "—"}. Pay via ${(crew.payment || {}).method || "—"} to ${(crew.payment || {}).payeeName || crew.name}.`,
+          status: acct ? "Queued" : "Queued — set an accounting email in Company branding", at: nowStamp(),
+        }],
+      };
+    });
+    toast(acct ? "Submitted — accounting notified" : "Submitted — add an accounting email in Company branding to auto-notify");
+  };
+  const markPaid = () => {
+    mut((j) => {
+      const amt = subInvoiceTotal(j.subInvoice);
+      return {
+        ...j,
+        subInvoice: { ...(j.subInvoice || {}), status: "paid", paidAt: todayIso() },
+        payments: [...(j.payments || []), { id: uid("p"), type: "Paid", to: crew.name, amt: Math.round(amt * 100) / 100, at: todayIso(), note: "Sub invoice" }],
+      };
+    });
+    toast("Marked paid");
   };
   const STATUS = { draft: ["Draft", "gray"], needs_review: ["Needs review", "amber"], confirmed: ["Confirmed", "blue"], submitted: ["Submitted", "blue"], paid: ["Paid", "green"] };
 
@@ -13522,6 +13574,35 @@ function SubInvoiceCard({ job, crew, mut, toast }) {
         <Field label="Terms"><input style={inputStyle} value={inv.terms || ""} onChange={(e) => setInv({ terms: e.target.value })} /></Field>
       </div>
       <Btn kind="ghost" small style={{ marginTop: 10 }} onClick={postToCosts}><DollarSign size={13} /> Post {money(total)} to job costs</Btn>
+
+      {docAlerts.length > 0 && (inv.status === "needs_review" || inv.status === "draft") && (
+        <div style={{ marginTop: 12, background: "#FBEAE8", border: "1px solid #F0C4BE", borderRadius: 10, padding: "9px 12px", fontSize: 12.5, color: "#8A2A1E", lineHeight: 1.5 }}>
+          {crew.name} has {docAlerts.map((d) => `${d.type || d.name} ${d.status}`).join(", ")} — collect current paperwork before paying.
+        </div>
+      )}
+
+      {/* Review → confirm → submit → paid */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${S.line}` }}>
+        {(inv.status === "draft" || inv.status === "needs_review") && (
+          <Btn small onClick={confirmInv}><CheckCircle2 size={14} /> Confirm invoice</Btn>
+        )}
+        {inv.status === "confirmed" && (
+          <Btn small onClick={submitInv}><Send size={13} /> Submit to accounting</Btn>
+        )}
+        {inv.status === "submitted" && (
+          <Btn small onClick={markPaid}><DollarSign size={13} /> Mark paid</Btn>
+        )}
+        {inv.status === "paid" && (
+          <span style={{ fontSize: 13, color: "#177245", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}><CheckCircle2 size={14} /> Paid {inv.paidAt}</span>
+        )}
+      </div>
+      {(inv.confirmedBy || inv.submittedAt) && (
+        <div style={{ fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+          {inv.confirmedBy && <>Confirmed by {inv.confirmedBy} {inv.confirmedAt}. </>}
+          {inv.dueDate && inv.status !== "paid" && <>Due {inv.dueDate}. </>}
+          {inv.submittedAt && <>Submitted {inv.submittedAt}.</>}
+        </div>
+      )}
 
       <Sheet open={menuOpen} onClose={() => setMenuOpen(false)} title={`${crew.name} — price menu`}>
         <input style={{ ...inputStyle, marginBottom: 10 }} value={menuQ} placeholder="Search…" onChange={(e) => setMenuQ(e.target.value)} />
@@ -13628,7 +13709,7 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
           card and this job's installed squares + conditions. Never shown on
           the crew-facing document below. */}
       {crew && canSeeMoney(currentUser) && (
-        <SubInvoiceCard job={job} crew={crew} mut={mut} toast={toast} />
+        <SubInvoiceCard job={job} crew={crew} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />
       )}
 
       <Card style={{ marginTop: 12 }}>
@@ -16311,6 +16392,9 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
         <Field label="Slogan"><input style={inputStyle} value={brand.slogan} onChange={set("slogan")} /></Field>
         <Field label="Main phone"><input style={inputStyle} value={brand.phone} onChange={set("phone")} /></Field>
         <Field label="Email"><input style={inputStyle} value={brand.email} onChange={set("email")} /></Field>
+        <Field label="Accounting email" hint="Where sub-invoice payment notices are sent when a sub invoice is submitted.">
+          <input style={inputStyle} type="email" value={brand.accountingEmail || ""} onChange={set("accountingEmail")} placeholder="accounting@yourcompany.com" />
+        </Field>
         <Field label="Head office address">
           <AddressAutocomplete value={brand.address} placeholder="Start typing the address…"
             onChange={(v) => setBrand({ ...brand, address: v })}
@@ -18280,6 +18364,18 @@ function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
   });
   const shown = crewId === "all" ? rows : rows.filter((r) => r.crew.id === crewId);
   const totalOut = rows.reduce((a, r) => a + r.outstanding, 0);
+  /* Subs to pay: invoices that have been confirmed or submitted but not yet
+     paid, with their due date and whether they're overdue. */
+  const today = todayIso();
+  const payQueue = (jobs || [])
+    .filter((j) => j.subInvoice && ["confirmed", "submitted"].includes(j.subInvoice.status))
+    .map((j) => {
+      const inv = j.subInvoice;
+      const due = inv.dueDate || dueFromTerms(inv.terms, inv.confirmedAt);
+      return { job: j, inv, crew: (crews || []).find((c) => c.id === j.crewId), amt: subInvoiceTotal(inv), due, overdue: due && due < today };
+    })
+    .sort((a, b) => String(a.due).localeCompare(String(b.due)));
+  const payTotal = payQueue.reduce((a, r) => a + r.amt, 0);
 
   return (
     <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
@@ -18294,6 +18390,32 @@ function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
           crew count to that crew; otherwise the job's whole labour bucket does.
         </div>
       </Card>
+
+      {payQueue.length > 0 && (
+        <Card style={{ marginTop: 14 }}>
+          <CardTitle right={<Chip tone={payQueue.some((r) => r.overdue) ? "red" : "amber"}>{money(payTotal)}</Chip>}>Subs to pay</CardTitle>
+          <div style={{ fontSize: 12, color: S.sub, marginBottom: 6, lineHeight: 1.5 }}>
+            Confirmed sub invoices awaiting payment. Mark paid on the job's work order.
+          </div>
+          {payQueue.map((r) => (
+            <button key={r.job.id} onClick={() => onOpenJob && onOpenJob(r.job.id)} style={{
+              display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
+              border: "none", borderTop: `1px solid ${S.line}`, background: "none", cursor: "pointer", padding: "11px 2px", fontFamily: "inherit",
+            }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: S.ink }}>{r.crew ? r.crew.name : "Crew"} · {r.job.name}</span>
+                <span style={{ display: "block", fontSize: 11.5, color: r.overdue ? "#B3261E" : S.sub }}>
+                  {r.inv.status === "submitted" ? "Submitted" : "Confirmed"}{r.due ? ` · due ${r.due}${r.overdue ? " — overdue" : ""}` : ""}
+                  {(r.crew && r.crew.payment && r.crew.payment.method) ? ` · ${r.crew.payment.method}` : ""}
+                </span>
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{money(r.amt)}</span>
+              <ChevronRight size={15} color="#C7CBD1" />
+            </button>
+          ))}
+        </Card>
+      )}
+
       <div style={{ display: "flex", gap: 6, overflowX: "auto", margin: "14px 0 4px" }}>
         {[["all", "All crews"], ...(crews || []).map((c) => [c.id, c.name])].map(([id, label]) => (
           <button key={id} onClick={() => setCrewId(id)} style={{
@@ -19906,6 +20028,18 @@ export default function SupremeCRM() {
     setJobs((prev) => prev.map((j) => {
       if (j.id !== jobId) return j;
       const next = { ...j, stageId, daysInStage: 0, updated: "just now" };
+      /* Production → Invoicing (s9): the sub's pay is temporary until confirmed
+         after install, so this flags their invoice for review. Seed a draft if
+         none exists; never downgrade an already-confirmed/paid invoice. */
+      if (stageId === "s9" && next.crewId) {
+        const crew = crews.find((c) => c.id === next.crewId);
+        if (crew) {
+          const existing = next.subInvoice;
+          const base = (existing && (existing.lines || []).length) ? existing : buildSubInvoiceDraft(next, crew);
+          const terminal = ["confirmed", "submitted", "paid"].includes(base.status);
+          next.subInvoice = { ...base, status: terminal ? base.status : "needs_review" };
+        }
+      }
       if (j.portal?.notifyStage && stage) {
         const channel = j.consent?.sms?.granted ? "sms" : j.consent?.email?.granted ? "email" : null;
         if (channel) {
@@ -19923,6 +20057,10 @@ export default function SupremeCRM() {
     if (jb && stage) {
       logAct({ kind: "stage", jobId, jobName: jb.name, text: `moved ${jb.name} to "${stageName}"` });
       toast(`Moved to ${stageName}${jb.portal?.notifyStage ? " — customer update queued when consent is available" : ""}`);
+      if (stageId === "s9" && jb.crewId) {
+        const crew = crews.find((c) => c.id === jb.crewId);
+        logAct({ kind: "sub", jobId, jobName: jb.name, text: `sub invoice for ${crew ? crew.name : "the crew"} needs review before payment` });
+      }
     }
   };
 

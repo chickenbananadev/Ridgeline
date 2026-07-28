@@ -2990,6 +2990,11 @@ function subRate(crew2, code) {
   const row = (crew2 && crew2.rateCard || []).find((r) => r.code === code);
   return row ? num(row.price) : 0;
 }
+function crewDocAlerts(crew2, today) {
+  const t = today || todayIso();
+  const soon = isoLocal(new Date((/* @__PURE__ */ new Date(t + "T12:00:00")).getTime() + 30 * 864e5));
+  return (crew2 && crew2.docs || []).filter((d) => d.expires).map((d) => ({ name: d.name, type: d.type || "", expires: d.expires, status: d.expires < t ? "expired" : d.expires <= soon ? "expiring" : "ok" })).filter((d) => d.status !== "ok");
+}
 function mkSubInvoice(over = {}) {
   return {
     status: "draft",
@@ -3008,6 +3013,12 @@ function mkSubInvoice(over = {}) {
 }
 function subInvoiceTotal(inv) {
   return (inv && inv.lines || []).reduce((a, l) => a + num(l.qty) * num(l.price), 0);
+}
+function dueFromTerms(terms, from) {
+  const base = from || todayIso();
+  const m = /net\s*(\d+)/i.exec(String(terms || ""));
+  const days = m ? parseInt(m[1], 10) : 0;
+  return isoLocal(new Date((/* @__PURE__ */ new Date(base + "T12:00:00")).getTime() + days * 864e5));
 }
 function buildSubInvoiceDraft(job, crew2) {
   const inv = mkSubInvoice({ terms: crew2 && crew2.payment && crew2.payment.terms || "Net 15" });
@@ -4675,6 +4686,8 @@ function Dashboard({
     else if (k === "sent" || k === "clicked") rev.asked++;
     else rev.notasked++;
   });
+  const subsReview = jobs.filter((j) => j.subInvoice && j.subInvoice.status === "needs_review").length;
+  const subsPay = jobs.filter((j) => j.subInvoice && ["confirmed", "submitted"].includes(j.subInvoice.status)).length;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
@@ -5090,6 +5103,21 @@ function Dashboard({
       " stale job",
       stale.length === 1 ? "" : "s",
       " \u2014 14+ days untouched \u2192"
+    ] }),
+    (subsReview > 0 || subsPay > 0) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("crewpay"), children: "Crew payouts \u2192" }), children: "Subcontractors" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+        subsReview > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: subsReview }),
+          " invoice",
+          subsReview === 1 ? "" : "s",
+          " to review"
+        ] }),
+        subsPay > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: subsPay }),
+          " to pay"
+        ] })
+      ] })
     ] }),
     reviewJobs.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("reviews"), children: "Manage \u2192" }), children: "Reviews" }),
@@ -14970,7 +14998,7 @@ function TabInvoice({ job, brand: brand2, mut, toast: toast2 }) {
     ] })
   ] });
 }
-function SubInvoiceCard({ job, crew: crew2, mut, toast: toast2 }) {
+function SubInvoiceCard({ job, crew: crew2, mut, toast: toast2, currentUser, brand: brand2 }) {
   const [menuOpen, setMenuOpen] = (0, import_react.useState)(false);
   const [menuQ, setMenuQ] = (0, import_react.useState)("");
   const inv = job.subInvoice || null;
@@ -14990,9 +15018,46 @@ function SubInvoiceCard({ job, crew: crew2, mut, toast: toast2 }) {
   const addReimbursable = () => setInv({ lines: [...inv && inv.lines || [], { id: uid("sil"), category: "Reimbursable", label: "", qty: 1, unit: "ea", price: 0, notes: "at receipt cost", reimbursable: true, source: "manual" }] });
   const addBlank = () => setInv({ lines: [...inv && inv.lines || [], { id: uid("sil"), category: "Other", label: "", qty: 1, unit: "ea", price: 0, notes: "", reimbursable: false, source: "manual" }] });
   const total = subInvoiceTotal(inv);
+  const docAlerts = crewDocAlerts(crew2);
   const postToCosts = () => {
     mut((j) => ({ ...j, fin: { ...j.fin || {}, labor: [...(j.fin || {}).labor || [], { id: uid("l"), label: `Sub labor \u2014 ${crew2.name} (invoice)`, amt: Math.round(subInvoiceTotal(j.subInvoice) * 100) / 100, by: crew2.name }] } }));
     toast2("Posted to job costs");
+  };
+  const confirmInv = () => {
+    setInv({ status: "confirmed", confirmedBy: (currentUser || {}).name || "", confirmedAt: todayIso(), dueDate: dueFromTerms(inv.terms) });
+    toast2(docAlerts.length ? `Confirmed \u2014 heads up: ${crew2.name} has ${docAlerts.length} expired/expiring doc(s)` : "Sub invoice confirmed");
+  };
+  const submitInv = () => {
+    const acct = brand2 && brand2.accountingEmail || "";
+    mut((j) => {
+      const amt = subInvoiceTotal(j.subInvoice);
+      return {
+        ...j,
+        subInvoice: { ...j.subInvoice || {}, status: "submitted", submittedAt: todayIso() },
+        messages: [...j.messages || [], {
+          id: uid("m"),
+          kind: "email",
+          audience: "Accounting",
+          to: acct || "accounting",
+          subject: `Sub payment due \u2014 ${crew2.name} \u2014 ${j.name}`,
+          body: `${crew2.name} is owed ${money(amt)} for ${j.name} (${j.address}). Terms ${(j.subInvoice || {}).terms || "\u2014"}, due ${(j.subInvoice || {}).dueDate || "\u2014"}. PO ${(j.subInvoice || {}).poNumber || "\u2014"}. Pay via ${(crew2.payment || {}).method || "\u2014"} to ${(crew2.payment || {}).payeeName || crew2.name}.`,
+          status: acct ? "Queued" : "Queued \u2014 set an accounting email in Company branding",
+          at: nowStamp()
+        }]
+      };
+    });
+    toast2(acct ? "Submitted \u2014 accounting notified" : "Submitted \u2014 add an accounting email in Company branding to auto-notify");
+  };
+  const markPaid = () => {
+    mut((j) => {
+      const amt = subInvoiceTotal(j.subInvoice);
+      return {
+        ...j,
+        subInvoice: { ...j.subInvoice || {}, status: "paid", paidAt: todayIso() },
+        payments: [...j.payments || [], { id: uid("p"), type: "Paid", to: crew2.name, amt: Math.round(amt * 100) / 100, at: todayIso(), note: "Sub invoice" }]
+      };
+    });
+    toast2("Marked paid");
   };
   const STATUS = { draft: ["Draft", "gray"], needs_review: ["Needs review", "amber"], confirmed: ["Confirmed", "blue"], submitted: ["Submitted", "blue"], paid: ["Paid", "green"] };
   if (!inv) {
@@ -15075,6 +15140,50 @@ function SubInvoiceCard({ job, crew: crew2, mut, toast: toast2 }) {
       " Post ",
       money(total),
       " to job costs"
+    ] }),
+    docAlerts.length > 0 && (inv.status === "needs_review" || inv.status === "draft") && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12, background: "#FBEAE8", border: "1px solid #F0C4BE", borderRadius: 10, padding: "9px 12px", fontSize: 12.5, color: "#8A2A1E", lineHeight: 1.5 }, children: [
+      crew2.name,
+      " has ",
+      docAlerts.map((d) => `${d.type || d.name} ${d.status}`).join(", "),
+      " \u2014 collect current paperwork before paying."
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14, paddingTop: 12, borderTop: `1px solid ${S.line}` }, children: [
+      (inv.status === "draft" || inv.status === "needs_review") && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, onClick: confirmInv, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 14 }),
+        " Confirm invoice"
+      ] }),
+      inv.status === "confirmed" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, onClick: submitInv, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 13 }),
+        " Submit to accounting"
+      ] }),
+      inv.status === "submitted" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, onClick: markPaid, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.DollarSign, { size: 13 }),
+        " Mark paid"
+      ] }),
+      inv.status === "paid" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13, color: "#177245", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 14 }),
+        " Paid ",
+        inv.paidAt
+      ] })
+    ] }),
+    (inv.confirmedBy || inv.submittedAt) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: [
+      inv.confirmedBy && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        "Confirmed by ",
+        inv.confirmedBy,
+        " ",
+        inv.confirmedAt,
+        ". "
+      ] }),
+      inv.dueDate && inv.status !== "paid" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        "Due ",
+        inv.dueDate,
+        ". "
+      ] }),
+      inv.submittedAt && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        "Submitted ",
+        inv.submittedAt,
+        "."
+      ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open: menuOpen, onClose: () => setMenuOpen(false), title: `${crew2.name} \u2014 price menu`, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, marginBottom: 10 }, value: menuQ, placeholder: "Search\u2026", onChange: (e) => setMenuQ(e.target.value) }),
@@ -15189,7 +15298,7 @@ function TabWorkOrder({ job, mut, toast: toast2, brand: brand2, crews, templates
         ] })
       ] })
     ] }),
-    crew2 && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubInvoiceCard, { job, crew: crew2, mut, toast: toast2 }),
+    crew2 && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubInvoiceCard, { job, crew: crew2, mut, toast: toast2, currentUser, brand: brand2 }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "No pricing" }), children: [
         "Work order \u2014 ",
@@ -18062,6 +18171,7 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast: toast2, brandE
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Slogan", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.slogan, onChange: set("slogan") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Main phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.phone, onChange: set("phone") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.email, onChange: set("email") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Accounting email", hint: "Where sub-invoice payment notices are sent when a sub invoice is submitted.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: brand2.accountingEmail || "", onChange: set("accountingEmail"), placeholder: "accounting@yourcompany.com" }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Head office address", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         AddressAutocomplete,
         {
@@ -20151,12 +20261,51 @@ function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
   });
   const shown = crewId === "all" ? rows : rows.filter((r) => r.crew.id === crewId);
   const totalOut = rows.reduce((a, r) => a + r.outstanding, 0);
+  const today = todayIso();
+  const payQueue = (jobs || []).filter((j) => j.subInvoice && ["confirmed", "submitted"].includes(j.subInvoice.status)).map((j) => {
+    const inv = j.subInvoice;
+    const due = inv.dueDate || dueFromTerms(inv.terms, inv.confirmedAt);
+    return { job: j, inv, crew: (crews || []).find((c) => c.id === j.crewId), amt: subInvoiceTotal(inv), due, overdue: due && due < today };
+  }).sort((a, b) => String(a.due).localeCompare(String(b.due)));
+  const payTotal = payQueue.reduce((a, r) => a + r.amt, 0);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Crew payouts", onBack }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }, children: "OWED TO CREWS" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 30, fontWeight: 800, color: totalOut > 0 ? "#9A6B00" : S.ink, marginTop: 4 }, children: money(totalOut) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }, children: "Contracted labour less what has been paid out. Labour lines naming a crew count to that crew; otherwise the job's whole labour bucket does." })
+    ] }),
+    payQueue.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: payQueue.some((r) => r.overdue) ? "red" : "amber", children: money(payTotal) }), children: "Subs to pay" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginBottom: 6, lineHeight: 1.5 }, children: "Confirmed sub invoices awaiting payment. Mark paid on the job's work order." }),
+      payQueue.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob && onOpenJob(r.job.id), style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        width: "100%",
+        textAlign: "left",
+        border: "none",
+        borderTop: `1px solid ${S.line}`,
+        background: "none",
+        cursor: "pointer",
+        padding: "11px 2px",
+        fontFamily: "inherit"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "block", fontSize: 14, fontWeight: 700, color: S.ink }, children: [
+            r.crew ? r.crew.name : "Crew",
+            " \xB7 ",
+            r.job.name
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "block", fontSize: 11.5, color: r.overdue ? "#B3261E" : S.sub }, children: [
+            r.inv.status === "submitted" ? "Submitted" : "Confirmed",
+            r.due ? ` \xB7 due ${r.due}${r.overdue ? " \u2014 overdue" : ""}` : "",
+            r.crew && r.crew.payment && r.crew.payment.method ? ` \xB7 ${r.crew.payment.method}` : ""
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }, children: money(r.amt) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 15, color: "#C7CBD1" })
+      ] }, r.job.id))
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, overflowX: "auto", margin: "14px 0 4px" }, children: [["all", "All crews"], ...(crews || []).map((c) => [c.id, c.name])].map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setCrewId(id), style: {
       border: `1.5px solid ${crewId === id ? T.accent : S.line}`,
@@ -21790,6 +21939,15 @@ function SupremeCRM() {
     setJobs((prev) => prev.map((j) => {
       if (j.id !== jobId) return j;
       const next = { ...j, stageId, daysInStage: 0, updated: "just now" };
+      if (stageId === "s9" && next.crewId) {
+        const crew2 = crews.find((c) => c.id === next.crewId);
+        if (crew2) {
+          const existing = next.subInvoice;
+          const base = existing && (existing.lines || []).length ? existing : buildSubInvoiceDraft(next, crew2);
+          const terminal = ["confirmed", "submitted", "paid"].includes(base.status);
+          next.subInvoice = { ...base, status: terminal ? base.status : "needs_review" };
+        }
+      }
       if (j.portal?.notifyStage && stage) {
         const channel = j.consent?.sms?.granted ? "sms" : j.consent?.email?.granted ? "email" : null;
         if (channel) {
@@ -21811,6 +21969,10 @@ function SupremeCRM() {
     if (jb && stage) {
       logAct({ kind: "stage", jobId, jobName: jb.name, text: `moved ${jb.name} to "${stageName}"` });
       toast2(`Moved to ${stageName}${jb.portal?.notifyStage ? " \u2014 customer update queued when consent is available" : ""}`);
+      if (stageId === "s9" && jb.crewId) {
+        const crew2 = crews.find((c) => c.id === jb.crewId);
+        logAct({ kind: "sub", jobId, jobName: jb.name, text: `sub invoice for ${crew2 ? crew2.name : "the crew"} needs review before payment` });
+      }
     }
   };
   const applyRemovedStages = (nextStages) => {
