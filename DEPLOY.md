@@ -87,7 +87,49 @@ as a follow-up, wire the checkout quantity — see §6).
 
 ---
 
-## 4. Everything else already in the repo
+## 4. Calendar sync — appointments on iPhone / Google Calendar
+
+Reps subscribe their phone calendar to a personal RoofStride feed under
+**More → Integrations → Calendar sync**. Read-only and one-way; the phone
+refreshes on its own (about hourly).
+
+```bash
+supabase functions deploy calendar-feed --no-verify-jwt
+```
+
+The `--no-verify-jwt` is required — calendar apps can't send an auth header, so
+the feed is public and gated by a long per-seat token in the URL (stored in
+`crm_user_integrations`). No secrets needed. `supabase/config.toml` already
+records the `verify_jwt = false` setting for CLI/CI deploys.
+
+## 5. Email sending — per-rep Gmail
+
+Each rep sends from their **own** Gmail; there's no shared company sender.
+One Google Cloud OAuth client serves everyone.
+
+**One-time (office):**
+1. console.cloud.google.com → new project → enable the **Gmail API**.
+2. **OAuth consent screen** → Internal (if you use Google Workspace) or External; add the `gmail.send` scope.
+3. **Credentials → OAuth client ID → Web application.** Add your app origin **with a trailing slash** as an Authorized redirect URI (e.g. `https://roofstride.com/`, plus preview origins).
+4. Set the Client ID and Secret:
+   ```bash
+   # Vercel env var (client redirect):
+   #   VITE_GOOGLE_CLIENT_ID = <client id>
+   supabase secrets set GOOGLE_CLIENT_ID=<client id> GOOGLE_CLIENT_SECRET=<client secret>
+   supabase functions deploy gmail-oauth
+   supabase functions deploy gmail-send
+   ```
+
+**Then each rep:** Integrations → **Connect my Gmail** → pick their account →
+approve. Messages composed on a job then send from their address; replies land
+in their inbox. Until this is deployed, email is saved to the job thread rather
+than sent (SMS via Twilio is unaffected).
+
+> Note: *immediate* emails send now. Scheduled day-before reminders are still
+> queued in the thread — delivering those on a timer needs a small scheduled
+> function (a follow-up), since a schedule has to run server-side.
+
+## 6. Everything else already in the repo
 
 These functions exist and just need deploying if you haven't already:
 
@@ -109,6 +151,7 @@ Secrets used across these (set the ones you use):
 | `STRIPE_WEBHOOK_SECRET` | webhook | Stripe → Developers → Webhooks → signing secret |
 | `APP_URL` | checkout, portal | your domain, no trailing slash |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` | send-sms | Twilio console |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | gmail-oauth, gmail-send | Google Cloud → Credentials |
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are
 injected into every function automatically — don't set them by hand.
@@ -131,6 +174,7 @@ then redeploy:
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon/public key |
 | `VITE_GEOAPIFY_KEY` | address autocomplete (optional but recommended) |
 | `VITE_PROPERTY_KEY` | property-record auto-fill (optional) |
+| `VITE_GOOGLE_CLIENT_ID` | per-rep Gmail sending (optional; pairs with the `GOOGLE_*` secrets) |
 
 The app runs in demo mode (no backend) when the Supabase pair is absent, so a
 missing key never white-screens the site.

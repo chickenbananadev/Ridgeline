@@ -15997,11 +15997,11 @@ function TabMessages({ job, mut, toast: toast2, brand: brand2, templates, crews,
       }]
     }));
     if (compose === "sms") {
-      const auth = AUTH();
-      if (auth && auth.sendSms) {
+      const auth2 = AUTH();
+      if (auth2 && auth2.sendSms) {
         setSending(true);
         try {
-          await auth.sendSms({ to: addr, body, jobId: job.id });
+          await auth2.sendSms({ to: addr, body, jobId: job.id });
           record("Sent");
           setCompose(null);
           toast2("Text sent");
@@ -16021,9 +16021,27 @@ function TabMessages({ job, mut, toast: toast2, brand: brand2, templates, crews,
       return;
     }
     const myGmail = (integrations.gmailByUser || {})[currentUser.id] || { connected: false };
-    record(myGmail.connected ? "Sent" : "Queued \u2014 no provider connected");
+    const auth = AUTH();
+    if (myGmail.connected && auth && auth.sendGmail) {
+      setSending(true);
+      try {
+        await auth.sendGmail({ to: addr, subject, body });
+        record("Sent");
+        setCompose(null);
+        toast2(`Email sent${myGmail.email ? ` from ${myGmail.email}` : ""}`);
+      } catch (e) {
+        const m = e && e.message || "Could not send";
+        const notSetUp = /not configured|Function not found|Failed to send a request|non-2xx|isn't connected/i.test(m);
+        record(notSetUp ? "Queued \u2014 email not set up yet" : `Failed \u2014 ${m}`);
+        toast2(notSetUp ? "Email sending isn't deployed yet \u2014 saved to the thread" : `Gmail: ${m}`);
+        setCompose(null);
+      }
+      setSending(false);
+      return;
+    }
+    record("Queued \u2014 no provider connected");
     setCompose(null);
-    toast2(myGmail.connected ? "Message sent" : "Saved to thread \u2014 connect a provider to deliver");
+    toast2("Saved to thread \u2014 connect your Gmail to deliver");
   };
   const available = templates.filter((t) => t.kind === compose);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -21499,6 +21517,123 @@ async function ccSaveToken(userId, value) {
     return false;
   }
 }
+function newCalToken() {
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, "");
+  } catch (e) {
+  }
+  return (uid("cal") + uid("cal") + uid("cal")).replace(/[^a-z0-9]/gi, "");
+}
+async function calLoadToken(userId) {
+  const db = DB();
+  if (!db || !userId) return null;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    return data && data.data && data.data.calendarToken || null;
+  } catch (e) {
+    return null;
+  }
+}
+async function calSaveToken(userId, value) {
+  const db = DB();
+  if (!db || !userId) return false;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    const next = { ...data && data.data || {}, calendarToken: value };
+    const { error } = await db.from("crm_user_integrations").upsert({ user_id: userId, data: next, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+    return !error;
+  } catch (e) {
+    return false;
+  }
+}
+function calFeedUrl(token, scheme = "https") {
+  const sb = typeof window !== "undefined" ? window.__SUPABASE__ : null;
+  const base = sb && sb.supabaseUrl;
+  if (!base) return null;
+  const m = String(base).match(/https:\/\/([^.]+)\.supabase\.co/);
+  const host = m ? `${m[1]}.functions.supabase.co` : null;
+  if (!host) return null;
+  return `${scheme}://${host}/calendar-feed?token=${encodeURIComponent(token)}`;
+}
+function CalendarSync({ currentUser, toast: toast2 }) {
+  const [token, setToken] = (0, import_react.useState)(null);
+  const [loaded, setLoaded] = (0, import_react.useState)(false);
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  (0, import_react.useEffect)(() => {
+    let alive = true;
+    if (!currentUser || !liveAuth()) {
+      setLoaded(true);
+      return;
+    }
+    calLoadToken(currentUser.id).then((t) => {
+      if (alive) {
+        setToken(t);
+        setLoaded(true);
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [currentUser && currentUser.id]);
+  const enable = async () => {
+    setBusy(true);
+    const t = newCalToken();
+    const okSaved = await calSaveToken(currentUser.id, t);
+    setBusy(false);
+    if (okSaved) {
+      setToken(t);
+      toast2("Calendar sync enabled");
+    } else toast2("Couldn't enable sync \u2014 try again once you're online");
+  };
+  const rotate = async () => {
+    setBusy(true);
+    const t = newCalToken();
+    const okSaved = await calSaveToken(currentUser.id, t);
+    setBusy(false);
+    if (okSaved) {
+      setToken(t);
+      toast2("Old link revoked \u2014 resubscribe with the new one");
+    }
+  };
+  const https = token && calFeedUrl(token, "https");
+  const webcal = token && calFeedUrl(token, "webcal");
+  const googleAdd = https && `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(webcal || https)}`;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: token ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "On" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Off" }), children: "Calendar sync \u2014 iPhone & Google" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 10 }, children: "Subscribe your phone's calendar to your RoofStride appointments. It's read-only and updates on its own (about hourly) \u2014 reschedule in the app and the calendar follows. Anyone with the link can see your appointments, so keep it private." }),
+    !liveAuth() ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Needs the backend", children: "Connect Supabase to generate your personal calendar link." }) : !loaded ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "Checking\u2026" }) : !token ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { onClick: enable, disabled: busy, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Calendar, { size: 15 }),
+      " ",
+      busy ? "Enabling\u2026" : "Enable calendar sync"
+    ] }) : !https ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Almost there", tone: "amber", children: [
+      "Sync is enabled, but the calendar-feed function isn't deployed yet. See DEPLOY.md (",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("code", { children: "supabase functions deploy calendar-feed --no-verify-jwt" }),
+      ")."
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: webcal, style: { textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Calendar, { size: 14 }),
+          " Add to Apple Calendar"
+        ] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: googleAdd, target: "_blank", rel: "noreferrer", style: { textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Calendar, { size: 14 }),
+          " Add to Google Calendar"
+        ] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => {
+          try {
+            navigator.clipboard.writeText(https);
+            toast2("Link copied");
+          } catch {
+            toast2("Copy this link manually");
+          }
+        }, children: "Copy link" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 10, fontSize: 11.5, color: S.sub, wordBreak: "break-all", background: S.soft, borderRadius: 8, padding: "8px 10px" }, children: https }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: "On iPhone the Apple button opens Settings to add the subscription. On Google, paste the link under Other calendars \u2192 From URL if the button doesn't prompt." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: rotate, disabled: busy, style: { ...linkBtn, marginTop: 10, color: "#B42318" }, children: "Revoke & make a new link" })
+    ] })
+  ] });
+}
 function CompanyCamConnect({ onConnect }) {
   const [token, setToken] = (0, import_react.useState)("");
   const [busy, setBusy] = (0, import_react.useState)(false);
@@ -21566,7 +21701,14 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
             kind: "danger",
             small: true,
             style: { marginTop: 12 },
-            onClick: () => {
+            onClick: async () => {
+              const a = AUTH();
+              if (a && a.gmailDisconnect) {
+                try {
+                  await a.gmailDisconnect();
+                } catch (e) {
+                }
+              }
               setMyGmail({ connected: false });
               toast2("Gmail disconnected");
             },
@@ -21594,13 +21736,21 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 5 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "4." }),
-            " Credentials \u2192 Create credentials \u2192 OAuth client ID \u2192 Web application. Under Authorized redirect URIs, add this app's address followed by ",
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "/auth/gmail" }),
-            "."
+            " Credentials \u2192 Create credentials \u2192 OAuth client ID \u2192 Web application. Under Authorized redirect URIs, add this app's address with a trailing slash (e.g. ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "https://roofstride.com/" }),
+            ")."
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 5 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "5." }),
-            " Copy the Client ID and Client Secret, then send them over so the token-exchange function can be deployed. The secret must live on the server \u2014 never in the app."
+            " Set ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "VITE_GOOGLE_CLIENT_ID" }),
+            " in Vercel to the Client ID, and the Client Secret as a Supabase secret (",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "GOOGLE_CLIENT_SECRET" }),
+            "); deploy ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "gmail-oauth" }),
+            " and ",
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "gmail-send" }),
+            ". See DEPLOY.md. The secret must live on the server \u2014 never in the app."
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontWeight: 800, fontSize: 12.5, color: S.sub, margin: "12px 0 6px" }, children: "THEN, EACH REP" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 5 }, children: [
@@ -21613,7 +21763,18 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: "That's it \u2014 customer emails then send from your address and replies land in your own inbox." })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%", marginTop: 12 }, onClick: () => setConnecting("gmail"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%", marginTop: 12 }, onClick: () => {
+          const a = AUTH();
+          if (!a || !a.gmailConnect) {
+            toast2("Connect isn't available in demo mode");
+            return;
+          }
+          try {
+            a.gmailConnect();
+          } catch (e) {
+            toast2(e && e.message ? e.message : "Gmail sending isn't configured yet \u2014 see DEPLOY.md");
+          }
+        }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Mail, { size: 15 }),
           " Connect my Gmail"
         ] })
@@ -21740,6 +21901,7 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
         ] })
       ] })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CalendarSync, { currentUser, toast: toast2 }),
     (() => {
       const g = integrations.googleReviews || {};
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
@@ -24355,6 +24517,32 @@ function SupremeCRM() {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 2200);
   };
+  const gmailCbDone = (0, import_react.useRef)(false);
+  (0, import_react.useEffect)(() => {
+    if (gmailCbDone.current || typeof window === "undefined") return;
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get("state") !== "gmail" || !qs.get("code")) return;
+    gmailCbDone.current = true;
+    const code = qs.get("code");
+    const a = AUTH();
+    const clean = () => {
+      try {
+        window.history.replaceState({}, "", window.location.pathname);
+      } catch {
+      }
+    };
+    if (!a || !a.gmailExchange || !currentUser) {
+      clean();
+      return;
+    }
+    a.gmailExchange(code).then((res) => {
+      setIntegrations((prev) => ({
+        ...prev,
+        gmailByUser: { ...prev.gmailByUser || {}, [currentUser.id]: { connected: true, email: res && res.email || "", at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) } }
+      }));
+      toast2(res && res.email ? `Gmail connected \u2014 sending as ${res.email}` : "Gmail connected");
+    }).catch((e) => toast2(e && e.message ? e.message : "Couldn't connect Gmail")).finally(clean);
+  }, [currentUser && currentUser.id]);
   const applyJob = (id, fn) => setJobs((prev) => prev.map((j) => j.id === id ? { ...fn(j), updated: "just now", touchedAt: Date.now() } : j));
   const mutJob = (id, fn) => fn ? applyJob(id, fn) : (f2) => applyJob(id, f2);
   const moveStage = (jobId, stageId) => {

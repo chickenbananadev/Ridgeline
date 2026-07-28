@@ -59,5 +59,17 @@ ok(has("./supabase/functions/create-portal-session/index.ts"), "create-portal-se
 ok(/companycam-proxy/.test(src), "ccFetch routes through the proxy");
 ok(has("./DEPLOY.md"), "DEPLOY.md checklist");
 
+/* P7 — calendar sync + per-rep Gmail send (follow-up round) */
+ok(has("./supabase/functions/calendar-feed/index.ts"), "calendar-feed function");
+ok(/BEGIN:VCALENDAR/.test(fs.readFileSync("./supabase/functions/calendar-feed/index.ts", "utf8")), "calendar feed emits iCalendar");
+ok(has("./supabase/config.toml") && /verify_jwt = false/.test(fs.readFileSync("./supabase/config.toml", "utf8")), "calendar-feed is public (config.toml)");
+ok(/function CalendarSync\(/.test(src) && /function calFeedUrl\(/.test(src), "in-app Calendar sync card + feed URL");
+ok(/function calSaveToken\(/.test(src), "per-seat calendar token stored");
+ok(has("./supabase/functions/gmail-oauth/index.ts") && has("./supabase/functions/gmail-send/index.ts"), "Gmail OAuth + send functions");
+ok(/gmailConnect\(\)/.test(main) && /async sendGmail\(/.test(main), "auth wires gmailConnect + sendGmail");
+ok(/state=gmail&code|qs\.get\("state"\) !== "gmail"/.test(src) || /state.*gmail/.test(src), "app handles the Gmail OAuth callback");
+ok(/auth\.sendGmail\(\{ to: addr, subject, body \}\)/.test(src), "composer sends email via the rep's Gmail");
+ok(/__GOOGLE_CLIENT_ID__/.test(main), "Google client id exposed for the redirect");
+
 if (fails) { console.log("\nbuild 46: " + fails + " FAILED"); process.exit(1); }
 console.log("build 46 tests passed");

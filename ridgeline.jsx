@@ -14309,10 +14309,31 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
       return;
     }
 
+    /* Email goes through the rep's own connected Gmail via the gmail-send
+       function. If it isn't connected (or the function isn't deployed) the
+       message is saved to the thread instead of silently vanishing. */
     const myGmail = (integrations.gmailByUser || {})[currentUser.id] || { connected: false };
-    record(myGmail.connected ? "Sent" : "Queued — no provider connected");
+    const auth = AUTH();
+    if (myGmail.connected && auth && auth.sendGmail) {
+      setSending(true);
+      try {
+        await auth.sendGmail({ to: addr, subject, body });
+        record("Sent");
+        setCompose(null);
+        toast(`Email sent${myGmail.email ? ` from ${myGmail.email}` : ""}`);
+      } catch (e) {
+        const m = (e && e.message) || "Could not send";
+        const notSetUp = /not configured|Function not found|Failed to send a request|non-2xx|isn't connected/i.test(m);
+        record(notSetUp ? "Queued — email not set up yet" : `Failed — ${m}`);
+        toast(notSetUp ? "Email sending isn't deployed yet — saved to the thread" : `Gmail: ${m}`);
+        setCompose(null);
+      }
+      setSending(false);
+      return;
+    }
+    record("Queued — no provider connected");
     setCompose(null);
-    toast(myGmail.connected ? "Message sent" : "Saved to thread — connect a provider to deliver");
+    toast("Saved to thread — connect your Gmail to deliver");
   };
 
   const available = templates.filter((t) => t.kind === compose);
@@ -19283,6 +19304,126 @@ async function ccSaveToken(userId, value) {
   } catch (e) { return false; }
 }
 
+/* Per-seat calendar-subscription token, stored beside the CompanyCam token in
+   crm_user_integrations. The calendar-feed Edge Function maps this token back
+   to the seat and streams the tenant's appointments as .ics. */
+function newCalToken() {
+  try {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return (crypto.randomUUID() + crypto.randomUUID()).replace(/-/g, "");
+  } catch (e) { /* fall through */ }
+  return (uid("cal") + uid("cal") + uid("cal")).replace(/[^a-z0-9]/gi, "");
+}
+async function calLoadToken(userId) {
+  const db = DB();
+  if (!db || !userId) return null;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    return (data && data.data && data.data.calendarToken) || null;
+  } catch (e) { return null; }
+}
+async function calSaveToken(userId, value) {
+  const db = DB();
+  if (!db || !userId) return false;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    const next = { ...((data && data.data) || {}), calendarToken: value };
+    const { error } = await db.from("crm_user_integrations")
+      .upsert({ user_id: userId, data: next, updated_at: new Date().toISOString() });
+    return !error;
+  } catch (e) { return false; }
+}
+/* Build the subscribe URL from the project's functions hostname. */
+function calFeedUrl(token, scheme = "https") {
+  const sb = typeof window !== "undefined" ? window.__SUPABASE__ : null;
+  const base = sb && sb.supabaseUrl;
+  if (!base) return null;
+  const m = String(base).match(/https:\/\/([^.]+)\.supabase\.co/);
+  const host = m ? `${m[1]}.functions.supabase.co` : null;
+  if (!host) return null;
+  return `${scheme}://${host}/calendar-feed?token=${encodeURIComponent(token)}`;
+}
+
+/* "Sync to your phone" — enables the per-seat calendar feed and shows the
+   subscribe links for Apple and Google Calendar. */
+function CalendarSync({ currentUser, toast }) {
+  const [token, setToken] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    if (!currentUser || !liveAuth()) { setLoaded(true); return; }
+    calLoadToken(currentUser.id).then((t) => { if (alive) { setToken(t); setLoaded(true); } });
+    return () => { alive = false; };
+  }, [currentUser && currentUser.id]);
+
+  const enable = async () => {
+    setBusy(true);
+    const t = newCalToken();
+    const okSaved = await calSaveToken(currentUser.id, t);
+    setBusy(false);
+    if (okSaved) { setToken(t); toast("Calendar sync enabled"); }
+    else toast("Couldn't enable sync — try again once you're online");
+  };
+  const rotate = async () => {
+    setBusy(true);
+    const t = newCalToken();
+    const okSaved = await calSaveToken(currentUser.id, t);
+    setBusy(false);
+    if (okSaved) { setToken(t); toast("Old link revoked — resubscribe with the new one"); }
+  };
+
+  const https = token && calFeedUrl(token, "https");
+  const webcal = token && calFeedUrl(token, "webcal");
+  const googleAdd = https && `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(webcal || https)}`;
+
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle right={token ? <Chip tone="green">On</Chip> : <Chip tone="gray">Off</Chip>}>
+        Calendar sync — iPhone &amp; Google
+      </CardTitle>
+      <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 10 }}>
+        Subscribe your phone's calendar to your RoofStride appointments. It's read-only and updates
+        on its own (about hourly) — reschedule in the app and the calendar follows. Anyone with the
+        link can see your appointments, so keep it private.
+      </div>
+      {!liveAuth() ? (
+        <Callout label="Needs the backend">Connect Supabase to generate your personal calendar link.</Callout>
+      ) : !loaded ? (
+        <div style={{ fontSize: 13, color: S.sub }}>Checking…</div>
+      ) : !token ? (
+        <Btn onClick={enable} disabled={busy}><CalIcon size={15} /> {busy ? "Enabling…" : "Enable calendar sync"}</Btn>
+      ) : !https ? (
+        <Callout label="Almost there" tone="amber">
+          Sync is enabled, but the calendar-feed function isn't deployed yet. See DEPLOY.md
+          (<code>supabase functions deploy calendar-feed --no-verify-jwt</code>).
+        </Callout>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <a href={webcal} style={{ textDecoration: "none" }}>
+              <Btn kind="soft" small><CalIcon size={14} /> Add to Apple Calendar</Btn>
+            </a>
+            <a href={googleAdd} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+              <Btn kind="soft" small><CalIcon size={14} /> Add to Google Calendar</Btn>
+            </a>
+            <Btn kind="ghost" small onClick={() => { try { navigator.clipboard.writeText(https); toast("Link copied"); } catch { toast("Copy this link manually"); } }}>
+              Copy link
+            </Btn>
+          </div>
+          <div style={{ marginTop: 10, fontSize: 11.5, color: S.sub, wordBreak: "break-all", background: S.soft, borderRadius: 8, padding: "8px 10px" }}>{https}</div>
+          <div style={{ fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
+            On iPhone the Apple button opens Settings to add the subscription. On Google, paste the
+            link under Other calendars → From URL if the button doesn't prompt.
+          </div>
+          <button onClick={rotate} disabled={busy} style={{ ...linkBtn, marginTop: 10, color: "#B42318" }}>
+            Revoke &amp; make a new link
+          </button>
+        </>
+      )}
+    </Card>
+  );
+}
+
 function CompanyCamConnect({ onConnect }) {
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
@@ -19355,7 +19496,7 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
               the thread intact. Every rep connects their own — there's no shared company sender.
             </div>
             <Btn kind="danger" small style={{ marginTop: 12 }}
-              onClick={() => { setMyGmail({ connected: false }); toast("Gmail disconnected"); }}>
+              onClick={async () => { const a = AUTH(); if (a && a.gmailDisconnect) { try { await a.gmailDisconnect(); } catch (e) { /* ignore */ } } setMyGmail({ connected: false }); toast("Gmail disconnected"); }}>
               Disconnect
             </Btn>
           </>
@@ -19374,14 +19515,19 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
               <div style={{ marginBottom: 5 }}><b>1.</b> Go to console.cloud.google.com and create a project named {PRODUCT.name}.</div>
               <div style={{ marginBottom: 5 }}><b>2.</b> APIs &amp; Services → Library → search "Gmail API" → Enable.</div>
               <div style={{ marginBottom: 5 }}><b>3.</b> OAuth consent screen → choose Internal if you use Google Workspace (recommended — no Google review needed), otherwise External. Fill in the app name and your support email.</div>
-              <div style={{ marginBottom: 5 }}><b>4.</b> Credentials → Create credentials → OAuth client ID → Web application. Under Authorized redirect URIs, add this app's address followed by <b>/auth/gmail</b>.</div>
-              <div style={{ marginBottom: 5 }}><b>5.</b> Copy the Client ID and Client Secret, then send them over so the token-exchange function can be deployed. The secret must live on the server — never in the app.</div>
+              <div style={{ marginBottom: 5 }}><b>4.</b> Credentials → Create credentials → OAuth client ID → Web application. Under Authorized redirect URIs, add this app's address with a trailing slash (e.g. <b>https://roofstride.com/</b>).</div>
+              <div style={{ marginBottom: 5 }}><b>5.</b> Set <b>VITE_GOOGLE_CLIENT_ID</b> in Vercel to the Client ID, and the Client Secret as a Supabase secret (<b>GOOGLE_CLIENT_SECRET</b>); deploy <b>gmail-oauth</b> and <b>gmail-send</b>. See DEPLOY.md. The secret must live on the server — never in the app.</div>
               <div style={{ fontWeight: 800, fontSize: 12.5, color: S.sub, margin: "12px 0 6px" }}>THEN, EACH REP</div>
               <div style={{ marginBottom: 5 }}><b>6.</b> Open this screen and tap Connect my Gmail.</div>
               <div style={{ marginBottom: 5 }}><b>7.</b> Pick your work Google account and approve the "send email on your behalf" permission.</div>
               <div>That's it — customer emails then send from your address and replies land in your own inbox.</div>
             </div>
-            <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => setConnecting("gmail")}>
+            <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => {
+              const a = AUTH();
+              if (!a || !a.gmailConnect) { toast("Connect isn't available in demo mode"); return; }
+              try { a.gmailConnect(); }
+              catch (e) { toast(e && e.message ? e.message : "Gmail sending isn't configured yet — see DEPLOY.md"); }
+            }}>
               <Mail size={15} /> Connect my Gmail
             </Btn>
           </>
@@ -19535,6 +19681,8 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           </span>
         </label>
       </Card>
+
+      <CalendarSync currentUser={currentUser} toast={toast} />
 
       {/* Google Business Profile — scaffold. Storing the Place ID and marking
           the connection is done here; actually pulling live posted reviews to
@@ -22132,6 +22280,28 @@ export default function SupremeCRM() {
   }, [chatMsgs]);
 
   const toast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(""), 2200); };
+
+  /* Finish the Gmail OAuth handshake when Google redirects back with
+     ?state=gmail&code=... — exchange the code, mark the seat connected, and
+     clean the URL. Runs once when a code is present. */
+  const gmailCbDone = useRef(false);
+  useEffect(() => {
+    if (gmailCbDone.current || typeof window === "undefined") return;
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get("state") !== "gmail" || !qs.get("code")) return;
+    gmailCbDone.current = true;
+    const code = qs.get("code");
+    const a = AUTH();
+    const clean = () => { try { window.history.replaceState({}, "", window.location.pathname); } catch { /* ignore */ } };
+    if (!a || !a.gmailExchange || !currentUser) { clean(); return; }
+    a.gmailExchange(code).then((res) => {
+      setIntegrations((prev) => ({
+        ...prev,
+        gmailByUser: { ...(prev.gmailByUser || {}), [currentUser.id]: { connected: true, email: (res && res.email) || "", at: new Date().toISOString().slice(0, 10) } },
+      }));
+      toast(res && res.email ? `Gmail connected — sending as ${res.email}` : "Gmail connected");
+    }).catch((e) => toast(e && e.message ? e.message : "Couldn't connect Gmail")).finally(clean);
+  }, [currentUser && currentUser.id]); // eslint-disable-line
 
   const applyJob = (id, fn) => setJobs((prev) => prev.map((j) => (j.id === id ? { ...fn(j), updated: "just now", touchedAt: Date.now() } : j)));
   /* Callable both ways: mutJob(id)(fn) and mutJob(id, fn). */
