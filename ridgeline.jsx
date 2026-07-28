@@ -2103,6 +2103,20 @@ const fmtCoord = (lat, lng) => `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 const mapLinkForCoords = (lat, lng) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 const mapLinkForAddress = (addr) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
 const directionsLink = (addr) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`;
+/* Directions in the rep's map app of choice. All three are https universal
+   links that hand off to the installed app on an iOS home-screen PWA. */
+const directionsAppleLink = (addr) => `https://maps.apple.com/?daddr=${encodeURIComponent(addr)}`;
+const directionsWazeLink = (addr) => `https://waze.com/ul?q=${encodeURIComponent(addr)}&navigate=yes`;
+const MAP_PROVIDERS = [
+  { id: "google", name: "Google Maps", link: directionsLink },
+  { id: "apple", name: "Apple Maps", link: directionsAppleLink },
+  { id: "waze", name: "Waze", link: directionsWazeLink },
+];
+/* Remembered default map app — last one used wins, stored per device.
+   Guarded so it's a no-op under jsdom/SSR where localStorage may be absent. */
+const MAP_PREF_KEY = "ridgeline.mapProvider";
+const getMapPref = () => { try { return localStorage.getItem(MAP_PREF_KEY) || "google"; } catch (e) { return "google"; } };
+const setMapPref = (id) => { try { localStorage.setItem(MAP_PREF_KEY, id); } catch (e) { /* ignore */ } };
 const staticMapEmbed = (lat, lng) => {
   const d = 0.004;
   return `https://www.openstreetmap.org/export/embed.html?bbox=${lng - d}%2C${lat - d}%2C${lng + d}%2C${lat + d}&layer=mapnik&marker=${lat}%2C${lng}`;
@@ -2131,6 +2145,7 @@ function fmtPhone(v) {
 }
 /* Digits only, for tel: links. */
 const telHref = (v) => `tel:${String(v || "").replace(/\D/g, "")}`;
+const smsHref = (v) => `sms:${String(v || "").replace(/\D/g, "")}`;
 
 /* Quantity x price, shown the way an invoice line reads. Kept here so
    estimates, change orders and material lines all agree. */
@@ -4975,6 +4990,8 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   });
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [viewingId, setViewingId] = useState(null); // appt tapped for the quick-action popup
+  const [mapPref, setMapPrefState] = useState(getMapPref()); // remembered map app
   const [f, setF] = useState({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "", assignedTo: "", durationMin: 60, status: "Scheduled" });
   const openAdd = (date) => {
     setEditingId(null);
@@ -5235,7 +5252,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
                     const j = jobOf(ap.jobId);
                     const cat = ap.category || categoryForAppointment(ap.type);
                     return (
-                      <button key={ap.id} onClick={() => openEdit(ap)} style={{ display: "flex", gap: 9, alignItems: "center", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
+                      <button key={ap.id} onClick={() => setViewingId(ap.id)} style={{ display: "flex", gap: 9, alignItems: "center", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
                         <span style={{ width: 8, height: 8, borderRadius: 99, flexShrink: 0, background: cat === "issues" ? "#B42318" : cat === "delivery" ? "#92600A" : cat === "production" ? "#177245" : T.accent }} />
                         <span style={{ flex: 1, minWidth: 0 }}>
                           <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }}>{ap.type}{j ? ` — ${j.name}` : ""}</span>
@@ -5275,7 +5292,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
         return (
           <Card key={ap.id} pad={14} style={{ marginTop: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
-              <button onClick={() => openEdit(ap)} style={{ border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }}>
+              <button onClick={() => setViewingId(ap.id)} style={{ border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
                   <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>{ap.type}{j ? ` — ${j.name}` : ""}</div>
                   <Chip tone={(ap.category || categoryForAppointment(ap.type)) === "issues" ? "red" : (ap.category || categoryForAppointment(ap.type)) === "delivery" ? "amber" : (ap.category || categoryForAppointment(ap.type)) === "production" ? "green" : "blue"}>
@@ -5316,6 +5333,75 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       {monthAppts.length === 0 && monthJobs.length === 0 && monthTasks.length === 0 && (
         <Card style={{ marginTop: 8 }}><div style={{ fontSize: 14, color: S.sub }}>Nothing scheduled this month.</div></Card>
       )}
+
+      {/* Quick-action popup — tap an appointment to call, text, or get
+          directions to the customer before jumping into the edit form. */}
+      {(() => {
+        const vAp = appointments.find((a) => a.id === viewingId);
+        const vJob = vAp ? jobOf(vAp.jobId) : null;
+        const vCat = vAp ? (vAp.category || categoryForAppointment(vAp.type)) : "";
+        const vTel = vJob ? String(vJob.phone || "").replace(/\D/g, "") : "";
+        const addr = vJob ? (vJob.address || "") : "";
+        const actLink = {
+          flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+          textDecoration: "none", borderRadius: 10, padding: "11px 10px", fontSize: 14, fontWeight: 700,
+          border: `1px solid ${S.line}`, fontFamily: "inherit", minWidth: 0,
+        };
+        const off = { pointerEvents: "none", opacity: 0.45 };
+        const providersOrdered = [...MAP_PROVIDERS].sort((a, b) => (a.id === mapPref ? -1 : b.id === mapPref ? 1 : 0));
+        return (
+          <Sheet open={!!viewingId} onClose={() => setViewingId(null)} title={vAp ? vAp.type : "Appointment"}
+            footer={vAp && (
+              <div style={{ display: "flex", gap: 10 }}>
+                <Btn kind="ghost" style={{ flex: 1 }} onClick={() => { const ap = vAp; setViewingId(null); openEdit(ap); }}>
+                  <Pencil size={14} /> Edit
+                </Btn>
+                {vJob && <Btn style={{ flex: 1 }} onClick={() => { setViewingId(null); onOpenJob(vJob.id); }}>Open job</Btn>}
+              </div>
+            )}>
+            {vAp && (
+              <>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+                  <Chip tone={vCat === "issues" ? "red" : vCat === "delivery" ? "amber" : vCat === "production" ? "green" : "blue"}>{vCat}</Chip>
+                  <span style={{ fontSize: 13, color: S.sub }}>
+                    {vAp.date}{vAp.time ? ` · ${fmtClock(vAp.time)}` : " · All day"}{vAp.durationMin ? ` · ${vAp.durationMin} min` : ""}
+                  </span>
+                </div>
+                {vJob ? <KV k="Customer" v={vJob.name} /> : <div style={{ fontSize: 13, color: S.sub, marginBottom: 8 }}>No linked job on this appointment.</div>}
+                {addr && <KV k="Address" v={addr} />}
+                {(vAp.assignedTo || vJob?.assignee) && <KV k="Assigned to" v={vAp.assignedTo || vJob.assignee} />}
+                {vAp.notes && <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.5, marginTop: 8, whiteSpace: "pre-wrap" }}>{vAp.notes}</div>}
+
+                {/* Call / Text */}
+                <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                  <a href={vTel ? telHref(vJob.phone) : undefined} style={{ ...actLink, background: "#fff", color: S.ink, ...(vTel ? {} : off) }}>
+                    <Phone size={15} /> Call
+                  </a>
+                  <a href={vTel ? smsHref(vJob.phone) : undefined} style={{ ...actLink, background: "#fff", color: S.ink, ...(vTel ? {} : off) }}>
+                    <MessageCircle size={15} /> Text
+                  </a>
+                </div>
+
+                {/* Directions — preferred map app first; tapping one remembers it */}
+                <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".04em", color: S.sub, margin: "16px 0 7px" }}>DIRECTIONS</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {providersOrdered.map((p) => {
+                    const on = p.id === mapPref;
+                    return (
+                      <a key={p.id} href={addr ? p.link(addr) : undefined} target="_blank" rel="noreferrer"
+                        onClick={() => { setMapPref(p.id); setMapPrefState(p.id); }}
+                        style={{ ...actLink, flex: "1 1 30%", ...(on ? { background: T.accent, color: "#fff", border: "1px solid transparent" } : { background: "#fff", color: S.ink }), ...(addr ? {} : off) }}>
+                        <MapPin size={14} /> {p.name}
+                      </a>
+                    );
+                  })}
+                </div>
+                {!addr && <div style={{ fontSize: 12, color: S.sub, marginTop: 8 }}>No address on file for this job.</div>}
+              </>
+            )}
+          </Sheet>
+        );
+      })()}
 
       <Sheet open={adding} onClose={() => { setAdding(false); setEditingId(null); }} title={editingId ? "Edit appointment" : "Add appointment"}
         footer={

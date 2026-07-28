@@ -2704,6 +2704,27 @@ var fmtCoord = (lat, lng) => `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 var mapLinkForCoords = (lat, lng) => `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
 var mapLinkForAddress = (addr) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
 var directionsLink = (addr) => `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`;
+var directionsAppleLink = (addr) => `https://maps.apple.com/?daddr=${encodeURIComponent(addr)}`;
+var directionsWazeLink = (addr) => `https://waze.com/ul?q=${encodeURIComponent(addr)}&navigate=yes`;
+var MAP_PROVIDERS = [
+  { id: "google", name: "Google Maps", link: directionsLink },
+  { id: "apple", name: "Apple Maps", link: directionsAppleLink },
+  { id: "waze", name: "Waze", link: directionsWazeLink }
+];
+var MAP_PREF_KEY = "ridgeline.mapProvider";
+var getMapPref = () => {
+  try {
+    return localStorage.getItem(MAP_PREF_KEY) || "google";
+  } catch (e) {
+    return "google";
+  }
+};
+var setMapPref = (id) => {
+  try {
+    localStorage.setItem(MAP_PREF_KEY, id);
+  } catch (e) {
+  }
+};
 var staticMapEmbed = (lat, lng) => {
   const d = 4e-3;
   return `https://www.openstreetmap.org/export/embed.html?bbox=${lng - d}%2C${lat - d}%2C${lng + d}%2C${lat + d}&layer=mapnik&marker=${lat}%2C${lng}`;
@@ -2730,6 +2751,7 @@ function fmtPhone(v) {
   return String(v || "");
 }
 var telHref = (v) => `tel:${String(v || "").replace(/\D/g, "")}`;
+var smsHref = (v) => `sms:${String(v || "").replace(/\D/g, "")}`;
 var lineTotal = (qty, price) => num(qty) * num(price);
 var qtyFmt = (n) => {
   const v = num(n);
@@ -5778,6 +5800,8 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   });
   const [adding, setAdding] = (0, import_react.useState)(false);
   const [editingId, setEditingId] = (0, import_react.useState)(null);
+  const [viewingId, setViewingId] = (0, import_react.useState)(null);
+  const [mapPref, setMapPrefState] = (0, import_react.useState)(getMapPref());
   const [f, setF] = (0, import_react.useState)({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "", assignedTo: "", durationMin: 60, status: "Scheduled" });
   const openAdd = (date) => {
     setEditingId(null);
@@ -6061,7 +6085,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
             dayAppts.map((ap) => {
               const j = jobOf(ap.jobId);
               const cat = ap.category || categoryForAppointment(ap.type);
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => openEdit(ap), style: { display: "flex", gap: 9, alignItems: "center", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "8px 0", borderTop: `1px solid ${S.line}` }, children: [
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setViewingId(ap.id), style: { display: "flex", gap: 9, alignItems: "center", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "8px 0", borderTop: `1px solid ${S.line}` }, children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 8, height: 8, borderRadius: 99, flexShrink: 0, background: cat === "issues" ? "#B42318" : cat === "delivery" ? "#92600A" : cat === "production" ? "#177245" : T.accent } }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
                   /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }, children: [
@@ -6107,7 +6131,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     monthAppts.map((ap) => {
       const j = jobOf(ap.jobId);
       return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 14, style: { marginTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => openEdit(ap), style: { border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setViewingId(ap.id), style: { border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, flex: 1, minWidth: 0 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14.5, fontWeight: 700, color: S.ink }, children: [
               ap.type,
@@ -6166,6 +6190,100 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       ] })
     ] }) }, j.id)),
     monthAppts.length === 0 && monthJobs.length === 0 && monthTasks.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub }, children: "Nothing scheduled this month." }) }),
+    (() => {
+      const vAp = appointments.find((a) => a.id === viewingId);
+      const vJob = vAp ? jobOf(vAp.jobId) : null;
+      const vCat = vAp ? vAp.category || categoryForAppointment(vAp.type) : "";
+      const vTel = vJob ? String(vJob.phone || "").replace(/\D/g, "") : "";
+      const addr = vJob ? vJob.address || "" : "";
+      const actLink = {
+        flex: 1,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        textDecoration: "none",
+        borderRadius: 10,
+        padding: "11px 10px",
+        fontSize: 14,
+        fontWeight: 700,
+        border: `1px solid ${S.line}`,
+        fontFamily: "inherit",
+        minWidth: 0
+      };
+      const off = { pointerEvents: "none", opacity: 0.45 };
+      const providersOrdered = [...MAP_PROVIDERS].sort((a, b) => a.id === mapPref ? -1 : b.id === mapPref ? 1 : 0);
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        Sheet,
+        {
+          open: !!viewingId,
+          onClose: () => setViewingId(null),
+          title: vAp ? vAp.type : "Appointment",
+          footer: vAp && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => {
+              const ap = vAp;
+              setViewingId(null);
+              openEdit(ap);
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Pencil, { size: 14 }),
+              " Edit"
+            ] }),
+            vJob && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 1 }, onClick: () => {
+              setViewingId(null);
+              onOpenJob(vJob.id);
+            }, children: "Open job" })
+          ] }),
+          children: vAp && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: vCat === "issues" ? "red" : vCat === "delivery" ? "amber" : vCat === "production" ? "green" : "blue", children: vCat }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13, color: S.sub }, children: [
+                vAp.date,
+                vAp.time ? ` \xB7 ${fmtClock(vAp.time)}` : " \xB7 All day",
+                vAp.durationMin ? ` \xB7 ${vAp.durationMin} min` : ""
+              ] })
+            ] }),
+            vJob ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Customer", v: vJob.name }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 8 }, children: "No linked job on this appointment." }),
+            addr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Address", v: addr }),
+            (vAp.assignedTo || vJob?.assignee) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Assigned to", v: vAp.assignedTo || vJob.assignee }),
+            vAp.notes && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, lineHeight: 1.5, marginTop: 8, whiteSpace: "pre-wrap" }, children: vAp.notes }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 14 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: vTel ? telHref(vJob.phone) : void 0, style: { ...actLink, background: "#fff", color: S.ink, ...vTel ? {} : off }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Phone, { size: 15 }),
+                " Call"
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: vTel ? smsHref(vJob.phone) : void 0, style: { ...actLink, background: "#fff", color: S.ink, ...vTel ? {} : off }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MessageCircle, { size: 15 }),
+                " Text"
+              ] })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 800, letterSpacing: ".04em", color: S.sub, margin: "16px 0 7px" }, children: "DIRECTIONS" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: providersOrdered.map((p) => {
+              const on = p.id === mapPref;
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                "a",
+                {
+                  href: addr ? p.link(addr) : void 0,
+                  target: "_blank",
+                  rel: "noreferrer",
+                  onClick: () => {
+                    setMapPref(p.id);
+                    setMapPrefState(p.id);
+                  },
+                  style: { ...actLink, flex: "1 1 30%", ...on ? { background: T.accent, color: "#fff", border: "1px solid transparent" } : { background: "#fff", color: S.ink }, ...addr ? {} : off },
+                  children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 14 }),
+                    " ",
+                    p.name
+                  ]
+                },
+                p.id
+              );
+            }) }),
+            !addr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 8 }, children: "No address on file for this job." })
+          ] })
+        }
+      );
+    })(),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
       Sheet,
       {
