@@ -2600,7 +2600,21 @@ var seedJobs = [
     crewId: "c1",
     messages: [],
     workOrder: { number: "WO-014", sentAt: "Jul 17, 8:02 AM", status: "Sent", notes: "Dumpster on the north side of the drive. Dog in the back yard \u2014 keep the gate shut." },
-    review: { sent: true, clicked: true, posted: true }
+    review: { sent: true, clicked: true, posted: true },
+    /* A finished job that still owes something — the case the punch list
+       exists for, and the one that puts a red row on the home screen. */
+    punch: [{
+      id: "pn1",
+      label: "Gutter apron short at the NE corner",
+      note: "Roughly 6 ft. Material is on the truck.",
+      done: false,
+      at: "Jul 21, 4:15 PM",
+      by: "Stephen Klein",
+      doneAt: null,
+      doneBy: null,
+      due: null,
+      photo: null
+    }]
   }
 ];
 var ZIP_PREFIX_STATE = [
@@ -5569,6 +5583,16 @@ function jobExceptions(job, ctx) {
     if (late.length) add("tasks", "red", `${late.length} overdue ${late.length === 1 ? "task" : "tasks"} \u2014 oldest: ${late[0].label}`, "tasks");
     if (job.soldRequestedAt && !job.jobFolder) add("approval", "amber", `Waiting on the office to approve the sold job`, "handoff");
     if (job.schedDate && job.schedDate >= today && !job.crewId) add("crew", "red", `Scheduled ${job.schedDate} with no crew assigned`, "workorder");
+  }
+  const punch = openPunch(job);
+  if (punch.length) {
+    const late = punch.filter((p) => p.due && p.due < today);
+    add(
+      "punch",
+      punchTone(job),
+      done ? `${punch.length} punch ${punch.length === 1 ? "item" : "items"} still open \u2014 job marked ${(c.stages || []).find((s) => s.id === job.stageId) ? (c.stages || []).find((s) => s.id === job.stageId).name.toLowerCase() : "closed"}` : late.length ? `${late.length} punch ${late.length === 1 ? "item" : "items"} past due \u2014 oldest: ${late[0].label}` : `${punch.length} punch ${punch.length === 1 ? "item" : "items"} open \u2014 ${punch[0].label}`,
+      "punchlist"
+    );
   }
   if (job.subInvoice && job.subInvoice.status === "needs_review") {
     add("sub", "amber", "Subcontractor invoice needs review before it can be paid", "financials");
@@ -9215,7 +9239,8 @@ var JOB_TABS = [
   ["assistant", "Ask the assistant"],
   ["portal", "Portal"],
   ["claim", "Insurance claim"],
-  ["certificate", "Certificate of completion"]
+  ["certificate", "Certificate of completion"],
+  ["punchlist", "Punch list"]
 ];
 var JOB_SECTIONS = [
   // Inspect
@@ -9236,6 +9261,7 @@ var JOB_SECTIONS = [
   // Build
   ["workorder", "Work order", import_lucide_react.ClipboardList, "Build"],
   ["handoff", "Sold & handoff", import_lucide_react.Share2, "Build"],
+  ["punchlist", "Punch list", import_lucide_react.ClipboardCheck, "Build"],
   ["tasks", "Tasks", import_lucide_react.CheckCircle2, "Build"],
   ["files", "Attachments", import_lucide_react.Layers, "Build"],
   ["assistant", "Ask the assistant", import_lucide_react.MessageCircle, "Build"],
@@ -9633,6 +9659,8 @@ function JobDetail({
               );
             case "tasks":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabTasks, { job, mut, toast });
+            case "punchlist":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPunchList, { job, mut, toast, currentUser });
             case "files":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFiles, { job, mut, toast });
             case "certificate":
@@ -9674,7 +9702,13 @@ function JobDetail({
           return allowed.has(id);
         });
         const HINTS = {
-          claim: "Carrier money and supplements"
+          claim: "Carrier money and supplements",
+          punchlist: "What this roof still owes"
+        };
+        const sectionBadge = (sid) => {
+          if (sid !== "punchlist") return null;
+          const n = openPunch(job).length;
+          return n ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: punchTone(job) || "amber", children: n }) : null;
         };
         const rows = [];
         let lastGroup = null;
@@ -9723,6 +9757,7 @@ function JobDetail({
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 15.5, fontWeight: 800, color: S.ink }, children: label }),
                 HINTS[id] && !isOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 11.5, color: S.sub, marginTop: 1 }, children: HINTS[id] })
               ] }),
+              sectionBadge(id),
               isOpen ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronUp, { size: 17, color: S.sub }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronDown, { size: 17, color: S.sub })
             ] }),
             isOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "2px 13px 15px", borderTop: `1px solid ${S.line}` }, children: render(id) })
@@ -15145,6 +15180,15 @@ var STAGE_CHECKS = {
     },
     fix: "Financials \u2014 there is still a balance owed on this job."
   },
+  /* Warns rather than blocks by default, per the shipped s10 rule. An
+     office that wants a hard stop can flip it in the workflow editor —
+     the check picker iterates STAGE_CHECKS, so it appears there with no
+     further wiring. */
+  punchclear: {
+    label: "Punch list cleared",
+    test: (j) => !(j.punch || []).some((p) => !p.done),
+    fix: "Punch list \u2014 close what's been fixed, or delete anything raised in error."
+  },
   reason: {
     label: "Reason recorded",
     test: (j) => !!String(j.lostReason || "").trim(),
@@ -15209,7 +15253,7 @@ var DEFAULT_STAGE_RULES = {
   },
   s10: {
     sla: 0,
-    gate: { mode: "warn", checks: ["paidfull"] },
+    gate: { mode: "warn", checks: ["paidfull", "punchclear"] },
     tasks: [{ label: "Request review", dueIn: 1 }],
     notify: true
   },
@@ -20389,6 +20433,20 @@ function TabCertificate({ job, brand: brand2, mut, toast, currentUser = null, in
         "The certificate is missing ",
         gaps.join(", "),
         ". Fill those in below, or on the Insurance claim screen where the carrier details live."
+      ] }),
+      openPunch(job).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: `${openPunch(job).length} punch ${openPunch(job).length === 1 ? "item is" : "items are"} still open`, children: [
+        "This certificate states the work was completed in a good and workmanlike manner and that the owner accepts it as complete. Closing out the punch list first is the honest order to do this in.",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 6 }, children: [
+          openPunch(job).slice(0, 3).map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, marginTop: 2 }, children: [
+            "\u2022 ",
+            p.label
+          ] }, p.id)),
+          openPunch(job).length > 3 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, marginTop: 2, color: S.sub }, children: [
+            "\u2026and ",
+            openPunch(job).length - 3,
+            " more on the Punch list."
+          ] })
+        ] })
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
@@ -21103,6 +21161,192 @@ function TaskRow({ t, today, onToggle }) {
       ]
     }
   );
+}
+function openPunch(job) {
+  return (job.punch || []).filter((p) => !p.done);
+}
+function punchTone(job) {
+  const open = openPunch(job);
+  if (!open.length) return null;
+  const done = ["s10", "s11", "s12"].includes(job.stageId);
+  const late = open.some((p) => p.due && p.due < todayIso());
+  return done || late ? "red" : "amber";
+}
+function PunchRow({ p, today, onToggle, onDelete }) {
+  const late = !p.done && p.due && p.due < today;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "flex-start", gap: 11, padding: "11px 0", borderBottom: `1px solid ${S.line}` }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "button",
+      {
+        onClick: onToggle,
+        "aria-label": p.done ? "Reopen" : "Mark fixed",
+        style: { border: "none", background: "none", cursor: "pointer", padding: 0, marginTop: 1, touchAction: "manipulation" },
+        children: p.done ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 20, color: "#177245" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Circle, { size: 20, color: "#C7CBD1" })
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, color: p.done ? S.sub : S.ink, textDecoration: p.done ? "line-through" : "none", lineHeight: 1.35 }, children: p.label }),
+      p.note && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.45, marginTop: 3 }, children: p.note }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 5 }, children: [
+        p.due && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: p.done ? "gray" : late ? "red" : "blue", children: [
+          late ? "Overdue \xB7 " : "Due ",
+          p.due
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11.5, color: S.sub }, children: [
+          "Raised by ",
+          p.by || "\u2014",
+          p.at ? ` \xB7 ${p.at}` : "",
+          p.done && p.doneAt ? ` \xB7 fixed ${p.doneAt}${p.doneBy ? ` by ${p.doneBy}` : ""}` : ""
+        ] })
+      ] }),
+      p.photo && p.photo.url && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: p.photo.url, target: "_blank", rel: "noreferrer", style: { display: "inline-block", marginTop: 7 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: p.photo.url, alt: p.label, style: { maxHeight: 96, borderRadius: 8, border: `1px solid ${S.line}` } }) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "button",
+      {
+        onClick: onDelete,
+        "aria-label": "Delete this item",
+        style: { border: "none", background: "none", cursor: "pointer", padding: 2, flexShrink: 0 },
+        children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" })
+      }
+    )
+  ] });
+}
+function TabPunchList({ job, mut, toast, currentUser = null }) {
+  const [txt, setTxt] = (0, import_react.useState)("");
+  const [note, setNote] = (0, import_react.useState)("");
+  const [due, setDue] = (0, import_react.useState)("");
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const [err, setErr] = (0, import_react.useState)("");
+  const fileRef = (0, import_react.useRef)(null);
+  const pendingPhoto = (0, import_react.useRef)(null);
+  const today = todayIso();
+  const who = currentUser && currentUser.name || job.assignee || "\u2014";
+  const items = job.punch || [];
+  const open = items.filter((p) => !p.done);
+  const fixed = items.filter((p) => p.done);
+  const add = (photo = null) => {
+    const label = txt.trim();
+    if (!label) return;
+    mut((j) => ({ ...j, punch: [...j.punch || [], {
+      id: uid("pn"),
+      label,
+      note: note.trim(),
+      done: false,
+      at: nowStamp(),
+      by: who,
+      doneAt: null,
+      doneBy: null,
+      due: due || null,
+      photo
+    }] }));
+    setTxt("");
+    setNote("");
+    setDue("");
+    toast("Added to the punch list");
+  };
+  const toggle = (p) => mut((j) => ({ ...j, punch: (j.punch || []).map((x) => x.id === p.id ? { ...x, done: !x.done, doneAt: !x.done ? nowStamp() : null, doneBy: !x.done ? who : null } : x) }));
+  const remove = (p) => mut((j) => ({ ...j, punch: (j.punch || []).filter((x) => x.id !== p.id) }));
+  const onFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setBusy(true);
+    setErr("");
+    let up = null;
+    try {
+      up = await uploadJobFile(job.id, await downscaleImageFile(file));
+    } catch (ex) {
+      setBusy(false);
+      setErr(ex && ex.message || "Couldn't save that photo.");
+      return;
+    }
+    setBusy(false);
+    add({ url: up.url, storage: up.storage, storageKey: up.key, size: up.size, mime: up.mime });
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "input",
+      {
+        ref: fileRef,
+        type: "file",
+        accept: "image/*",
+        capture: "environment",
+        onChange: onFile,
+        style: { display: "none" }
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: open.length ? punchTone(job) || "amber" : "green", children: open.length ? `${open.length} open` : "Clear" }), children: "Punch list" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: [
+        "What the crew still owes on this roof. Internal \u2014 the homeowner never sees this list. Open items show on the home screen until they are closed, and warn when the job is moved to ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Job completed" }),
+        " or a certificate is issued, but they never block anything."
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 14 }, children: [
+        "OPEN (",
+        open.length,
+        ")"
+      ] }),
+      open.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, padding: "10px 0" }, children: "Nothing outstanding." }),
+      open.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PunchRow, { p, today, onToggle: () => toggle(p), onDelete: () => remove(p) }, p.id)),
+      fixed.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 16 }, children: [
+          "FIXED (",
+          fixed.length,
+          ")"
+        ] }),
+        fixed.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PunchRow, { p, today, onToggle: () => toggle(p), onDelete: () => remove(p) }, p.id))
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Add an item" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "What needs fixing", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: inputStyle,
+          value: txt,
+          placeholder: "Gutter apron short at the NE corner",
+          onChange: (e) => setTxt(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === "Enter" && txt.trim()) add();
+          }
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Detail (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "textarea",
+        {
+          style: { ...inputStyle, minHeight: 54, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.5 },
+          value: note,
+          placeholder: "Roughly 6 ft short. Material is on the truck.",
+          onChange: (e) => setNote(e.target.value)
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Needed by (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: due, onChange: (e) => setDue(e.target.value) }) }),
+      err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginBottom: 8 }, children: err }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { flex: 1 }, disabled: !txt.trim() || busy, onClick: () => add(), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 15 }),
+          " Add"
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          Btn,
+          {
+            kind: "soft",
+            style: { flex: 1 },
+            disabled: !txt.trim() || busy,
+            onClick: () => fileRef.current && fileRef.current.click(),
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Camera, { size: 15 }),
+              " ",
+              busy ? "Saving\u2026" : "Add with photo"
+            ]
+          }
+        )
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 7, lineHeight: 1.45 }, children: "A photo makes it obvious what you meant three weeks later, and settles it with the crew." })
+    ] })
+  ] });
 }
 function TabTasks({ job, mut, toast }) {
   const [txt, setTxt] = (0, import_react.useState)("");
@@ -26663,7 +26907,8 @@ var FEATURE_SWITCHES = [
   ["chat", "Team chat", "Company channel in the Inbox"],
   ["dispatch", "Dispatch board", "Crew-by-day scheduling"],
   ["codes", "Code lookup", "Jurisdiction requirements and citations"],
-  ["companycam", "CompanyCam", "Create and open CompanyCam projects"]
+  ["companycam", "CompanyCam", "Create and open CompanyCam projects"],
+  ["punchlist", "Punch list", "Track what a finished roof still owes, and warn before it is called done"]
 ];
 var DEFAULT_FEATURES = FEATURE_SWITCHES.reduce((a, [k]) => {
   a[k] = true;

@@ -8,7 +8,7 @@ import {
   BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat, CloudRain,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
   Scale, Lightbulb, ExternalLink, Lock, Layers, Smile
-, Filter , Megaphone, Clock, Zap, Sun, Moon, Navigation, Award } from "lucide-react";
+, Filter , Megaphone, Clock, Zap, Sun, Moon, Navigation, Award, ClipboardCheck } from "lucide-react";
 
 /* ================================================================
    BRANDING — single source of company identity. Everything company-
@@ -2023,6 +2023,14 @@ const seedJobs = [
     },
     portal: { estimate: true, contract: true, photos: true, invoice: true }, crewId: "c1", messages: [], workOrder: { number: "WO-014", sentAt: "Jul 17, 8:02 AM", status: "Sent", notes: "Dumpster on the north side of the drive. Dog in the back yard — keep the gate shut." },
     review: { sent: true, clicked: true, posted: true },
+    /* A finished job that still owes something — the case the punch list
+       exists for, and the one that puts a red row on the home screen. */
+    punch: [{
+      id: "pn1", label: "Gutter apron short at the NE corner",
+      note: "Roughly 6 ft. Material is on the truck.", done: false,
+      at: "Jul 21, 4:15 PM", by: "Stephen Klein", doneAt: null, doneBy: null,
+      due: null, photo: null,
+    }],
   },
 ];
 
@@ -4769,6 +4777,21 @@ function jobExceptions(job, ctx) {
     if (late.length) add("tasks", "red", `${late.length} overdue ${late.length === 1 ? "task" : "tasks"} — oldest: ${late[0].label}`, "tasks");
     if (job.soldRequestedAt && !job.jobFolder) add("approval", "amber", `Waiting on the office to approve the sold job`, "handoff");
     if (job.schedDate && job.schedDate >= today && !job.crewId) add("crew", "red", `Scheduled ${job.schedDate} with no crew assigned`, "workorder");
+  }
+  /* Outside the `!done` block on purpose. A completed job with work
+     still outstanding is the whole reason the punch list exists — put
+     this inside the block above and it goes quiet at exactly the moment
+     it matters, because `done` covers s10. */
+  const punch = openPunch(job);
+  if (punch.length) {
+    const late = punch.filter((p) => p.due && p.due < today);
+    add("punch", punchTone(job),
+      done
+        ? `${punch.length} punch ${punch.length === 1 ? "item" : "items"} still open — job marked ${(c.stages || []).find((s) => s.id === job.stageId) ? ((c.stages || []).find((s) => s.id === job.stageId).name.toLowerCase()) : "closed"}`
+        : late.length
+          ? `${late.length} punch ${late.length === 1 ? "item" : "items"} past due — oldest: ${late[0].label}`
+          : `${punch.length} punch ${punch.length === 1 ? "item" : "items"} open — ${punch[0].label}`,
+      "punchlist");
   }
   if (job.subInvoice && job.subInvoice.status === "needs_review") {
     add("sub", "amber", "Subcontractor invoice needs review before it can be paid", "financials");
@@ -7947,7 +7970,7 @@ const JOB_TABS = [
   ["payments", "Payments"], ["invoice", "Invoice"], ["workorder", "Work order"],
   ["tasks", "Tasks"], ["files", "Files"], ["assistant", "Ask the assistant"],
   ["portal", "Portal"], ["claim", "Insurance claim"],
-  ["certificate", "Certificate of completion"],
+  ["certificate", "Certificate of completion"], ["punchlist", "Punch list"],
 ];
 
 /* Collapsible sections, in the order they are worked. Replaces a
@@ -7981,6 +8004,7 @@ const JOB_SECTIONS = [
   // Build
   ["workorder", "Work order", ClipboardList, "Build"],
   ["handoff", "Sold & handoff", Share2, "Build"],
+  ["punchlist", "Punch list", ClipboardCheck, "Build"],
   ["tasks", "Tasks", CheckCircle2, "Build"],
   ["files", "Attachments", Layers, "Build"],
   ["assistant", "Ask the assistant", MessageCircle, "Build"],
@@ -8215,6 +8239,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "workorder": return <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
                 crews={crews} templates={templates} currentUser={currentUser} users={users} />;
               case "tasks": return <TabTasks job={job} mut={mut} toast={toast} />;
+              case "punchlist": return <TabPunchList job={job} mut={mut} toast={toast} currentUser={currentUser} />;
               case "files": return <TabFiles job={job} mut={mut} toast={toast} />;
               case "certificate": return <TabCertificate job={job} brand={brand} mut={mut} toast={toast}
                 currentUser={currentUser} integrations={integrations} />;
@@ -8240,6 +8265,16 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
              for. */
           const HINTS = {
             claim: "Carrier money and supplements",
+            punchlist: "What this roof still owes",
+          };
+          /* A count on the collapsed header, so an open punch item is
+             visible without opening the section. Returns a node or null;
+             only the punch list needs one today, but the shape
+             generalises if another section ever does. */
+          const sectionBadge = (sid) => {
+            if (sid !== "punchlist") return null;
+            const n = openPunch(job).length;
+            return n ? <Chip tone={punchTone(job) || "amber"}>{n}</Chip> : null;
           };
           /* Interleave a group divider before the first visible section
              of each group, so the accordion reads Inspect → Sell → …
@@ -8279,6 +8314,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
                       <span style={{ display: "block", fontSize: 11.5, color: S.sub, marginTop: 1 }}>{HINTS[id]}</span>
                     )}
                   </span>
+                  {sectionBadge(id)}
                   {isOpen ? <ChevronUp size={17} color={S.sub} /> : <ChevronDown size={17} color={S.sub} />}
                 </button>
                 {isOpen && (
@@ -14046,6 +14082,13 @@ const STAGE_CHECKS = {
   paidfull: { label: "Balance collected in full",
     test: (j) => { const p = paymentsSummary(j); return !p.contract || p.balance <= 0.01; },
     fix: "Financials — there is still a balance owed on this job." },
+  /* Warns rather than blocks by default, per the shipped s10 rule. An
+     office that wants a hard stop can flip it in the workflow editor —
+     the check picker iterates STAGE_CHECKS, so it appears there with no
+     further wiring. */
+  punchclear: { label: "Punch list cleared",
+    test: (j) => !(j.punch || []).some((p) => !p.done),
+    fix: "Punch list — close what's been fixed, or delete anything raised in error." },
   reason: { label: "Reason recorded",
     test: (j) => !!String(j.lostReason || "").trim(),
     fix: "Say why this one went away — the move dialog will ask you." },
@@ -14095,7 +14138,7 @@ const DEFAULT_STAGE_RULES = {
         tasks: [{ label: "Confirm crew and delivery", dueIn: 1 }, { label: "Complete installation", dueIn: 3 }], notify: true },
   s9: { sla: 10, gate: { mode: "warn", checks: ["measure"] },
         tasks: [{ label: "Send final invoice", dueIn: 1 }, { label: "Collect depreciation & deductible", dueIn: 5, when: "Insurance" }] },
-  s10: { sla: 0, gate: { mode: "warn", checks: ["paidfull"] },
+  s10: { sla: 0, gate: { mode: "warn", checks: ["paidfull", "punchclear"] },
          tasks: [{ label: "Request review", dueIn: 1 }], notify: true },
   s11: { sla: 0, gate: { mode: "warn", checks: ["reason"] }, tasks: [] },
   s12: { sla: 0, gate: { mode: "warn", checks: ["reason"] }, tasks: [] },
@@ -18877,6 +18920,28 @@ function TabCertificate({ job, brand, mut, toast, currentUser = null, integratio
             the carrier details live.
           </Callout>
         )}
+        {/* A warning, not a gate — open punch items block nothing, by
+            decision. But this document tells a carrier the work is
+            "complete and satisfactory", and signing that with the punch
+            list still open is a false statement with the contractor's
+            name on it. Deliberately screen-only: the punch list is
+            internal and must never reach the printed certificate. */}
+        {openPunch(job).length > 0 && (
+          <Callout label={`${openPunch(job).length} punch ${openPunch(job).length === 1 ? "item is" : "items are"} still open`}>
+            This certificate states the work was completed in a good and workmanlike manner and that the owner
+            accepts it as complete. Closing out the punch list first is the honest order to do this in.
+            <div style={{ marginTop: 6 }}>
+              {openPunch(job).slice(0, 3).map((p) => (
+                <div key={p.id} style={{ fontSize: 12.5, marginTop: 2 }}>• {p.label}</div>
+              ))}
+              {openPunch(job).length > 3 && (
+                <div style={{ fontSize: 12.5, marginTop: 2, color: S.sub }}>
+                  …and {openPunch(job).length - 3} more on the Punch list.
+                </div>
+              )}
+            </div>
+          </Callout>
+        )}
       </Card>
 
       <Card style={{ marginTop: 12 }}>
@@ -19476,6 +19541,185 @@ function TaskRow({ t, today, onToggle }) {
         )}
       </span>
     </button>
+  );
+}
+
+/* ==================================================================
+   PUNCH LIST
+
+   Everything the crew still owes on a job that is otherwise finished.
+   `moveStage` has stamped `completedAt` since the certificate landed,
+   and the comment explaining why it is stamped only once already said
+   "a job bounces back for a punch item" — while no punch item existed
+   anywhere in the app. This is that model.
+
+   It is close to `job.tasks` on purpose, so the code reads the same,
+   but a punch item is a *finding* rather than a to-do, which changes
+   two things: it records who spotted it, and it can be deleted. A task
+   raised in error can reasonably be closed as done; a punch item
+   cannot, because "done" here means somebody went back and fixed it.
+
+   Internal only. Nothing here reaches the customer portal.
+================================================================== */
+function openPunch(job) { return (job.punch || []).filter((p) => !p.done); }
+/* Red when the job is being called finished with work outstanding, or
+   when an item has blown its date; amber while the job is still in
+   flight and nothing is late. The Blockers card handles no other tone. */
+function punchTone(job) {
+  const open = openPunch(job);
+  if (!open.length) return null;
+  const done = ["s10", "s11", "s12"].includes(job.stageId);
+  const late = open.some((p) => p.due && p.due < todayIso());
+  return (done || late) ? "red" : "amber";
+}
+
+function PunchRow({ p, today, onToggle, onDelete }) {
+  const late = !p.done && p.due && p.due < today;
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 11, padding: "11px 0", borderBottom: `1px solid ${S.line}` }}>
+      <button onClick={onToggle} aria-label={p.done ? "Reopen" : "Mark fixed"}
+        style={{ border: "none", background: "none", cursor: "pointer", padding: 0, marginTop: 1, touchAction: "manipulation" }}>
+        {p.done ? <CheckCircle2 size={20} color="#177245" /> : <Circle size={20} color="#C7CBD1" />}
+      </button>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, color: p.done ? S.sub : S.ink, textDecoration: p.done ? "line-through" : "none", lineHeight: 1.35 }}>
+          {p.label}
+        </div>
+        {p.note && <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.45, marginTop: 3 }}>{p.note}</div>}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 5 }}>
+          {p.due && (
+            <Chip tone={p.done ? "gray" : late ? "red" : "blue"}>
+              {late ? "Overdue · " : "Due "}{p.due}
+            </Chip>
+          )}
+          {/* Who spotted it. On a punch item this is the person to ask,
+              which is why it is on the row rather than buried. */}
+          <span style={{ fontSize: 11.5, color: S.sub }}>
+            Raised by {p.by || "—"}{p.at ? ` · ${p.at}` : ""}
+            {p.done && p.doneAt ? ` · fixed ${p.doneAt}${p.doneBy ? ` by ${p.doneBy}` : ""}` : ""}
+          </span>
+        </div>
+        {p.photo && p.photo.url && (
+          <a href={p.photo.url} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 7 }}>
+            <img src={p.photo.url} alt={p.label} style={{ maxHeight: 96, borderRadius: 8, border: `1px solid ${S.line}` }} />
+          </a>
+        )}
+      </div>
+      <button onClick={onDelete} aria-label="Delete this item"
+        style={{ border: "none", background: "none", cursor: "pointer", padding: 2, flexShrink: 0 }}>
+        <Trash2 size={15} color="#B42318" />
+      </button>
+    </div>
+  );
+}
+
+function TabPunchList({ job, mut, toast, currentUser = null }) {
+  const [txt, setTxt] = useState("");
+  const [note, setNote] = useState("");
+  const [due, setDue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const fileRef = useRef(null);
+  const pendingPhoto = useRef(null);
+  const today = todayIso();
+  const who = (currentUser && currentUser.name) || job.assignee || "—";
+  /* No job created before this feature has the field. */
+  const items = job.punch || [];
+  const open = items.filter((p) => !p.done);
+  const fixed = items.filter((p) => p.done);
+
+  const add = (photo = null) => {
+    const label = txt.trim();
+    if (!label) return;
+    mut((j) => ({ ...j, punch: [...(j.punch || []), {
+      id: uid("pn"), label, note: note.trim(), done: false,
+      at: nowStamp(), by: who, doneAt: null, doneBy: null,
+      due: due || null, photo,
+    }] }));
+    setTxt(""); setNote(""); setDue("");
+    toast("Added to the punch list");
+  };
+  const toggle = (p) => mut((j) => ({ ...j, punch: (j.punch || []).map((x) => x.id === p.id
+    ? { ...x, done: !x.done, doneAt: !x.done ? nowStamp() : null, doneBy: !x.done ? who : null }
+    : x) }));
+  const remove = (p) => mut((j) => ({ ...j, punch: (j.punch || []).filter((x) => x.id !== p.id) }));
+
+  /* Same path as job photos: downscale, then upload, and record nothing
+     if the upload fails rather than leaving an item pointing at an
+     image that was never stored. */
+  const onFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setBusy(true); setErr("");
+    let up = null;
+    try {
+      up = await uploadJobFile(job.id, await downscaleImageFile(file));
+    } catch (ex) {
+      setBusy(false);
+      setErr((ex && ex.message) || "Couldn't save that photo.");
+      return;
+    }
+    setBusy(false);
+    add({ url: up.url, storage: up.storage, storageKey: up.key, size: up.size, mime: up.mime });
+  };
+
+  return (
+    <>
+      <input ref={fileRef} type="file" accept="image/*" capture="environment"
+        onChange={onFile} style={{ display: "none" }} />
+      <Card>
+        <CardTitle right={<Chip tone={open.length ? (punchTone(job) || "amber") : "green"}>
+          {open.length ? `${open.length} open` : "Clear"}
+        </Chip>}>Punch list</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
+          What the crew still owes on this roof. Internal — the homeowner never sees this list.
+          Open items show on the home screen until they are closed, and warn when the job is moved
+          to <b>Job completed</b> or a certificate is issued, but they never block anything.
+        </div>
+
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 14 }}>OPEN ({open.length})</div>
+        {open.length === 0 && <div style={{ fontSize: 13.5, color: S.sub, padding: "10px 0" }}>Nothing outstanding.</div>}
+        {open.map((p) => <PunchRow key={p.id} p={p} today={today} onToggle={() => toggle(p)} onDelete={() => remove(p)} />)}
+
+        {fixed.length > 0 && (
+          <>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 16 }}>FIXED ({fixed.length})</div>
+            {fixed.map((p) => <PunchRow key={p.id} p={p} today={today} onToggle={() => toggle(p)} onDelete={() => remove(p)} />)}
+          </>
+        )}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Add an item</CardTitle>
+        <Field label="What needs fixing">
+          <input style={inputStyle} value={txt} placeholder="Gutter apron short at the NE corner"
+            onChange={(e) => setTxt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && txt.trim()) add(); }} />
+        </Field>
+        <Field label="Detail (optional)">
+          <textarea style={{ ...inputStyle, minHeight: 54, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.5 }}
+            value={note} placeholder="Roughly 6 ft short. Material is on the truck."
+            onChange={(e) => setNote(e.target.value)} />
+        </Field>
+        <Field label="Needed by (optional)">
+          <input style={dateInputStyle} type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+        </Field>
+        {err && <div style={{ fontSize: 12.5, color: "#B42318", marginBottom: 8 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Btn style={{ flex: 1 }} disabled={!txt.trim() || busy} onClick={() => add()}>
+            <Plus size={15} /> Add
+          </Btn>
+          <Btn kind="soft" style={{ flex: 1 }} disabled={!txt.trim() || busy}
+            onClick={() => fileRef.current && fileRef.current.click()}>
+            <Camera size={15} /> {busy ? "Saving…" : "Add with photo"}
+          </Btn>
+        </div>
+        <div style={{ fontSize: 11.5, color: S.sub, marginTop: 7, lineHeight: 1.45 }}>
+          A photo makes it obvious what you meant three weeks later, and settles it with the crew.
+        </div>
+      </Card>
+    </>
   );
 }
 
@@ -24887,6 +25131,7 @@ const FEATURE_SWITCHES = [
   ["dispatch", "Dispatch board", "Crew-by-day scheduling"],
   ["codes", "Code lookup", "Jurisdiction requirements and citations"],
   ["companycam", "CompanyCam", "Create and open CompanyCam projects"],
+  ["punchlist", "Punch list", "Track what a finished roof still owes, and warn before it is called done"],
 ];
 const DEFAULT_FEATURES = FEATURE_SWITCHES.reduce((a, [k]) => { a[k] = true; return a; }, {});
 function featureOn(features, key) {
