@@ -40,7 +40,13 @@ ok(!/terms: "[^"]*\bOhio\b[^"]*"/.test(src), "no signing-terms string names a si
    per-state phone lines it feeds could therefore never match a job. */
 ok(!/US_STATES\.map\(\(s\) => <option key=\{s\} value=\{s\}>/.test(src),
   "every US_STATES picker destructures the [abbrev, name] pair");
-ok((src.match(/US_STATES\.map\(\(\[/g) || []).length === 3, "all three state pickers use the pair form");
+/* The invariant is "every picker destructures", not "there are exactly N of
+   them" — a hardcoded count just breaks whenever a picker is added, as it did
+   when the letter templates gained a state selector. */
+const allMaps = (src.match(/US_STATES\.map\(/g) || []).length;
+const pairMaps = (src.match(/US_STATES\.map\(\(\[/g) || []).length;
+ok(allMaps > 0 && pairMaps === allMaps,
+  `every US_STATES picker uses the pair form (${pairMaps} of ${allMaps})`);
 
 /* County departments are keyed by state and county together. */
 ok(/COUNTY_DEPARTMENTS\[`\$\{state\}:\$\{county\}`\]/.test(src), "department lookups are state-scoped");

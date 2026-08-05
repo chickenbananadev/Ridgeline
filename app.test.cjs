@@ -256,7 +256,9 @@ var CODE_PROVISIONS = {
     underlayment: { cite: "RCO R905.1.1", note: "Double-layer underlayment (or self-adhering membrane) on slopes 2:12 up to 4:12.", verified: true },
     ventilation: { cite: "RCO R806.2", note: "Default required ratio is 1/150. The 1/300 exception applies only with a balanced system \u2014 40 to 50 percent of net free area in the upper portion, balance at the eaves.", verified: true },
     fastening: { cite: "RCO R905.2.5", note: "4 nails per shingle minimum; 6-nail where manufacturer or wind zone requires.", verified: true },
-    decking: { cite: "RCO R803 / R908.3", note: "Sheathing must be structurally sound; recover over unsound decking prohibited.", verified: true }
+    decking: { cite: "RCO R803 / R908.3", note: "Sheathing must be structurally sound; recover over unsound decking prohibited.", verified: true },
+    flashing: { cite: "RCO R905.2.8.4", note: "Base and step flashing at walls and roof-to-wall intersections; flashing cannot be reused after tear-off.", verified: true },
+    kickout: { cite: "RCO R703.4", note: "Kickout / diverter flashing required where a roof edge terminates against a wall.", verified: true }
   },
   KY: {
     iceBarrier: { cite: "KRC R905.1.2 \u2014 verify edition", note: "Ice barrier to 24 in. inside exterior wall line (IRC-based; confirm KY amendments).", verified: false },
@@ -265,7 +267,9 @@ var CODE_PROVISIONS = {
     underlayment: { cite: "KRC R905.1.1 \u2014 verify edition", note: "Low-slope double underlayment 2:12\u20134:12 (confirm KY amendments).", verified: false },
     ventilation: { cite: "KRC R806.2 \u2014 verify edition", note: "Balanced attic ventilation (confirm KY amendments).", verified: false },
     fastening: { cite: "KRC R905.2.5 \u2014 verify edition", note: "Fastening per code minimum and manufacturer spec (confirm).", verified: false },
-    decking: { cite: "KRC R803 \u2014 verify edition", note: "Structurally sound sheathing required (confirm).", verified: false }
+    decking: { cite: "KRC R803 \u2014 verify edition", note: "Structurally sound sheathing required (confirm).", verified: false },
+    flashing: { cite: "KRC R905.2.8.4 \u2014 verify edition", note: "Step and base flashing at wall intersections (confirm KY amendments).", verified: false },
+    kickout: { cite: "KRC R703.4 \u2014 verify edition", note: "Kickout flashing at roof-to-wall terminations (confirm KY amendments).", verified: false }
   },
   IL: {
     iceBarrier: { cite: "Adopted IRC R905.1.2 \u2014 verify municipality", note: "Ice barrier per the locally adopted IRC edition \u2014 Illinois adoption is municipal.", verified: false },
@@ -274,7 +278,9 @@ var CODE_PROVISIONS = {
     underlayment: { cite: "Adopted IRC R905.1.1 \u2014 verify municipality", note: "Low-slope underlayment per local adopted edition.", verified: false },
     ventilation: { cite: "Adopted IRC R806.2 \u2014 verify municipality", note: "Ventilation per local adopted edition.", verified: false },
     fastening: { cite: "Adopted IRC R905.2.5 \u2014 verify municipality", note: "Fastening per local adopted edition and manufacturer spec.", verified: false },
-    decking: { cite: "Adopted IRC R803 \u2014 verify municipality", note: "Sheathing requirements per local adopted edition.", verified: false }
+    decking: { cite: "Adopted IRC R803 \u2014 verify municipality", note: "Sheathing requirements per local adopted edition.", verified: false },
+    flashing: { cite: "Adopted IRC R905.2.8.4 \u2014 verify municipality", note: "Step and base flashing per local adopted edition.", verified: false },
+    kickout: { cite: "Adopted IRC R703.4 \u2014 verify municipality", note: "Kickout flashing per local adopted edition.", verified: false }
   }
 };
 var PROVISION_TOPICS = [
@@ -1412,6 +1418,66 @@ var IRC_DEEP = [
     body: "Roof recover is prohibited where the existing roof has two or more applications of any type of covering, where the existing covering is water-soaked or deteriorated, or where the existing covering is slate, clay, cement or asbestos-cement tile. Any of these requires a complete tear-off."
   }
 ];
+var NAIC_DIRECTORY = "https://content.naic.org/state-insurance-departments";
+var STATE_REGULATORS = {
+  OH: {
+    name: "Ohio Department of Insurance \u2014 Consumer Services Division",
+    address: "50 W. Town Street, Third Floor, Suite 300\nColumbus, OH 43215",
+    phone: "1-800-686-1526",
+    url: "https://insurance.ohio.gov",
+    confidence: "verified",
+    asOf: "Jul 2026"
+  }
+};
+function renderLetter(tpl, state) {
+  const used = [];
+  let body = String(tpl.body || "");
+  body = body.replace(/\{CITE:(\w+)\}/g, (_m, topic) => {
+    const f = asFact(citeFor(state, topic));
+    used.push({ token: topic, fact: f });
+    return f.value || `[code citation for ${topic} \u2014 not on file, confirm locally]`;
+  });
+  body = body.replace(/\{CODE_NAME\}/g, () => state ? codeNameForState(state) : "the adopted building code");
+  body = body.replace(/\{MATCHING_RULE\}/g, () => {
+    const f = state === "OH" ? fact(
+      "OAC 3901-1-54(I)(1)(b) requires that replacement items be of like kind and quality with reasonably comparable appearance.",
+      { srcId: "OAC3901", confidence: "verified", asOf: "Jul 2026" }
+    ) : fact("", { note: "No matching regulation on file for this state \u2014 argue from the policy's like-kind-and-quality language.", confidence: "unknown" });
+    used.push({ token: "matching", fact: f });
+    return f.value || "The policy provides for replacement with like kind and quality, which a visible line between new and existing slopes does not satisfy.";
+  });
+  body = body.replace(/\{APPRAISAL_AUTHORITY\}/g, () => {
+    const f = state === "OH" ? fact("Schwartz v. Standard Fire Insurance Co. (Ohio 2008)", { confidence: "verified", asOf: "Jul 2026" }) : fact("", { note: "No appraisal authority on file for this state.", confidence: "unknown" });
+    used.push({ token: "appraisal", fact: f });
+    return f.value ? ` This is consistent with ${f.value}.` : "";
+  });
+  body = body.replace(/\{REGULATOR_BLOCK\}/g, () => {
+    const f = regulatorFor(state);
+    used.push({ token: "regulator", fact: f });
+    return f.value ? `${f.value}
+${f.note || ""}`.trim() : "[your state's department of insurance \u2014 address it before sending]";
+  });
+  const blocking = used.filter((u) => !printable(u.fact));
+  return { body, used, blocking, ready: blocking.length === 0 };
+}
+function regulatorFor(state) {
+  const r = STATE_REGULATORS[state];
+  if (r) {
+    return fact(r.name, {
+      note: r.address,
+      sourceUrl: r.url,
+      sourceName: r.name,
+      asOf: r.asOf,
+      confidence: r.confidence
+    });
+  }
+  return fact("", {
+    note: state ? `No department of insurance on file for ${state}. Find it in the NAIC directory before sending.` : "Pick a state to address this complaint.",
+    sourceUrl: NAIC_DIRECTORY,
+    sourceName: "NAIC \u2014 state insurance departments",
+    confidence: "unknown"
+  });
+}
 var LETTER_TEMPLATES = [
   {
     id: "lt-supp",
@@ -1422,19 +1488,19 @@ var LETTER_TEMPLATES = [
 RE: Claim #[claim] \xB7 Insured: [name] \xB7 Date of loss: [date]
 Property: [address]
 
-We are the contractor of record on the above claim. Having reviewed the loss summary dated [date], we have identified the following items that were omitted or under-scoped. Each is required by the Residential Code of Ohio, by the manufacturer's published installation instructions, or by the loss settlement terms of the policy.
+We are the contractor of record on the above claim. Having reviewed the loss summary dated [date], we have identified the following items that were omitted or under-scoped. Each is required by {CODE_NAME}, by the manufacturer's published installation instructions, or by the loss settlement terms of the policy.
 
-1. Drip edge, full perimeter \u2014 RCO R905.2.8.5. [LF] at [$].
-2. Ice barrier at eaves and valleys \u2014 RCO R905.1.2. Ohio sits in IECC Climate Zones 4A and 5A; this applies statewide. [SQ] at [$].
-3. Step flashing, remove and replace \u2014 RCO R905.2.8.4. Flashing cannot be reused after tear-off. [LF] at [$].
-4. Kickout flashing \u2014 RCO R703.4. [EA] at [$].
-5. Decking replacement where existing sheathing does not provide an adequate base \u2014 RCO R908.6. [SF] at [$].
-6. Ventilation brought to the code-required ratio \u2014 RCO R806.2. [detail] at [$].
+1. Drip edge, full perimeter \u2014 {CITE:dripEdge}. [LF] at [$].
+2. Ice barrier at eaves and valleys \u2014 {CITE:iceBarrier}. [SQ] at [$].
+3. Step flashing, remove and replace \u2014 {CITE:flashing}. Flashing cannot be reused after tear-off. [LF] at [$].
+4. Kickout flashing \u2014 {CITE:kickout}. [EA] at [$].
+5. Decking replacement where existing sheathing does not provide an adequate base \u2014 {CITE:decking}. [SF] at [$].
+6. Ventilation brought to the code-required ratio \u2014 {CITE:ventilation}. [detail] at [$].
 7. Permit and inspection fee. [$].
 8. Disposal. [$].
 9. Overhead and profit, where the loss requires coordination of multiple trades.
 
-Please update the loss summary to reflect these items and reissue payment within the timeframe set by OAC 3901-1-54. Supporting photographs and measurements are attached.
+Please update the loss summary to reflect these items and reissue payment within the timeframe your state's claim-handling rules allow. Supporting photographs and measurements are attached.
 
 [Rep name] \u2014 [Company] \u2014 [Phone]`
   },
@@ -1454,7 +1520,7 @@ The current authorization covers [x] slope(s). We respectfully request authoriza
 
 3. Partial replacement does not meet the policy's settlement standard. The policy provides for replacement with like kind and quality. A visible line between new and existing slopes does not satisfy that standard.
 
-4. OAC 3901-1-54(I)(1)(b) requires that replacement items be of like kind and quality with reasonably comparable appearance. If the carrier intends to maintain the partial position, OAC 3901-1-54(I)(2) requires a written explanation of the provision relied upon. We request that explanation in writing.
+4. {MATCHING_RULE} If the carrier intends to maintain the partial position, we request a written explanation of the policy provision relied upon.
 
 We request re-inspection within fourteen days. If the partial position is maintained, we will advise the insured of their right to invoke the policy's appraisal clause.
 
@@ -1492,7 +1558,7 @@ Pursuant to the appraisal provision of the policy, the insured demands appraisal
 
 The insured names [appraiser name, address] as their competent and disinterested appraiser.
 
-Please name the carrier's appraiser within the period required by the policy. The two appraisers will then select an umpire. An award agreed by any two of the three will be binding as to the amount of loss, consistent with Schwartz v. Standard Fire Insurance Co. (Ohio 2008).
+Please name the carrier's appraiser within the period required by the policy. The two appraisers will then select an umpire. An award agreed by any two of the three will be binding as to the amount of loss, as provided by the policy's appraisal clause.{APPRAISAL_AUTHORITY}
 
 [Insured name / Rep name] \u2014 [Company] \u2014 [Phone]`
   },
@@ -1501,15 +1567,13 @@ Please name the carrier's appraiser within the period required by the policy. Th
     title: "Department of Insurance complaint",
     when: "The carrier has missed handling deadlines or refused a written explanation. Escalates the file and creates a regulatory record.",
     body: `[Date]
-Ohio Department of Insurance \u2014 Consumer Services Division
-50 W. Town Street, Third Floor, Suite 300
-Columbus, OH 43215
+{REGULATOR_BLOCK}
 
 RE: Claim complaint \xB7 Insured: [name] \xB7 Carrier: [carrier] \xB7 Claim #[claim] \xB7 Date of loss: [date]
 
 The insured submits this complaint regarding the handling of the above claim.
 
-1. [Select: failure to acknowledge within 15 days per OAC 3901-1-54 / failure to complete investigation within 21 days / refusal to provide the written matching explanation required by OAC 3901-1-54(I)(2) / scope omitting code-required items / other].
+1. [Select: failure to acknowledge the claim within the period your state's claim-handling rules require / failure to complete the investigation within that period / refusal to provide a written explanation of the provision relied upon / scope omitting code-required items / other].
 
 2. The carrier has been given written notice regarding [drip edge / ice barrier / step flashing / kickout / decking / ventilation / matching] and has not updated the scope.
 
@@ -2548,7 +2612,9 @@ var IRC_BASE = {
   underlayment: { cite: "IRC R905.1.1", note: "Double-layer underlayment (or self-adhering membrane) on slopes 2:12 up to 4:12." },
   ventilation: { cite: "IRC R806.2", note: "Default 1/150 net free ventilating area; the 1/300 exception applies only with a balanced system." },
   fastening: { cite: "IRC R905.2.5", note: "4 nails per shingle minimum; 6-nail where the manufacturer or wind zone requires." },
-  decking: { cite: "IRC R803 / R908.3", note: "Sheathing must be structurally sound; recover over unsound decking prohibited." }
+  decking: { cite: "IRC R803 / R908.3", note: "Sheathing must be structurally sound; recover over unsound decking prohibited." },
+  flashing: { cite: "IRC R905.2.8.4", note: "Base and step flashing at walls and roof-to-wall intersections." },
+  kickout: { cite: "IRC R703.4", note: "Kickout / diverter flashing where a roof edge terminates against a wall." }
 };
 var STATE_DEFAULTS = {
   OH: {
@@ -3224,6 +3290,46 @@ var fmtStamp = (iso) => {
 var money = (n) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 var money0 = (n) => (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
 var pct1 = (n) => `${n.toFixed(2)}%`;
+var FACT_TIERS = ["unknown", "seeded", "derived", "verified"];
+function fact(value, opts = {}) {
+  return {
+    value: value == null ? "" : value,
+    note: opts.note || "",
+    sourceUrl: opts.sourceUrl || "",
+    sourceName: opts.sourceName || "",
+    srcId: opts.srcId || "",
+    asOf: opts.asOf || null,
+    verifiedBy: opts.verifiedBy || null,
+    confidence: FACT_TIERS.includes(opts.confidence) ? opts.confidence : value ? "seeded" : "unknown"
+  };
+}
+function asFact(x) {
+  if (!x) return fact("");
+  if (x.confidence) return x.value != null ? x : { ...x, value: x.cite != null ? x.cite : "" };
+  if (x.missing) return fact("", { note: x.note, confidence: "unknown" });
+  return fact(x.cite != null ? x.cite : x.value, {
+    note: x.note,
+    srcId: x.srcId || x.src,
+    sourceUrl: x.sourceUrl || x.source,
+    asOf: x.asOf || x.verifiedDetail && x.verifiedDetail.date || x.checked || null,
+    verifiedBy: x.verifiedBy || x.verifiedDetail && x.verifiedDetail.by || null,
+    confidence: x.verified ? "verified" : x.cite || x.value ? "derived" : "unknown"
+  });
+}
+function printable(x) {
+  const f = asFact(x);
+  return f.confidence === "verified" && !!String(f.value || "").trim();
+}
+function factTone(x) {
+  const c = asFact(x).confidence;
+  return c === "verified" ? "green" : c === "derived" ? "blue" : c === "seeded" ? "amber" : "gray";
+}
+var FACT_LABEL = {
+  verified: "Verified",
+  derived: "Verify locally",
+  seeded: "Unconfirmed",
+  unknown: "Not on file"
+};
 function msgFailed(status) {
   return /^failed/i.test(String(status || ""));
 }
@@ -3458,13 +3564,33 @@ function codeNameForState(st) {
   return STATE_DEFAULTS[st] && STATE_DEFAULTS[st].codeName || STATE_CODE_ADOPTION[st] && STATE_CODE_ADOPTION[st].code || "Adopted IRC \u2014 verify locally";
 }
 function citeFor(state, topic) {
-  if (CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic]) return CODE_PROVISIONS[state][topic];
+  const curated = CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic];
+  if (curated) {
+    return { ...curated, state, confidence: curated.verified ? "verified" : "derived" };
+  }
   const base = IRC_BASE[topic];
-  if (!base) return { cite: "", note: "No code citation on file for this item \u2014 verify locally before citing it.", verified: false, missing: true };
+  if (!base) {
+    return {
+      cite: "",
+      value: "",
+      state,
+      note: "No code citation on file for this item \u2014 verify locally before citing it.",
+      verified: false,
+      missing: true,
+      confidence: "unknown"
+    };
+  }
   const adopt = STATE_CODE_ADOPTION[state];
   const label = adopt ? adopt.code : "the locally adopted IRC";
   const verifyLine = `Per ${label}; verify edition${adopt && adopt.local ? " & local adoption" : ""}.`;
-  return { cite: base.cite, note: base.note ? `${base.note} ${verifyLine}` : verifyLine, verified: false };
+  return {
+    cite: base.cite,
+    value: base.cite,
+    state,
+    note: base.note ? `${base.note} ${verifyLine}` : verifyLine,
+    verified: false,
+    confidence: "derived"
+  };
 }
 function generateRoofingMaterials(m) {
   if (!num(m.squares)) return null;
@@ -3820,6 +3946,28 @@ function SourceLink({ srcId }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ExternalLink, { size: 13 }),
     " ",
     s.name
+  ] });
+}
+function Cited({ fact: f, compact = false, style }) {
+  const x = asFact(f);
+  const tone = factTone(x);
+  if (!x.value) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: FACT_LABEL.unknown }),
+      x.note && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: x.note }),
+      x.srcId ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SourceLink, { srcId: x.srcId }) : null,
+      !x.srcId && x.sourceUrl ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistLink, { href: x.sourceUrl, children: x.sourceName || "Where to check" }) : null
+    ] });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", ...style }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone, children: x.value }),
+    !compact && x.confidence !== "verified" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11, fontWeight: 700, color: tone === "blue" ? T.accent : "#92600A" }, children: FACT_LABEL[x.confidence] }),
+    !compact && x.confidence === "verified" && x.asOf && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11, color: S.sub }, children: [
+      "Verified ",
+      x.asOf,
+      x.verifiedBy ? ` \xB7 ${x.verifiedBy}` : ""
+    ] }),
+    !compact && x.srcId ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SourceLink, { srcId: x.srcId }) : null
   ] });
 }
 function municodeUrl(state, city) {
@@ -15823,8 +15971,9 @@ function TabVentilation({ job, mut, toast }) {
   const m = ventMath(v);
   const n1 = (x) => Math.round(x).toLocaleString();
   const supplementText = () => {
-    const cite = "IRC / RCO R806.2";
-    return `Attic ventilation \u2014 ${n1(m.area)} sq ft ventilated area. Per ${cite}, required net free area at 1/${m.effectiveRatio} is ${n1(m.effectiveRequired)} in\xB2. Existing system provides ${n1(m.totalIn2)} in\xB2 (${n1(m.exhaustIn2)} in\xB2 exhaust, ${n1(m.intakeIn2)} in\xB2 intake). ` + (m.meets ? `System meets the required ratio.` : `System is short by ${n1(m.shortfall)} in\xB2. Reinstalling the existing non-compliant system on the new roof would violate code. Requested scope: ${m.needExhaustUnits} ${m.findEx.per === "ft" ? "LF" : "ea"} ${m.findEx.label} and ${m.needIntakeUnits} ${m.findIn.per === "ft" ? "LF" : "ea"} ${m.findIn.label}, plus baffles at each rafter bay where required. Ordinance & Law coverage applies where included in the policy.`) + (m.starved ? ` Note: intake is below exhaust, which starves the system and voids major shingle warranties regardless of total area.` : "");
+    const vf = asFact(citeFor(job.state || "", "ventilation"));
+    const per = printable(vf) && vf.value ? `Per ${vf.value}, required` : "Required";
+    return `Attic ventilation \u2014 ${n1(m.area)} sq ft ventilated area. ${per} net free area at 1/${m.effectiveRatio} is ${n1(m.effectiveRequired)} in\xB2. Existing system provides ${n1(m.totalIn2)} in\xB2 (${n1(m.exhaustIn2)} in\xB2 exhaust, ${n1(m.intakeIn2)} in\xB2 intake). ` + (m.meets ? `System meets the required ratio.` : `System is short by ${n1(m.shortfall)} in\xB2. Reinstalling the existing non-compliant system on the new roof would violate code. Requested scope: ${m.needExhaustUnits} ${m.findEx.per === "ft" ? "LF" : "ea"} ${m.findEx.label} and ${m.needIntakeUnits} ${m.findIn.per === "ft" ? "LF" : "ea"} ${m.findIn.label}, plus baffles at each rafter bay where required. Ordinance & Law coverage applies where included in the policy.`) + (m.starved ? ` Note: intake is below exhaust, which starves the system and voids major shingle warranties regardless of total area.` : "");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
@@ -16565,7 +16714,7 @@ function supplementFindings(job) {
       "MODERATE",
       "Kickout / diverter flashing",
       "Wall-to-roof intersections need a kickout diverter at the eave end to keep runoff out of the wall \u2014 commonly omitted and code-required.",
-      { cite: "IRC R703.4", line: { desc: "Kickout / diverter flashing", qty: 2, unit: "EA" } }
+      { topic: "kickout", line: { desc: "Kickout / diverter flashing", qty: 2, unit: "EA" } }
     );
   if (!has(/underlayment|synthetic|felt/i))
     add(
@@ -16680,11 +16829,21 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
   };
   const addAsSupplement = (f) => {
     if (!mut) return;
-    const cite = f.cite ? ` [${f.cite}]` : "";
-    const row = { id: uid("sup"), desc: `${f.title}${cite}`, amount: "", status: "Draft", at: nowStamp() };
+    const cf = asFact(f);
+    const cite = printable(cf) && cf.value ? ` [${cf.value}]` : "";
+    const row = {
+      id: uid("sup"),
+      desc: `${f.title}${cite}`,
+      amount: "",
+      status: "Draft",
+      at: nowStamp(),
+      cite: cf.value || "",
+      citeConfidence: cf.confidence,
+      citeState: f.state || ""
+    };
     mut((j) => ({ ...j, claim: { ...j.claim || {}, supplements: [...(j.claim || {}).supplements || [], row] } }));
     setDone((d) => ({ ...d, [f.title]: "supplement" }));
-    toast && toast(`Added "${f.title}" to the claim supplements`);
+    toast && toast(printable(cf) || !cf.value ? `Added "${f.title}" to the claim supplements` : `Added "${f.title}" \u2014 the code cite was left off because it is not verified for this state`);
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 12 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: found.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Clear" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: found.some((f) => f.sev === "HIGH") ? "red" : "amber", children: found.length }), children: "Supplement check" }),
@@ -16699,7 +16858,7 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: f.title }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 2 }, children: f.why }),
-            f.cite && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 5 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: f.verified ? "blue" : "amber", children: f.cite }) })
+            f.cite && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 5 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: f, compact: true }) })
           ] })
         ] }),
         !locked && mut && (done[f.title] || f.line || isClaim) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, marginTop: 8, marginLeft: 0, flexWrap: "wrap" }, children: done[f.title] ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: done[f.title] === "estimate" ? "\u2713 Added to estimate" : "\u2713 Added as supplement" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -21024,12 +21183,13 @@ function ShingleFinder() {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Verify before it goes in writing", children: "Dimensions and dates here are a field reference compiled from manufacturer data and industry sources. Before attaching any of it to a supplement, confirm against the manufacturer's own current literature or their tech services line \u2014 their document is the evidence, this screen is the shortcut to finding it." })
   ] });
 }
-function LetterTemplates() {
+function LetterTemplates({ state: stateProp = "" }) {
   const [open, setOpen] = (0, import_react.useState)(null);
   const [copied, setCopied] = (0, import_react.useState)(null);
-  const copy = async (t) => {
+  const [state, setState] = (0, import_react.useState)(stateProp || "");
+  const copy = async (t, body) => {
     try {
-      await navigator.clipboard.writeText(t.body);
+      await navigator.clipboard.writeText(body);
       setCopied(t.id);
       setTimeout(() => setCopied(null), 1800);
     } catch {
@@ -21039,39 +21199,58 @@ function LetterTemplates() {
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }, children: "Put it in writing. Verbal approvals and denials disappear when a claim gets contested \u2014 written ones do not. Copy a template, fill the bracketed fields, send it from your work email so there's a timestamp." }),
-    LETTER_TEMPLATES.map((t, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: i ? 12 : 0 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: t.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 4 }, children: t.when })
-      ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => setOpen(open === t.id ? null : t.id), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Eye, { size: 13 }),
-          " ",
-          open === t.id ? "Hide" : "Read"
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginBottom: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Where is the property?", hint: "Code sections, the matching rule and the regulator's address all resolve from this.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: state, onChange: (e) => setState(e.target.value), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Select a state\u2026" }),
+      US_STATES.map(([ab, name]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: ab, children: name }, ab))
+    ] }) }) }),
+    LETTER_TEMPLATES.map((t, i) => {
+      const r = renderLetter(t, state);
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: i ? 12 : 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: t.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 4 }, children: t.when })
+        ] }) }),
+        r.used.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }, children: r.used.map((u, k) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: u.fact, compact: true }, k)) }),
+        !r.ready && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: state ? `Not ready to send in ${state}` : "Pick a state first", tone: "amber", children: [
+          r.blocking.length,
+          " of the references in this letter ",
+          r.blocking.length === 1 ? "is" : "are",
+          " not verified for ",
+          state || "the selected state",
+          ". Sending an unchecked citation to an adjuster is what gets the rest of the letter dismissed \u2014 confirm ",
+          r.blocking.length === 1 ? "it" : "them",
+          " first.",
+          r.blocking.some((b) => b.fact.sourceUrl) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 6 }, children: r.blocking.filter((b) => b.fact.sourceUrl).map((b, k) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistLink, { href: b.fact.sourceUrl, children: b.fact.sourceName || "Where to check" }, k)) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, style: { flex: 1 }, onClick: () => copy(t), children: copied === t.id ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Check, { size: 13 }),
-          " Copied"
-        ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Copy, { size: 13 }),
-          " Copy"
-        ] }) })
-      ] }),
-      open === t.id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { style: {
-        whiteSpace: "pre-wrap",
-        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-        fontSize: 12.5,
-        lineHeight: 1.6,
-        color: S.ink,
-        background: "#FAFBFC",
-        border: `1px solid ${S.line}`,
-        borderRadius: 10,
-        padding: 13,
-        marginTop: 12,
-        overflowX: "auto"
-      }, children: t.body })
-    ] }, t.id)),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => setOpen(open === t.id ? null : t.id), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Eye, { size: 13 }),
+            " ",
+            open === t.id ? "Hide" : "Read"
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, style: { flex: 1 }, disabled: !r.ready, onClick: () => copy(t, r.body), children: copied === t.id ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Check, { size: 13 }),
+            " Copied"
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Copy, { size: 13 }),
+            " Copy"
+          ] }) })
+        ] }),
+        open === t.id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { style: {
+          whiteSpace: "pre-wrap",
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+          fontSize: 12.5,
+          lineHeight: 1.6,
+          color: S.ink,
+          background: "#FAFBFC",
+          border: `1px solid ${S.line}`,
+          borderRadius: 10,
+          padding: 13,
+          marginTop: 12,
+          overflowX: "auto"
+        }, children: r.body })
+      ] }, t.id);
+    }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Before sending", children: "Replace every bracketed field \u2014 an unfilled placeholder in front of an adjuster costs credibility on the whole letter. Attach the photos, measurements, and manufacturer bulletin you reference. Keep a copy in the job's Files tab." })
   ] });
 }
@@ -21318,7 +21497,12 @@ function ClaimAssistant({ job = null }) {
         (m.hits || []).map((h, j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 8 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 5 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: tone[h.tag] || "gray", children: h.source }),
-            h.cite && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, fontWeight: 700, color: T.accent }, children: h.cite })
+            h.cite && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: fact(h.cite, {
+              /* Only real code sections read as authority here. The
+                 corpus also carries "NRCA Roofing Manual" and
+                 "Manufacturer instructions" in this same field. */
+              confidence: /^(IRC|RCO|OAC|R\.C\.)\s/.test(String(h.cite)) ? "derived" : "seeded"
+            }), compact: true })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 800, color: S.ink, lineHeight: 1.35 }, children: h.title }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginTop: 5 }, children: h.body.length > 320 ? h.body.slice(0, 320).trim() + "\u2026" : h.body })
@@ -21527,9 +21711,12 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
                   small: true,
                   style: { width: "100%", marginTop: 9 },
                   onClick: () => {
-                    const t = `${c.supplement}
+                    const kf = asFact({ cite: c.cite, verified: /^IRC\s/.test(String(c.cite || "")) });
+                    const t = printable(kf) ? `${c.supplement}
 
-Authority: ${c.cite}`;
+Authority: ${kf.value}` : c.cite ? `${c.supplement}
+
+Reference: ${c.cite} (confirm before citing)` : c.supplement;
                     if (navigator.clipboard) navigator.clipboard.writeText(t);
                     toast("Supplement wording copied");
                   },
@@ -21600,8 +21787,10 @@ Authority: ${c.cite}`;
       ] }),
       SUPPLEMENT_TEMPLATES.map((t) => {
         const prov = citeFor(tplState, t.topic);
+        const pf = asFact(prov);
         const isOpen = openTpl === t.id;
-        const wording = t.wording.replaceAll("{CITE}", prov.cite);
+        const wording = pf.value ? t.wording.replaceAll("{CITE}", pf.value) : t.wording.replace(/Per \{CITE\},\s*/g, "").replaceAll("{CITE}", "the adopted code");
+        const canCopy = printable(pf);
         return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 16, style: { marginTop: 10 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setOpenTpl(isOpen ? null : t.id), style: {
             width: "100%",
@@ -21614,7 +21803,7 @@ Authority: ${c.cite}`;
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: t.category }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700, marginTop: 2 }, children: t.title }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 6 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: prov.verified ? "blue" : "amber", children: prov.cite }) })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 6 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: pf }) })
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronDown, { size: 17, style: { transform: isOpen ? "rotate(180deg)" : "none", flexShrink: 0 } })
           ] }) }),
@@ -21643,7 +21832,8 @@ Authority: ${c.cite}`;
               borderRadius: 10,
               padding: 12
             }, children: wording }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", style: { marginTop: 12 }, onClick: () => {
+            !canCopy && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: `Not verified for ${tplState}`, tone: "amber", children: pf.value ? `${pf.value} is the section this resolves to under ${codeNameForState(tplState)}, but nobody has confirmed the edition or the local adoption. Check it before this goes to an adjuster.` : "No code citation on file for this item in this state. Confirm the section locally before citing it." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", style: { marginTop: 12 }, disabled: !canCopy, onClick: () => {
               if (navigator.clipboard) navigator.clipboard.writeText(wording);
               toast("Wording copied \u2014 fill the [brackets]");
             }, children: [
@@ -21876,7 +22066,7 @@ Authority: ${c.cite}`;
           ["iceBarrier", "tearOff", "dripEdge", "underlayment", "ventilation", "fastening", "decking"].map((topic) => {
             const p = citeFor(juris.state, topic);
             return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "10px 0", borderBottom: `1px solid ${S.line}` }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: p.verified ? "blue" : "amber", children: p.cite }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: p, compact: true }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, marginTop: 6, lineHeight: 1.5 }, children: p.note })
             ] }, topic);
           })
@@ -21887,7 +22077,13 @@ Authority: ${c.cite}`;
           PROVISION_TOPICS.map((p, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: i ? `1px solid ${S.line}` : "none", padding: "12px 0" }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10 }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 800, color: S.ink }, children: p.topic }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: p.srcOH === "RCO" ? "blue" : "amber", children: p.oh })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: fact(p.oh, {
+                srcId: p.srcOH,
+                /* A topic the file itself flags as having two
+                   competing section numbers is not settled. */
+                confidence: p.conflict ? "derived" : "verified",
+                asOf: "Jul 2026"
+              }), compact: true })
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 5, lineHeight: 1.5 }, children: p.note }),
             p.conflict && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Check the section number", children: p.conflict }),

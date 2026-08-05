@@ -189,6 +189,8 @@ const CODE_PROVISIONS = {
     ventilation: { cite: "RCO R806.2", note: "Default required ratio is 1/150. The 1/300 exception applies only with a balanced system — 40 to 50 percent of net free area in the upper portion, balance at the eaves.", verified: true },
     fastening: { cite: "RCO R905.2.5", note: "4 nails per shingle minimum; 6-nail where manufacturer or wind zone requires.", verified: true },
     decking: { cite: "RCO R803 / R908.3", note: "Sheathing must be structurally sound; recover over unsound decking prohibited.", verified: true },
+    flashing: { cite: "RCO R905.2.8.4", note: "Base and step flashing at walls and roof-to-wall intersections; flashing cannot be reused after tear-off.", verified: true },
+    kickout: { cite: "RCO R703.4", note: "Kickout / diverter flashing required where a roof edge terminates against a wall.", verified: true },
   },
   KY: {
     iceBarrier: { cite: "KRC R905.1.2 — verify edition", note: "Ice barrier to 24 in. inside exterior wall line (IRC-based; confirm KY amendments).", verified: false },
@@ -198,6 +200,8 @@ const CODE_PROVISIONS = {
     ventilation: { cite: "KRC R806.2 — verify edition", note: "Balanced attic ventilation (confirm KY amendments).", verified: false },
     fastening: { cite: "KRC R905.2.5 — verify edition", note: "Fastening per code minimum and manufacturer spec (confirm).", verified: false },
     decking: { cite: "KRC R803 — verify edition", note: "Structurally sound sheathing required (confirm).", verified: false },
+    flashing: { cite: "KRC R905.2.8.4 — verify edition", note: "Step and base flashing at wall intersections (confirm KY amendments).", verified: false },
+    kickout: { cite: "KRC R703.4 — verify edition", note: "Kickout flashing at roof-to-wall terminations (confirm KY amendments).", verified: false },
   },
   IL: {
     iceBarrier: { cite: "Adopted IRC R905.1.2 — verify municipality", note: "Ice barrier per the locally adopted IRC edition — Illinois adoption is municipal.", verified: false },
@@ -207,6 +211,8 @@ const CODE_PROVISIONS = {
     ventilation: { cite: "Adopted IRC R806.2 — verify municipality", note: "Ventilation per local adopted edition.", verified: false },
     fastening: { cite: "Adopted IRC R905.2.5 — verify municipality", note: "Fastening per local adopted edition and manufacturer spec.", verified: false },
     decking: { cite: "Adopted IRC R803 — verify municipality", note: "Sheathing requirements per local adopted edition.", verified: false },
+    flashing: { cite: "Adopted IRC R905.2.8.4 — verify municipality", note: "Step and base flashing per local adopted edition.", verified: false },
+    kickout: { cite: "Adopted IRC R703.4 — verify municipality", note: "Kickout flashing per local adopted edition.", verified: false },
   },
 };
 
@@ -1020,6 +1026,96 @@ const IRC_DEEP = [
    LETTER TEMPLATES — fill the bracketed fields, send in writing.
    Written communication is what survives a contested claim.
    ================================================================ */
+/* ==================================================================
+   REGULATORS
+
+   The Department of Insurance complaint letter used to be pre-addressed
+   to Columbus, Ohio, for every user in every state — so a Texas rep's
+   regulatory complaint went to an agency with no jurisdiction over the
+   file, achieved nothing, and let the real clock run out.
+
+   Fifty state agencies with fifty mailing addresses is exactly the data
+   this environment cannot source reliably, so it is not invented here.
+   Ohio, which the office has confirmed, is verified. Every other state
+   resolves to a pointer: the NAIC's official directory, which is the
+   canonical index of state insurance departments. Naming the right door
+   beats guessing the address behind it.
+================================================================== */
+const NAIC_DIRECTORY = "https://content.naic.org/state-insurance-departments";
+const STATE_REGULATORS = {
+  OH: {
+    name: "Ohio Department of Insurance — Consumer Services Division",
+    address: "50 W. Town Street, Third Floor, Suite 300\nColumbus, OH 43215",
+    phone: "1-800-686-1526",
+    url: "https://insurance.ohio.gov",
+    confidence: "verified", asOf: "Jul 2026",
+  },
+};
+/* Resolve a letter against a state. Returns the rendered body plus the
+   facts it leaned on, so the UI can show what resolved and the copy
+   action can refuse when something did not. A letter to a carrier with
+   an unresolved token, or with a cite nobody has verified, is worse than
+   no letter: it is the thing the adjuster uses to dismiss the rest. */
+function renderLetter(tpl, state) {
+  const used = [];
+  let body = String(tpl.body || "");
+  body = body.replace(/\{CITE:(\w+)\}/g, (_m, topic) => {
+    const f = asFact(citeFor(state, topic));
+    used.push({ token: topic, fact: f });
+    return f.value || `[code citation for ${topic} — not on file, confirm locally]`;
+  });
+  body = body.replace(/\{CODE_NAME\}/g, () => (state ? codeNameForState(state) : "the adopted building code"));
+  body = body.replace(/\{MATCHING_RULE\}/g, () => {
+    /* Ohio has a matching regulation. Most states do not, and the ones
+       that do use different standards — so outside a curated state the
+       letter argues from the policy rather than inventing a rule. */
+    const f = state === "OH"
+      ? fact("OAC 3901-1-54(I)(1)(b) requires that replacement items be of like kind and quality with reasonably comparable appearance.",
+          { srcId: "OAC3901", confidence: "verified", asOf: "Jul 2026" })
+      : fact("", { note: "No matching regulation on file for this state — argue from the policy's like-kind-and-quality language.", confidence: "unknown" });
+    used.push({ token: "matching", fact: f });
+    return f.value || "The policy provides for replacement with like kind and quality, which a visible line between new and existing slopes does not satisfy.";
+  });
+  body = body.replace(/\{APPRAISAL_AUTHORITY\}/g, () => {
+    const f = state === "OH"
+      ? fact("Schwartz v. Standard Fire Insurance Co. (Ohio 2008)", { confidence: "verified", asOf: "Jul 2026" })
+      : fact("", { note: "No appraisal authority on file for this state.", confidence: "unknown" });
+    used.push({ token: "appraisal", fact: f });
+    return f.value ? ` This is consistent with ${f.value}.` : "";
+  });
+  body = body.replace(/\{REGULATOR_BLOCK\}/g, () => {
+    const f = regulatorFor(state);
+    used.push({ token: "regulator", fact: f });
+    return f.value ? `${f.value}\n${f.note || ""}`.trim()
+      : "[your state's department of insurance — address it before sending]";
+  });
+  /* Anything below "verified" must not leave the building. */
+  const blocking = used.filter((u) => !printable(u.fact));
+  return { body, used, blocking, ready: blocking.length === 0 };
+}
+
+function regulatorFor(state) {
+  const r = STATE_REGULATORS[state];
+  if (r) {
+    return fact(r.name, {
+      note: r.address, sourceUrl: r.url, sourceName: r.name,
+      asOf: r.asOf, confidence: r.confidence,
+    });
+  }
+  return fact("", {
+    note: state
+      ? `No department of insurance on file for ${state}. Find it in the NAIC directory before sending.`
+      : "Pick a state to address this complaint.",
+    sourceUrl: NAIC_DIRECTORY, sourceName: "NAIC — state insurance departments",
+    confidence: "unknown",
+  });
+}
+
+/* Letter bodies carry {CITE:topic} tokens rather than hardcoded section
+   numbers, the same shape SUPPLEMENT_TEMPLATES already uses. renderLetter
+   resolves them against the job's state through citeFor, and reports what
+   it could not resolve so the copy action can refuse rather than send a
+   letter with a hole in it. */
 const LETTER_TEMPLATES = [
   { id: "lt-supp", title: "Supplement request", when: "The carrier's scope omits code-required or manufacturer-required line items.",
     body: `[Date]
@@ -1027,19 +1123,19 @@ const LETTER_TEMPLATES = [
 RE: Claim #[claim] · Insured: [name] · Date of loss: [date]
 Property: [address]
 
-We are the contractor of record on the above claim. Having reviewed the loss summary dated [date], we have identified the following items that were omitted or under-scoped. Each is required by the Residential Code of Ohio, by the manufacturer's published installation instructions, or by the loss settlement terms of the policy.
+We are the contractor of record on the above claim. Having reviewed the loss summary dated [date], we have identified the following items that were omitted or under-scoped. Each is required by {CODE_NAME}, by the manufacturer's published installation instructions, or by the loss settlement terms of the policy.
 
-1. Drip edge, full perimeter — RCO R905.2.8.5. [LF] at [$].
-2. Ice barrier at eaves and valleys — RCO R905.1.2. Ohio sits in IECC Climate Zones 4A and 5A; this applies statewide. [SQ] at [$].
-3. Step flashing, remove and replace — RCO R905.2.8.4. Flashing cannot be reused after tear-off. [LF] at [$].
-4. Kickout flashing — RCO R703.4. [EA] at [$].
-5. Decking replacement where existing sheathing does not provide an adequate base — RCO R908.6. [SF] at [$].
-6. Ventilation brought to the code-required ratio — RCO R806.2. [detail] at [$].
+1. Drip edge, full perimeter — {CITE:dripEdge}. [LF] at [$].
+2. Ice barrier at eaves and valleys — {CITE:iceBarrier}. [SQ] at [$].
+3. Step flashing, remove and replace — {CITE:flashing}. Flashing cannot be reused after tear-off. [LF] at [$].
+4. Kickout flashing — {CITE:kickout}. [EA] at [$].
+5. Decking replacement where existing sheathing does not provide an adequate base — {CITE:decking}. [SF] at [$].
+6. Ventilation brought to the code-required ratio — {CITE:ventilation}. [detail] at [$].
 7. Permit and inspection fee. [$].
 8. Disposal. [$].
 9. Overhead and profit, where the loss requires coordination of multiple trades.
 
-Please update the loss summary to reflect these items and reissue payment within the timeframe set by OAC 3901-1-54. Supporting photographs and measurements are attached.
+Please update the loss summary to reflect these items and reissue payment within the timeframe your state's claim-handling rules allow. Supporting photographs and measurements are attached.
 
 [Rep name] — [Company] — [Phone]` },
 
@@ -1056,7 +1152,7 @@ The current authorization covers [x] slope(s). We respectfully request authoriza
 
 3. Partial replacement does not meet the policy's settlement standard. The policy provides for replacement with like kind and quality. A visible line between new and existing slopes does not satisfy that standard.
 
-4. OAC 3901-1-54(I)(1)(b) requires that replacement items be of like kind and quality with reasonably comparable appearance. If the carrier intends to maintain the partial position, OAC 3901-1-54(I)(2) requires a written explanation of the provision relied upon. We request that explanation in writing.
+4. {MATCHING_RULE} If the carrier intends to maintain the partial position, we request a written explanation of the policy provision relied upon.
 
 We request re-inspection within fourteen days. If the partial position is maintained, we will advise the insured of their right to invoke the policy's appraisal clause.
 
@@ -1088,22 +1184,20 @@ Pursuant to the appraisal provision of the policy, the insured demands appraisal
 
 The insured names [appraiser name, address] as their competent and disinterested appraiser.
 
-Please name the carrier's appraiser within the period required by the policy. The two appraisers will then select an umpire. An award agreed by any two of the three will be binding as to the amount of loss, consistent with Schwartz v. Standard Fire Insurance Co. (Ohio 2008).
+Please name the carrier's appraiser within the period required by the policy. The two appraisers will then select an umpire. An award agreed by any two of the three will be binding as to the amount of loss, as provided by the policy's appraisal clause.{APPRAISAL_AUTHORITY}
 
 [Insured name / Rep name] — [Company] — [Phone]` },
 
   { id: "lt-odi", title: "Department of Insurance complaint",
     when: "The carrier has missed handling deadlines or refused a written explanation. Escalates the file and creates a regulatory record.",
     body: `[Date]
-Ohio Department of Insurance — Consumer Services Division
-50 W. Town Street, Third Floor, Suite 300
-Columbus, OH 43215
+{REGULATOR_BLOCK}
 
 RE: Claim complaint · Insured: [name] · Carrier: [carrier] · Claim #[claim] · Date of loss: [date]
 
 The insured submits this complaint regarding the handling of the above claim.
 
-1. [Select: failure to acknowledge within 15 days per OAC 3901-1-54 / failure to complete investigation within 21 days / refusal to provide the written matching explanation required by OAC 3901-1-54(I)(2) / scope omitting code-required items / other].
+1. [Select: failure to acknowledge the claim within the period your state's claim-handling rules require / failure to complete the investigation within that period / refusal to provide a written explanation of the provision relied upon / scope omitting code-required items / other].
 
 2. The carrier has been given written notice regarding [drip edge / ice barrier / step flashing / kickout / decking / ventilation / matching] and has not updated the scope.
 
@@ -1891,6 +1985,8 @@ const IRC_BASE = {
   ventilation: { cite: "IRC R806.2", note: "Default 1/150 net free ventilating area; the 1/300 exception applies only with a balanced system." },
   fastening: { cite: "IRC R905.2.5", note: "4 nails per shingle minimum; 6-nail where the manufacturer or wind zone requires." },
   decking: { cite: "IRC R803 / R908.3", note: "Sheathing must be structurally sound; recover over unsound decking prohibited." },
+  flashing: { cite: "IRC R905.2.8.4", note: "Base and step flashing at walls and roof-to-wall intersections." },
+  kickout: { cite: "IRC R703.4", note: "Kickout / diverter flashing where a roof edge terminates against a wall." },
 };
 const STATE_DEFAULTS = {
   OH: {
@@ -2474,6 +2570,83 @@ const money = (n) =>
 const money0 = (n) =>
   (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
 const pct1 = (n) => `${n.toFixed(2)}%`;
+
+/* ==================================================================
+   THE VERIFICATION LADDER
+
+   Two bugs shipped from the same root cause: placeholder phone numbers
+   under a green "Verified" chip, and Ohio code sections marked verified
+   on an out-of-state supplement. Both were somebody setting
+   `verified: true` on data that was not. Convention did not hold, so
+   confidence becomes a value the render path reads rather than a flag
+   the author sets.
+
+   The tiers deliberately mirror resolveJurisdiction's existing
+   precision ladder ("verified" | "learned" | "market" | "state") so the
+   app carries one idea of confidence and not two:
+
+     verified — a person opened the source, on a date, and initialled
+                it. The only tier that may leave the building.
+     derived  — computed from a curated record (e.g. the IRC section for
+                a state's adopted code). True as far as it goes; shows
+                its derivation and asks to be checked.
+     seeded   — present but unconfirmed. On screen only.
+     unknown  — no value. Renders as a pointer to who would know, never
+                as a guess.
+
+   printable() is the whole point: anything below `verified` must not
+   reach a carrier, an adjuster or a homeowner. Callers omit the cite
+   entirely rather than printing it with a caveat, because a caveat in
+   a letter to an adjuster is still a citation in a letter to an
+   adjuster.
+================================================================== */
+const FACT_TIERS = ["unknown", "seeded", "derived", "verified"];
+function fact(value, opts = {}) {
+  return {
+    value: value == null ? "" : value,
+    note: opts.note || "",
+    sourceUrl: opts.sourceUrl || "",
+    sourceName: opts.sourceName || "",
+    srcId: opts.srcId || "",
+    asOf: opts.asOf || null,
+    verifiedBy: opts.verifiedBy || null,
+    confidence: FACT_TIERS.includes(opts.confidence) ? opts.confidence
+      : (value ? "seeded" : "unknown"),
+  };
+}
+/* Accepts a Fact or any of the older shapes still in the file
+   ({ cite, verified, missing }) so the two can coexist while the call
+   sites are converted. */
+function asFact(x) {
+  if (!x) return fact("");
+  /* A shape that already states its confidence may still be carrying the
+     value under the older `cite` key — citeFor's curated branch does. If
+     that is not normalised here, `value` is undefined, the letter renders
+     its placeholder text, and printable() returns true anyway because the
+     confidence says "verified". A confident fact with nothing in it is the
+     same false green this whole mechanism exists to prevent. */
+  if (x.confidence) return x.value != null ? x : { ...x, value: x.cite != null ? x.cite : "" };
+  if (x.missing) return fact("", { note: x.note, confidence: "unknown" });
+  return fact(x.cite != null ? x.cite : x.value, {
+    note: x.note, srcId: x.srcId || x.src, sourceUrl: x.sourceUrl || x.source,
+    asOf: x.asOf || (x.verifiedDetail && x.verifiedDetail.date) || x.checked || null,
+    verifiedBy: x.verifiedBy || (x.verifiedDetail && x.verifiedDetail.by) || null,
+    confidence: x.verified ? "verified" : (x.cite || x.value ? "derived" : "unknown"),
+  });
+}
+function printable(x) {
+  const f = asFact(x);
+  /* Both halves matter: a verified tier with an empty value is not
+     something to print, it is a bug upstream. */
+  return f.confidence === "verified" && !!String(f.value || "").trim();
+}
+function factTone(x) {
+  const c = asFact(x).confidence;
+  return c === "verified" ? "green" : c === "derived" ? "blue" : c === "seeded" ? "amber" : "gray";
+}
+const FACT_LABEL = {
+  verified: "Verified", derived: "Verify locally", seeded: "Unconfirmed", unknown: "Not on file",
+};
 /* Message delivery status. A send that hard-failed stores its reason in
    the status string ("Failed — Gmail rejected the message: …"); showing
    that as an amber "Queued" chip told the user it was still on its way
@@ -2713,20 +2886,32 @@ function codeNameForState(st) {
     || "Adopted IRC — verify locally";
 }
 function citeFor(state, topic) {
-  if (CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic]) return CODE_PROVISIONS[state][topic];
+  const curated = CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic];
+  if (curated) {
+    return { ...curated, state, confidence: curated.verified ? "verified" : "derived" };
+  }
   /* No IRC base cite for this topic means we genuinely do not know it. The
      old code reached into CODE_PROVISIONS.OH here and then labelled the
      result with the local adopted code — an Ohio section number dressed up
      as a Texas one. Say nothing instead. */
   const base = IRC_BASE[topic];
-  if (!base) return { cite: "", note: "No code citation on file for this item — verify locally before citing it.", verified: false, missing: true };
+  if (!base) {
+    return { cite: "", value: "", state,
+      note: "No code citation on file for this item — verify locally before citing it.",
+      verified: false, missing: true, confidence: "unknown" };
+  }
   const adopt = STATE_CODE_ADOPTION[state];
   const label = adopt ? adopt.code : "the locally adopted IRC";
   /* Keep `cite` to the short IRC section so it fits the badge; the
      adopted-code context and the verify reminder ride on `note` (the card
      already shows a "verify locally" banner and the adopted code name). */
   const verifyLine = `Per ${label}; verify edition${adopt && adopt.local ? " & local adoption" : ""}.`;
-  return { cite: base.cite, note: base.note ? `${base.note} ${verifyLine}` : verifyLine, verified: false };
+  /* The IRC section is real; whether this state adopted that edition is
+     what has not been checked. That is "derived", not "verified" — it may
+     be shown, and it may not be sent to a carrier. */
+  return { cite: base.cite, value: base.cite, state,
+    note: base.note ? `${base.note} ${verifyLine}` : verifyLine,
+    verified: false, confidence: "derived" };
 }
 
 /* Material list generator — quantities from measurements + waste. */
@@ -3137,6 +3322,42 @@ function SourceLink({ srcId }) {
     }}>
       <ExternalLink size={13} /> {s.name}
     </a>
+  );
+}
+
+/* The one way a citation renders. The tone is computed from the fact's
+   own confidence rather than passed in, so a caller cannot paint an
+   unconfirmed value in the verified style — which is exactly how a
+   placeholder phone number ended up under a green "Verified" chip.
+
+   An `unknown` fact renders the pointer instead of the value: who would
+   know, and a link to them. Silence with a next step beats a guess. */
+function Cited({ fact: f, compact = false, style }) {
+  const x = asFact(f);
+  const tone = factTone(x);
+  if (!x.value) {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", ...style }}>
+        <Chip tone="gray">{FACT_LABEL.unknown}</Chip>
+        {x.note && <span style={{ fontSize: 11.5, color: S.sub }}>{x.note}</span>}
+        {x.srcId ? <SourceLink srcId={x.srcId} /> : null}
+        {!x.srcId && x.sourceUrl ? <AssistLink href={x.sourceUrl}>{x.sourceName || "Where to check"}</AssistLink> : null}
+      </span>
+    );
+  }
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", ...style }}>
+      <Chip tone={tone}>{x.value}</Chip>
+      {!compact && x.confidence !== "verified" && (
+        <span style={{ fontSize: 11, fontWeight: 700, color: tone === "blue" ? T.accent : "#92600A" }}>
+          {FACT_LABEL[x.confidence]}
+        </span>
+      )}
+      {!compact && x.confidence === "verified" && x.asOf && (
+        <span style={{ fontSize: 11, color: S.sub }}>Verified {x.asOf}{x.verifiedBy ? ` · ${x.verifiedBy}` : ""}</span>
+      )}
+      {!compact && x.srcId ? <SourceLink srcId={x.srcId} /> : null}
+    </span>
   );
 }
 
@@ -14645,8 +14866,12 @@ function TabVentilation({ job, mut, toast }) {
   const n1 = (x) => Math.round(x).toLocaleString();
 
   const supplementText = () => {
-    const cite = "IRC / RCO R806.2";
-    return `Attic ventilation — ${n1(m.area)} sq ft ventilated area. Per ${cite}, required net free area at 1/${m.effectiveRatio} is ${n1(m.effectiveRequired)} in². `
+    /* Was hardcoded to "IRC / RCO R806.2" for every job in the country.
+       Resolves against the property's state now, and where the cite is not
+       verified there the sentence simply does not claim one. */
+    const vf = asFact(citeFor(job.state || "", "ventilation"));
+    const per = printable(vf) && vf.value ? `Per ${vf.value}, required` : "Required";
+    return `Attic ventilation — ${n1(m.area)} sq ft ventilated area. ${per} net free area at 1/${m.effectiveRatio} is ${n1(m.effectiveRequired)} in². `
       + `Existing system provides ${n1(m.totalIn2)} in² (${n1(m.exhaustIn2)} in² exhaust, ${n1(m.intakeIn2)} in² intake). `
       + (m.meets
         ? `System meets the required ratio.`
@@ -15365,7 +15590,7 @@ function supplementFindings(job) {
   if ((c.flashingFail === "Yes" || n(m.wallFlash) > 0) && !has(/kickout|kick\s*out|diverter/i))
     add("MODERATE", "Kickout / diverter flashing",
       "Wall-to-roof intersections need a kickout diverter at the eave end to keep runoff out of the wall — commonly omitted and code-required.",
-      { cite: "IRC R703.4", line: { desc: "Kickout / diverter flashing", qty: 2, unit: "EA" } });
+      { topic: "kickout", line: { desc: "Kickout / diverter flashing", qty: 2, unit: "EA" } });
 
   // --- Field of the roof ---
   if (!has(/underlayment|synthetic|felt/i))
@@ -15454,13 +15679,22 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
     setDone((d) => ({ ...d, [f.title]: "estimate" }));
     toast && toast(`Added "${f.line.desc}" — set its price`);
   };
+  /* The cite used to be concatenated into `desc` and the tier discarded,
+     so once written the row was just "Drip edge [RCO R905.2.8.5]" with no
+     way to tell whether anyone had checked it. This text is what a rep
+     reads to an adjuster, so an unverified cite is left off entirely and
+     the tier travels with the row. */
   const addAsSupplement = (f) => {
     if (!mut) return;
-    const cite = f.cite ? ` [${f.cite}]` : "";
-    const row = { id: uid("sup"), desc: `${f.title}${cite}`, amount: "", status: "Draft", at: nowStamp() };
+    const cf = asFact(f);
+    const cite = printable(cf) && cf.value ? ` [${cf.value}]` : "";
+    const row = { id: uid("sup"), desc: `${f.title}${cite}`, amount: "", status: "Draft", at: nowStamp(),
+      cite: cf.value || "", citeConfidence: cf.confidence, citeState: f.state || "" };
     mut((j) => ({ ...j, claim: { ...(j.claim || {}), supplements: [...((j.claim || {}).supplements || []), row] } }));
     setDone((d) => ({ ...d, [f.title]: "supplement" }));
-    toast && toast(`Added "${f.title}" to the claim supplements`);
+    toast && toast(printable(cf) || !cf.value
+      ? `Added "${f.title}" to the claim supplements`
+      : `Added "${f.title}" — the code cite was left off because it is not verified for this state`);
   };
 
   return (
@@ -15487,7 +15721,7 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{f.title}</div>
                   <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 2 }}>{f.why}</div>
-                  {f.cite && <div style={{ marginTop: 5 }}><Chip tone={f.verified ? "blue" : "amber"}>{f.cite}</Chip></div>}
+                  {f.cite && <div style={{ marginTop: 5 }}><Cited fact={f} compact /></div>}
                 </div>
               </div>
               {!locked && mut && (done[f.title] || f.line || isClaim) && (
@@ -19231,12 +19465,19 @@ function ShingleFinder() {
 /* ================================================================
    LETTER TEMPLATES — copy, fill the brackets, send.
    ================================================================ */
-function LetterTemplates() {
+function LetterTemplates({ state: stateProp = "" }) {
   const [open, setOpen] = useState(null);
   const [copied, setCopied] = useState(null);
-  const copy = async (t) => {
+  /* These go to a carrier or a regulator on company letterhead, so they
+     resolve against a state before they can be copied. They used to carry
+     Ohio code sections and the Columbus DOI address as literal prose, to
+     every user in the country. */
+  /* No default. Defaulting to Ohio here would be the same habit this whole
+     round is removing — the rep picks, or nothing resolves. */
+  const [state, setState] = useState(stateProp || "");
+  const copy = async (t, body) => {
     try {
-      await navigator.clipboard.writeText(t.body);
+      await navigator.clipboard.writeText(body);
       setCopied(t.id);
       setTimeout(() => setCopied(null), 1800);
     } catch { setCopied("fail"); setTimeout(() => setCopied(null), 1800); }
@@ -19247,7 +19488,17 @@ function LetterTemplates() {
         Put it in writing. Verbal approvals and denials disappear when a claim gets contested — written ones do not.
         Copy a template, fill the bracketed fields, send it from your work email so there's a timestamp.
       </div>
-      {LETTER_TEMPLATES.map((t, i) => (
+      <Card style={{ marginBottom: 14 }}>
+        <Field label="Where is the property?" hint="Code sections, the matching rule and the regulator's address all resolve from this.">
+          <select style={selStyle} value={state} onChange={(e) => setState(e.target.value)}>
+            <option value="">Select a state…</option>
+            {US_STATES.map(([ab, name]) => <option key={ab} value={ab}>{name}</option>)}
+          </select>
+        </Field>
+      </Card>
+      {LETTER_TEMPLATES.map((t, i) => {
+        const r = renderLetter(t, state);
+        return (
         <Card key={t.id} style={{ marginTop: i ? 12 : 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
             <div style={{ minWidth: 0 }}>
@@ -19255,11 +19506,30 @@ function LetterTemplates() {
               <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 4 }}>{t.when}</div>
             </div>
           </div>
+          {r.used.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+              {r.used.map((u, k) => <Cited key={k} fact={u.fact} compact />)}
+            </div>
+          )}
+          {!r.ready && (
+            <Callout label={state ? `Not ready to send in ${state}` : "Pick a state first"} tone="amber">
+              {r.blocking.length} of the references in this letter {r.blocking.length === 1 ? "is" : "are"} not
+              verified for {state || "the selected state"}. Sending an unchecked citation to an adjuster is what
+              gets the rest of the letter dismissed — confirm {r.blocking.length === 1 ? "it" : "them"} first.
+              {r.blocking.some((b) => b.fact.sourceUrl) && (
+                <div style={{ marginTop: 6 }}>
+                  {r.blocking.filter((b) => b.fact.sourceUrl).map((b, k) => (
+                    <AssistLink key={k} href={b.fact.sourceUrl}>{b.fact.sourceName || "Where to check"}</AssistLink>
+                  ))}
+                </div>
+              )}
+            </Callout>
+          )}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => setOpen(open === t.id ? null : t.id)}>
               <Eye size={13} /> {open === t.id ? "Hide" : "Read"}
             </Btn>
-            <Btn small style={{ flex: 1 }} onClick={() => copy(t)}>
+            <Btn small style={{ flex: 1 }} disabled={!r.ready} onClick={() => copy(t, r.body)}>
               {copied === t.id ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
             </Btn>
           </div>
@@ -19268,10 +19538,11 @@ function LetterTemplates() {
               whiteSpace: "pre-wrap", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
               fontSize: 12.5, lineHeight: 1.6, color: S.ink, background: "#FAFBFC",
               border: `1px solid ${S.line}`, borderRadius: 10, padding: 13, marginTop: 12, overflowX: "auto",
-            }}>{t.body}</pre>
+            }}>{r.body}</pre>
           )}
         </Card>
-      ))}
+        );
+      })}
       <Callout label="Before sending">
         Replace every bracketed field — an unfilled placeholder in front of an adjuster costs credibility on the whole
         letter. Attach the photos, measurements, and manufacturer bulletin you reference. Keep a copy in the job's Files tab.
@@ -19594,7 +19865,12 @@ function ClaimAssistant({ job = null }) {
                 <Card key={j} style={{ marginBottom: 8 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 5 }}>
                     <Chip tone={tone[h.tag] || "gray"}>{h.source}</Chip>
-                    {h.cite && <span style={{ fontSize: 12, fontWeight: 700, color: T.accent }}>{h.cite}</span>}
+                    {h.cite && <Cited fact={fact(h.cite, {
+                      /* Only real code sections read as authority here. The
+                         corpus also carries "NRCA Roofing Manual" and
+                         "Manufacturer instructions" in this same field. */
+                      confidence: /^(IRC|RCO|OAC|R\.C\.)\s/.test(String(h.cite)) ? "derived" : "seeded",
+                    })} compact />}
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 800, color: S.ink, lineHeight: 1.35 }}>{h.title}</div>
                   <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginTop: 5 }}>{h.body.length > 320 ? h.body.slice(0, 320).trim() + "…" : h.body}</div>
@@ -19788,7 +20064,15 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                         </div>
                         <Btn kind="soft" small style={{ width: "100%", marginTop: 9 }}
                           onClick={() => {
-                            const t = `${c.supplement}\n\nAuthority: ${c.cite}`;
+                            /* "Authority:" was prepended to whatever was in
+                               `cite` — including "Manufacturer instructions"
+                               and "Industry standard pricing", which are
+                               pointers, not authority. Only a verified cite
+                               gets the label. */
+                            const kf = asFact({ cite: c.cite, verified: /^IRC\s/.test(String(c.cite || "")) });
+                            const t = printable(kf)
+                              ? `${c.supplement}\n\nAuthority: ${kf.value}`
+                              : (c.cite ? `${c.supplement}\n\nReference: ${c.cite} (confirm before citing)` : c.supplement);
                             if (navigator.clipboard) navigator.clipboard.writeText(t);
                             toast("Supplement wording copied");
                           }}>
@@ -19882,8 +20166,17 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
           </Card>
           {SUPPLEMENT_TEMPLATES.map((t) => {
             const prov = citeFor(tplState, t.topic);
+            const pf = asFact(prov);
             const isOpen = openTpl === t.id;
-            const wording = t.wording.replaceAll("{CITE}", prov.cite);
+            /* When citeFor has nothing on file, substituting an empty string
+               produced "Per , ice barrier is required…" — a malformed
+               sentence going to a carrier. The wording drops the clause
+               instead, and the copy action is withheld unless the cite is
+               verified for this state. */
+            const wording = pf.value
+              ? t.wording.replaceAll("{CITE}", pf.value)
+              : t.wording.replace(/Per \{CITE\},\s*/g, "").replaceAll("{CITE}", "the adopted code");
+            const canCopy = printable(pf);
             return (
               <Card key={t.id} pad={16} style={{ marginTop: 10 }}>
                 <button onClick={() => setOpenTpl(isOpen ? null : t.id)} style={{
@@ -19894,7 +20187,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                     <div>
                       <div style={{ fontSize: 12, color: S.sub }}>{t.category}</div>
                       <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2 }}>{t.title}</div>
-                      <div style={{ marginTop: 6 }}><Chip tone={prov.verified ? "blue" : "amber"}>{prov.cite}</Chip></div>
+                      <div style={{ marginTop: 6 }}><Cited fact={pf} /></div>
                     </div>
                     <ChevronDown size={17} style={{ transform: isOpen ? "rotate(180deg)" : "none", flexShrink: 0 }} />
                   </div>
@@ -19918,7 +20211,14 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                       fontSize: 13, color: S.ink, lineHeight: 1.6, background: "#FAFBFC",
                       border: `1px solid ${S.line}`, borderRadius: 10, padding: 12,
                     }}>{wording}</div>
-                    <Btn small kind="soft" style={{ marginTop: 12 }} onClick={() => {
+                    {!canCopy && (
+                      <Callout label={`Not verified for ${tplState}`} tone="amber">
+                        {pf.value
+                          ? `${pf.value} is the section this resolves to under ${codeNameForState(tplState)}, but nobody has confirmed the edition or the local adoption. Check it before this goes to an adjuster.`
+                          : "No code citation on file for this item in this state. Confirm the section locally before citing it."}
+                      </Callout>
+                    )}
+                    <Btn small kind="soft" style={{ marginTop: 12 }} disabled={!canCopy} onClick={() => {
                       if (navigator.clipboard) navigator.clipboard.writeText(wording);
                       toast("Wording copied — fill the [brackets]");
                     }}><Copy size={13} /> Copy wording</Btn>
@@ -20174,7 +20474,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                   const p = citeFor(juris.state, topic);
                   return (
                     <div key={topic} style={{ padding: "10px 0", borderBottom: `1px solid ${S.line}` }}>
-                      <Chip tone={p.verified ? "blue" : "amber"}>{p.cite}</Chip>
+                      <Cited fact={p} compact />
                       <div style={{ fontSize: 13, color: S.ink, marginTop: 6, lineHeight: 1.5 }}>{p.note}</div>
                     </div>
                   );
@@ -20188,7 +20488,13 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                     <div key={i} style={{ borderTop: i ? `1px solid ${S.line}` : "none", padding: "12px 0" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                         <div style={{ fontSize: 14, fontWeight: 800, color: S.ink }}>{p.topic}</div>
-                        <Chip tone={p.srcOH === "RCO" ? "blue" : "amber"}>{p.oh}</Chip>
+                        <Cited fact={fact(p.oh, {
+                          srcId: p.srcOH,
+                          /* A topic the file itself flags as having two
+                             competing section numbers is not settled. */
+                          confidence: p.conflict ? "derived" : "verified",
+                          asOf: "Jul 2026",
+                        })} compact />
                       </div>
                       <div style={{ fontSize: 13, color: S.sub, marginTop: 5, lineHeight: 1.5 }}>{p.note}</div>
                       {p.conflict && <Callout label="Check the section number">{p.conflict}</Callout>}
