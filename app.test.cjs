@@ -2149,7 +2149,12 @@ var DEFAULT_PORTAL_SETTINGS = {
   contact: true,
   requests: true,
   sign: true,
-  review: true
+  review: true,
+  /* The certificate of completion is the homeowner's document as much as
+     the carrier's — they need it to chase their own depreciation cheque.
+     On by default, and independent of `documents`, which governs files
+     the office chose to upload. */
+  certificate: true
 };
 var PORTAL_SECTION_KEY = {
   tracker: "tracker",
@@ -9209,7 +9214,8 @@ var JOB_TABS = [
   ["files", "Files"],
   ["assistant", "Ask the assistant"],
   ["portal", "Portal"],
-  ["claim", "Insurance claim"]
+  ["claim", "Insurance claim"],
+  ["certificate", "Certificate of completion"]
 ];
 var JOB_SECTIONS = [
   // Inspect
@@ -9226,6 +9232,7 @@ var JOB_SECTIONS = [
   ["report", "Report", import_lucide_react.ScrollText, "Sell"],
   // Claim (insurance jobs only — gated in the render filter)
   ["claim", "Insurance claim", import_lucide_react.Shield, "Claim"],
+  ["certificate", "Certificate of completion", import_lucide_react.Award, "Claim"],
   // Build
   ["workorder", "Work order", import_lucide_react.ClipboardList, "Build"],
   ["handoff", "Sold & handoff", import_lucide_react.Share2, "Build"],
@@ -9628,6 +9635,18 @@ function JobDetail({
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabTasks, { job, mut, toast });
             case "files":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFiles, { job, mut, toast });
+            case "certificate":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                TabCertificate,
+                {
+                  job,
+                  brand: brand2,
+                  mut,
+                  toast,
+                  currentUser,
+                  integrations
+                }
+              );
             case "assistant":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimAssistant, { job });
             case "portal":
@@ -9650,6 +9669,7 @@ function JobDetail({
         const relevant = JOB_SECTIONS.filter(([id]) => {
           if (!featureOn(features, id)) return false;
           if (id === "claim") return job.claimType === "Insurance";
+          if (id === "certificate") return job.claimType === "Insurance";
           if (id === "handoff" || id === "changeorders") return true;
           return allowed.has(id);
         });
@@ -11110,6 +11130,158 @@ function proposalCss(brand2) {
   @media print { body { padding-bottom: 24px; } }
   </style>`;
 }
+var PERILS = ["Wind", "Hail", "Wind & Hail", "Fire", "Water", "Tree impact", "Other"];
+function longDate(iso) {
+  const s = String(iso || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}/.test(s)) return s;
+  const d = /* @__PURE__ */ new Date(s.slice(0, 10) + "T12:00:00");
+  if (isNaN(d.getTime())) return s;
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+function certificateFor(job, brand2) {
+  const c = job.certificate || {};
+  const ins = job.insurance || {};
+  const claim = job.claim || {};
+  const pay = paymentsSummary(job);
+  const rcv = num(pay.contract) || num(claim.rcv) || 0;
+  const deductible = c.deductible !== void 0 && c.deductible !== "" ? moneyNum(c.deductible) : moneyNum(ins.deductible);
+  return {
+    owner: c.owner || job.name || "",
+    address: c.address || job.address || "",
+    carrier: c.carrier || ins.carrier || "",
+    claimNo: c.claimNo || ins.claim || "",
+    policyNo: c.policyNo || ins.policy || "",
+    typeOfLoss: c.typeOfLoss || claim.typeOfLoss || "",
+    dateOfLoss: c.dateOfLoss || claim.dateOfLoss || "",
+    adjuster: c.adjuster || ins.adjusterName || "",
+    completedAt: c.completedAt || job.completedAt || "",
+    manager: c.manager || job.assignee || "",
+    rcv,
+    deductible,
+    net: Math.max(0, rcv - deductible),
+    /* Free text under the money block. The sample names the carrier's
+       price list and estimate date; those are not on the job file, so
+       the default says what is true and the rep can paste the rest. */
+    note: c.note !== void 0 ? c.note : "",
+    /* Who signs for the company. The contract's countersignature is the
+       right default — the same person already stood behind this job. */
+    signedBy: c.signedBy || job.assignee || "",
+    scope: c.scope || `${titleish(projectNoun(job))} \u2014 Insurance Restoration`
+  };
+}
+function titleish(s) {
+  const map = { roofing: "Residential Roof Replacement", siding: "Residential Siding Replacement", gutter: "Gutter Replacement", window: "Window Replacement", exterior: "Residential Exterior Restoration" };
+  return map[String(s || "").toLowerCase()] || "Residential Roof Replacement";
+}
+function certificateGaps(job, brand2) {
+  const a = certificateFor(job, brand2);
+  const out = [];
+  if (!a.completedAt) out.push("the date the work was completed");
+  if (!a.claimNo) out.push("the claim number");
+  if (!a.carrier) out.push("the insurance carrier");
+  if (!a.rcv) out.push("a contract price");
+  if (!a.owner) out.push("the property owner's name");
+  if (!a.address) out.push("the property address");
+  return out;
+}
+function certificateReady(job, brand2) {
+  return certificateGaps(job, brand2).length === 0;
+}
+function certificateCss(brand2) {
+  const ink = "#111", sub = "#666", rule = "#bbb", band = "#f2f2f2";
+  return `<style>
+@page { size: letter; margin: 0.62in 0.62in 0.55in; }
+.cert { font-family: Helvetica, Arial, sans-serif; color: ${ink}; font-size: 9pt; line-height: 1.42; }
+.certh { text-align: center; margin-bottom: 13pt; }
+.certh1 { font-size: 17.5pt; font-weight: 700; letter-spacing: .01em; margin: 0 0 4pt; }
+.certh2 { font-size: 8.5pt; color: ${ink}; margin: 0 0 5pt; }
+.certh3 { font-size: 7.6pt; color: ${sub}; margin: 0; }
+.certband { background: ${band}; font-size: 9.5pt; font-weight: 700; padding: 3pt 6pt; margin: 0 0 3pt; }
+.certgrid { width: 100%; border-collapse: collapse; margin-bottom: 11pt; }
+.certgrid td { border-bottom: 1px solid ${rule}; padding: 3pt 6pt 3pt 0; vertical-align: top; }
+.certgrid td.k { font-size: 8pt; font-weight: 700; width: 17%; }
+.certgrid td.v { font-size: 9pt; width: 33%; padding-right: 14pt; }
+.certmoney { width: 100%; border-collapse: collapse; margin-bottom: 6pt; }
+.certmoney td { border-bottom: 1px solid ${rule}; padding: 3.5pt 6pt 3.5pt 0; font-size: 9pt; }
+.certmoney td.r { text-align: right; white-space: nowrap; }
+.certmoney tr.certtot td { font-weight: 700; }
+.certnote { font-size: 7.6pt; color: ${sub}; line-height: 1.45; margin: 0 0 11pt; }
+.certp { font-size: 8.4pt; line-height: 1.5; margin: 0 0 14pt; }
+.certsig { width: 100%; border-collapse: collapse; }
+.certsig td { vertical-align: bottom; padding-top: 3pt; }
+.certsig tr.gap td { padding-top: 20pt; }
+.certsig td.d { width: 34%; padding-left: 18pt; }
+.certink { font-family: 'Snell Roundhand', 'Apple Chancery', 'Segoe Script', cursive; font-size: 15pt; }
+.certline { border-bottom: 1px solid ${ink}; height: 13pt; }
+.certcap { font-size: 7.6pt; color: ${ink}; padding-top: 3pt; border-top: 1px solid ${rule}; }
+.certfoot { position: fixed; bottom: 0; left: 0; right: 0; font-size: 7pt; color: ${sub};
+  display: flex; justify-content: space-between; border-top: 1px solid ${rule}; padding-top: 3pt; }
+@media print { .certfoot { position: fixed; } }
+</style>`;
+}
+function certificateDocHtml(job, brand2) {
+  const a = certificateFor(job, brand2);
+  const co = [brand2.company, brand2.address, brand2.phone, brand2.email].filter(Boolean).map(esc).join(" &nbsp;|&nbsp; ");
+  const row = (k1, v1, k2, v2) => `<tr>
+    <td class="k">${esc(k1)}</td><td class="v">${esc(v1) || "&nbsp;"}</td>
+    <td class="k">${esc(k2)}</td><td class="v">${esc(v2) || "&nbsp;"}</td></tr>`;
+  const done = longDate(a.completedAt);
+  return `<div class="cert">
+  <div class="certh">
+    <div class="certh1">CERTIFICATE OF COMPLETION</div>
+    <div class="certh2">${esc(a.scope)}</div>
+    <div class="certh3">${co}</div>
+  </div>
+
+  <div class="certband">PROJECT INFORMATION</div>
+  <table class="certgrid">
+    ${row("PROPERTY OWNER", a.owner, "PROPERTY ADDRESS", a.address)}
+    ${row("INSURANCE CARRIER", a.carrier, "CLAIM NUMBER", a.claimNo)}
+    ${row("POLICY NUMBER", a.policyNo, "TYPE OF LOSS", a.typeOfLoss)}
+    ${row("DATE OF LOSS", longDate(a.dateOfLoss), "ADJUSTER / ESTIMATOR", a.adjuster)}
+    ${row("WORK COMPLETED", done, "PROJECT MANAGER", a.manager)}
+  </table>
+
+  <div class="certband">CONTRACT PRICE &amp; SETTLEMENT SUMMARY</div>
+  <table class="certmoney">
+    <tr><td>Replacement Cost Value (Total Contract Price)</td><td class="r">${money(a.rcv)}</td></tr>
+    <tr><td>Less Insured's Deductible</td><td class="r">(${money(a.deductible)})</td></tr>
+    <tr class="certtot"><td>Net Claim / Insurance Proceeds</td><td class="r">${money(a.net)}</td></tr>
+  </table>
+  ${a.note ? `<p class="certnote">${esc(a.note)}</p>` : `<p class="certnote">Amounts per the signed contract for this project, including any approved change orders. Recoverable depreciation and supplements are billed per that contract.</p>`}
+
+  <div class="certband">CERTIFICATION</div>
+  <p class="certp">${esc(brand2.company || "The Company")} certifies that all work described above was completed on
+  ${esc(done || "____________")} at ${esc(a.address)} in a good and workmanlike manner, in accordance with the
+  approved insurance scope, manufacturer instructions, and applicable building code. All debris was removed and the
+  site left in clean condition. The undersigned property owner has inspected the work and accepts it as complete and
+  satisfactory.</p>
+
+  <table class="certsig">
+    <tr>
+      <td><div class="certink">${esc(a.signedBy)}</div></td>
+      <td class="d"><div class="certink">${esc(done)}</div></td>
+    </tr>
+    <tr>
+      <td class="certcap">${esc(a.signedBy)} &mdash; ${esc(brand2.company || "")}</td>
+      <td class="d certcap">Date</td>
+    </tr>
+    <tr class="gap">
+      <td><div class="certline"></div></td>
+      <td class="d"><div class="certline"></div></td>
+    </tr>
+    <tr>
+      <td class="certcap">${esc(a.owner)} &mdash; Property Owner</td>
+      <td class="d certcap">Date</td>
+    </tr>
+  </table>
+</div>
+<div class="certfoot">
+  <span>${esc(brand2.company || "")} &nbsp;|&nbsp; Certificate of Completion${a.owner ? " &nbsp;|&nbsp; " + esc(a.owner) : ""}${a.claimNo ? " &nbsp;|&nbsp; Claim " + esc(a.claimNo) : ""}</span>
+  <span>Page 1</span>
+</div>
+${certificateCss(brand2)}`;
+}
 function invoiceDocHtml(job, brand2) {
   const pay = paymentsSummary(job);
   const est = job.estimate;
@@ -12058,9 +12230,30 @@ function projectNoun(job) {
   if (has("window")) return "window";
   return "roofing";
 }
+function portalDocuments(job, brand2, portal) {
+  const out = portal.documents ? (job.files || []).filter((file) => file.shared).map((file) => ({
+    name: file.name,
+    category: file.cat,
+    date: file.at,
+    url: file.url || null
+  })) : [];
+  const cert = job.certificate || {};
+  if (portal.certificate !== false && cert.shared !== false && certificateReady(job, brand2)) {
+    const a = certificateFor(job, brand2);
+    out.unshift({
+      name: "Certificate of Completion",
+      category: "Insurance",
+      date: longDate(a.completedAt),
+      url: null,
+      html: certificateDocHtml(job, brand2)
+    });
+  }
+  return out;
+}
 function buildPortalSnapshot(job, brand2, token, users = []) {
   const portal = { ...DEFAULT_PORTAL_SETTINGS, ...job.portal || {} };
   const pay = paymentsSummary(job);
+  const portalDocs = portalDocuments(job, brand2, portal);
   return {
     token,
     job_id: job.id,
@@ -12076,7 +12269,7 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
       address: job.address,
       projectType: projectNoun(job),
       stageLabel: job.stageLabel || "",
-      order: portalOrderOf(portal).filter((sid) => portalSectionOn(portal, sid)),
+      order: portalOrderOf(portal).filter((sid) => sid === "documents" ? portalDocs.length > 0 : portalSectionOn(portal, sid)),
       /* Rep block: a per-job override wins over the assigned seat, so a
          different face can be put in front of a customer without
          reassigning the job. */
@@ -12181,12 +12374,7 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
       portal,
       notes: (job.notes || []).filter((n) => n.customerVisible).map((n) => ({ at: n.at, text: n.text })),
       photos: portal.photos ? (job.photos || []).filter((ph) => ph.shared).map((ph) => ({ url: ph.url || ph.dataUrl, label: ph.label || "" })) : [],
-      documents: portal.documents ? (job.files || []).filter((file) => file.shared).map((file) => ({
-        name: file.name,
-        category: file.cat,
-        date: file.at,
-        url: file.url || null
-      })) : [],
+      documents: portalDocs,
       estimate: portal.estimate ? (() => {
         const est = job.estimate;
         const tiers = (est.tiers || []).map((t) => ({
@@ -13020,7 +13208,16 @@ function PublicPortal({ token }) {
                   file.date ? ` \xB7 ${file.date}` : ""
                 ] })
               ] }),
-              file.url && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: file.url, target: "_blank", rel: "noreferrer", style: { color: prim, fontSize: 12.5, fontWeight: 700 }, children: "Open" })
+              file.url && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: file.url, target: "_blank", rel: "noreferrer", style: { color: prim, fontSize: 12.5, fontWeight: 700 }, children: "Open" }),
+              !file.url && file.html && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "button",
+                {
+                  onClick: () => openDoc(file.name, { company: d.company, logo: d.logo, primary: d.primary, phone: d.phone, email: d.email }, file.html, () => {
+                  }, { bare: true }),
+                  style: { border: "none", background: "none", cursor: "pointer", color: prim, fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", padding: 0 },
+                  children: "View"
+                }
+              )
             ] }, `${file.name}-${index}`))
           ] })
         ) : null;
@@ -16049,6 +16246,7 @@ function TabClaim({ job, mut, toast, brand: brand2 }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Policy number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: ins.policy || "", onChange: (e) => setIns("policy")(e.target.value) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date of loss", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: c.dateOfLoss || "", onChange: (e) => set("dateOfLoss")(e.target.value) }) })
       ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Type of loss", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: PERILS, value: c.typeOfLoss || "", onPick: set("typeOfLoss") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Adjuster", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: ins.adjusterName || "", onChange: (e) => setIns("adjusterName")(e.target.value) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Adjuster phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "tel", value: ins.adjusterPhone || "", onChange: (e) => setIns("adjusterPhone")(e.target.value) }) }),
@@ -20163,6 +20361,139 @@ function TabPayments({ job, mut, toast, onLog = () => {
         ] })
       }
     )
+  ] });
+}
+function TabCertificate({ job, brand: brand2, mut, toast, currentUser = null, integrations = {} }) {
+  const a = certificateFor(job, brand2);
+  const gaps = certificateGaps(job, brand2);
+  const ready = gaps.length === 0;
+  const cert = job.certificate || {};
+  const set = (k) => (v) => mut((j) => ({ ...j, certificate: { ...j.certificate || {}, [k]: v } }));
+  const shared = cert.shared !== false;
+  const completed = job.stageId === "s10";
+  const docTitle = `Certificate of Completion \u2014 ${job.name}`;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: ready ? "green" : "amber", children: ready ? "Ready" : `${gaps.length} missing` }), children: "Certificate of completion" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55 }, children: [
+        "The document the carrier wants before it releases recoverable depreciation. It builds itself from this job \u2014 the completion date is stamped when the job moves to ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Job completed" }),
+        ", and the rest comes off the claim and the contract. Correct anything below and it changes on the certificate."
+      ] }),
+      !completed && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "This job is not marked completed yet", children: [
+        "You can still print a draft, but the completion date is stamped when the job reaches ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Job completed" }),
+        ". A certificate dated before the work finished is worse than a late one."
+      ] }),
+      !ready && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Not ready to send", children: [
+        "The certificate is missing ",
+        gaps.join(", "),
+        ". Fill those in below, or on the Insurance claim screen where the carrier details live."
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Project information" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Property owner", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.owner, onChange: (e) => set("owner")(e.target.value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Work completed", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: a.completedAt, onChange: (e) => set("completedAt")(e.target.value) }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Property address", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.address, onChange: (e) => set("address")(e.target.value) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Insurance carrier", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.carrier, onChange: (e) => set("carrier")(e.target.value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Claim number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.claimNo, onChange: (e) => set("claimNo")(e.target.value) }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Policy number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.policyNo, onChange: (e) => set("policyNo")(e.target.value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Type of loss", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.typeOfLoss, placeholder: "Wind", onChange: (e) => set("typeOfLoss")(e.target.value) }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date of loss", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: a.dateOfLoss, onChange: (e) => set("dateOfLoss")(e.target.value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Adjuster / estimator", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.adjuster, onChange: (e) => set("adjuster")(e.target.value) }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Project manager", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.manager, onChange: (e) => set("manager")(e.target.value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Signed for the company by", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.signedBy, onChange: (e) => set("signedBy")(e.target.value) }) })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Contract price & settlement" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Stated as a total, not a line-item schedule \u2014 the contract price including approved change orders, less the deductible. An itemised certificate that disagrees with the carrier's own estimate line for line starts an argument on a document whose only job is to close the claim." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Replacement Cost Value (total contract price)", v: money(a.rcv) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Insured's deductible", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        MoneyInput,
+        {
+          style: inputStyle,
+          value: cert.deductible !== void 0 ? cert.deductible : (job.insurance || {}).deductible || "",
+          onChange: set("deductible")
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Net claim / insurance proceeds", v: money(a.net), strong: true }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        Field,
+        {
+          label: "Note under the settlement block",
+          hint: "Optional. Paste the carrier's price list and estimate date here if the adjuster wants them cited.",
+          children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "textarea",
+            {
+              style: { ...inputStyle, minHeight: 62, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.5 },
+              value: a.note,
+              placeholder: "Amounts per the approved [carrier] estimate (Price List ______, completed __/__/____).",
+              onChange: (e) => set("note")(e.target.value)
+            }
+          )
+        }
+      )
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Where it goes" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 10, alignItems: "center", padding: "9px 0", fontSize: 13.5, cursor: "pointer" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: shared,
+            onChange: (e) => set("shared")(e.target.checked),
+            style: { width: 18, height: 18, accentColor: T.accent }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontWeight: 600 }, children: "Show it in the customer portal" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: "Filed under Documents, alongside anything else you have shared. It is the homeowner's certificate \u2014 they need it as much as the carrier does." })
+        ] })
+      ] }),
+      shared && !ready && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: "It will not appear in the portal until it is complete \u2014 a homeowner should not be shown a certificate with blanks in it." })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+        Btn,
+        {
+          kind: "ghost",
+          style: { flex: 1 },
+          onClick: () => openDoc(docTitle, brand2, certificateDocHtml(job, brand2), toast, { bare: true }),
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
+            " PDF"
+          ]
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+        Btn,
+        {
+          style: { flex: 1 },
+          disabled: !ready,
+          onClick: () => sendClientEmail(job, mut, currentUser, integrations, toast, {
+            subject: `Certificate of completion \u2014 ${job.address}`,
+            body: `Hi ${(job.name || "").split(" ")[0]}, attached is the certificate of completion for the work at ${job.address}, finished ${longDate(a.completedAt)}. Your carrier will usually want a copy of this before releasing the recoverable depreciation on claim ${a.claimNo}. It is also in your customer portal under Documents.`
+          }),
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }),
+            " Email it"
+          ]
+        }
+      )
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: ready ? "Print it for a wet signature from the homeowner, or email it as it stands. The owner's signature line is left blank on purpose." : "Printing a draft works so you can see what is still blank. Emailing is off until it is complete." })
   ] });
 }
 function TabInvoice({ job, brand: brand2, mut, toast, currentUser = null, integrations = {} }) {
@@ -28424,6 +28755,7 @@ function SupremeCRM() {
           next.subInvoice = { ...base, status: terminal ? base.status : "needs_review" };
         }
       }
+      if (stageId === "s10" && !next.completedAt) next.completedAt = todayIso();
       if (j.portal?.notifyStage && stage) {
         const channel = j.consent?.sms?.granted ? "sms" : j.consent?.email?.granted ? "email" : null;
         if (channel) {

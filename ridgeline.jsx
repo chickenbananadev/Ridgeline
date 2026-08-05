@@ -8,7 +8,7 @@ import {
   BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat, CloudRain,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
   Scale, Lightbulb, ExternalLink, Lock, Layers, Smile
-, Filter , Megaphone, Clock, Zap, Sun, Moon, Navigation } from "lucide-react";
+, Filter , Megaphone, Clock, Zap, Sun, Moon, Navigation, Award } from "lucide-react";
 
 /* ================================================================
    BRANDING — single source of company identity. Everything company-
@@ -1705,6 +1705,11 @@ const DEFAULT_PORTAL_SETTINGS = {
      that does not want a tracker or a messaging thread in front of its
      customers can turn them off. */
   tracker: true, updates: true, messages: true, yourinfo: true, contact: true, requests: true, sign: true, review: true,
+  /* The certificate of completion is the homeowner's document as much as
+     the carrier's — they need it to chase their own depreciation cheque.
+     On by default, and independent of `documents`, which governs files
+     the office chose to upload. */
+  certificate: true,
 };
 /* Section id -> settings key. Most match by name; the ones that predate
    the registry keep their original keys so saved jobs are unaffected. */
@@ -7942,6 +7947,7 @@ const JOB_TABS = [
   ["payments", "Payments"], ["invoice", "Invoice"], ["workorder", "Work order"],
   ["tasks", "Tasks"], ["files", "Files"], ["assistant", "Ask the assistant"],
   ["portal", "Portal"], ["claim", "Insurance claim"],
+  ["certificate", "Certificate of completion"],
 ];
 
 /* Collapsible sections, in the order they are worked. Replaces a
@@ -7971,6 +7977,7 @@ const JOB_SECTIONS = [
   ["report", "Report", ScrollText, "Sell"],
   // Claim (insurance jobs only — gated in the render filter)
   ["claim", "Insurance claim", Shield, "Claim"],
+  ["certificate", "Certificate of completion", Award, "Claim"],
   // Build
   ["workorder", "Work order", ClipboardList, "Build"],
   ["handoff", "Sold & handoff", Share2, "Build"],
@@ -7989,7 +7996,7 @@ const JOB_TAB_GROUPS = [
   ["Inspect", ["overview", "checklist", "ventilation", "measure", "photos"]],
   ["Sell", ["estimate", "contract", "materials", "report"]],
   ["Build", ["workorder", "tasks", "files", "assistant"]],
-  ["Money", ["financials", "payments", "invoice"]],
+  ["Money", ["financials", "payments", "invoice", "certificate"]],
   ["Customer", ["messages", "portal"]],
 ];
 
@@ -8209,6 +8216,8 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
                 crews={crews} templates={templates} currentUser={currentUser} users={users} />;
               case "tasks": return <TabTasks job={job} mut={mut} toast={toast} />;
               case "files": return <TabFiles job={job} mut={mut} toast={toast} />;
+              case "certificate": return <TabCertificate job={job} brand={brand} mut={mut} toast={toast}
+                currentUser={currentUser} integrations={integrations} />;
               case "assistant": return <ClaimAssistant job={job} />;
               case "portal": return <TabPortal job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser}
                 users={users}
@@ -8221,6 +8230,8 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           const relevant = JOB_SECTIONS.filter(([id]) => {
             if (!featureOn(features, id)) return false;
             if (id === "claim") return job.claimType === "Insurance";
+            /* Retail jobs have no carrier to certify anything to. */
+            if (id === "certificate") return job.claimType === "Insurance";
             if (id === "handoff" || id === "changeorders") return true;
             return allowed.has(id);
           });
@@ -9818,6 +9829,188 @@ function proposalCss(brand) {
   </style>`;
 }
 
+/* ==================================================================
+   CERTIFICATE OF COMPLETION
+
+   The document a carrier asks for before it releases recoverable
+   depreciation. It is a statement of fact about a finished job, so it
+   is generated from the job file rather than typed: everything on it
+   is already recorded somewhere by the time the job reaches "Job
+   completed", and the two things that were not — the completion date
+   and the peril — now are.
+
+   The settlement block deliberately does not itemise. This company
+   contracts on a total, not a line-item schedule, so the certificate
+   states the contract price, the deductible and what that leaves as
+   the carrier's share. An itemised certificate that disagrees with the
+   carrier's own estimate line for line invites an argument on a
+   document whose only job is to close the claim.
+================================================================== */
+const PERILS = ["Wind", "Hail", "Wind & Hail", "Fire", "Water", "Tree impact", "Other"];
+/* "2026-08-03" reads as a form field; "August 3, 2026" reads as a
+   statement. Parsed at noon so a timezone west of UTC cannot walk the
+   date back a day, which is the classic bug with date-only strings. */
+function longDate(iso) {
+  const s = String(iso || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}/.test(s)) return s;
+  const d = new Date(s.slice(0, 10) + "T12:00:00");
+  if (isNaN(d.getTime())) return s;
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+/* Everything the certificate states, resolved from the job with the
+   rep's corrections layered on top. Never written back on open — the
+   same rule the agreement follows, so viewing a job does not mutate it. */
+function certificateFor(job, brand) {
+  const c = job.certificate || {};
+  const ins = job.insurance || {};
+  const claim = job.claim || {};
+  const pay = paymentsSummary(job);
+  /* The contract total, which already includes approved change orders —
+     the figure the screen shows and, since the invoice fix, the figure
+     the invoice bills. Falling back to the claim's RCV covers a job
+     settled straight off the carrier's estimate with no contract typed. */
+  const rcv = num(pay.contract) || num(claim.rcv) || 0;
+  const deductible = c.deductible !== undefined && c.deductible !== ""
+    ? moneyNum(c.deductible) : moneyNum(ins.deductible);
+  return {
+    owner: c.owner || job.name || "",
+    address: c.address || job.address || "",
+    carrier: c.carrier || ins.carrier || "",
+    claimNo: c.claimNo || ins.claim || "",
+    policyNo: c.policyNo || ins.policy || "",
+    typeOfLoss: c.typeOfLoss || claim.typeOfLoss || "",
+    dateOfLoss: c.dateOfLoss || claim.dateOfLoss || "",
+    adjuster: c.adjuster || ins.adjusterName || "",
+    completedAt: c.completedAt || job.completedAt || "",
+    manager: c.manager || job.assignee || "",
+    rcv, deductible,
+    net: Math.max(0, rcv - deductible),
+    /* Free text under the money block. The sample names the carrier's
+       price list and estimate date; those are not on the job file, so
+       the default says what is true and the rep can paste the rest. */
+    note: c.note !== undefined ? c.note : "",
+    /* Who signs for the company. The contract's countersignature is the
+       right default — the same person already stood behind this job. */
+    signedBy: c.signedBy || job.assignee || "",
+    scope: c.scope || `${titleish(projectNoun(job))} — Insurance Restoration`,
+  };
+}
+function titleish(s) {
+  const map = { roofing: "Residential Roof Replacement", siding: "Residential Siding Replacement", gutter: "Gutter Replacement", window: "Window Replacement", exterior: "Residential Exterior Restoration" };
+  return map[String(s || "").toLowerCase()] || "Residential Roof Replacement";
+}
+/* What is still missing before this can go to a carrier. A certificate
+   with a blank claim number or no completion date is not a document,
+   it is a draft — and it is the contractor's name on the assertion. */
+function certificateGaps(job, brand) {
+  const a = certificateFor(job, brand);
+  const out = [];
+  if (!a.completedAt) out.push("the date the work was completed");
+  if (!a.claimNo) out.push("the claim number");
+  if (!a.carrier) out.push("the insurance carrier");
+  if (!a.rcv) out.push("a contract price");
+  if (!a.owner) out.push("the property owner's name");
+  if (!a.address) out.push("the property address");
+  return out;
+}
+function certificateReady(job, brand) { return certificateGaps(job, brand).length === 0; }
+
+function certificateCss(brand) {
+  const ink = "#111", sub = "#666", rule = "#bbb", band = "#f2f2f2";
+  return `<style>
+@page { size: letter; margin: 0.62in 0.62in 0.55in; }
+.cert { font-family: Helvetica, Arial, sans-serif; color: ${ink}; font-size: 9pt; line-height: 1.42; }
+.certh { text-align: center; margin-bottom: 13pt; }
+.certh1 { font-size: 17.5pt; font-weight: 700; letter-spacing: .01em; margin: 0 0 4pt; }
+.certh2 { font-size: 8.5pt; color: ${ink}; margin: 0 0 5pt; }
+.certh3 { font-size: 7.6pt; color: ${sub}; margin: 0; }
+.certband { background: ${band}; font-size: 9.5pt; font-weight: 700; padding: 3pt 6pt; margin: 0 0 3pt; }
+.certgrid { width: 100%; border-collapse: collapse; margin-bottom: 11pt; }
+.certgrid td { border-bottom: 1px solid ${rule}; padding: 3pt 6pt 3pt 0; vertical-align: top; }
+.certgrid td.k { font-size: 8pt; font-weight: 700; width: 17%; }
+.certgrid td.v { font-size: 9pt; width: 33%; padding-right: 14pt; }
+.certmoney { width: 100%; border-collapse: collapse; margin-bottom: 6pt; }
+.certmoney td { border-bottom: 1px solid ${rule}; padding: 3.5pt 6pt 3.5pt 0; font-size: 9pt; }
+.certmoney td.r { text-align: right; white-space: nowrap; }
+.certmoney tr.certtot td { font-weight: 700; }
+.certnote { font-size: 7.6pt; color: ${sub}; line-height: 1.45; margin: 0 0 11pt; }
+.certp { font-size: 8.4pt; line-height: 1.5; margin: 0 0 14pt; }
+.certsig { width: 100%; border-collapse: collapse; }
+.certsig td { vertical-align: bottom; padding-top: 3pt; }
+.certsig tr.gap td { padding-top: 20pt; }
+.certsig td.d { width: 34%; padding-left: 18pt; }
+.certink { font-family: 'Snell Roundhand', 'Apple Chancery', 'Segoe Script', cursive; font-size: 15pt; }
+.certline { border-bottom: 1px solid ${ink}; height: 13pt; }
+.certcap { font-size: 7.6pt; color: ${ink}; padding-top: 3pt; border-top: 1px solid ${rule}; }
+.certfoot { position: fixed; bottom: 0; left: 0; right: 0; font-size: 7pt; color: ${sub};
+  display: flex; justify-content: space-between; border-top: 1px solid ${rule}; padding-top: 3pt; }
+@media print { .certfoot { position: fixed; } }
+</style>`;
+}
+function certificateDocHtml(job, brand) {
+  const a = certificateFor(job, brand);
+  const co = [brand.company, brand.address, brand.phone, brand.email].filter(Boolean).map(esc).join(" &nbsp;|&nbsp; ");
+  const row = (k1, v1, k2, v2) => `<tr>
+    <td class="k">${esc(k1)}</td><td class="v">${esc(v1) || "&nbsp;"}</td>
+    <td class="k">${esc(k2)}</td><td class="v">${esc(v2) || "&nbsp;"}</td></tr>`;
+  const done = longDate(a.completedAt);
+  return `<div class="cert">
+  <div class="certh">
+    <div class="certh1">CERTIFICATE OF COMPLETION</div>
+    <div class="certh2">${esc(a.scope)}</div>
+    <div class="certh3">${co}</div>
+  </div>
+
+  <div class="certband">PROJECT INFORMATION</div>
+  <table class="certgrid">
+    ${row("PROPERTY OWNER", a.owner, "PROPERTY ADDRESS", a.address)}
+    ${row("INSURANCE CARRIER", a.carrier, "CLAIM NUMBER", a.claimNo)}
+    ${row("POLICY NUMBER", a.policyNo, "TYPE OF LOSS", a.typeOfLoss)}
+    ${row("DATE OF LOSS", longDate(a.dateOfLoss), "ADJUSTER / ESTIMATOR", a.adjuster)}
+    ${row("WORK COMPLETED", done, "PROJECT MANAGER", a.manager)}
+  </table>
+
+  <div class="certband">CONTRACT PRICE &amp; SETTLEMENT SUMMARY</div>
+  <table class="certmoney">
+    <tr><td>Replacement Cost Value (Total Contract Price)</td><td class="r">${money(a.rcv)}</td></tr>
+    <tr><td>Less Insured's Deductible</td><td class="r">(${money(a.deductible)})</td></tr>
+    <tr class="certtot"><td>Net Claim / Insurance Proceeds</td><td class="r">${money(a.net)}</td></tr>
+  </table>
+  ${a.note ? `<p class="certnote">${esc(a.note)}</p>` : `<p class="certnote">Amounts per the signed contract for this project, including any approved change orders. Recoverable depreciation and supplements are billed per that contract.</p>`}
+
+  <div class="certband">CERTIFICATION</div>
+  <p class="certp">${esc(brand.company || "The Company")} certifies that all work described above was completed on
+  ${esc(done || "____________")} at ${esc(a.address)} in a good and workmanlike manner, in accordance with the
+  approved insurance scope, manufacturer instructions, and applicable building code. All debris was removed and the
+  site left in clean condition. The undersigned property owner has inspected the work and accepts it as complete and
+  satisfactory.</p>
+
+  <table class="certsig">
+    <tr>
+      <td><div class="certink">${esc(a.signedBy)}</div></td>
+      <td class="d"><div class="certink">${esc(done)}</div></td>
+    </tr>
+    <tr>
+      <td class="certcap">${esc(a.signedBy)} &mdash; ${esc(brand.company || "")}</td>
+      <td class="d certcap">Date</td>
+    </tr>
+    <tr class="gap">
+      <td><div class="certline"></div></td>
+      <td class="d"><div class="certline"></div></td>
+    </tr>
+    <tr>
+      <td class="certcap">${esc(a.owner)} &mdash; Property Owner</td>
+      <td class="d certcap">Date</td>
+    </tr>
+  </table>
+</div>
+<div class="certfoot">
+  <span>${esc(brand.company || "")} &nbsp;|&nbsp; Certificate of Completion${a.owner ? " &nbsp;|&nbsp; " + esc(a.owner) : ""}${a.claimNo ? " &nbsp;|&nbsp; Claim " + esc(a.claimNo) : ""}</span>
+  <span>Page 1</span>
+</div>
+${certificateCss(brand)}`;
+}
+
 function invoiceDocHtml(job, brand) {
   const pay = paymentsSummary(job);
   const est = job.estimate;
@@ -10864,9 +11057,35 @@ function projectNoun(job) {
   return "roofing";
 }
 
+/* What the homeowner may open under Documents: the files the office
+   shared, plus the certificate of completion, which is generated rather
+   than uploaded and so carries its rendered body instead of a storage
+   URL. Withheld until it is complete — a homeowner should never be shown
+   a certificate with a blank where the claim number goes. */
+function portalDocuments(job, brand, portal) {
+  const out = portal.documents ? (job.files || []).filter((file) => file.shared).map((file) => ({
+    name: file.name, category: file.cat, date: file.at, url: file.url || null,
+  })) : [];
+  const cert = job.certificate || {};
+  if (portal.certificate !== false && cert.shared !== false && certificateReady(job, brand)) {
+    const a = certificateFor(job, brand);
+    out.unshift({
+      name: "Certificate of Completion", category: "Insurance",
+      date: longDate(a.completedAt), url: null,
+      html: certificateDocHtml(job, brand),
+    });
+  }
+  return out;
+}
 function buildPortalSnapshot(job, brand, token, users = []) {
   const portal = { ...DEFAULT_PORTAL_SETTINGS, ...(job.portal || {}) };
   const pay = paymentsSummary(job);
+  /* Built before the snapshot so the section order can depend on it. The
+     Documents section is normally gated on `portal.documents`, which
+     governs uploaded files and ships off; a certificate the office chose
+     to share would otherwise be filed into a section the homeowner
+     cannot open. */
+  const portalDocs = portalDocuments(job, brand, portal);
   return {
     token, job_id: job.id,
     data: {
@@ -10875,7 +11094,7 @@ function buildPortalSnapshot(job, brand, token, users = []) {
       jobId: job.id, name: job.name, address: job.address,
       projectType: projectNoun(job),
       stageLabel: job.stageLabel || "",
-      order: portalOrderOf(portal).filter((sid) => portalSectionOn(portal, sid)),
+      order: portalOrderOf(portal).filter((sid) => (sid === "documents" ? portalDocs.length > 0 : portalSectionOn(portal, sid))),
       /* Rep block: a per-job override wins over the assigned seat, so a
          different face can be put in front of a customer without
          reassigning the job. */
@@ -10973,9 +11192,7 @@ function buildPortalSnapshot(job, brand, token, users = []) {
       portal,
       notes: (job.notes || []).filter((n) => n.customerVisible).map((n) => ({ at: n.at, text: n.text })),
       photos: portal.photos ? (job.photos || []).filter((ph) => ph.shared).map((ph) => ({ url: ph.url || ph.dataUrl, label: ph.label || "" })) : [],
-      documents: portal.documents ? (job.files || []).filter((file) => file.shared).map((file) => ({
-        name: file.name, category: file.cat, date: file.at, url: file.url || null,
-      })) : [],
+      documents: portalDocs,
       estimate: portal.estimate ? (() => {
         const est = job.estimate;
         /* Send the Good/Better/Best tiers and optional upgrades UNFLATTENED so
@@ -11852,6 +12069,15 @@ function PublicPortal({ token }) {
                     <div style={{ fontSize: 11.5, color: S.sub }}>{file.category}{file.date ? ` · ${file.date}` : ""}</div>
                   </div>
                   {file.url && <a href={file.url} target="_blank" rel="noreferrer" style={{ color: prim, fontSize: 12.5, fontWeight: 700 }}>Open</a>}
+                  {/* A generated document has no storage URL — it travels
+                      in the snapshot as rendered HTML, so it prints
+                      through the same path the office uses. */}
+                  {!file.url && file.html && (
+                    <button onClick={() => openDoc(file.name, { company: d.company, logo: d.logo, primary: d.primary, phone: d.phone, email: d.email }, file.html, () => {}, { bare: true })}
+                      style={{ border: "none", background: "none", cursor: "pointer", color: prim, fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", padding: 0 }}>
+                      View
+                    </button>
+                  )}
                 </div>
               ))}
             </Card>
@@ -14924,6 +15150,12 @@ function TabClaim({ job, mut, toast, brand }) {
             <input style={dateInputStyle} type="date" value={c.dateOfLoss || ""} onChange={(e) => set("dateOfLoss")(e.target.value)} />
           </Field>
         </div>
+        {/* The peril. Recorded here because the certificate of completion
+            states it to the carrier, and it was the one field on that
+            document with nowhere in the job file to come from. */}
+        <Field label="Type of loss">
+          <PillGroup options={PERILS} value={c.typeOfLoss || ""} onPick={set("typeOfLoss")} />
+        </Field>
         <Field label="Adjuster">
           <input style={inputStyle} value={ins.adjusterName || ""} onChange={(e) => setIns("adjusterName")(e.target.value)} />
         </Field>
@@ -18609,6 +18841,155 @@ function TabPayments({ job, mut, toast, onLog = () => {} }) {
 }
 
 /* ---------- Invoice ---------- */
+/* The certificate screen. Deliberately not a form to fill in: it shows
+   what the certificate will say, sourced from the job, and lets a rep
+   correct any line. Everything blank is blank because nothing upstream
+   recorded it, and the screen says which screen records it. */
+function TabCertificate({ job, brand, mut, toast, currentUser = null, integrations = {} }) {
+  const a = certificateFor(job, brand);
+  const gaps = certificateGaps(job, brand);
+  const ready = gaps.length === 0;
+  const cert = job.certificate || {};
+  const set = (k) => (v) => mut((j) => ({ ...j, certificate: { ...(j.certificate || {}), [k]: v } }));
+  const shared = cert.shared !== false;
+  const completed = job.stageId === "s10";
+  const docTitle = `Certificate of Completion — ${job.name}`;
+  return (
+    <>
+      <Card>
+        <CardTitle right={<Chip tone={ready ? "green" : "amber"}>{ready ? "Ready" : `${gaps.length} missing`}</Chip>}>
+          Certificate of completion
+        </CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
+          The document the carrier wants before it releases recoverable depreciation. It builds itself from this
+          job — the completion date is stamped when the job moves to <b>Job completed</b>, and the rest comes off
+          the claim and the contract. Correct anything below and it changes on the certificate.
+        </div>
+        {!completed && (
+          <Callout label="This job is not marked completed yet">
+            You can still print a draft, but the completion date is stamped when the job reaches <b>Job completed</b>.
+            A certificate dated before the work finished is worse than a late one.
+          </Callout>
+        )}
+        {!ready && (
+          <Callout label="Not ready to send">
+            The certificate is missing {gaps.join(", ")}. Fill those in below, or on the Insurance claim screen where
+            the carrier details live.
+          </Callout>
+        )}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Project information</CardTitle>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Property owner">
+            <input style={inputStyle} value={a.owner} onChange={(e) => set("owner")(e.target.value)} />
+          </Field>
+          <Field label="Work completed">
+            <input style={dateInputStyle} type="date" value={a.completedAt} onChange={(e) => set("completedAt")(e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Property address">
+          <input style={inputStyle} value={a.address} onChange={(e) => set("address")(e.target.value)} />
+        </Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Insurance carrier">
+            <input style={inputStyle} value={a.carrier} onChange={(e) => set("carrier")(e.target.value)} />
+          </Field>
+          <Field label="Claim number">
+            <input style={inputStyle} value={a.claimNo} onChange={(e) => set("claimNo")(e.target.value)} />
+          </Field>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Policy number">
+            <input style={inputStyle} value={a.policyNo} onChange={(e) => set("policyNo")(e.target.value)} />
+          </Field>
+          <Field label="Type of loss">
+            <input style={inputStyle} value={a.typeOfLoss} placeholder="Wind" onChange={(e) => set("typeOfLoss")(e.target.value)} />
+          </Field>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Date of loss">
+            <input style={dateInputStyle} type="date" value={a.dateOfLoss} onChange={(e) => set("dateOfLoss")(e.target.value)} />
+          </Field>
+          <Field label="Adjuster / estimator">
+            <input style={inputStyle} value={a.adjuster} onChange={(e) => set("adjuster")(e.target.value)} />
+          </Field>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Project manager">
+            <input style={inputStyle} value={a.manager} onChange={(e) => set("manager")(e.target.value)} />
+          </Field>
+          <Field label="Signed for the company by">
+            <input style={inputStyle} value={a.signedBy} onChange={(e) => set("signedBy")(e.target.value)} />
+          </Field>
+        </div>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Contract price &amp; settlement</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Stated as a total, not a line-item schedule — the contract price including approved change orders, less
+          the deductible. An itemised certificate that disagrees with the carrier's own estimate line for line
+          starts an argument on a document whose only job is to close the claim.
+        </div>
+        <KV k="Replacement Cost Value (total contract price)" v={money(a.rcv)} />
+        <Field label="Insured's deductible">
+          <MoneyInput style={inputStyle} value={cert.deductible !== undefined ? cert.deductible : ((job.insurance || {}).deductible || "")}
+            onChange={set("deductible")} />
+        </Field>
+        <KV k="Net claim / insurance proceeds" v={money(a.net)} strong />
+        <Field label="Note under the settlement block"
+          hint="Optional. Paste the carrier's price list and estimate date here if the adjuster wants them cited.">
+          <textarea style={{ ...inputStyle, minHeight: 62, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.5 }}
+            value={a.note} placeholder="Amounts per the approved [carrier] estimate (Price List ______, completed __/__/____)."
+            onChange={(e) => set("note")(e.target.value)} />
+        </Field>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Where it goes</CardTitle>
+        <label style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0", fontSize: 13.5, cursor: "pointer" }}>
+          <input type="checkbox" checked={shared} onChange={(e) => set("shared")(e.target.checked)}
+            style={{ width: 18, height: 18, accentColor: T.accent }} />
+          <span>
+            <span style={{ display: "block", fontWeight: 600 }}>Show it in the customer portal</span>
+            <span style={{ fontSize: 11.5, color: S.sub }}>
+              Filed under Documents, alongside anything else you have shared. It is the homeowner's certificate —
+              they need it as much as the carrier does.
+            </span>
+          </span>
+        </label>
+        {shared && !ready && (
+          <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
+            It will not appear in the portal until it is complete — a homeowner should not be shown a certificate
+            with blanks in it.
+          </div>
+        )}
+      </Card>
+
+      <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+        <Btn kind="ghost" style={{ flex: 1 }}
+          onClick={() => openDoc(docTitle, brand, certificateDocHtml(job, brand), toast, { bare: true })}>
+          <Printer size={15} /> PDF
+        </Btn>
+        <Btn style={{ flex: 1 }} disabled={!ready}
+          onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
+            subject: `Certificate of completion — ${job.address}`,
+            body: `Hi ${(job.name || "").split(" ")[0]}, attached is the certificate of completion for the work at ${job.address}, finished ${longDate(a.completedAt)}. Your carrier will usually want a copy of this before releasing the recoverable depreciation on claim ${a.claimNo}. It is also in your customer portal under Documents.`,
+          })}>
+          <Send size={15} /> Email it
+        </Btn>
+      </div>
+      <div style={{ fontSize: 12, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+        {ready
+          ? "Print it for a wet signature from the homeowner, or email it as it stands. The owner's signature line is left blank on purpose."
+          : "Printing a draft works so you can see what is still blank. Emailing is off until it is complete."}
+      </div>
+    </>
+  );
+}
+
 function TabInvoice({ job, brand, mut, toast, currentUser = null, integrations = {} }) {
   const pay = paymentsSummary(job);
   return (
@@ -26598,6 +26979,14 @@ export default function SupremeCRM() {
           next.subInvoice = { ...base, status: terminal ? base.status : "needs_review" };
         }
       }
+      /* Job completed (s10). The certificate of completion generates
+         itself from the job file, and the one thing it needs that
+         nothing else recorded is the date the work was actually
+         finished — stageAt is the date of the last stage move, which is
+         not the same thing once a job bounces back for a punch item.
+         Stamped once and never overwritten for exactly that reason;
+         the certificate screen can correct it. */
+      if (stageId === "s10" && !next.completedAt) next.completedAt = todayIso();
       if (j.portal?.notifyStage && stage) {
         const channel = j.consent?.sms?.granted ? "sms" : j.consent?.email?.granted ? "email" : null;
         if (channel) {
