@@ -8,7 +8,7 @@ import {
   BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat, CloudRain,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
   Scale, Lightbulb, ExternalLink, Lock, Layers, Smile
-, Filter , Megaphone, Clock, Zap, Sun, Moon } from "lucide-react";
+, Filter , Megaphone, Clock, Zap, Sun, Moon, Navigation } from "lucide-react";
 
 /* ================================================================
    BRANDING — single source of company identity. Everything company-
@@ -881,6 +881,106 @@ const SIDING_MATCHING = {
 };
 
 /* ================================================================
+   INSTALL SPECIFICATIONS — what the manufacturer actually requires
+
+   The specs above are product identity (dimensions, wind rating, what
+   can be matched to what). These are the install requirements that get
+   argued about on a claim: fastening, starters, low slope, ventilation
+   as a warranty condition. Every one of them is a line a carrier's
+   scope routinely omits and a supplement routinely wins.
+   ================================================================ */
+const INSTALL_SPECS = [
+  { mfr: "All manufacturers", topic: "Fastener count",
+    spec: "Four nails per shingle in the standard field, six in high-wind areas and on the perimeter. Nails must land in the manufacturer's nail zone — high-nailed shingles fail the seal strip and void the wind warranty regardless of the product's rating.",
+    cite: "Manufacturer application instructions (printed on every bundle wrapper)" },
+  { mfr: "All manufacturers", topic: "Starter course",
+    spec: "A manufacturer starter strip is required at eaves and, for most current laminates, at rakes. A reversed three-tab is not an approved substitute on laminate systems and voids the wind warranty. Starter is a separate scope line from field shingles — a carrier scope that omits rake starter is short.",
+    cite: "Manufacturer application instructions" },
+  { mfr: "All manufacturers", topic: "Low slope",
+    spec: "Asphalt shingles are not approved below 2:12 under any manufacturer's instructions. Between 2:12 and 4:12 a double-layer underlayment or a self-adhering membrane over the whole low-slope area is required. Any slope under 2:12 needs a different roof covering entirely, which is a scope change, not a supplement.",
+    cite: "IRC R905.2.2 and manufacturer instructions" },
+  { mfr: "All manufacturers", topic: "Ventilation as a warranty condition",
+    spec: "Every major shingle warranty conditions coverage on attic ventilation meeting code — generally 1 sq ft of net free area per 150 sq ft of attic floor, or 1:300 when a vapor retarder is present or the intake/exhaust split is balanced 50/50 with at least 40% at the eave. Installing new shingles over a non-compliant attic hands the manufacturer a denial. Bringing ventilation to code is a legitimate code-upgrade supplement.",
+    cite: "IRC R806.2; manufacturer warranty terms" },
+  { mfr: "All manufacturers", topic: "Mixing exhaust types",
+    spec: "Ridge vent combined with powered or box vents on the same attic space short-circuits the airflow: the ridge pulls from the nearest opening instead of from the soffit, and the far end of the attic stops ventilating. Manufacturers and NRCA both call this out. One exhaust type per attic space.",
+    cite: "NRCA Roofing Manual; manufacturer technical bulletins" },
+  { mfr: "GAF", topic: "System warranty requirements",
+    spec: "GAF's enhanced warranties (System Plus, Golden Pledge) require a certified contractor plus a defined count of GAF accessory components — starter, ridge cap, leak barrier, ventilation, and underlayment. Substituting a non-GAF component drops the roof to the standard shingle-only limited warranty.",
+    cite: "GAF warranty terms; GAF Technical Services 1-800-ROOF-411" },
+  { mfr: "GAF", topic: "HD vs HDZ",
+    spec: "GAF states Timberline HD (2007–2018) and HDZ are not interchangeable — the nail zone, exposure and sealant differ. An HD roof cannot be repair-matched with current HDZ product, which is the manufacturer-sourced basis for a full-slope or full-roof matching argument on any HD-era roof.",
+    cite: "GAF technical bulletin" },
+  { mfr: "Owens Corning", topic: "SureNail and system warranty",
+    spec: "Duration's 130 mph rating depends on nailing within the SureNail fabric strip. OC's Preferred and Platinum warranties require the full OC component system installed by a Preferred or Platinum contractor; component substitution drops coverage to the base limited warranty.",
+    cite: "Owens Corning warranty terms; OC Technical Services 1-800-GET-PINK" },
+  { mfr: "CertainTeed", topic: "Integrity Roof System",
+    spec: "CertainTeed's SureStart Plus and 5-Star coverage require the Integrity Roof System — CertainTeed underlayment, starter, shingles, hip and ridge, and ventilation together — installed by a credentialed contractor. Partial systems get the standard limited warranty only.",
+    cite: "CertainTeed warranty terms" },
+  { mfr: "Malarkey", topic: "Polymer-modified asphalt",
+    spec: "Malarkey's Vista and Legacy use rubberized SBS-modified asphalt, which stays flexible in cold and resists granule loss. Many Legacy products carry a Class 4 impact rating, which matters for both hail performance and for impact-resistant-roof premium discounts a homeowner may already be paying for.",
+    cite: "Malarkey product data sheets" },
+];
+
+/* ================================================================
+   NRCA BEST PRACTICE — what the trade association recommends
+
+   NRCA guidance is not code and not a manufacturer requirement, but it
+   is the standard of care an expert will be measured against, and it
+   is frequently more demanding than minimum code. Useful when a carrier
+   argues that a repair meets code: code is the floor, not the finish.
+   ================================================================ */
+const NRCA_PRACTICE = [
+  { topic: "Repair versus replacement",
+    body: "NRCA's position is that a roof system is a system, and spot repairs to a weathered asphalt roof rarely restore its expected service life. Aged shingles lose the flexibility needed to lift and reseal without breaking, so removing a damaged shingle typically damages the surrounding courses. This is the trade-practice basis for arguing that a repair-only scope on a mature roof is not a like-kind-and-quality restoration.",
+    cite: "NRCA Roofing Manual — Steep-slope Roof Systems" },
+  { topic: "Test squares and damage density",
+    body: "Hail damage is assessed by test square — conventionally a 10 ft by 10 ft area on each slope. Density of functional damage within the square, not the presence of any single hit, is what determines whether a slope is replaced. Photograph and chalk each square by slope and elevation; a scope disputing your count is much harder to sustain against documented squares.",
+    cite: "NRCA / industry standard practice" },
+  { topic: "Functional versus cosmetic damage",
+    body: "Functional hail damage is evidenced by a fractured or bruised mat under the impact, granule displacement exposing the asphalt, and a broken seal bond — all of which shorten service life. Spatter marks and granule scuffing without mat fracture are cosmetic. Document function separately from appearance: photograph the bruise, not just the mark, because a cosmetic-damage exclusion is defeated by evidence of function, not by more pictures of spatter.",
+    cite: "NRCA / industry standard practice" },
+  { topic: "Underlayment and ice barrier",
+    body: "NRCA recommends self-adhering membrane at all eaves in freeze climates, in valleys, and around all penetrations — beyond the code minimum of 24 in. inside the warm wall line. Where the carrier pays only the code minimum, the difference is a legitimate upgrade discussion with the homeowner, not a supplement.",
+    cite: "NRCA Roofing Manual" },
+  { topic: "Flashing replacement",
+    body: "NRCA's guidance is that flashings are replaced, not reused, whenever the roof covering is replaced. Reused step and counter flashing is the most common source of a callback leak on an otherwise sound new roof, and reuse is not consistent with restoring the assembly to its pre-loss condition.",
+    cite: "NRCA Roofing Manual" },
+  { topic: "Decking condition",
+    body: "Decking must be sound, dry and properly fastened before new covering. Delaminated, saw-kerfed, or 1x plank decking with gaps beyond the shingle manufacturer's tolerance requires replacement or re-sheathing. Carriers commonly allow a token number of sheets; document actual condition per slope with photographs taken during tear-off, because after the roof is on, the argument is unwinnable.",
+    cite: "NRCA Roofing Manual; IRC R803" },
+  { topic: "Ventilation balance",
+    body: "NRCA recommends a balanced system with at least half of the required net free area at the intake (soffit) and the remainder at the exhaust. Exhaust-heavy systems pull makeup air from the conditioned space or from the nearest roof opening rather than from the eave, which drives moisture into the attic and shortens deck and shingle life.",
+    cite: "NRCA Roofing Manual; IRC R806" },
+];
+
+/* Deeper IRC provisions the code lookup does not surface on its own.
+   Kept generic (IRC, not a state amendment) — the jurisdiction lookup
+   layers local amendments on top. */
+const IRC_DEEP = [
+  { cite: "IRC R905.2.1", topic: "Sheathing for asphalt shingles",
+    body: "Asphalt shingles shall be fastened to solidly sheathed decks. Spaced or skip sheathing does not qualify, which is why a plank-decked older home commonly requires re-sheathing as part of a compliant replacement." },
+  { cite: "IRC R905.2.2", topic: "Minimum slope",
+    body: "Asphalt shingles shall only be used on roof slopes of 2:12 or greater. For slopes from 2:12 up to 4:12, double underlayment application is required." },
+  { cite: "IRC R905.2.5", topic: "Fasteners",
+    body: "Fasteners shall be galvanized steel, stainless steel, aluminum or copper roofing nails, minimum 12 gauge with a 3/8 in. head, of a length to penetrate through the sheathing or at least 3/4 in. into the sheathing." },
+  { cite: "IRC R905.2.6", topic: "Attachment",
+    body: "Shingles shall be fastened per the manufacturer's installation instructions. In areas with a basic wind speed of 110 mph or higher, or where the eave is more than 20 ft above grade, special methods of fastening are required." },
+  { cite: "IRC R905.2.8.2", topic: "Valleys",
+    body: "Valley linings shall be installed per the manufacturer's instructions before the shingles are applied. For open valleys the code specifies minimum lining widths and material types; a closed-cut valley still requires a lining." },
+  { cite: "IRC R905.2.8.3", topic: "Sidewall flashing",
+    body: "Base flashing against a vertical sidewall shall be continuous or step flashing, with each piece not less than 4 in. in height and 4 in. in width. Step flashing is per-course and cannot be substituted with a continuous strip." },
+  { cite: "IRC R703.4", topic: "Kickout flashing",
+    body: "A kickout (diverter) flashing is required where the roof meets a wall that continues past the eave, to divert water away from the wall assembly. Its absence is the most common cause of hidden wall rot and is a code item, not an upgrade." },
+  { cite: "IRC R806.2", topic: "Ventilation area",
+    body: "The minimum net free ventilating area shall be 1/150 of the vented space. 1/300 is permitted where a Class I or II vapor retarder is installed on the warm side, or where 40 to 50 percent of the required area is provided by ventilators at least 3 ft above the eave with the balance at the eave." },
+  { cite: "IRC R803.2.3", topic: "Deck condition",
+    body: "Wood structural panel sheathing shall be installed with the long dimension perpendicular to the supports, with edges supported or clipped as required by the span rating. Delaminated or water-damaged panels do not meet this and must be replaced." },
+  { cite: "IRC R908.3", topic: "Recover limits",
+    body: "Roof recover is prohibited where the existing roof has two or more applications of any type of covering, where the existing covering is water-soaked or deteriorated, or where the existing covering is slate, clay, cement or asbestos-cement tile. Any of these requires a complete tear-off." },
+];
+
+/* ================================================================
    LETTER TEMPLATES — fill the bracketed fields, send in writing.
    Written communication is what survives a contested claim.
    ================================================================ */
@@ -1013,6 +1113,56 @@ const SEED_USERS = [
   { id: "u3", name: "Stephen Klein", email: "stephen@supremebuildinggroup.com", phone: "", role: "rep", title: "Sales Rep", active: true, commissionRate: 55, addedAt: "2026-03-02" },
   { id: "u4", name: "Steven Tatgenhorst", email: "steven@supremebuildinggroup.com", phone: "", role: "rep", title: "Sales Rep", active: true, commissionRate: 60, addedAt: "2026-03-02" },
 ];
+/* ==================================================================
+   THE REP'S CONTACT CARD
+
+   Every job shows a "project contact" to the homeowner. That used to read
+   job.assigneeContact — a field nothing in the app ever wrote — so the
+   portal showed a bare name with no phone and no email unless someone
+   hand-typed one onto each job. This resolves it from the seat instead.
+
+   A rep working several states usually carries a different number in
+   each, so a seat can hold extra lines keyed by state. The line whose
+   state matches the job wins; otherwise the seat's own details do; and a
+   per-job override still beats both, because sometimes a specific
+   customer needs a specific person in front of them.
+================================================================== */
+function repSeatFor(users, job) {
+  if (!job) return null;
+  const list = users || [];
+  return list.find((u) => u.name && u.name === job.assignee) || null;
+}
+/* The seat's details as they apply to THIS job's state. A seat already
+   separates its customer-facing repPhone/workEmail from its login
+   phone/email; a state line beats both. */
+function seatLineFor(seat, state) {
+  if (!seat) return { name: "", title: "", phone: "", email: "" };
+  const line = (seat.lines || []).find((l) => l.state && state && l.state === state);
+  return {
+    name: seat.name || "",
+    title: seat.title || "",
+    phone: (line && line.phone) || seat.repPhone || seat.phone || "",
+    email: (line && line.email) || seat.workEmail || seat.email || "",
+    lineState: line ? line.state : null,
+  };
+}
+/* What the customer actually sees, and what the Project-contact fields
+   prefill with. Resolution order: per-job override → state line → seat. */
+function repContactFor(users, job) {
+  const seat = repSeatFor(users, job);
+  const base = seatLineFor(seat, job && job.state);
+  const o = (job && job.repOverride) || {};
+  const pick = (k) => (String(o[k] || "").trim() ? o[k] : base[k]);
+  return {
+    name: pick("name") || (job && job.assignee) || "",
+    title: pick("title"),
+    phone: pick("phone"),
+    email: pick("email"),
+    base, seat,
+    /* True when this job is showing someone other than the assigned seat. */
+    overridden: ["name", "title", "phone", "email"].some((k) => String(o[k] || "").trim() && o[k] !== base[k]),
+  };
+}
 const canSeeMoney = (u) => u && u.role !== "crew";
 const canEditStructure = (u) => u && u.role === "admin";
 const canManageSeats = (u) => u && u.role === "admin";
@@ -2262,6 +2412,10 @@ const fmtStamp = (iso) => {
 
 const money = (n) =>
   (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/* Whole dollars, for the big customer-facing numbers. "$20,911" reads as a
+   price; "$20,911.00" reads as an invoice line. */
+const money0 = (n) =>
+  (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
 const pct1 = (n) => `${n.toFixed(2)}%`;
 
 /* Phone display, in the house format: 1(555)555-5555.
@@ -2742,12 +2896,12 @@ const DONUT_PALETTE = ["#0A9E98", "#1B6DE0", "#F59E0B", "#7C3AED", "#EC4899", "#
 
 function Chip({ children, tone = "gray" }) {
   const tones = {
-    gray: { bg: "#F3F4F6", fg: "#374151" },
+    gray: { bg: "var(--rl-gray-bg)", fg: "var(--rl-gray-fg)" },
     blue: { bg: T.accentSoft, fg: T.accent },
-    green: { bg: "#E8F6EE", fg: "#177245" },
-    red: { bg: "#FDECEC", fg: "#B42318" },
-    amber: { bg: "#FDF4E3", fg: "#92600A" },
-    slate: { bg: "#E9EDEF", fg: T.primary },
+    green: { bg: "var(--rl-green-bg)", fg: "var(--rl-green-fg)" },
+    red: { bg: "var(--rl-red-bg)", fg: "var(--rl-red-fg)" },
+    amber: { bg: "var(--rl-amber-bg)", fg: "var(--rl-amber-fg)" },
+    slate: { bg: "var(--rl-slate-bg)", fg: T.primary },
   };
   const t = tones[tone] || tones.gray;
   return (
@@ -2832,7 +2986,9 @@ function KV({ k, v, strong }) {
 /* Merged from the Ridgeline repo. */
 function Callout({ label, children, tone = "amber" }) {
   const map = {
-    amber: ["#FDF4E3", "#92600A"], red: ["#FDECEC", "#B42318"], green: ["#E8F6EE", "#177245"],
+    amber: ["var(--rl-amber-bg)", "var(--rl-amber-fg)"],
+    red: ["var(--rl-red-bg)", "var(--rl-red-fg)"],
+    green: ["var(--rl-green-bg)", "var(--rl-green-fg)"],
   };
   const [bg, fg] = map[tone] || map.amber;
   return (
@@ -2973,7 +3129,7 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
               style={{
                 display: "flex", alignItems: "flex-start", gap: 10, width: "100%", textAlign: "left",
                 border: "none", cursor: "pointer", padding: "11px 13px",
-                background: hi === i ? T.accentSoft : "#fff",
+                background: hi === i ? T.accentSoft : S.card,
                 borderTop: i ? `1px solid ${S.line}` : "none",
               }}>
               <MapPin size={14} color={T.accent} style={{ flexShrink: 0, marginTop: 2 }} />
@@ -3014,8 +3170,8 @@ function Sheet({ open, onClose, title, children, footer, wide, tall, center = tr
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 12px" }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: S.ink }}>{title}</div>
           <button onClick={onClose} style={{
-            border: "none", background: "#F3F4F6", borderRadius: 999, width: 34, height: 34,
-            display: "grid", placeItems: "center", cursor: "pointer",
+            border: "none", background: S.soft, borderRadius: 999, width: 34, height: 34,
+            display: "grid", placeItems: "center", cursor: "pointer", color: S.ink,
           }}><X size={17} /></button>
         </div>
         <div style={{ overflowY: "auto", padding: "4px 20px 20px", flex: 1 }}>{children}</div>
@@ -4018,46 +4174,129 @@ function Login({ brand, users, onLogin, initialMode = "login", selectedPlan = "p
    ================================================================== */
 function focusScore(job) {
   if (DEAD_STAGES.includes(job.stageId) || job.stageId === "s10") return null;
-  const reasons = [];
+  /* Two kinds of signal, and the difference matters.
+
+     A CAUSE is something that has gone wrong and that a rep can act on:
+     silence, a broken commitment, sold work that isn't moving. A CONTEXT
+     is an attribute — how big the job is, how good the lead looked. A
+     $40k job with a 5-star lead and nothing wrong with it does not
+     "need your attention"; it's just a good job.
+
+     The card promises "time in stage, dollars at stake, and broken
+     commitments" and then ranks by all of them — but only a cause can
+     put a row on the list. Without that split, a lead someone entered
+     five minutes ago and rated 4/5 surfaces at the top with "4/5 lead
+     quality" as its entire justification, which reads as noise and
+     teaches people to ignore the list. */
+  const causes = [];
+  const context = [];
   let score = 0;
 
   // Staleness — the dominant factor. Deals die of silence, not "no".
-  const days = num(job.daysInStage);
-  if (days >= 21) { score += 40; reasons.push(`${days} days sitting in this stage`); }
-  else if (days >= 14) { score += 28; reasons.push(`${days} days in stage`); }
-  else if (days >= 7) { score += 14; reasons.push(`${days} days in stage`); }
+  const days = stageDays(job);
+  if (days >= 21) { score += 40; causes.push(`${days} days sitting in this stage`); }
+  else if (days >= 14) { score += 28; causes.push(`${days} days in stage`); }
+  else if (days >= 7) { score += 14; causes.push(`${days} days in stage`); }
 
   // Money on the table, scaled so a big roof outranks a small one at equal staleness.
   const v = num(job.value || (job.contract && job.contract.price));
-  if (v >= 25000) { score += 18; reasons.push(`${money(v)} at stake`); }
-  else if (v >= 12000) { score += 11; reasons.push(`${money(v)} at stake`); }
+  if (v >= 25000) { score += 18; context.push(`${money(v)} at stake`); }
+  else if (v >= 12000) { score += 11; context.push(`${money(v)} at stake`); }
   else if (v > 0) { score += 5; }
 
   // What the rep already flagged by hand.
-  if (job.priority === "Urgent") { score += 25; reasons.push("marked Urgent"); }
-  else if (job.priority === "High") { score += 14; reasons.push("marked High priority"); }
-  if (num(job.leadQuality) >= 4) { score += 10; reasons.push(`${job.leadQuality}/5 lead quality`); }
+  if (job.priority === "Urgent") { score += 25; causes.push("marked Urgent"); }
+  else if (job.priority === "High") { score += 14; causes.push("marked High priority"); }
+  if (num(job.leadQuality) >= 4) { score += 10; context.push(`${job.leadQuality}/5 lead quality`); }
 
   // Overdue tasks are commitments already broken.
   const t = todayIso();
   const late = (job.tasks || []).filter((x) => !x.done && x.due && x.due < t).length;
-  if (late > 0) { score += 12 + late * 4; reasons.push(`${late} overdue ${late === 1 ? "task" : "tasks"}`); }
+  if (late > 0) { score += 12 + late * 4; causes.push(`${late} overdue ${late === 1 ? "task" : "tasks"}`); }
 
   // Signed but unscheduled: sold work that isn't moving is churn risk.
-  if (WON_STAGES.includes(job.stageId) && !job.schedDate) { score += 15; reasons.push("signed but not scheduled"); }
+  if (WON_STAGES.includes(job.stageId) && !job.schedDate) { score += 15; causes.push("signed but not scheduled"); }
 
   // An estimate sent and never signed goes cold fast.
   const est = job.estimate || {};
-  if (est.status === "Sent" && days >= 5) { score += 12; reasons.push("estimate out with no answer"); }
+  if (est.status === "Sent" && days >= 5) { score += 12; causes.push("estimate out with no answer"); }
 
-  /* No reason to show means no row: value alone can nudge a ranking but
-     must never surface a job by itself — an unexplained entry breaks the
-     whole promise that the list justifies itself. */
-  if (score === 0 || reasons.length === 0) return null;
-  return { score, reasons: reasons.slice(0, 3) };
+  // A brand-new lead nobody has called yet is a cause in its own right.
+  if (job.stageId === "s1" && days >= 2 && !(job.tasks || []).some((x) => x.done)) {
+    score += 16; causes.push("new lead, no contact logged yet");
+  }
+
+  /* No cause means no row. Context still ranks — a big job and a small
+     job with the same problem are not equally urgent — but it can never
+     put a job on the list by itself. */
+  if (!causes.length) return null;
+  return { score, reasons: [...causes, ...context].slice(0, 3), causes };
+}
+/* The single next thing to do about the top reason. The list is useless if
+   it tells you a job is stuck and leaves you to work out what that means. */
+function focusAction(job, f) {
+  const top = (f && f.causes && f.causes[0]) || "";
+  if (/overdue/.test(top)) return { label: "Open tasks", tab: "tasks" };
+  if (/not scheduled/.test(top)) return { label: "Get it on the schedule", tab: "workorder" };
+  if (/estimate out/.test(top)) return { label: "Follow up on the estimate", tab: "estimate" };
+  if (/new lead/.test(top)) return { label: "Call them", tab: "overview" };
+  if (/Urgent|High priority/.test(top)) return { label: "Open the job", tab: null };
+  return { label: "Move it forward", tab: null };
 }
 
-function FocusList({ jobs, onOpenJob }) {
+/* ==================================================================
+   EXCEPTIONS — what is actually broken right now
+
+   focusScore ranks what deserves attention. This is the harder-edged
+   sibling: not "who is worth a call" but "what has gone wrong". A job
+   past its stage clock, a job that entered a stage without meeting its
+   requirements, a roof scheduled with nobody to build it, money sitting
+   uncollected, an unhappy customer.
+
+   Everything here reads a field the app already maintains. An owner
+   should open the app and see this before any chart.
+================================================================== */
+function jobExceptions(job, ctx) {
+  const c = ctx || {};
+  const out = [];
+  const add = (id, tone, text, tab) => out.push({ id: `${job.id}:${id}`, jobId: job.id, jobName: job.name, address: job.address, tone, text, tab });
+  const done = ["s10", "s11", "s12"].includes(job.stageId);
+  const today = todayIso();
+
+  if (!done) {
+    const age = stageAge(job, c.stageRules);
+    if (age.sla && age.late) {
+      const stage = (c.stages || []).find((s) => s.id === job.stageId);
+      add("sla", "red", `${age.days} days in ${stage ? stage.name.toLowerCase() : "this stage"} — ${age.sla}-day target`, null);
+    }
+    const gate = stageGate(job, job.stageId, c.stageRules, c);
+    if (gate.failed.length) {
+      add("gate", "amber", `In this stage without: ${gate.failed.map((f) => f.label.toLowerCase()).join(", ")}`, null);
+    }
+    const late = (job.tasks || []).filter((t) => !t.done && t.due && t.due < today);
+    if (late.length) add("tasks", "red", `${late.length} overdue ${late.length === 1 ? "task" : "tasks"} — oldest: ${late[0].label}`, "tasks");
+    if (job.soldRequestedAt && !job.jobFolder) add("approval", "amber", `Waiting on the office to approve the sold job`, "handoff");
+    if (job.schedDate && job.schedDate >= today && !job.crewId) add("crew", "red", `Scheduled ${job.schedDate} with no crew assigned`, "workorder");
+  }
+  if (job.subInvoice && job.subInvoice.status === "needs_review") {
+    add("sub", "amber", "Subcontractor invoice needs review before it can be paid", "financials");
+  }
+  if (job.claimType === "Insurance" && claimMath(job).depOutstanding > 0 && ((job.claim || {}).depStatus || "held") !== "released") {
+    add("dep", "amber", `${money(claimMath(job).depOutstanding)} in recoverable depreciation not yet requested`, "claim");
+  }
+  if (reviewState(job).key === "recover") {
+    add("review", "red", `Rated ${(job.review || {}).rating}★ — call before asking for anything public`, "portal");
+  }
+  return out;
+}
+function exceptionFeed(jobs, ctx) {
+  const all = (jobs || []).flatMap((j) => jobExceptions(j, ctx));
+  /* Red before amber, because a roof with no crew tomorrow outranks a
+     supplement that has been sitting for a week. */
+  return all.sort((a, b) => (a.tone === b.tone ? 0 : a.tone === "red" ? -1 : 1));
+}
+
+function FocusList({ jobs, onOpenJob, stages = [] }) {
   const ranked = jobs
     .map((j) => ({ j, f: focusScore(j) }))
     .filter((x) => x.f)
@@ -4070,35 +4309,61 @@ function FocusList({ jobs, onOpenJob }) {
       <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
         Ranked by time in stage, dollars at stake, and broken commitments — every reason shown.
       </div>
-      {ranked.map(({ j, f }, i) => (
-        <button key={j.id} onClick={() => onOpenJob(j.id)} style={{
-          display: "flex", gap: 10, alignItems: "flex-start", width: "100%",
-          border: "none", background: "none", cursor: "pointer", textAlign: "left",
-          padding: "10px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontFamily: "inherit",
-        }}>
-          <span style={{
-            width: 24, height: 24, borderRadius: 999, flexShrink: 0, marginTop: 1,
-            background: i === 0 ? "#FDECEC" : S.soft,
-            color: i === 0 ? "#B42318" : S.sub,
-            display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800,
-          }}>{i + 1}</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{j.name}</div>
-            <div style={{ fontSize: 12, color: S.sub, lineHeight: 1.5, marginTop: 1 }}>
-              {f.reasons.join(" · ")}
+      {ranked.map(({ j, f }, i) => {
+        /* A row used to be a bare name and a reason, which left people
+           asking what it even was — customer or rep, and where does
+           tapping it go. It's a job, so it says so: who, where, which
+           stage, and the one thing to do next. */
+        const act = focusAction(j, f);
+        const stage = stages.find((s) => s.id === j.stageId);
+        return (
+          <button key={j.id} onClick={() => onOpenJob(j.id, act.tab || undefined)} style={{
+            display: "flex", gap: 10, alignItems: "flex-start", width: "100%",
+            border: "none", background: "none", cursor: "pointer", textAlign: "left",
+            padding: "11px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontFamily: "inherit",
+          }}>
+            <span style={{
+              width: 24, height: 24, borderRadius: 999, flexShrink: 0, marginTop: 2,
+              background: i === 0 ? "var(--rl-red-bg)" : S.soft,
+              color: i === 0 ? "var(--rl-red-fg)" : S.sub,
+              display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800,
+            }}>{i + 1}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{j.name}</div>
+              <div style={{ fontSize: 12, color: S.sub, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {[j.address, stage && stage.name].filter(Boolean).join(" · ")}
+              </div>
+              <div style={{ fontSize: 12, color: S.sub, lineHeight: 1.5, marginTop: 3 }}>
+                {f.reasons.join(" · ")}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, marginTop: 4 }}>
+                {act.label} →
+              </div>
             </div>
-          </div>
-          <ChevronRight size={15} color="#C7CBD1" style={{ flexShrink: 0, marginTop: 4 }} />
-        </button>
-      ))}
+            <ChevronRight size={15} color="#C7CBD1" style={{ flexShrink: 0, marginTop: 4 }} />
+          </button>
+        );
+      })}
     </Card>
   );
 }
 
-function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND,
+function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND,
   appointments = [], apptTypes = [], crews = [], setAppointments, setApptTypes, toast, onQueueMessage, onLog, users = [], mutJob, onToggleTask,
-  chatMsgs = [], onSendChat }) {
+  chatMsgs = [], onSendChat, stageRules = {}, currentUser = null, showMoney = true, isAdmin = true }) {
+  /* Scope. An owner wants the company; a rep wants their own book and is
+     actively hurt by a feed full of other people's problems. Reps land on
+     "Mine" and can look wider; admins land on the company. The prop is
+     shadowed rather than renamed at every use, so every card below —
+     exceptions, focus list, pipeline, money — is scoped by this one line. */
+  const isRep = !!currentUser && currentUser.role === "rep";
+  const [scope, setScope] = useState(isRep ? "mine" : "all");
+  const jobs = useMemo(() => {
+    if (scope !== "mine" || !currentUser) return allJobs;
+    return allJobs.filter((j) => j.assignee === currentUser.name);
+  }, [allJobs, scope, currentUser]);
   const [homeBoard, setHomeBoard] = useState("calendar");
+  const [showAllBlockers, setShowAllBlockers] = useState(false);
   const [quick, setQuick] = useState(null);        // "note" | "call" | "task"
   const [homeChat, setHomeChat] = useState("");
   const [quickJob, setQuickJob] = useState("");
@@ -4136,7 +4401,7 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
     return `${((h + 11) % 12) + 1}:${String(m || 0).padStart(2, "0")} ${ap}`;
   };
   const totalPipeline = jobs.filter((j) => !DEAD_STAGES.includes(j.stageId) && j.stageId !== "s10").reduce((s, j) => s + j.value, 0);
-  const stale = jobs.filter((j) => j.daysInStage >= 14 && !["s10","s11","s12"].includes(j.stageId));
+  const stale = jobs.filter((j) => stageDays(j) >= 14 && !["s10","s11","s12"].includes(j.stageId));
   const approvedPlus = jobs.filter((j) => WON_STAGES.includes(j.stageId));
   const signedValue = approvedPlus.reduce((s, j) => s + (j.contract.price || j.value), 0);
   const byStage = stages.map((s) => ({
@@ -4169,7 +4434,7 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
   const subsPay = jobs.filter((j) => j.subInvoice && ["confirmed", "submitted"].includes(j.subInvoice.status)).length;
 
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>
@@ -4211,96 +4476,20 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         ))}
       </div>
 
-      {/* Pipeline at a glance — counts and dollars per stage, tap to filter the board */}
-      <Card style={{ marginTop: 16 }}>
-        {(() => {
-          const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
-          const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
-          const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
-          const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
-          /* Ring summary: five buckets of the twelve stages, each a
-             tappable letter that filters the board. Mirrors the at-a-glance
-             read Jacob wanted from his old dashboard. */
-          const RINGS = [
-            ["L", "Leads", "#F0B429", ["s1"]],
-            ["P", "Pipeline", "#F2711C", ["s2", "s3", "s4"]],
-            ["A", "Approved", "#63B54B", ["s5", "s6", "s7"]],
-            ["C", "Production", "#2BA4DE", ["s8", "s9"]],
-            ["I", "Invoicing", "#E0464B", ["s10"]],
-          ];
-          const ringData = RINGS.map(([letter, label, color, ids]) => ({
-            letter, label, color, ids,
-            count: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.count, 0),
-            value: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.value, 0),
-          }));
-          return (
-            <>
-              <div style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${S.line}`,
-              }}>
-                <span style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>Current pipeline</span>
-                <span style={{ fontSize: 13, color: S.sub }}>Active jobs: {activeTotal}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-around", gap: 4, padding: "14px 0 16px", flexWrap: "wrap" }}>
-                {ringData.map((r) => (
-                  <button key={r.letter} onClick={() => onOpenStage && onOpenStage(r.ids[0])}
-                    aria-label={`${r.label}: ${r.count} jobs`}
-                    style={{
-                      border: "none", background: "none", cursor: "pointer", padding: "0 2px",
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 56,
-                    }}>
-                    <span style={{
-                      width: 46, height: 46, borderRadius: "50%", background: r.color,
-                      display: "grid", placeItems: "center", color: "#fff", fontSize: 21, fontWeight: 800,
-                    }}>{r.letter}</span>
-                    <span style={{ fontSize: 17, fontWeight: 800, color: r.count ? "#F2711C" : "#C7CBD1" }}>{r.count}</span>
-                    <span style={{ fontSize: 11.5, color: S.sub, whiteSpace: "nowrap" }}>
-                      {r.value > 0 ? money(r.value) : "—"}
-                    </span>
-                    <span style={{ fontSize: 10.5, color: S.sub, letterSpacing: ".02em" }}>{r.label}</span>
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => go("jobs")} style={{
-                ...linkBtn, display: "block", width: "100%", textAlign: "center",
-                padding: "6px 0 10px", fontSize: 13,
-              }}>Open board →</button>
-              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: S.sub, borderTop: `1px solid ${S.line}`, paddingTop: 12, marginBottom: 2 }}>
-                BY STAGE · {money(totalPipeline)}
-              </div>
-              {liveStages.map((st) => (
-                <button key={st.id} onClick={() => onOpenStage && onOpenStage(st.id)}
-                  style={{
-                    display: "block", width: "100%", textAlign: "left", border: "none", background: "none",
-                    cursor: "pointer", padding: "7px 0", borderTop: `1px solid ${S.line}`,
-                  }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                    <span style={{ fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {st.name}
-                    </span>
-                    <span style={{ fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }}>{st.value > 0 ? money(st.value) : ""}</span>
-                    <span style={{ fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }}>
-                      {st.count}
-                    </span>
-                  </div>
-                  <div style={{ height: 5, borderRadius: 99, background: S.soft, marginTop: 5, overflow: "hidden" }}>
-                    <div style={{
-                      width: `${(st.count / maxCount) * 100}%`, height: "100%", borderRadius: 99,
-                      background: st.count ? T.accent : "transparent",
-                    }} />
-                  </div>
-                </button>
-              ))}
-              {lost > 0 && (
-                <div style={{ fontSize: 12, color: S.sub, marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 9 }}>
-                  {lost} lost or unqualified — not counted above
-                </div>
-              )}
-            </>
-          );
-        })()}
-      </Card>
+      {/* Whose book this screen is showing. Reps default to their own. */}
+      {currentUser && (
+        <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
+          {[["mine", "Mine"], ["all", "Company"]].map(([id, label]) => (
+            <button key={id} onClick={() => setScope(id)} style={{
+              border: `1px solid ${scope === id ? T.accent : S.line}`,
+              background: scope === id ? T.accentSoft : S.card,
+              color: scope === id ? T.accent : S.sub,
+              borderRadius: 999, padding: "6px 14px", fontSize: 12.5, fontWeight: 700,
+              cursor: "pointer", fontFamily: "inherit",
+            }}>{label}</button>
+          ))}
+        </div>
+      )}
 
       {/* Today — the 6am answer: where everyone needs to be, what's overdue.
           Always rendered, including empty: a card that vanishes on a quiet
@@ -4377,6 +4566,57 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
           ))}
         </Card>
       )}
+
+      {/* Blockers — what is actually broken, before any chart. This is the
+          card an owner opens the app for: it is the only place that answers
+          "what will cost me money today" without reading six other screens. */}
+      {(() => {
+        const feed = exceptionFeed(jobs, { stages, stageRules, appointments });
+        const [reds, ambers] = [feed.filter((e) => e.tone === "red"), feed.filter((e) => e.tone === "amber")];
+        const show = showAllBlockers ? feed : feed.slice(0, 6);
+        return (
+          <Card style={{ marginTop: 16 }}>
+            <CardTitle right={
+              feed.length ? (
+                <span style={{ display: "flex", gap: 6 }}>
+                  {reds.length > 0 && <Chip tone="red">{reds.length}</Chip>}
+                  {ambers.length > 0 && <Chip tone="amber">{ambers.length}</Chip>}
+                </span>
+              ) : <Chip tone="green">Clear</Chip>
+            }>Blockers</CardTitle>
+            {!feed.length && (
+              <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+                Nothing is stuck. No overdue tasks, no roof scheduled without a crew,
+                no job sitting past its stage clock.
+              </div>
+            )}
+            {show.map((e) => (
+              <button key={e.id} onClick={() => onOpenJob(e.jobId, e.tab || undefined)} style={{
+                display: "flex", gap: 10, alignItems: "flex-start", width: "100%", textAlign: "left",
+                border: "none", background: "none", cursor: "pointer", padding: "9px 0",
+                borderTop: `1px solid ${S.line}`,
+              }}>
+                <span style={{ marginTop: 2, flexShrink: 0, color: e.tone === "red" ? "var(--rl-red-fg)" : "var(--rl-amber-fg)" }}>
+                  <AlertTriangle size={15} />
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }}>{e.jobName}</span>
+                  <span style={{ fontSize: 12, color: S.sub, display: "block", lineHeight: 1.45 }}>{e.text}</span>
+                </span>
+                <ChevronRight size={15} color="#C7CBD1" style={{ flexShrink: 0, marginTop: 3 }} />
+              </button>
+            ))}
+            {feed.length > 6 && (
+              <button onClick={() => setShowAllBlockers(!showAllBlockers)} style={{
+                ...linkBtn, display: "block", width: "100%", textAlign: "center", padding: "10px 0 2px", fontSize: 12.5,
+              }}>{showAllBlockers ? "Show less" : `Show all ${feed.length}`}</button>
+            )}
+          </Card>
+        );
+      })()}
+
+      {/* Team chat lives in the Inbox, not on the home page. */}
+      <FocusList jobs={jobs} onOpenJob={onOpenJob} stages={stages} />
 
       {/* Week ahead — the next seven days of appointments and crew
           assignments, so the calendar and the dispatch board are answered
@@ -4467,24 +4707,100 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         );
       })()}
 
-      {/* Recoverable depreciation waiting to be chased — the most common
-          unclaimed money on an insurance job. */}
-      {(() => {
-        const depJobs = jobs.filter((j) => j.claimType === "Insurance" && claimMath(j).depOutstanding > 0 && (j.claim?.depStatus || "held") !== "released");
-        if (!depJobs.length) return null;
-        const depTotal = depJobs.reduce((x, j) => x + claimMath(j).depOutstanding, 0);
-        return (
-          <Card style={{ marginTop: 12 }}>
-            <button onClick={() => onOpenJob(depJobs[0].id, "claim")} style={{
-              display: "block", width: "100%", textAlign: "left",
-              border: "1px solid #F0D9A8", background: "#FFF6E5", borderRadius: 9,
-              padding: "11px 13px", cursor: "pointer", fontSize: 13, color: S.ink, fontFamily: "inherit", lineHeight: 1.5,
-            }}>
-              <strong>{money(depTotal)}</strong> in recoverable depreciation across {depJobs.length} {depJobs.length === 1 ? "claim" : "claims"} — request release on the completed invoices.
-            </button>
-          </Card>
-        );
-      })()}
+      {/* Pipeline at a glance — counts and dollars per stage, tap to filter the board */}
+      <Card style={{ marginTop: 16 }}>
+        {(() => {
+          const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
+          const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
+          const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
+          const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
+          /* Ring summary: five buckets of the twelve stages, each a
+             tappable letter that filters the board. Mirrors the at-a-glance
+             read Jacob wanted from his old dashboard. */
+          const RINGS = [
+            ["L", "Leads", "#F0B429", ["s1"]],
+            ["P", "Pipeline", "#F2711C", ["s2", "s3", "s4"]],
+            ["A", "Approved", "#63B54B", ["s5", "s6", "s7"]],
+            ["C", "Production", "#2BA4DE", ["s8", "s9"]],
+            ["I", "Invoicing", "#E0464B", ["s10"]],
+          ];
+          const ringData = RINGS.map(([letter, label, color, ids]) => ({
+            letter, label, color, ids,
+            count: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.count, 0),
+            value: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.value, 0),
+          }));
+          return (
+            <>
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${S.line}`,
+              }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>Current pipeline</span>
+                <span style={{ fontSize: 13, color: S.sub }}>Active jobs: {activeTotal}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-around", gap: 4, padding: "14px 0 16px", flexWrap: "wrap" }}>
+                {ringData.map((r) => (
+                  <button key={r.letter} onClick={() => onOpenStage && onOpenStage(r.ids[0])}
+                    aria-label={`${r.label}: ${r.count} jobs`}
+                    style={{
+                      border: "none", background: "none", cursor: "pointer", padding: "0 2px",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 56,
+                    }}>
+                    <span style={{
+                      width: 46, height: 46, borderRadius: "50%", background: r.color,
+                      display: "grid", placeItems: "center", color: "#fff", fontSize: 21, fontWeight: 800,
+                    }}>{r.letter}</span>
+                    <span style={{ fontSize: 17, fontWeight: 800, color: r.count ? "#F2711C" : "#C7CBD1" }}>{r.count}</span>
+                    <span style={{ fontSize: 11.5, color: S.sub, whiteSpace: "nowrap" }}>
+                      {r.value > 0 ? money(r.value) : "—"}
+                    </span>
+                    <span style={{ fontSize: 10.5, color: S.sub, letterSpacing: ".02em" }}>{r.label}</span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => go("jobs")} style={{
+                ...linkBtn, display: "block", width: "100%", textAlign: "center",
+                padding: "6px 0 10px", fontSize: 13,
+              }}>Open board →</button>
+              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: S.sub, borderTop: `1px solid ${S.line}`, paddingTop: 12, marginBottom: 2 }}>
+                BY STAGE · {money(totalPipeline)}
+              </div>
+              {liveStages.map((st) => (
+                <button key={st.id} onClick={() => onOpenStage && onOpenStage(st.id)}
+                  style={{
+                    display: "block", width: "100%", textAlign: "left", border: "none", background: "none",
+                    cursor: "pointer", padding: "7px 0", borderTop: `1px solid ${S.line}`,
+                  }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {st.name}
+                    </span>
+                    <span style={{ fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }}>{st.value > 0 ? money(st.value) : ""}</span>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }}>
+                      {st.count}
+                    </span>
+                  </div>
+                  <div style={{ marginTop: 5, overflow: "hidden", height: 7, background: S.soft, borderRadius: 99 }}>
+                    <div style={{
+                      width: `${(st.count / maxCount) * 100}%`, height: "100%", borderRadius: 99,
+                      background: st.count ? T.accent : "transparent",
+                    }} />
+                  </div>
+                </button>
+              ))}
+              {lost > 0 && (
+                <div style={{ fontSize: 12, color: S.sub, marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 9 }}>
+                  {lost} lost or unqualified — not counted above
+                </div>
+              )}
+            </>
+          );
+        })()}
+      </Card>
+
+      {/* Recoverable depreciation used to have its own banner here. It is a
+          blocker like any other now, so it rides in the exception feed at the
+          top of the page instead of being a second place to look. */}
 
       {/* Calendar and dispatch are one tap away under their own screens; the
           home page stays focused on money and what needs attention rather
@@ -4517,22 +4833,26 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         )}
       </Sheet>
 
-      {/* Team chat lives in the Inbox, not on the home page. */}
-      <FocusList jobs={jobs} onOpenJob={onOpenJob} />
-
       {/* Business at a glance — the money-forward company metrics a
-          ServiceTitan dashboard leads with. */}
+          ServiceTitan dashboard leads with. A crew seat sees no money at all;
+          a rep sees their own numbers, not the company's book. */}
+      {showMoney && (<>
       <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: S.sub, margin: "22px 4px 10px" }}>
-        Business at a glance
+        {isRep && scope === "mine" ? "Your numbers" : "Business at a glance"}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+      {/* Three fixed columns clipped six-figure numbers on a phone — a
+          $60,317.16 pipeline needs more than a third of a 390px screen.
+          auto-fit gives two columns on a handset and three on a tablet. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
         {[
           ["Sold", money(signedValue), `${wonCount} won`, T.accent],
           ["Avg sale", money(avgSale), "per won job", S.ink],
-          ["Collected", money(collected), "cash received", "#177245"],
           ["Pipeline", money(totalPipeline), "open value", S.ink],
-          ["A/R", money(arTotal), `${ar.length} open`, arTotal > 0 ? "#9A6B00" : S.ink],
-          ["Close rate", pct1(closeRate), `${wonCount}/${jobs.length}`, S.ink],
+          ...(isRep ? [] : [
+            ["Collected", money(collected), "cash received", "#177245"],
+            ["A/R", money(arTotal), `${ar.length} open`, arTotal > 0 ? "#9A6B00" : S.ink],
+            ["Close rate", pct1(closeRate), `${wonCount}/${jobs.length}`, S.ink],
+          ]),
         ].map(([l, v, sub, color]) => (
           <Card key={l} pad={13}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: S.sub }}>{l}</div>
@@ -4541,109 +4861,7 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
           </Card>
         ))}
       </div>
-      {stale.length > 0 && (
-        <button onClick={() => go("jobs")} style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", fontSize: 12.5, color: "#9A6B00", padding: "10px 4px 0" }}>
-          {stale.length} stale job{stale.length === 1 ? "" : "s"} — 14+ days untouched →
-        </button>
-      )}
-
-      {(subsReview > 0 || subsPay > 0) && (
-        <Card style={{ marginTop: 14 }}>
-          <CardTitle right={<button style={linkBtn} onClick={() => go("crewpay")}>Crew payouts →</button>}>Subcontractors</CardTitle>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {subsReview > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}><Chip tone="amber">{subsReview}</Chip> invoice{subsReview === 1 ? "" : "s"} to review</span>}
-            {subsPay > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}><Chip tone="blue">{subsPay}</Chip> to pay</span>}
-          </div>
-        </Card>
-      )}
-
-      {reviewJobs.length > 0 && (
-        <Card style={{ marginTop: 14 }}>
-          <CardTitle right={<button style={linkBtn} onClick={() => go("reviews")}>Manage →</button>}>Reviews</CardTitle>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: rev.recover || rev.notasked ? 10 : 0 }}>
-            {[["Posted", rev.posted, "green"], ["Rated", rev.rated, "amber"], ["Asked", rev.asked, "gray"], ["Not asked", rev.notasked, "blue"], ["Needs a call", rev.recover, "red"]]
-              .filter(([, n]) => n > 0).map(([l, n, tone]) => (
-                <span key={l} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}>
-                  <Chip tone={tone}>{n}</Chip> {l}
-                </span>
-              ))}
-          </div>
-          {rev.recover > 0 && (
-            <div style={{ fontSize: 12.5, color: "#B3261E", lineHeight: 1.5 }}>
-              {rev.recover} customer{rev.recover === 1 ? "" : "s"} rated you 3★ or below — call before asking for anything public.
-            </div>
-          )}
-          {rev.recover === 0 && rev.notasked > 0 && (
-            <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
-              {rev.notasked} sold/finished job{rev.notasked === 1 ? "" : "s"} not yet asked for a review.
-            </div>
-          )}
-        </Card>
-      )}
-
-      <Card style={{ marginTop: 14 }}>
-        <CardTitle right={
-          <button onClick={() => go("jobs")} style={{ border: "none", background: "none", color: T.accent, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-            Open board
-          </button>
-        }>Pipeline by stage</CardTitle>
-        {byStage.filter((s) => s.count > 0).map((s) => (
-          <div key={s.id} style={{ marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 5 }}>
-              <span style={{ fontWeight: 600, color: S.ink }}>{s.name} · {s.count}</span>
-              <span style={{ color: S.sub }}>{money(s.value)}</span>
-            </div>
-            <div style={{ height: 7, background: "#EEF1F4", borderRadius: 99 }}>
-              <div style={{
-                height: 7, borderRadius: 99, background: T.accent,
-                width: `${Math.max(5, totalPipeline + signedValue ? (s.value / Math.max(totalPipeline, signedValue)) * 100 : 0)}%`,
-                maxWidth: "100%",
-              }} />
-            </div>
-          </div>
-        ))}
-      </Card>
-
-      <Card style={{ marginTop: 14 }}>
-        <CardTitle right={
-          <span style={{ display: "flex", gap: 6 }}>
-            <Btn kind="soft" small onClick={onQuickTask}><Plus size={12} /> Task</Btn>
-            <Btn kind="soft" small onClick={onNewLead}><Plus size={12} /> Lead</Btn>
-          </span>
-        }>Needs attention</CardTitle>
-        {stale.length === 0 && openTasks.length === 0 && (
-          <div style={{ fontSize: 14, color: S.sub }}>Nothing stale and no open tasks. Pipeline is moving.</div>
-        )}
-        {stale.map((j) => (
-          <button key={j.id} onClick={() => onOpenJob(j.id)} style={{
-            width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
-            border: "none", background: "none", cursor: "pointer", textAlign: "left",
-            padding: "11px 0", borderBottom: `1px solid ${S.line}`,
-          }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{j.name}</div>
-              <div style={{ fontSize: 12, color: S.sub }}>{j.address}</div>
-            </div>
-            <Chip tone="red">{j.daysInStage}d in stage</Chip>
-          </button>
-        ))}
-        {openTasks.slice(0, 5).map(({ job, t }) => (
-          <button key={job.id + t.id} onClick={() => onOpenJob(job.id)} style={{
-            width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
-            border: "none", background: "none", cursor: "pointer", textAlign: "left",
-            padding: "11px 0", borderBottom: `1px solid ${S.line}`,
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <Circle size={16} color="#C7CBD1" />
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: S.ink }}>{t.label}</div>
-                <div style={{ fontSize: 12, color: S.sub }}>{job.name}</div>
-              </div>
-            </div>
-            <ChevronRight size={16} color="#C7CBD1" />
-          </button>
-        ))}
-      </Card>
+      </>)}
 
       {(() => {
         /* Every client who has been sent a review request, and where
@@ -4663,12 +4881,12 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
           <Card style={{ marginTop: 14 }}>
             <CardTitle right={<button style={linkBtn} onClick={() => go("reviews")}>Settings →</button>}>Reviews</CardTitle>
             <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-              <div style={{ flex: 1, background: "#EAF6EE", borderRadius: 10, padding: "9px 0", textAlign: "center" }}>
-                <div style={{ fontSize: 18, fontWeight: 800, color: "#177245" }}>{posted}</div>
+              <div style={{ flex: 1, background: "var(--rl-green-bg)", borderRadius: 10, padding: "9px 0", textAlign: "center" }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "var(--rl-green-fg)" }}>{posted}</div>
                 <div style={{ fontSize: 11, color: S.sub }}>posted</div>
               </div>
-              <div style={{ flex: 1, background: "#FFF6E5", borderRadius: 10, padding: "9px 0", textAlign: "center" }}>
-                <div style={{ fontSize: 18, fontWeight: 800, color: "#9A6B00" }}>{awaiting}</div>
+              <div style={{ flex: 1, background: "var(--rl-amber-bg)", borderRadius: 10, padding: "9px 0", textAlign: "center" }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "var(--rl-amber-fg)" }}>{awaiting}</div>
                 <div style={{ fontSize: 11, color: S.sub }}>awaiting</div>
               </div>
               <div style={{ flex: 1, background: T.accentSoft, borderRadius: 10, padding: "9px 0", textAlign: "center" }}>
@@ -4676,6 +4894,11 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
                 <div style={{ fontSize: 11, color: S.sub }}>ready to ask</div>
               </div>
             </div>
+            {rev.recover > 0 && (
+              <div style={{ fontSize: 12.5, color: "#B3261E", lineHeight: 1.5, marginBottom: 10 }}>
+                {rev.recover} customer{rev.recover === 1 ? "" : "s"} rated you 3★ or below — call before asking for anything public.
+              </div>
+            )}
             {eligible.length > 0 && (
               <div style={{ fontSize: 11.5, fontWeight: 800, color: S.sub, letterSpacing: ".04em", margin: "4px 0 2px" }}>NOT YET ASKED</div>
             )}
@@ -4713,6 +4936,16 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
           </Card>
         );
       })()}
+
+      {isAdmin && (subsReview > 0 || subsPay > 0) && (
+        <Card style={{ marginTop: 14 }}>
+          <CardTitle right={<button style={linkBtn} onClick={() => go("crewpay")}>Crew payouts →</button>}>Subcontractors</CardTitle>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {subsReview > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}><Chip tone="amber">{subsReview}</Chip> invoice{subsReview === 1 ? "" : "s"} to review</span>}
+            {subsPay > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}><Chip tone="blue">{subsPay}</Chip> to pay</span>}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -4751,7 +4984,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
     const wonIdx = order.indexOf("s5");
     const oddsFor = (sid) => { const i = order.indexOf(sid); if (i < 0 || wonIdx <= 0) return 0.3; return Math.max(0.1, Math.min(0.9, (i + 1) / (wonIdx + 1))); };
     const weightedPipeline = open.reduce((x, j) => x + num(j.value) * oddsFor(j.stageId), 0);
-    const avgAge = open.length ? open.reduce((x, j) => x + num(j.daysInStage), 0) / open.length : 0;
+    const avgAge = open.length ? open.reduce((x, j) => x + stageDays(j), 0) / open.length : 0;
     return {
       total: scoped.length, won: won.length, lost: lost.length, unq: unq.length,
       done: done.length, open: open.length,
@@ -4855,7 +5088,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
   };
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Financials & performance" onBack={onBack} />
 
       <Card style={{ marginTop: 14 }}>
@@ -5143,7 +5376,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
             return (
               <div key={st.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
                 <div style={{ width: 140, fontSize: 12, color: S.sub, flexShrink: 0 }}>{st.name}</div>
-                <div style={{ flex: 1, height: 18, background: "#EEF1F4", borderRadius: 6, overflow: "hidden" }}>
+                <div style={{ flex: 1, height: 18, background: S.soft, borderRadius: 6, overflow: "hidden" }}>
                   <div style={{
                     height: "100%", width: `${(inStage.length / max) * 100}%`,
                     background: DEAD_STAGES.includes(st.id) ? "#B42318" : WON_STAGES.includes(st.id) ? "#177245" : T.primary,
@@ -5192,11 +5425,59 @@ function isoLocal(d) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 }
 function todayIso() { return isoLocal(new Date()); }
+/* How long a job has sat in its current stage.
+
+   This used to read job.daysInStage directly, which was dead data: the
+   field was only ever *written* — as literals in the demo jobs and as 0 on
+   import / stage move / lead creation — and nothing ever incremented it.
+   Every real customer therefore saw "0 days in stage" forever, silently
+   flattening focusScore's staleness weighting, the stale-jobs list, average
+   age, the stage-time sort and the red-after-10-days card.
+
+   The fix is to stamp the entry date (job.stageAt) once and derive the age
+   on read. Jobs saved before this change have no stageAt, so they fall back
+   to whatever daysInStage last held and start reporting truthfully the
+   moment they next move. We deliberately do not backfill stageAt at
+   hydration: touching every job on load would trip the debounced upsert and
+   rewrite the customer's whole table on first open. */
+function stageDays(job) {
+  if (!job) return 0;
+  if (job.stageAt) {
+    const ms = Date.parse(todayIso()) - Date.parse(String(job.stageAt).slice(0, 10));
+    return Math.max(0, Math.round(ms / 86400000));
+  }
+  return num(job.daysInStage);
+}
+/* Stage age as a board signal. Green while the job is comfortably inside its
+   stage SLA, neutral once it's past halfway, red once it's overdue. Stages
+   with no SLA configured keep the old behavior (red after 10 days) so nothing
+   changes for an org that never opens the workflow editor, and finished or
+   dead jobs are never colored — they aren't waiting on anyone. */
+function stageAge(job, rules) {
+  const days = stageDays(job);
+  const done = ["s10", "s11", "s12"].includes(job && job.stageId);
+  const sla = num(rules && job && rules[job.stageId] && rules[job.stageId].sla);
+  const limit = sla || 10;
+  if (done) return { days, sla, limit: 0, late: false, fresh: false, color: S.sub };
+  const late = days > limit;
+  const fresh = days <= Math.ceil(limit / 2);
+  return {
+    days, sla, limit, late, fresh,
+    color: late ? "var(--rl-red-fg)" : fresh ? "var(--rl-green-fg)" : S.sub,
+  };
+}
 /* The day before a date, in local terms — used to schedule reminders. */
 function dayBefore(iso) {
   if (!iso) return null;
   const d = new Date(iso + "T12:00:00");
   d.setDate(d.getDate() - 1);
+  return isoLocal(d);
+}
+/* N days after a date, in local terms — used to date seeded stage tasks. */
+function plusDays(iso, n) {
+  if (!iso) return null;
+  const d = new Date(iso + "T12:00:00");
+  d.setDate(d.getDate() + num(n));
   return isoLocal(d);
 }
 
@@ -5438,7 +5719,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   const jobOf = (id) => jobs.find((j) => j.id === id);
 
   return (
-    <div style={embedded ? { padding: 0 } : { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={embedded ? { padding: 0 } : { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       {embedded ? (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: S.ink }}>Calendar</div>
@@ -5939,7 +6220,7 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject, currentUser, onDelete
     [contact.name, contact.phone, contact.email, ...contact.jobs.flatMap((j) => [j.address, j.intake?.reasonForCalling, ...(j.intake?.workRequested || [])])]
       .filter(Boolean).join(" ").toLowerCase().includes(needle));
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Contacts" onBack={onBack} />
       <div style={{ marginTop: 14 }}>
         <input style={inputStyle} placeholder="Search name, address, phone, email" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -6542,9 +6823,16 @@ const linkBtn = { border: "none", background: "none", color: T.accent, fontWeigh
 /* ================================================================
    WORKFLOW EDITOR — rename / reorder / add / remove stages
    ================================================================ */
-function WorkflowEditor({ open, onClose, stages, setStages }) {
+function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, setStageRules = () => {} }) {
   const [local, setLocal] = useState(stages);
-  useEffect(() => { if (open) setLocal(stages.map((s) => ({ ...s }))); }, [open]); // eslint-disable-line
+  const [rules, setRules] = useState(stageRules);
+  const [openRule, setOpenRule] = useState(null);
+  useEffect(() => {
+    if (!open) return;
+    setLocal(stages.map((s) => ({ ...s })));
+    setRules(JSON.parse(JSON.stringify(stageRules || {})));
+    setOpenRule(null);
+  }, [open]); // eslint-disable-line
   const rename = (id, name) => setLocal(local.map((s) => (s.id === id ? { ...s, name } : s)));
   const remove = (id) => setLocal(local.filter((s) => s.id !== id));
   const move = (i, dir) => {
@@ -6554,32 +6842,168 @@ function WorkflowEditor({ open, onClose, stages, setStages }) {
     [next[i], next[j]] = [next[j], next[i]];
     setLocal(next);
   };
+  const ruleOf = (id) => stageRuleFor(rules, id);
+  const patchRule = (id, patch) => setRules((prev) => ({ ...prev, [id]: { ...stageRuleFor(prev, id), ...patch } }));
+  const patchGate = (id, patch) => patchRule(id, { gate: { ...ruleOf(id).gate, ...patch } });
+  const applyRecipe = (id, recipe) => {
+    const cur = ruleOf(id);
+    const p = recipe.patch;
+    patchRule(id, {
+      ...(p.sla !== undefined ? { sla: p.sla } : {}),
+      ...(p.notify !== undefined ? { notify: p.notify } : {}),
+      ...(p.gate ? { gate: { ...cur.gate, ...p.gate } } : {}),
+      ...(p.tasks ? { tasks: [
+        ...cur.tasks,
+        ...p.tasks.filter((t) => !cur.tasks.some((x) => String(x.label).toLowerCase() === String(t.label).toLowerCase())),
+      ] } : {}),
+    });
+  };
+  /* How many stages a recipe is already live on — the number is what makes a
+     recipe feel like a company policy rather than a one-off toggle. */
+  const recipeUse = (recipe) => local.filter((s) => {
+    const r = ruleOf(s.id), p = recipe.patch;
+    if (p.notify !== undefined && r.notify !== p.notify) return false;
+    if (p.sla !== undefined && r.sla !== p.sla) return false;
+    if (p.gate && (r.gate.mode !== p.gate.mode || !(p.gate.checks || []).every((c) => (r.gate.checks || []).includes(c)))) return false;
+    if (p.tasks && !p.tasks.every((t) => r.tasks.some((x) => String(x.label).toLowerCase() === String(t.label).toLowerCase()))) return false;
+    return true;
+  }).length;
+
   return (
-    <Sheet open={open} onClose={onClose} title="Customize workflow"
+    <Sheet open={open} onClose={onClose} title="Customize workflow" tall
       footer={
         <div style={{ display: "flex", gap: 10 }}>
           <Btn kind="ghost" style={{ flex: 1 }} onClick={onClose}>Cancel</Btn>
-          <Btn style={{ flex: 1 }} disabled={local.length === 0} onClick={() => { setStages(local); onClose(); }}>Save workflow</Btn>
+          <Btn style={{ flex: 1 }} disabled={local.length === 0}
+            onClick={() => { setStages(local); setStageRules(rules); onClose(); }}>Save workflow</Btn>
         </div>
       }>
-      <div style={{ fontSize: 14, color: S.sub, marginBottom: 14 }}>
-        Rename, reorder, add, or remove pipeline stages. Jobs in a removed stage move to the first stage.
+      <div style={{ fontSize: 14, color: S.sub, marginBottom: 14, lineHeight: 1.5 }}>
+        Rename, reorder, add, or remove pipeline stages. Open <strong style={{ color: S.ink }}>Automate</strong> on
+        a stage to say how long a job should sit there, what has to be true before it can arrive,
+        and what work to hand the rep when it does.
       </div>
-      {local.map((s, i) => (
-        <div key={s.id} style={{
-          display: "flex", alignItems: "center", gap: 8, padding: "8px 0",
-          borderBottom: `1px solid ${S.line}`,
-        }}>
-          <GripVertical size={16} color="#C7CBD1" />
-          <input value={s.name} onChange={(e) => rename(s.id, e.target.value)}
-            style={{ ...inputStyle, padding: "9px 12px", flex: 1 }} />
-          <button onClick={() => move(i, -1)} style={arrowBtn} aria-label="Move up">↑</button>
-          <button onClick={() => move(i, 1)} style={arrowBtn} aria-label="Move down">↓</button>
-          <button onClick={() => remove(s.id)} style={{ border: "none", background: "none", cursor: "pointer", padding: 4 }}>
-            <Trash2 size={16} color="#B42318" />
-          </button>
-        </div>
-      ))}
+      {local.map((s, i) => {
+        const r = ruleOf(s.id);
+        const locked = LOCKED_STAGES.includes(s.id);
+        const isOpen = openRule === s.id;
+        const summary = [
+          r.sla ? `${r.sla}-day clock` : null,
+          r.gate.mode !== "off" && (r.gate.checks || []).length ? `${r.gate.mode === "block" ? "blocks" : "warns"} on ${r.gate.checks.length}` : null,
+          r.tasks.length ? `${r.tasks.length} ${r.tasks.length === 1 ? "task" : "tasks"}` : null,
+          r.notify ? "tells the homeowner" : null,
+        ].filter(Boolean).join(" · ");
+        return (
+          <div key={s.id} style={{ borderBottom: `1px solid ${S.line}`, padding: "8px 0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <GripVertical size={16} color="#C7CBD1" />
+              <input value={s.name} onChange={(e) => rename(s.id, e.target.value)}
+                style={{ ...inputStyle, padding: "9px 12px", flex: 1 }} />
+              <button onClick={() => move(i, -1)} style={arrowBtn} aria-label="Move up">↑</button>
+              <button onClick={() => move(i, 1)} style={arrowBtn} aria-label="Move down">↓</button>
+              {locked ? (
+                <span title="Reporting depends on this stage — rename it, but it can't be deleted."
+                  style={{ padding: 4, display: "inline-flex" }}>
+                  <Lock size={15} color={S.sub} />
+                </span>
+              ) : (
+                <button onClick={() => remove(s.id)} style={{ border: "none", background: "none", cursor: "pointer", padding: 4 }}>
+                  <Trash2 size={16} color="#B42318" />
+                </button>
+              )}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 24, marginTop: 6 }}>
+              <button onClick={() => setOpenRule(isOpen ? null : s.id)}
+                style={{
+                  border: `1px solid ${S.line}`, background: isOpen ? T.accentSoft : S.card, color: isOpen ? T.accent : S.sub,
+                  borderRadius: 999, padding: "5px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                }}>
+                <Zap size={12} style={{ verticalAlign: -2 }} /> Automate
+              </button>
+              <span style={{ fontSize: 12, color: S.sub }}>{summary || "Nothing automated yet"}</span>
+            </div>
+            {isOpen && (
+              <div style={{ background: S.soft, borderRadius: 12, padding: 12, marginTop: 9, marginLeft: 24 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: .4, marginBottom: 8 }}>ONE-TAP RECIPES</div>
+                {STAGE_RECIPES.map((rec) => {
+                  const n = recipeUse(rec);
+                  return (
+                    <div key={rec.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "7px 0" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: S.ink }}>{rec.name}</div>
+                        <div style={{ fontSize: 12, color: S.sub, lineHeight: 1.45 }}>
+                          {rec.blurb}{n > 0 ? ` Applied to ${n} ${n === 1 ? "stage" : "stages"}.` : ""}
+                        </div>
+                      </div>
+                      <Btn small kind="soft" onClick={() => applyRecipe(s.id, rec)} style={{ flexShrink: 0 }}>Apply</Btn>
+                    </div>
+                  );
+                })}
+                <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: .4, margin: "14px 0 8px" }}>CUSTOMIZE</div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
+                  <span style={{ fontSize: 13, color: S.ink, flex: 1 }}>Flag a job after</span>
+                  <input type="number" min="0" value={r.sla || ""} placeholder="0"
+                    onChange={(e) => patchRule(s.id, { sla: num(e.target.value) })}
+                    style={{ ...inputStyle, padding: "7px 10px", width: 74, textAlign: "right" }} />
+                  <span style={{ fontSize: 13, color: S.sub }}>days</span>
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
+                  <span style={{ fontSize: 13, color: S.ink, flex: 1 }}>Unmet requirements</span>
+                  <select value={r.gate.mode} onChange={(e) => patchGate(s.id, { mode: e.target.value })}
+                    style={{ ...selStyle, padding: "7px 10px", width: 150 }}>
+                    <option value="off">Ignore</option>
+                    <option value="warn">Warn but allow</option>
+                    <option value="block">Block the move</option>
+                  </select>
+                </div>
+                {r.gate.mode !== "off" && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                    {Object.keys(STAGE_CHECKS).map((cid) => {
+                      const on = (r.gate.checks || []).includes(cid);
+                      return (
+                        <button key={cid}
+                          onClick={() => patchGate(s.id, {
+                            checks: on ? r.gate.checks.filter((c) => c !== cid) : [...(r.gate.checks || []), cid],
+                          })}
+                          style={{
+                            border: `1px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : S.card,
+                            color: on ? T.accent : S.sub, borderRadius: 999, padding: "5px 10px",
+                            fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                          }}>{STAGE_CHECKS[cid].label}</button>
+                      );
+                    })}
+                  </div>
+                )}
+                <label style={{ display: "flex", gap: 9, alignItems: "center", fontSize: 13, cursor: "pointer", marginBottom: 10 }}>
+                  <input type="checkbox" checked={!!r.notify} onChange={(e) => patchRule(s.id, { notify: e.target.checked })}
+                    style={{ width: 17, height: 17, accentColor: T.accent }} />
+                  <span>Queue a portal update to the homeowner on arrival</span>
+                </label>
+                <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 6 }}>
+                  Tasks handed to the rep when a job lands here:
+                </div>
+                {r.tasks.map((t, ti) => (
+                  <div key={ti} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                    <input value={t.label}
+                      onChange={(e) => patchRule(s.id, { tasks: r.tasks.map((x, k) => (k === ti ? { ...x, label: e.target.value } : x)) })}
+                      style={{ ...inputStyle, padding: "7px 10px", flex: 1 }} />
+                    <input type="number" min="0" value={t.dueIn === undefined ? "" : t.dueIn} placeholder="due"
+                      onChange={(e) => patchRule(s.id, { tasks: r.tasks.map((x, k) => (k === ti ? { ...x, dueIn: num(e.target.value) } : x)) })}
+                      style={{ ...inputStyle, padding: "7px 10px", width: 62, textAlign: "right" }} />
+                    <button onClick={() => patchRule(s.id, { tasks: r.tasks.filter((x, k) => k !== ti) })}
+                      style={{ border: "none", background: "none", cursor: "pointer", padding: 4 }}>
+                      <Trash2 size={15} color="#B42318" />
+                    </button>
+                  </div>
+                ))}
+                <Btn small kind="soft" onClick={() => patchRule(s.id, { tasks: [...r.tasks, { label: "", dueIn: 1 }] })}>
+                  <Plus size={13} /> Add task
+                </Btn>
+              </div>
+            )}
+          </div>
+        );
+      })}
       <Btn kind="soft" small style={{ marginTop: 14 }}
         onClick={() => setLocal([...local, { id: uid("s"), name: "New stage" }])}>
         <Plus size={14} /> Add stage
@@ -6698,7 +7122,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
 /* ================================================================
    JOB BOARD — kanban with drag between stages + tap-to-move
    ================================================================ */
-function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {} }) {
+function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {}, stageRules = {}, onBulkMoveStage = () => {} }) {
   const dragJob = useRef(null);
   const focusRef = useRef(null);
   useEffect(() => {
@@ -6732,7 +7156,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
     const s = filters.sort;
     if (s === "value-hi") out = [...out].sort((a, b) => b.value - a.value);
     else if (s === "value-lo") out = [...out].sort((a, b) => a.value - b.value);
-    else if (s === "stage-time") out = [...out].sort((a, b) => b.daysInStage - a.daysInStage);
+    else if (s === "stage-time") out = [...out].sort((a, b) => stageDays(b) - stageDays(a));
     else if (s === "name") out = [...out].sort((a, b) => a.name.localeCompare(b.name));
     else if (s === "address") out = [...out].sort((a, b) => a.address.localeCompare(b.address));
     return out;
@@ -6740,15 +7164,25 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
 
   const activeFilterCount = filters.assignees.length + filters.stages.length + filters.sources.length;
 
-  const JobCard = ({ job }) => (
+  const JobCard = ({ job }) => {
+    const age = stageAge(job, stageRules);
+    return (
     <div
       draggable
       onDragStart={() => (dragJob.current = job.id)}
       onClick={() => onOpenJob(job.id)}
       style={{
         background: S.card, border: `1px solid ${S.line}`, borderRadius: 12,
+        borderLeft: age.late ? "3px solid var(--rl-red-fg)" : `1px solid ${S.line}`,
         padding: 14, marginBottom: 10, cursor: "pointer",
       }}>
+      {/* The house, when there is one. In a subdivision of near-identical
+          addresses a rep recognises the roof faster than the number. */}
+      {job.propertyPhoto && job.propertyPhoto.url && (
+        <img src={job.propertyPhoto.url} alt=""
+          style={{ width: "calc(100% + 28px)", height: 104, objectFit: "cover", display: "block",
+            margin: "-14px -14px 11px", borderRadius: "11px 11px 0 0" }} />
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{job.name}</div>
         {job.value > 0 && <div style={{ fontSize: 14, fontWeight: 700, color: S.ink, whiteSpace: "nowrap" }}>{money(job.value)}</div>}
@@ -6776,8 +7210,8 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
         display: "flex", justifyContent: "space-between", alignItems: "center",
         marginTop: 10, paddingTop: 10, borderTop: `1px solid ${S.line}`,
       }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: job.daysInStage > 10 ? "#B42318" : S.sub }}>
-          ● {job.daysInStage} days
+        <span style={{ fontSize: 12, fontWeight: 700, color: age.color }}>
+          ● {age.days} {age.days === 1 ? "day" : "days"}{age.late ? " — late" : ""}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 12, color: S.sub }}>{job.updated}</span>
@@ -6800,7 +7234,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
         <button
           onClick={(e) => { e.stopPropagation(); setMoveMenuFor(moveMenuFor === job.id ? null : job.id); }}
           style={{
-            flex: 1, border: `1px solid ${S.line}`, background: "#FAFBFC",
+            flex: 1, border: `1px solid ${S.line}`, background: S.card,
             borderRadius: 8, padding: "7px 0", fontSize: 13, fontWeight: 600, color: S.sub, cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
           }}>
@@ -6820,7 +7254,8 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   return (
     <div style={{ paddingBottom: 100 }}>
@@ -6869,7 +7304,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
             {bulkMenu === "stage" && (
               <div style={{ position: "absolute", top: "110%", left: 0, background: S.card, border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }}>
                 {stages.map((st) => (
-                  <button key={st.id} onClick={() => { selected.forEach((id) => onMoveStage(id, st.id)); clearSel(); }}
+                  <button key={st.id} onClick={() => { onBulkMoveStage([...selected], st.id); clearSel(); }}
                     style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", padding: "10px 14px", fontSize: 13.5, color: S.ink, cursor: "pointer", fontFamily: "inherit" }}>{st.name}</button>
                 ))}
               </div>
@@ -6887,12 +7322,14 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
             )}
           </div>
           <Btn small kind="soft" onClick={() => {
+            /* Goes through the same admin-only gate + audit log as every
+               other export in the app (downloadCsv/EXPORT_ALLOWED) — this
+               used to build and download the Blob directly, letting any rep
+               export the whole book of business unrestricted and unlogged. */
             const rows = filtered.filter((j) => selected.has(j.id));
             const head = ["Name", "Address", "Zip", "State", "Stage", "Value", "Type", "Phone", "Email", "Assignee"];
-            const esc2 = (v) => `"${String(v == null ? "" : v).replace(/"/g, '""')}"`;
-            const body = rows.map((j) => [j.name, j.address, j.zip, j.state, (stages.find((s) => s.id === j.stageId) || {}).name || "", j.value, j.claimType, j.phone || j.contact?.phone || "", j.email || j.contact?.email || "", j.assignee].map(esc2).join(",")).join("\n");
-            const blob = new Blob([head.join(",") + "\n" + body], { type: "text/csv" });
-            const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "jobs-export.csv"; a.click();
+            const body = rows.map((j) => [j.name, j.address, j.zip, j.state, (stages.find((s) => s.id === j.stageId) || {}).name || "", j.value, j.claimType, j.phone || j.contact?.phone || "", j.email || j.contact?.email || "", j.assignee]);
+            downloadCsv("jobs-export.csv", [head, ...body]);
           }}>Export CSV</Btn>
           <button onClick={clearSel} style={{ marginLeft: "auto", border: "none", background: "rgba(255,255,255,.15)", color: "#fff", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Clear</button>
         </div>
@@ -6973,8 +7410,8 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
 }
 const pill = {
   display: "flex", alignItems: "center", gap: 6, border: "none",
-  background: "#F3F4F6", borderRadius: 999, padding: "9px 14px",
-  fontSize: 13, fontWeight: 600, cursor: "pointer", color: "#111827", flexShrink: 0,
+  background: S.soft, borderRadius: 999, padding: "9px 14px",
+  fontSize: 13, fontWeight: 600, cursor: "pointer", color: S.ink, flexShrink: 0,
 };
 
 /* ================================================================
@@ -6986,7 +7423,8 @@ const JOB_TABS = [
   ["report", "Report"], ["messages", "Messages"],
   ["photos", "Photos"], ["financials", "Financials"],
   ["payments", "Payments"], ["invoice", "Invoice"], ["workorder", "Work order"],
-  ["tasks", "Tasks"], ["files", "Files"], ["portal", "Portal"], ["claim", "Insurance claim"],
+  ["tasks", "Tasks"], ["files", "Files"], ["assistant", "Ask the assistant"],
+  ["portal", "Portal"], ["claim", "Insurance claim"],
 ];
 
 /* Collapsible sections, in the order they are worked. Replaces a
@@ -7021,6 +7459,7 @@ const JOB_SECTIONS = [
   ["handoff", "Sold & handoff", Share2, "Build"],
   ["tasks", "Tasks", CheckCircle2, "Build"],
   ["files", "Attachments", Layers, "Build"],
+  ["assistant", "Ask the assistant", MessageCircle, "Build"],
   // Money
   ["financials", "Financials", DollarSign, "Money"],
   // Customer
@@ -7032,7 +7471,7 @@ const JOB_SECTIONS = [
 const JOB_TAB_GROUPS = [
   ["Inspect", ["overview", "checklist", "ventilation", "measure", "photos"]],
   ["Sell", ["estimate", "contract", "materials", "report"]],
-  ["Build", ["workorder", "tasks", "files"]],
+  ["Build", ["workorder", "tasks", "files", "assistant"]],
   ["Money", ["financials", "payments", "invoice"]],
   ["Customer", ["messages", "portal"]],
 ];
@@ -7067,7 +7506,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
   const stage = stages.find((s) => s.id === job.stageId);
   const juris = jurisdictionForZip(job.zip);
   return (
-    <div style={{ background: S.bg, minHeight: "100vh", paddingBottom: 110 }}>
+    <div style={{ background: S.bg, minHeight: "100%", paddingBottom: 28 }}>
       <div style={{ background: S.card, borderBottom: `1px solid ${S.line}` }}>
         <div style={{ padding: "16px 16px 0" }}>
           <SubHeader title={job.name} onBack={onBack}
@@ -7128,7 +7567,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
                   <span style={{
                     display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
                     padding: "9px 0", borderRadius: 10, border: `1px solid ${S.line}`,
-                    background: disabled ? "#F7F8FA" : "#fff", color: disabled ? "#C7CBD1" : T.accent,
+                    background: disabled ? S.soft : S.card, color: disabled ? "#C7CBD1" : T.accent,
                     fontSize: 11, fontWeight: 700, cursor: disabled ? "default" : "pointer", width: "100%",
                   }}><Icon size={17} /> {label}</span>
                 );
@@ -7228,32 +7667,34 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
                 onOpenCodeLookup={onOpenCodeLookup} />;
               case "claim": return <TabClaim job={job} mut={mut} toast={toast} brand={brand} />;
               case "handoff": return <TabHandoff job={job} mut={mut} toast={toast} isAdmin={isAdmin}
-                currentUser={currentUser} stages={stages} onMoveStage={onMoveStage} />;
-              case "changeorders": return <TabChangeOrders job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />;
+                currentUser={currentUser} stages={stages} onMoveStage={onMoveStage} showMoney={showMoney} />;
+              case "changeorders": return <TabChangeOrders job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} showMoney={showMoney} />;
               case "checklist": return <TabChecklist job={job} mut={mut} toast={toast} />;
               case "ventilation": return <TabVentilation job={job} mut={mut} toast={toast} />;
               case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
               case "materials": return <TabMaterials job={job} mut={mut} toast={toast} />;
               case "estimate": return <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
                 estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} priceList={priceList}
-                docTemplates={docTemplates} setDocTemplates={setDocTemplates} />;
+                docTemplates={docTemplates} setDocTemplates={setDocTemplates} users={users} />;
               case "contract": return (<>
                 <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast}
-                  docTemplates={docTemplates} setDocTemplates={setDocTemplates} />
+                  docTemplates={docTemplates} setDocTemplates={setDocTemplates} currentUser={currentUser} integrations={integrations} />
                 {/* Countersign queue + signature audit trail live with the
                     contract now, not in a separate section. */}
                 <TabSignatures job={job} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />
               </>);
-              case "report": return <TabReport job={job} brand={brand} juris={juris} />;
+              case "report": return <TabReport job={job} brand={brand} juris={juris} mut={mut} toast={toast} currentUser={currentUser} integrations={integrations} />;
               case "messages": return <TabMessages job={job} mut={mut} toast={toast} brand={brand}
                 templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />;
               case "photos": return <TabPhotos job={job} mut={mut} toast={toast} ccToken={ccToken} />;
-              case "financials": return <TabFinancialsCombined job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />;
+              case "financials": return <TabFinancialsCombined job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} integrations={integrations} />;
               case "workorder": return <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
                 crews={crews} templates={templates} currentUser={currentUser} users={users} />;
               case "tasks": return <TabTasks job={job} mut={mut} toast={toast} />;
               case "files": return <TabFiles job={job} mut={mut} toast={toast} />;
+              case "assistant": return <ClaimAssistant job={job} />;
               case "portal": return <TabPortal job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser}
+                users={users}
                 stageLabel={(stages.find((stage) => stage.id === job.stageId) || {}).name || ""} />;
               default: return null;
             }
@@ -7300,7 +7741,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               }}>
                 <button onClick={() => setOpen((o) => ({ ...o, [id]: !o[id] }))} style={{
                   display: "flex", alignItems: "center", gap: 11, width: "100%",
-                  border: "none", background: isOpen ? "#fff" : S.bg, cursor: "pointer",
+                  border: "none", background: isOpen ? S.card : S.bg, cursor: "pointer",
                   textAlign: "left", padding: "14px 15px", fontFamily: "inherit",
                 }}>
                   <Icon size={17} color={T.accent} />
@@ -7664,6 +8105,7 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="slate">{job.zip}</Chip>}>Site location</CardTitle>
+        <PropertyPhoto job={job} mut={mut} toast={toast} />
         <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.5 }}>{job.address}</div>
         <div style={{ marginTop: 8 }}><WeatherNow lat={job.lat ?? job.property?.lat} lng={job.lng ?? job.property?.lng} zip={job.zip} /></div>
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -7675,6 +8117,11 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
           </a>
         </div>
       </Card>
+
+      <EnRouteCard job={job} mut={mut} toast={toast} currentUser={currentUser} />
+
+      <ForecastStrip lat={job.lat ?? job.property?.lat} lng={job.lng ?? job.property?.lng}
+        zip={job.zip} schedDate={job.schedDate} />
 
       <PropertyRecordCard job={job} mut={mut} toast={toast} />
 
@@ -7827,7 +8274,7 @@ function AnnouncementManager({ announcements, setAnnouncements, currentUser, onB
     setDraft(""); toast("Announcement posted to everyone's home screen");
   };
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Company announcements" onBack={onBack} />
       <Card style={{ marginTop: 14 }}>
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
@@ -7873,7 +8320,13 @@ function AnnouncementManager({ announcements, setAnnouncements, currentUser, onB
    "Save as PDF", which is a genuine PDF — no library, no server, and
    it works on iOS Safari and Android Chrome alike.
 ================================================================ */
-function docShell(title, brand, bodyHtml) {
+/* opts.bare drops the letterhead and the closing footer. The proposal uses it
+   because those two blocks were what stopped its cover from being a cover: the
+   shell printed the logo, the address and the document title across the top of
+   page one, and then the proposal printed its own title underneath. The same
+   title, twice, above a photo that was supposed to own the page. Every other
+   document still wants the letterhead, so this is opt-in. */
+function docShell(title, brand, bodyHtml, opts = {}) {
   const esc = (x) => String(x == null ? "" : x)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const logo = brand.logo
@@ -7886,7 +8339,12 @@ function docShell(title, brand, bodyHtml) {
   @page { size: letter; margin: 0.6in; }
   * { box-sizing: border-box; }
   body { font: 13px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color: #111827; margin: 0; padding: 22px; }
-  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;
+  /* These two are scoped to div on purpose. They set display:flex, and a
+     document that happened to reuse the name on a <tr> — the cap-out sheet
+     did, for its column header and its total rows — had those rows drop out
+     of the table grid entirely and render as loose boxes. Scoping by tag
+     keeps a class-name collision from silently destroying a table. */
+  div.head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;
           border-bottom: 3px solid ${brand.primary}; padding-bottom: 14px; margin-bottom: 20px; }
   .co { font-size: 11.5px; color: #6B7280; line-height: 1.5; margin-top: 6px; white-space: pre-line; }
   .title { font-size: 21px; font-weight: 800; text-align: right; color: ${brand.primary}; }
@@ -7898,8 +8356,8 @@ function docShell(title, brand, bodyHtml) {
        color: #6B7280; border-bottom: 1.5px solid #E5E7EB; padding: 7px 6px; }
   td { padding: 8px 6px; border-bottom: 1px solid #F3F4F6; vertical-align: top; font-size: 12.5px; }
   td.r, th.r { text-align: right; white-space: nowrap; }
-  .tot { display: flex; justify-content: space-between; padding: 7px 6px; font-size: 13px; }
-  .tot.grand { font-weight: 800; font-size: 15px; border-top: 2px solid ${brand.primary}; margin-top: 6px; padding-top: 10px; }
+  div.tot { display: flex; justify-content: space-between; padding: 7px 6px; font-size: 13px; }
+  div.tot.grand { font-weight: 800; font-size: 15px; border-top: 2px solid ${brand.primary}; margin-top: 6px; padding-top: 10px; }
   .box { border: 1px solid #E5E7EB; border-radius: 9px; padding: 12px 14px; margin-top: 8px; }
   .muted { color: #6B7280; font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; }
   .sig { display: flex; gap: 26px; margin-top: 26px; page-break-inside: avoid; }
@@ -7908,8 +8366,8 @@ function docShell(title, brand, bodyHtml) {
   .siglbl { font-size: 10.5px; color: #6B7280; margin-top: 5px; }
   .foot { margin-top: 26px; padding-top: 12px; border-top: 1px solid #E5E7EB;
           font-size: 10.5px; color: #9CA3AF; text-align: center; }
-  .cover { text-align: center; padding: 40px 0 30px; page-break-after: always; }
-  .cover img.hero { width: 100%; height: 4.8in; object-fit: cover; border-radius: 12px; margin-bottom: 26px; }
+  /* The cover belongs to the proposal, and proposalCss owns it — these used
+     to live here too and the two rulesets disagreed about the hero height. */
   @media print { .noprint { display: none !important; } body { padding: 0; } }
   .bar { position: sticky; top: 0; background: #111827; color: #fff; padding: 11px 14px;
          display: flex; gap: 10px; align-items: center; margin: -22px -22px 20px; }
@@ -7921,21 +8379,21 @@ function docShell(title, brand, bodyHtml) {
   <button onclick="window.print()">Save as PDF / Print</button>
   <span>Choose "Save to Files" or "Save as PDF" in the print dialog.</span>
 </div>
-<div class="head">
+${opts.bare ? "" : `<div class="head">
   <div>${logo}<div class="co">${[
       brand.showAddress !== false ? esc(brand.address) : "",
       [brand.showPhone !== false ? esc(brand.phone) : "", brand.showEmail !== false ? esc(brand.email) : ""].filter(Boolean).join("   "),
       brand.showLicense !== false && brand.license ? esc(brand.license) : "",
     ].filter(Boolean).join("\n")}</div></div>
   <div><div class="title">${esc(title)}</div></div>
-</div>
+</div>`}
 ${bodyHtml}
-<div class="foot">${esc(brand.company)}${brand.showSlogan !== false ? " · " + esc(brand.slogan) : ""}</div>
+${opts.bare ? "" : `<div class="foot">${esc(brand.company)}${brand.showSlogan !== false ? " · " + esc(brand.slogan) : ""}</div>`}
 </body></html>`;
 }
 
-function openDoc(title, brand, bodyHtml, toast) {
-  const html = docShell(title, brand, bodyHtml);
+function openDoc(title, brand, bodyHtml, toast, opts = {}) {
+  const html = docShell(title, brand, bodyHtml, opts);
   /* 1) A new tab is best when the browser allows it. */
   try {
     const w = window.open("", "_blank");
@@ -7980,6 +8438,213 @@ function openDoc(title, brand, bodyHtml, toast) {
 const esc = (x) => String(x == null ? "" : x)
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+/* ==================================================================
+   QR CODES — generated here, on purpose
+
+   A printed proposal carries a link to the customer portal so a
+   homeowner can accept and sign on their phone instead of printing,
+   signing and scanning. A QR is what makes that actually happen.
+
+   Every "just call a QR image API" option would put the portal token
+   in a URL sent to a third-party host — and that token is a live,
+   unauthenticated key to one customer's whole file. So this encodes
+   locally: byte mode, error correction level M, smallest version that
+   fits, emitted as inline SVG with no network access and no dependency.
+
+   Standard: ISO/IEC 18004. The tables below are from the spec.
+================================================================== */
+const QR_ECC_M = 0;                                     // level M -> format bits 00
+/* Data codeword capacity at level M, versions 1-10. */
+const QR_M_DATA = [16, 28, 44, 64, 86, 108, 124, 154, 182, 216];
+/* EC codewords per block, and block counts, at level M, versions 1-10. */
+const QR_M_ECC = [10, 16, 26, 18, 24, 16, 18, 22, 22, 26];
+const QR_M_BLOCKS = [1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
+const QR_ALIGN = [[], [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34],
+  [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]];
+
+/* GF(256) with the QR primitive polynomial 0x11D. */
+const QR_EXP = new Uint8Array(512);
+const QR_LOG = new Uint8Array(256);
+(() => {
+  let x = 1;
+  for (let i = 0; i < 255; i++) {
+    QR_EXP[i] = x; QR_LOG[x] = i;
+    x <<= 1; if (x & 0x100) x ^= 0x11d;
+  }
+  for (let i = 255; i < 512; i++) QR_EXP[i] = QR_EXP[i - 255];
+})();
+const qrMul = (a, b) => (a === 0 || b === 0) ? 0 : QR_EXP[QR_LOG[a] + QR_LOG[b]];
+
+/* Generator polynomial for `degree` error-correction codewords. */
+function qrGenPoly(degree) {
+  let poly = [1];
+  for (let i = 0; i < degree; i++) {
+    const next = new Array(poly.length + 1).fill(0);
+    for (let j = 0; j < poly.length; j++) {
+      next[j] ^= qrMul(poly[j], 1);
+      next[j + 1] ^= qrMul(poly[j], QR_EXP[i]);
+    }
+    poly = next;
+  }
+  return poly;
+}
+function qrEccFor(data, count) {
+  const gen = qrGenPoly(count);
+  const rem = new Array(count).fill(0);
+  for (const byte of data) {
+    const factor = byte ^ rem.shift();
+    rem.push(0);
+    for (let i = 0; i < count; i++) rem[i] ^= qrMul(gen[i + 1], factor);
+  }
+  return rem;
+}
+
+/* Build the module matrix for `text`. Returns null when the text is empty or
+   too long for version 10 — callers render nothing rather than a broken code. */
+function qrMatrix(text) {
+  const bytes = Array.from(new TextEncoder().encode(String(text || "")));
+  if (!bytes.length) return null;
+
+  let version = 0;
+  for (let v = 1; v <= 10; v++) {
+    const lenBits = v < 10 ? 8 : 16;
+    if (4 + lenBits + bytes.length * 8 <= QR_M_DATA[v - 1] * 8) { version = v; break; }
+  }
+  if (!version) return null;
+
+  const size = version * 4 + 17;
+  const totalData = QR_M_DATA[version - 1];
+
+  /* --- bitstream: mode 0100, length, payload, terminator, pad --- */
+  const bits = [];
+  const push = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >> i) & 1); };
+  push(0b0100, 4);
+  push(bytes.length, version < 10 ? 8 : 16);
+  bytes.forEach((b) => push(b, 8));
+  for (let i = 0; i < 4 && bits.length < totalData * 8; i++) bits.push(0);
+  while (bits.length % 8) bits.push(0);
+  const dataCw = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    dataCw.push(bits.slice(i, i + 8).reduce((a, b) => (a << 1) | b, 0));
+  }
+  const PADS = [0xec, 0x11];
+  for (let i = 0; dataCw.length < totalData; i++) dataCw.push(PADS[i % 2]);
+
+  /* --- split into blocks, compute EC, interleave --- */
+  const nBlocks = QR_M_BLOCKS[version - 1];
+  const eccLen = QR_M_ECC[version - 1];
+  const shortLen = Math.floor(totalData / nBlocks);
+  const nLong = totalData % nBlocks;
+  const dBlocks = [], eBlocks = [];
+  let off = 0;
+  for (let b = 0; b < nBlocks; b++) {
+    const len = shortLen + (b >= nBlocks - nLong ? 1 : 0);
+    const chunk = dataCw.slice(off, off + len);
+    off += len;
+    dBlocks.push(chunk);
+    eBlocks.push(qrEccFor(chunk, eccLen));
+  }
+  const final = [];
+  for (let i = 0; i < shortLen + 1; i++) {
+    dBlocks.forEach((blk) => { if (i < blk.length) final.push(blk[i]); });
+  }
+  for (let i = 0; i < eccLen; i++) eBlocks.forEach((blk) => final.push(blk[i]));
+
+  /* --- lay out the matrix --- */
+  const m = Array.from({ length: size }, () => new Array(size).fill(null));
+  const set = (r, c, v) => { if (r >= 0 && r < size && c >= 0 && c < size) m[r][c] = v; };
+  const finder = (r, c) => {
+    for (let dr = -1; dr <= 7; dr++) {
+      for (let dc = -1; dc <= 7; dc++) {
+        const inner = dr >= 0 && dr <= 6 && dc >= 0 && dc <= 6;
+        const on = inner && (dr === 0 || dr === 6 || dc === 0 || dc === 6
+          || (dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4));
+        set(r + dr, c + dc, on ? 1 : 0);
+      }
+    }
+  };
+  finder(0, 0); finder(0, size - 7); finder(size - 7, 0);
+  for (let i = 8; i < size - 8; i++) {
+    m[6][i] = i % 2 === 0 ? 1 : 0;
+    m[i][6] = i % 2 === 0 ? 1 : 0;
+  }
+  const aligns = QR_ALIGN[version];
+  aligns.forEach((r) => aligns.forEach((c) => {
+    if (m[r][c] !== null) return;                        // skip finder overlaps
+    for (let dr = -2; dr <= 2; dr++) {
+      for (let dc = -2; dc <= 2; dc++) {
+        const on = Math.max(Math.abs(dr), Math.abs(dc)) !== 1;
+        set(r + dr, c + dc, on ? 1 : 0);
+      }
+    }
+  }));
+  m[size - 8][8] = 1;                                    // dark module
+
+  /* Reserve format areas so data placement skips them. */
+  const reserve = (r, c) => { if (m[r][c] === null) m[r][c] = 0; };
+  for (let i = 0; i < 9; i++) { reserve(8, i); reserve(i, 8); }
+  for (let i = 0; i < 8; i++) { reserve(8, size - 1 - i); reserve(size - 1 - i, 8); }
+
+  /* Data, upward/downward in two-column strips, skipping the timing column. */
+  const bitStream = [];
+  final.forEach((cw) => { for (let i = 7; i >= 0; i--) bitStream.push((cw >> i) & 1); });
+  let bi = 0, up = true;
+  for (let right = size - 1; right > 0; right -= 2) {
+    if (right === 6) right = 5;
+    for (let step = 0; step < size; step++) {
+      const row = up ? size - 1 - step : step;
+      for (const col of [right, right - 1]) {
+        if (m[row][col] !== null) continue;
+        /* Mask 0: (row + col) % 2 === 0 inverts. Chosen fixed rather than
+           evaluating all eight — a URL of this length produces no problematic
+           pattern, and a deterministic mask keeps this testable. */
+        const bit = bi < bitStream.length ? bitStream[bi++] : 0;
+        m[row][col] = ((row + col) % 2 === 0) ? bit ^ 1 : bit;
+      }
+    }
+    up = !up;
+  }
+
+  /* Format information: ECC level M + mask 0, BCH(15,5) with the spec mask. */
+  const fmtData = (QR_ECC_M << 3) | 0;
+  let rem = fmtData;
+  for (let i = 0; i < 10; i++) rem = (rem << 1) ^ (((rem >> 9) & 1) * 0x537);
+  const fmt = ((fmtData << 10) | rem) ^ 0x5412;
+  /* Format bits go down most-significant first — bit 14 lands at (8,0), not
+     bit 0. Getting this backwards produces a symbol that passes every
+     structural check (finders, timing, dark module all correct) and that no
+     reader on earth will decode, because the 15-bit word comes out reversed. */
+  const fbit = (i) => (fmt >> (14 - i)) & 1;
+  for (let i = 0; i <= 5; i++) m[8][i] = fbit(i);
+  m[8][7] = fbit(6); m[8][8] = fbit(7); m[7][8] = fbit(8);
+  for (let i = 9; i <= 14; i++) m[14 - i][8] = fbit(i);
+  /* The second copy is 7 modules up the left of the bottom-left finder and 8
+     across from the top-right one. Getting these lengths the wrong way round
+     silently overwrites the dark module at (size-8, 8), which no reader will
+     accept — worth stating, because the symbol still looks correct. */
+  for (let i = 0; i <= 6; i++) m[size - 1 - i][8] = fbit(i);
+  for (let i = 7; i <= 14; i++) m[8][size - 15 + i] = fbit(i);
+
+  return m;
+}
+
+/* The matrix as an inline SVG, sized in CSS pixels. Returns "" when the text
+   can't be encoded, so a caller can concatenate it unconditionally. */
+function qrSvg(text, px = 120) {
+  const m = qrMatrix(text);
+  if (!m) return "";
+  const n = m.length, quiet = 4, total = n + quiet * 2;
+  let rects = "";
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (m[r][c]) rects += `<rect x="${c + quiet}" y="${r + quiet}" width="1" height="1"/>`;
+    }
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} ${total}" `
+    + `width="${px}" height="${px}" shape-rendering="crispEdges" role="img" aria-label="Scan to accept online">`
+    + `<rect width="${total}" height="${total}" fill="#fff"/><g fill="#111827">${rects}</g></svg>`;
+}
+
 function lineTable(items, opts = {}) {
   /* opts.honorLine → respect each line's customer-visibility toggles
      (showQty / showUnitPrice) set in the estimate editor, so the printed
@@ -8004,6 +8669,24 @@ function lineTable(items, opts = {}) {
 /* Proposal visual styles for the customer-facing document. Each style is a
    light treatment of the cover/heading; the body stays legible and printable.
    Additive — an estimate with no doc.style falls back to "classic". */
+/* The order a proposal sells in: who we are and what we found before any
+   number, options before the itemised sheet, then warranty, process, terms.
+   Each is opt-out in the builder, and each renders nothing when the job has
+   no data for it — a company that never fills in a warranty simply doesn't
+   get a warranty page rather than getting an empty one. */
+const PROPOSAL_DEFAULT_SECTIONS = ["cover", "why", "findings", "options", "items", "concealed", "warranty", "process", "notes", "terms"];
+const PROPOSAL_SECTION_LABELS = {
+  cover: ["Cover page", "Photo, title, and who it's for"],
+  why: ["Why us", "Licence, insurance, crews, your contact"],
+  findings: ["What we found", "Measurements and the photos you shared"],
+  options: ["Options", "Good/Better/Best side by side, plus upgrades"],
+  items: ["Scope / what's included", "The line items"],
+  concealed: ["Concealed conditions", "Pre-agreed unit pricing for what's found after tear-off"],
+  warranty: ["Warranty", "Manufacturer and workmanship"],
+  process: ["What happens next", "The five steps after they sign"],
+  notes: ["Special notes", "Anything specific to this job"],
+  terms: ["Terms & conditions", "Payment terms and the fine print"],
+};
 const PROPOSAL_STYLES = [
   { id: "classic", name: "Classic", blurb: "Clean, photo above a title" },
   { id: "bold", name: "Bold", blurb: "Full color banner" },
@@ -8020,11 +8703,16 @@ function normalizeProposalDoc(doc) {
   return {
     style: d.style || "classic",
     title: d.title || "Roofing Proposal",
-    sections: Array.isArray(d.sections) && d.sections.length ? d.sections : ["cover", "items", "notes", "terms"],
+    sections: Array.isArray(d.sections) && d.sections.length ? d.sections : PROPOSAL_DEFAULT_SECTIONS,
     blocks: d.blocks || {},
     coverImage: d.coverImage || null,
     notes: d.notes || "",
     terms: d.terms || "",
+    /* Left undefined on purpose when unset — estimateDocHtml reads undefined
+       as "follow whether this proposal has options", which is what estimates
+       saved before the toggle existed should keep doing. */
+    showLinePrices: d.showLinePrices,
+    compare: d.compare || {},
   };
 }
 
@@ -8033,74 +8721,584 @@ function normalizeProposalDoc(doc) {
 function concealedTableHtml(est) {
   const rows = ((est && est.concealed) || []).filter((c) => c.on !== false && String(c.desc || "").trim());
   if (!rows.length) return "";
-  return `<h2>Concealed conditions — unit pricing</h2>` +
+  return `<section><h2>Concealed conditions — unit pricing</h2>` +
     `<div class="muted" style="margin-bottom:8px">Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented.</div>` +
     `<table><thead><tr><th>Condition</th><th>Unit</th><th class="r">Price</th></tr></thead><tbody>` +
     rows.map((c) => `<tr><td>${esc(c.desc)}</td><td>${esc(c.unit || "")}</td><td class="r">${num(c.price) ? money(num(c.price)) : "—"}</td></tr>`).join("") +
-    `</tbody></table>`;
+    `</tbody></table></section>`;
 }
 
-function estimateDocHtml(job, brand) {
+/* ==================================================================
+   THE PROPOSAL
+
+   This is the only document most homeowners ever judge the company by,
+   and it used to read as an invoice: a centred title, then straight into
+   a wall of line items with unit prices, then a bare total. That layout
+   actively loses work. It invites a homeowner to shop the sheet line by
+   line ("$3.40 a foot for drip edge? Home Depot sells that"), gives them
+   one price to say yes or no to, and offers nothing that justifies
+   twenty thousand dollars.
+
+   What the category does instead — SumoQuote, Roofr — is sell before it
+   prices: a real cover page, who you are and why you're trustworthy,
+   what we found on YOUR roof, then options side by side, then what's
+   included, warranty, and what happens after you sign. Options are the
+   single biggest lever; the sheet stops being yes/no and becomes which.
+
+   Good/Better/Best already existed here — in the builder, in the data,
+   and in the portal — but the printed proposal ignored it entirely and
+   printed the flattened single price. That was the biggest gap.
+
+   Every section below is opt-out via the doc's `sections` list, and
+   every one of them is built from data the app already holds.
+================================================================== */
+
+/* The tier cards, side by side, with the recommended one lifted. This is
+   the page a homeowner actually decides on. */
+function tierCardsHtml(est, brand, doc = {}) {
+  const tiers = (est.tiers || []).filter((t) => (t.items || []).length);
+  if (tiers.length < 2) return "";
+  const chosen = est.selectedTier || (tiers[tiers.length > 2 ? 1 : 0] || {}).id;
+  const totalOf = (t) => (t.items || []).reduce((a, it) => a + num(it.qty) * num(it.price), 0);
+  /* Tiers share most of their scope — tear-off, underlayment, flashing are
+     the same whichever shingle you pick. Listing items in their natural order
+     therefore fills all three cards with identical bullets and pushes the one
+     line that actually differs into "+2 more". Three identical lists at three
+     different prices makes the expensive options look like a markup on
+     nothing. So lead each card with what is unique to it. */
+  const common = new Set();
+  const descOf = (it) => String(it.desc || "").trim().toLowerCase();
+  tiers[0] && (tiers[0].items || []).forEach((it) => {
+    if (tiers.every((t) => (t.items || []).some((x) => descOf(x) === descOf(it)))) common.add(descOf(it));
+  });
+  const SHOW = 7;
+  const cards = tiers.map((t) => {
+    const on = t.id === chosen;
+    const items = (t.items || []).filter((it) => String(it.desc || "").trim());
+    const unique = items.filter((it) => !common.has(descOf(it)));
+    const shared = items.filter((it) => common.has(descOf(it)));
+    const inc = [...unique, ...shared].slice(0, SHOW);
+    const rest = items.length - inc.length;
+    return `<div class="tier${on ? " on" : ""}">
+      ${on ? `<div class="tierflag">Recommended</div>` : ""}
+      <div class="tiername">${esc(t.name || "Option")}</div>
+      <div class="tierprice">${money0(totalOf(t))}</div>
+      <ul class="tierlist">
+        ${inc.map((it, i) => `<li${i < unique.length ? ' class="key"' : ""}>${esc(it.desc)}</li>`).join("")}
+        ${rest > 0 ? `<li class="more">+ ${rest} more included</li>` : ""}
+      </ul>
+      <div class="tierpick">${on ? "✓ Recommended for your roof" : "Select this option"}</div>
+    </div>`;
+  }).join("");
+  return `<section class="page"><h2>Choose your roof</h2>
+    <div class="lede">Three ways to do this job properly. Every option is a complete, code-compliant
+    installation by our own crews — they differ in the shingle, the warranty, and how long you can
+    forget about your roof afterwards.</div>
+    <div class="tiers">${cards}</div>
+    ${tierCompareHtml(est, doc)}
+    ${upgradesHtml(est)}
+  </section>`;
+}
+
+function upgradesHtml(est) {
+  const ups = (est.upgrades || []).filter((u) => String(u.desc || "").trim());
+  if (!ups.length) return "";
+  return `<h3 class="subh">Optional upgrades</h3>
+    <div class="lede">Add any of these to the option you choose. Tick the box and we'll include it.</div>
+    <table class="ups"><tbody>
+    ${ups.map((u) => `<tr>
+      <td class="box">☐</td>
+      <td>${esc(u.desc)}</td>
+      <td class="r">${money0(num(u.price))}</td>
+    </tr>`).join("")}
+    </tbody></table>`;
+}
+
+/* Photos the rep marked customer-visible, as evidence of what we found.
+   A homeowner who has seen their own damaged flashing argues about price
+   far less than one who has only seen a number. */
+function findingsHtml(job) {
+  const shots = (job.photos || []).filter((p) => p.shared && (p.url || p.dataUrl)).slice(0, 6);
+  const m = job.measurements || {};
+  const facts = [
+    m.squares ? [`${m.squares}`, "squares"] : null,
+    m.pitch ? [`${esc(m.pitch)}`, "pitch"] : null,
+    (job.intake || {}).layers ? [`${esc(job.intake.layers)}`, "existing layers"] : null,
+    (job.checklist || {}).roofAge ? [`${esc(job.checklist.roofAge)}`, "years old"] : null,
+  ].filter(Boolean);
+  if (!shots.length && !facts.length) return "";
+  return `<section class="page"><h2>What we found on your roof</h2>
+    ${facts.length ? `<div class="facts">${facts.map(([v, l]) =>
+      `<div class="fact"><div class="factv">${v}</div><div class="factl">${l}</div></div>`).join("")}</div>` : ""}
+    ${shots.length ? `<div class="shots">${shots.map((p) =>
+      `<figure><img src="${p.url || p.dataUrl}" alt=""><figcaption>${esc(p.label || "")}</figcaption></figure>`).join("")}</div>` : ""}
+  </section>`;
+}
+
+/* Credentials, in the homeowner's terms. Only renders what the company has
+   actually filled in — an empty trust section is worse than none. */
+function credentialsHtml(brand, contact) {
+  const bullets = [
+    brand.license ? `Licensed — ${esc(brand.license)}` : null,
+    "Fully insured. Certificates of liability and workers' compensation available on request.",
+    "Our own crews. We do not sell your job to the lowest bidder.",
+    "Every roof is inspected by a company representative before we call it finished.",
+  ].filter(Boolean);
+  const rep = contact && (contact.name || contact.phone || contact.email) ? `
+    <div class="repcard">
+      <div class="repl">Your project contact</div>
+      <div class="repn">${esc(contact.name || "")}</div>
+      ${contact.title ? `<div class="rept">${esc(contact.title)}</div>` : ""}
+      <div class="repc">${[esc(contact.phone || ""), esc(contact.email || "")].filter(Boolean).join(" · ")}</div>
+    </div>` : "";
+  return `<section class="page"><h2>Why ${esc(brand.company)}</h2>
+    <ul class="checks">${bullets.map((b) => `<li>${b}</li>`).join("")}</ul>
+    ${rep}
+  </section>`;
+}
+
+/* Manufacturer + workmanship warranty, side by side. Reads the job's own
+   warranty record — the same one the Warranties screen writes — so a company
+   that fills that in once gets it on every proposal, and one that doesn't
+   simply has no warranty page rather than an empty one. */
+function warrantyHtml(job, brand) {
+  const w = job.warranty || {};
+  const mfr = w.mfr || "";
+  const labor = num(w.laborYears) ? `${w.laborYears}-year workmanship guarantee` : "";
+  if (!mfr && !labor) return "";
+  return `<section><h2>Your warranty</h2>
+    <div class="two">
+      ${mfr ? `<div class="wbox"><div class="wl">Manufacturer</div><div class="wv">${esc(mfr)}</div>
+        <div class="muted">Covers the materials themselves, registered in your name after installation.</div></div>` : ""}
+      ${labor ? `<div class="wbox"><div class="wl">Workmanship</div><div class="wv">${esc(labor)}</div>
+        <div class="muted">Our own guarantee on the installation. One phone call, no argument about whose fault it is.</div></div>` : ""}
+    </div>
+  </section>`;
+}
+
+/* Terms written as separate paragraphs become numbered clauses, which is how
+   people actually read and refer to them ("clause 4 says…"). Terms written as
+   one block stay one block — nobody's existing wording gets chopped up on a
+   guess about where the sentences divide. */
+function termsHtml(text) {
+  const parts = String(text || "").split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return `<div class="body small">${esc(text)}</div>`;
+  return `<ol class="clauses">${parts.map((p) => `<li>${esc(p)}</li>`).join("")}</ol>`;
+}
+
+/* What the homeowner actually pays and when — the first question on a job
+   this size, and until now it was a clause inside a paragraph of terms.
+   Reads the deposit terms already set on the contract. */
+function paymentScheduleHtml(job, amount) {
+  const con = job.contract || {};
+  const total = num(amount);
+  if (!total) return "";
+  const mode = con.depositMode || "pct";
+  const deposit = mode === "fixed" ? num(con.depositFixed) : total * (num(con.depositPct) / 100);
+  if (!deposit) return "";
+  const label = mode === "fixed" ? "Due at signing" : `Due at signing (${num(con.depositPct)}%)`;
+  return `<h3 class="subh">Payment schedule</h3>
+    <table class="pay"><tbody>
+      <tr><td>${label}</td><td class="r">${money0(deposit)}</td></tr>
+      <tr><td>Due on substantial completion</td><td class="r">${money0(total - deposit)}</td></tr>
+      <tr class="paytot"><td><b>Total</b></td><td class="r"><b>${money0(total)}</b></td></tr>
+    </tbody></table>`;
+}
+
+/* Scan a tier's line items for a shingle we recognise, then pull that
+   manufacturer's published specs. The whole library is already in the app —
+   SHINGLE_DB knows the product lines, MFR_SPECS knows what each maker
+   publishes for wind, algae and warranty — so a comparison table can build
+   itself from the estimate the rep already wrote. */
+/* Whole-name matching. Plain substring search reads "Camelot I" inside
+   "Camelot II" and confidently attributes the wrong product's specs to the
+   roof — a wrong row on a comparison table is worse than a blank one, because
+   nobody checks it. */
+function nameInText(name, text) {
+  const n = String(name || "").trim().toLowerCase();
+  if (n.length < 3) return false;
+  const i = text.indexOf(n);
+  if (i < 0) return false;
+  const before = i === 0 ? " " : text[i - 1];
+  const after = i + n.length >= text.length ? " " : text[i + n.length];
+  return !/[a-z0-9]/.test(before) && !/[a-z0-9]/.test(after);
+}
+function tierSpecFor(tier, override) {
+  const o = override || {};
+  const text = (tier.items || []).map((it) => `${it.desc || ""} ${it.description || ""}`).join(" ").toLowerCase();
+  const specs = typeof MFR_SPECS !== "undefined" ? MFR_SPECS : [];
+  /* Candidate product names: everything in the shingle catalogue, plus the
+     impact-rated lines each manufacturer publishes — those are exactly the
+     upgrade products a Better/Best tier names, and several aren't in the
+     catalogue at all. */
+  const cands = [];
+  (typeof SHINGLE_DB !== "undefined" ? SHINGLE_DB : []).forEach((s) => cands.push({ name: s.line, mfr: s.mfr }));
+  specs.forEach((m) => String(m.class4 || "").split(/[·,]/).forEach((raw) => {
+    const nm = raw.replace(/\(.*?\)/g, "").trim();
+    if (nm) cands.push({ name: nm, mfr: m.mfr, ir: true });
+  }));
+  /* Longest first, so "Timberline HDZ" wins over "Timberline". */
+  const hit = cands.sort((a, b) => b.name.length - a.name.length).find((c) => nameInText(c.name, text));
+  /* No catalogued product? A maker's wind, algae and warranty terms are
+     largely product-independent, so naming the manufacturer alone still fills
+     most of the table honestly, and the shingle row is left for the rep. */
+  const mfr = hit ? hit.mfr : (specs.find((m) => nameInText(m.mfr, text)) || {}).mfr;
+  const spec = mfr ? specs.find((m) => m.mfr === mfr) : null;
+  const impact = !hit ? ""
+    : hit.ir ? "Yes — Class 4"
+    : (spec && spec.class4 && nameInText(hit.name, spec.class4.toLowerCase())) ? "Yes — Class 4" : "No";
+  /* A tier that pays for an enhanced system warranty says so in its line
+     items, and that — System Plus versus Golden Pledge — is usually the real
+     difference between Better and Best. It beats the manufacturer's generic
+     shingle warranty, which is identical across their whole range. */
+  const system = (typeof MFR_WARRANTIES !== "undefined" ? MFR_WARRANTIES : [])
+    .filter((w) => !/^standard|^other/i.test(w))
+    .sort((a, b) => b.length - a.length)
+    .find((w) => nameInText(w, text));
+  return {
+    shingle: o.shingle || (hit ? `${hit.mfr} ${hit.name}` : (mfr || "")),
+    wind: o.wind || (spec ? spec.wind : ""),
+    algae: o.algae || (spec ? spec.algae : ""),
+    warranty: o.warranty || system || (spec ? spec.warranty : ""),
+    impact: o.impact || impact,
+  };
+}
+const TIER_COMPARE_ROWS = [
+  ["shingle", "Shingle"], ["wind", "Wind rating"], ["algae", "Algae warranty"],
+  ["warranty", "Manufacturer warranty"], ["impact", "Impact rated"],
+];
+function tierCompareHtml(est, doc) {
+  const tiers = (est.tiers || []).filter((t) => (t.items || []).length);
+  if (tiers.length < 2) return "";
+  const specs = tiers.map((t) => tierSpecFor(t, (doc.compare || {})[t.id]));
+  /* A row every option answers identically argues against the upgrade, and a
+     row nobody answers is an empty column. Keep only rows that are filled in
+     somewhere AND differ somewhere. */
+  const rows = TIER_COMPARE_ROWS.filter(([k]) => {
+    const vals = specs.map((s) => String(s[k] || "").trim());
+    return vals.some(Boolean) && new Set(vals).size > 1;
+  });
+  if (!rows.length) return "";
+  return `<h3 class="subh">Side by side</h3>
+    <table class="cmp"><thead><tr><th></th>
+      ${tiers.map((t) => `<th>${esc(t.name || "Option")}</th>`).join("")}
+    </tr></thead><tbody>
+      ${rows.map(([k, label]) => `<tr><th class="rowh">${esc(label)}</th>
+        ${specs.map((s) => `<td>${esc(s[k] || "—")}</td>`).join("")}</tr>`).join("")}
+    </tbody></table>`;
+}
+
+/* What happens after they sign. Removes the single biggest unspoken
+   objection on a large job, which is "and then what?". */
+const PROPOSAL_STEPS = [
+  ["Accept", "Sign below or in your online portal. We'll confirm the same day."],
+  ["Schedule", "We book your install date and order materials to the roof."],
+  ["Install", "Our crew tears off, dries in and finishes — most roofs in a single day."],
+  ["Inspect", "A company representative walks the roof and the property with you."],
+  ["Warranty", "We register your manufacturer warranty and send you the paperwork."],
+];
+function processHtml() {
+  return `<section><h2>What happens next</h2>
+    <ol class="steps">${PROPOSAL_STEPS.map(([t, d]) =>
+      `<li><span class="stept">${esc(t)}</span><span class="stepd">${esc(d)}</span></li>`).join("")}</ol>
+  </section>`;
+}
+
+function estimateDocHtml(job, brand, users = []) {
   const est = job.estimate;
   const doc = est.doc || {};
   const total = estimateTotal(est);
-  const secs = doc.sections || ["cover", "items", "notes", "terms"];
+  const secs = doc.sections || PROPOSAL_DEFAULT_SECTIONS;
   const blocks = doc.blocks || {};
   const style = doc.style || "classic";
   const title = esc((doc.title || "Roofing Proposal"));
+  const contact = repContactFor(users, job);
+  const tiers = (est.tiers || []).filter((t) => (t.items || []).length);
+  const hasTiers = tiers.length >= 2;
+  /* Whether the itemised sheet carries prices is a per-proposal call, because
+     it depends on who is reading it. With options on the table a retail
+     homeowner should see the option price and nothing else — two sets of
+     numbers invite arithmetic that never ends in a signature. An insurance
+     homeowner needs the opposite: their carrier's scope is itemised and they
+     have to reconcile ours against it line by line. So the default follows
+     whether there are options, and the rep can override it. */
+  const showLine = doc.showLinePrices === undefined ? !hasTiers : !!doc.showLinePrices;
+  const itemOpts = showLine ? { honorLine: true } : { honorLine: true, hidePrice: true };
+  /* The amount the payment schedule is written against. */
+  const chosenTier = hasTiers
+    ? (tiers.find((t) => t.id === est.selectedTier) || tiers[tiers.length > 2 ? 1 : 0])
+    : null;
+  const dueTotal = chosenTier
+    ? (chosenTier.items || []).reduce((a, it) => a + num(it.qty) * num(it.price), 0)
+    : total;
   let out = "";
+
   for (const sec of secs) {
     if (sec === "cover") {
-      if (style === "photo" && doc.coverImage) {
-        /* Photo hero: the house photo fills the page with the title and
-           customer info laid over a dark gradient at the bottom. */
-        out += `<div class="cover" style="position:relative;border-radius:14px;overflow:hidden;min-height:420px;background:#111 url('${doc.coverImage}') center/cover no-repeat">
-          <div style="position:absolute;left:0;right:0;bottom:0;padding:26px;background:linear-gradient(transparent,rgba(0,0,0,.78));color:#fff">
-            <div style="font-size:30px;font-weight:800">${title}</div>
-            <div style="margin-top:14px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
-            <div style="font-size:13px;color:rgba(255,255,255,.85)">${esc(job.address)}</div>
-            <div style="margin-top:12px;color:rgba(255,255,255,.85)">${esc(est.number || "")} · ${esc(est.date || "")}</div>
+      const img = doc.coverImage || (job.propertyPhoto && job.propertyPhoto.url) || null;
+      const meta = `<div class="cmeta">
+          <div><span class="cml">Prepared for</span><span class="cmv">${esc(job.name)}</span></div>
+          <div><span class="cml">Property</span><span class="cmv">${esc(job.address)}</span></div>
+          <div><span class="cml">Proposal</span><span class="cmv">${esc(est.number || "—")}</span></div>
+          <div><span class="cml">Date</span><span class="cmv">${esc(est.date || "")}</span></div>
+          ${contact.name ? `<div><span class="cml">Your contact</span><span class="cmv">${esc(contact.name)}${contact.phone ? " · " + esc(contact.phone) : ""}</span></div>` : ""}
+        </div>`;
+      /* The cover carries the letterhead itself. The shell's version is
+         suppressed (opts.bare) because it printed the company block AND the
+         document title above this, so the title appeared twice on page one
+         and the cover never owned its page. */
+      const mark = brand.logo
+        ? `<img class="colgo" src="${brand.logo}" alt="${esc(brand.company)}">`
+        : `<div class="coname">${esc(brand.company)}</div>`;
+      const contactLine = [brand.phone, brand.email, brand.website].filter(Boolean).map(esc).join("  ·  ");
+      if (style === "photo" && img) {
+        out += `<section class="cover photo" style="background-image:url('${img}')">
+          <div class="covershade">
+            ${mark}
+            <div class="cotitle">${title}</div>
+            <div class="coco">${esc(brand.slogan || "")}</div>
+            ${meta}
+            ${contactLine ? `<div class="cocontact">${contactLine}</div>` : ""}
           </div>
-        </div>`;
+        </section>`;
       } else {
-        const coverStyle = style === "bold"
-          ? `background:${brand.primary};color:#fff;padding:26px;border-radius:14px`
-          : style === "minimal" ? "padding:8px 0" : "";
-        const coverInk = style === "bold" ? "#fff" : brand.primary;
-        out += `<div class="cover" style="${coverStyle}">
-          ${doc.coverImage ? `<img class="hero" src="${doc.coverImage}" alt="">` : ""}
-          <div style="font-size:${style === "bold" ? 30 : 26}px;font-weight:800;color:${coverInk}">${title}</div>
-          <div style="margin-top:18px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
-          <div class="muted" style="font-size:13px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(job.address)}</div>
-          <div class="muted" style="margin-top:14px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(est.number || "")} · ${esc(est.date || "")}</div>
-        </div>`;
+        const bold = style === "bold";
+        out += `<section class="cover ${bold ? "boldcover" : "plaincover"}">
+          <div class="colead">${mark}${brand.license ? `<div class="colic">${esc(brand.license)}</div>` : ""}</div>
+          ${img ? `<img class="hero" src="${img}" alt="">` : ""}
+          <div class="cotitle">${title}</div>
+          <div class="coco">${esc(brand.slogan || "")}</div>
+          ${meta}
+          ${contactLine ? `<div class="cocontact">${contactLine}</div>` : ""}
+        </section>`;
       }
+      continue;
     }
+    if (sec === "findings") { out += findingsHtml(job); continue; }
+    if (sec === "why") { out += credentialsHtml(brand, contact); continue; }
+    if (sec === "options") { out += tierCardsHtml(est, brand, doc); continue; }
+    if (sec === "concealed") { out += concealedTableHtml(est); continue; }
+    if (sec === "warranty") { out += warrantyHtml(job, brand); continue; }
+    if (sec === "process") { out += processHtml(); continue; }
     if (sec === "items") {
-      out += `<h2>Scope of work</h2>`;
-      if (est.scope) out += `<div class="muted">${esc(est.scope)}</div>`;
-      out += lineTable(est.items || [], { honorLine: true });
-      out += `<div class="tot grand"><span>Total</span><span>${money(total)}</span></div>`;
-      if (est.validThrough) out += `<div class="muted" style="margin-top:10px">Valid through ${esc(est.validThrough)}</div>`;
+      out += `<section><h2>${hasTiers ? "What's included" : "Scope of work"}</h2>`;
+      if (est.scope) out += `<div class="lede">${esc(est.scope)}</div>`;
+      out += lineTable(est.items || [], itemOpts);
+      if (!hasTiers) {
+        out += `<div class="grandbox"><span class="grandl">Your investment</span><span class="grandv">${money0(total)}</span></div>`;
+      }
+      if (est.validThrough) out += `<div class="muted" style="margin-top:10px">This proposal is held through ${esc(est.validThrough)}.</div>`;
+      out += `</section>`;
+      continue;
     }
-    if (sec === "notes" && doc.notes) out += `<h2>Special notes</h2><div class="muted">${esc(doc.notes)}</div>`;
-    if (sec === "terms" && doc.terms) out += `<h2>Terms &amp; conditions</h2><div class="muted">${esc(doc.terms)}</div>`;
+    if (sec === "notes" && doc.notes) { out += `<section><h2>Special notes</h2><div class="body">${esc(doc.notes)}</div></section>`; continue; }
+    if (sec === "terms" && doc.terms) { out += `<section><h2>Terms &amp; conditions</h2>${termsHtml(doc.terms)}</section>`; continue; }
     /* Custom sections added in the proposal builder. */
     const b = blocks[sec];
     if (b && b.type === "text" && (b.title || b.body)) {
-      out += `<h2>${esc(b.title || "")}</h2><div class="muted">${esc(b.body || "")}</div>`;
+      out += `<section><h2>${esc(b.title || "")}</h2><div class="body">${esc(b.body || "")}</div></section>`;
     }
     if (b && b.type === "pdf" && b.dataUrl) {
-      out += `<h2>${esc(b.name || "Attachment")}</h2>`;
-      out += `<iframe src="${b.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe>`;
+      out += `<section class="page"><h2>${esc(b.name || "Attachment")}</h2>`;
+      out += `<iframe src="${b.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe></section>`;
     }
   }
-  out += concealedTableHtml(est);
-  out += `<div class="sig">
-    <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
-    <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative</div></div>
-  </div>`;
-  return out;
+  /* Concealed conditions is a section now, so it only appends here for
+     estimates saved before it was one — otherwise it prints twice. */
+  if (!secs.includes("concealed")) out += concealedTableHtml(est);
+
+  /* The close. A signature line at the bottom of a wall of text is not a call
+     to action. This states what they pay and when, offers the one-tap route
+     that the portal already supports, and only then asks for a signature. */
+  const portalUrl = job.portalToken && typeof window !== "undefined"
+    ? `${window.location.origin}/?portal=${job.portalToken}` : "";
+  const qr = portalUrl ? qrSvg(portalUrl, 116) : "";
+  out += `<section class="accept">
+    <h2 class="acceptt">Ready to go ahead?</h2>
+    <div class="lede">${portalUrl
+      ? "Accept online in under a minute — scan the code or open the link, choose your option and sign on your phone. Or sign below and send this back."
+      : "Sign below and send this back to us."}
+    ${est.validThrough ? `This pricing is held through ${esc(est.validThrough)}.` : ""}</div>
+    ${paymentScheduleHtml(job, dueTotal)}
+    ${portalUrl ? `<div class="accepton">
+      ${qr ? `<div class="qr">${qr}</div>` : ""}
+      <div class="qrtext">
+        <div class="qrh">Accept and sign online</div>
+        <div class="qru">${esc(portalUrl)}</div>
+        <div class="qrn">Opens your private project page — no login or account needed.</div>
+      </div>
+    </div>` : ""}
+    ${hasTiers ? `<div class="acceptpick"><b>Option chosen:</b> ______________________________
+      &nbsp;&nbsp;<b>Upgrades:</b> ______________________________</div>` : ""}
+    <div class="sig">
+      <div><div class="sigline"></div><div class="siglbl">${esc(job.name)} — signature / date</div></div>
+      <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative</div></div>
+    </div>
+  </section>
+  <div class="runfoot">${esc(brand.company)}${est.number ? ` · ${esc(est.number)}` : ""} · Prepared for ${esc(job.name)}</div>`;
+  return out + proposalCss(brand);
+}
+
+/* Proposal typography and layout. Kept with the document rather than in the
+   shell because these rules are specific to selling — the shell still styles
+   the plain business documents (invoice, work order, report) the old way. */
+function proposalCss(brand) {
+  const p = brand.primary || "#20242A";
+  const a = brand.accent || "#0A9E98";
+  return `<style>
+  /* Sections get real page structure. The old proposal was one continuous
+     flow, so tables split across pages wherever they happened to land. */
+  section { margin-top: 30px; }
+  section.page { page-break-before: always; }
+  section, .tier, figure, .wbox, .steps li { page-break-inside: avoid; }
+  h2 { font-size: 19px; font-weight: 800; letter-spacing: -0.01em; text-transform: none;
+       color: ${p}; margin: 0 0 4px; padding-bottom: 9px; border-bottom: 2px solid ${p}; }
+  h3.subh { font-size: 14px; font-weight: 800; color: ${p}; margin: 24px 0 4px; }
+  .lede { font-size: 13.5px; line-height: 1.65; color: #4B5563; margin: 12px 0 16px; max-width: 62ch; }
+  .body { font-size: 13.5px; line-height: 1.7; color: #374151; white-space: pre-wrap; max-width: 68ch; }
+  .body.small { font-size: 12px; line-height: 1.65; color: #4B5563; max-width: none; }
+
+  /* Cover. A real one — it owns the first page and nothing else is on it. */
+  .cover { page-break-after: always; padding: 0; text-align: left; }
+  .cover .hero { width: 100%; height: 4.4in; object-fit: cover; border-radius: 14px; margin-bottom: 34px; display: block; }
+  .cotitle { font-size: 40px; font-weight: 800; line-height: 1.08; letter-spacing: -0.02em; color: ${p}; }
+  .coco { font-size: 14px; color: #6B7280; margin-top: 10px; }
+  .cmeta { margin-top: 34px; border-top: 2px solid ${p}; padding-top: 18px; }
+  .cmeta > div { display: flex; gap: 14px; padding: 7px 0; border-bottom: 1px solid #EEF1F4; font-size: 13.5px; }
+  .cml { min-width: 132px; color: #6B7280; }
+  .cmv { color: #111827; font-weight: 600; }
+  .boldcover .cotitle { background: ${p}; color: #fff; padding: 26px 24px; border-radius: 14px; }
+  .boldcover .coco { padding-left: 2px; }
+  .cover.photo { min-height: 9in; background-size: cover; background-position: center;
+                 border-radius: 14px; overflow: hidden; display: flex; align-items: flex-end; }
+  .cover.photo .covershade { width: 100%; padding: 34px 30px;
+      background: linear-gradient(transparent, rgba(0,0,0,.82)); color: #fff; }
+  .cover.photo .cotitle, .cover.photo .coco, .cover.photo .cmv { color: #fff; }
+  .cover.photo .cmeta { border-top-color: rgba(255,255,255,.5); }
+  .cover.photo .cmeta > div { border-bottom-color: rgba(255,255,255,.18); }
+  .cover.photo .cml { color: rgba(255,255,255,.75); }
+
+  /* Options. The page the homeowner actually decides on. */
+  .tiers { display: flex; gap: 14px; align-items: stretch; margin-top: 18px; }
+  .tier { flex: 1; border: 1.5px solid #E3E7EC; border-radius: 14px; padding: 18px 16px 16px;
+          position: relative; display: flex; flex-direction: column; }
+  .tier.on { border-color: ${a}; border-width: 2.5px; box-shadow: 0 6px 22px rgba(0,0,0,.07); }
+  .tierflag { position: absolute; top: -11px; left: 16px; background: ${a}; color: #fff;
+              font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+              padding: 4px 10px; border-radius: 999px; }
+  .tiername { font-size: 15px; font-weight: 800; color: ${p}; }
+  .tierprice { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; color: ${p}; margin: 6px 0 12px; }
+  .tierlist { list-style: none; margin: 0; padding: 0; flex: 1; }
+  .tierlist li { font-size: 12px; line-height: 1.5; color: #374151; padding: 5px 0 5px 17px;
+                 position: relative; border-top: 1px solid #F1F3F6; }
+  .tierlist li:before { content: "✓"; position: absolute; left: 0; color: ${a}; font-weight: 800; }
+  .tierlist li.key { font-weight: 700; color: #111827; }
+  .tierlist li.more { color: #6B7280; font-style: italic; }
+  .tierlist li.more:before { content: ""; }
+  .tierpick { margin-top: 14px; text-align: center; font-size: 11.5px; font-weight: 700;
+              color: #6B7280; border-top: 1px solid #EEF1F4; padding-top: 11px; }
+  .tier.on .tierpick { color: ${a}; }
+  table.ups { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  table.ups td { padding: 9px 6px; border-bottom: 1px solid #F1F3F6; font-size: 13px; }
+  table.ups td.box { width: 26px; font-size: 16px; color: #9CA3AF; }
+  table.ups td.r { text-align: right; white-space: nowrap; font-weight: 700; }
+
+  /* Findings — their own roof, in numbers and photographs. */
+  .facts { display: flex; gap: 12px; margin: 16px 0 20px; }
+  .fact { flex: 1; border: 1px solid #E3E7EC; border-radius: 12px; padding: 13px 10px; text-align: center; }
+  .factv { font-size: 24px; font-weight: 800; color: ${p}; letter-spacing: -0.02em; }
+  .factl { font-size: 11px; color: #6B7280; margin-top: 2px; }
+  .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .shots figure { margin: 0; }
+  .shots img { width: 100%; height: 2.1in; object-fit: cover; border-radius: 10px; display: block; }
+  .shots figcaption { font-size: 11px; color: #6B7280; margin-top: 5px; }
+
+  /* Trust. */
+  ul.checks { list-style: none; margin: 16px 0 0; padding: 0; max-width: 66ch; }
+  ul.checks li { font-size: 13.5px; line-height: 1.6; color: #374151; padding: 8px 0 8px 26px;
+                 position: relative; border-bottom: 1px solid #F1F3F6; }
+  ul.checks li:before { content: "✓"; position: absolute; left: 2px; color: ${a}; font-weight: 800; }
+  .repcard { margin-top: 20px; border: 1.5px solid #E3E7EC; border-left: 4px solid ${a};
+             border-radius: 12px; padding: 15px 17px; max-width: 380px; }
+  .repl { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #6B7280; }
+  .repn { font-size: 17px; font-weight: 800; color: ${p}; margin-top: 4px; }
+  .rept { font-size: 12.5px; color: #6B7280; }
+  .repc { font-size: 13px; color: #374151; margin-top: 6px; }
+
+  /* Warranty + process. */
+  .two { display: flex; gap: 14px; margin-top: 16px; }
+  .wbox { flex: 1; border: 1px solid #E3E7EC; border-radius: 12px; padding: 15px 16px; }
+  .wl { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #6B7280; }
+  .wv { font-size: 16px; font-weight: 800; color: ${p}; margin: 4px 0 7px; }
+  ol.steps { list-style: none; counter-reset: s; margin: 16px 0 0; padding: 0; }
+  ol.steps li { counter-increment: s; position: relative; padding: 11px 0 11px 44px; border-bottom: 1px solid #F1F3F6; }
+  ol.steps li:before { content: counter(s); position: absolute; left: 0; top: 10px; width: 27px; height: 27px;
+      border-radius: 999px; background: ${p}; color: #fff; font-size: 12.5px; font-weight: 800;
+      display: grid; place-items: center; }
+  .stept { display: block; font-size: 13.5px; font-weight: 800; color: ${p}; }
+  .stepd { display: block; font-size: 12.5px; color: #4B5563; margin-top: 1px; line-height: 1.55; }
+
+  /* The number, when there is only one. */
+  .grandbox { display: flex; justify-content: space-between; align-items: baseline;
+      margin-top: 16px; padding: 16px 18px; border-radius: 12px; background: ${p}; color: #fff; }
+  .grandl { font-size: 13px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; opacity: .85; }
+  .grandv { font-size: 27px; font-weight: 800; letter-spacing: -0.02em; }
+
+  /* The cover carries its own letterhead now that the shell's is suppressed. */
+  .colead { display: flex; justify-content: space-between; align-items: flex-end;
+            gap: 16px; margin-bottom: 22px; }
+  .colgo, .cover.photo .colgo { height: 48px; max-width: 240px; object-fit: contain; display: block; }
+  .coname { font: 800 21px Georgia, serif; color: ${p}; }
+  .colic { font-size: 10.5px; color: #6B7280; }
+  .cocontact { margin-top: 16px; font-size: 11.5px; color: #6B7280; }
+  .cover.photo .coname, .cover.photo .cocontact { color: rgba(255,255,255,.9); }
+  .cover.photo .colgo { margin-bottom: 16px; }
+
+  /* Side-by-side comparison — what justifies the jump between options. */
+  table.cmp { width: 100%; border-collapse: collapse; margin-top: 8px; table-layout: fixed; }
+  table.cmp th, table.cmp td { padding: 9px 10px; font-size: 12px; line-height: 1.45;
+      border: 1px solid #E9EDF1; vertical-align: top; overflow-wrap: break-word; }
+  table.cmp thead th { background: ${p}; color: #fff; font-weight: 800; text-align: left;
+      text-transform: none; letter-spacing: 0; }
+  table.cmp thead th:first-child { background: transparent; border-color: transparent; }
+  table.cmp th.rowh { background: #F7F9FB; color: #4B5563; font-weight: 700; text-align: left;
+      width: 24%; text-transform: none; letter-spacing: 0; }
+
+  /* Payment schedule. */
+  table.pay { width: 100%; max-width: 420px; border-collapse: collapse; margin-top: 8px; }
+  table.pay td { padding: 9px 4px; font-size: 13.5px; border-bottom: 1px solid #F1F3F6; }
+  table.pay td.r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  table.pay tr.paytot td { border-bottom: 0; border-top: 2px solid ${p}; font-size: 15px; }
+
+  /* Terms as numbered clauses. */
+  ol.clauses { margin: 12px 0 0; padding-left: 20px; max-width: 72ch; }
+  ol.clauses li { font-size: 12px; line-height: 1.65; color: #4B5563; padding: 4px 0 4px 4px; }
+
+  /* The close. */
+  .accept { margin-top: 34px; border-top: 2px solid ${p}; padding-top: 20px; page-break-inside: avoid; }
+  .accept .acceptt { border: 0; padding-bottom: 0; }
+  .acceptpick { font-size: 13px; color: #374151; margin: 18px 0 4px; }
+  .accepton { display: flex; gap: 16px; align-items: center; margin-top: 18px;
+      border: 1.5px solid ${a}; border-radius: 12px; padding: 14px 16px; }
+  .accepton .qr { flex-shrink: 0; line-height: 0; }
+  .qrh { font-size: 14px; font-weight: 800; color: ${p}; }
+  .qru { font-size: 11px; color: ${a}; word-break: break-all; margin-top: 3px; }
+  .qrn { font-size: 11.5px; color: #6B7280; margin-top: 5px; line-height: 1.45; }
+
+  /* A fixed element repeats on every printed page in Chrome and Safari, which
+     is how each page gets an identity once the stack is separated.
+
+     A literal "Page 3 of 7" is deliberately absent: Chrome does not implement
+     CSS Paged Media margin boxes, and the page count isn't knowable before
+     the browser paginates, so any number printed here would be a guess.
+     Chrome's own print dialog can add numbering under Headers & footers. */
+  .runfoot { position: fixed; bottom: 0; left: 0; right: 0; text-align: center;
+      font-size: 9px; color: #9CA3AF; padding-bottom: 2px; }
+  @media screen { .runfoot { display: none; } }
+  /* A fixed footer sits over the flow, so the flow has to stop short of it —
+     otherwise it prints straight through the signature lines. */
+  @media print { body { padding-bottom: 24px; } }
+  </style>`;
 }
 
 function invoiceDocHtml(job, brand) {
@@ -8218,6 +9416,455 @@ function contractDocHtml(job, brand) {
     <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative / date</div></div>
   </div>`;
   return out;
+}
+
+/* ==================================================================
+   CONSTRUCTION AGREEMENT
+
+   A roofer's real agreement is a one-page fill-in form: numbered
+   specification blocks, checkboxes, blanks, a price box, and initials.
+   Reps have been printing it and writing on it with a pen.
+
+   The whole form is defined once, in AGREEMENT_SPEC below, as rows of
+   parts — a label, a checkbox, or a blank. The same definition drives
+   the on-screen form and the printed page, so a field can never exist
+   in one and be missing from the other. Add a row here and it appears
+   in both.
+
+   Answers live on job.agreement as a flat key/value map. Header and
+   price fields are declared the same way (AGREEMENT_HEADER,
+   AGREEMENT_PRICE_ROWS) for the same reason.
+================================================================== */
+
+/* Part kinds: t = static label, c = checkbox (key), b = blank (key, width px). */
+const AGREEMENT_SPEC = [
+  { n: "1", title: "DECKING", col: "L", rows: [
+    [{ t: "t", v: "A. Remove existing roofing" }, { t: "b", k: "tearoffLayers", w: 52 }, { t: "t", v: "layers to roof deck" }],
+  ] },
+  { n: "2", title: "ROOF DECK PROTECTION", col: "L", rows: [
+    [{ t: "t", v: "A. Felt Underlayment 15lb" }, { t: "c", k: "felt15" }, { t: "t", v: "B. 30lb" }, { t: "c", k: "felt30" }],
+    [{ t: "t", v: "C. Synthetic" }, { t: "b", k: "synthetic", w: 175 }],
+  ] },
+  { n: "3", title: "DRIP EDGE / GUTTER APRON", col: "L", rows: [
+    [{ t: "t", v: "A. Drip Edge Color" }, { t: "b", k: "dripColor", w: 90 }, { t: "t", v: "Rakes" }],
+    [{ t: "t", v: "B. Gutter Apron Color" }, { t: "b", k: "apronColor", w: 80 }, { t: "t", v: "Eaves" }],
+  ] },
+  { n: "4", title: "ICE AND WATER BARRIER", col: "L", note: "Install along Eaves, Valleys, and Flashings", rows: [
+    [{ t: "t", v: "A. Standard" }, { t: "c", k: "iwStandard" }, { t: "t", v: "B. Premium" }, { t: "c", k: "iwPremium" }, { t: "b", k: "iwNote", w: 130 }],
+  ] },
+  { n: "5", title: "VALLEY", col: "L", rows: [
+    [{ t: "t", v: "A. Ice and Water" }, { t: "c", k: "valleyIw" }],
+    [{ t: "t", v: "B. Valley Metal" }, { t: "c", k: "valleyMetal" }, { t: "t", v: "Color" }, { t: "b", k: "valleyColor", w: 120 }],
+  ] },
+  { n: "6", title: "STARTER SHINGLES", col: "L", note: "Install along all Rakes and Eaves", rows: [
+    [{ t: "t", v: "A. Standard" }, { t: "c", k: "starterStandard" }, { t: "t", v: "B. Premium" }, { t: "c", k: "starterPremium" }, { t: "b", k: "starterNote", w: 130 }],
+  ] },
+  { n: "7", title: "SHINGLES PER MANUFACTURER SPECS", col: "L", rows: [
+    [{ t: "t", v: "A. Style" }, { t: "b", k: "shingleStyle", w: 150 }],
+    [{ t: "t", v: "B. Color" }, { t: "b", k: "shingleColor", w: 120 }, { t: "t", v: "C. Brand" }, { t: "b", k: "shingleBrand", w: 105 }],
+  ] },
+  { n: "8", title: "FLASHING", col: "L", rows: [
+    [{ t: "t", v: "A. Chimney" }, { t: "c", k: "flashChimney" }, { t: "t", v: "B. Wall" }, { t: "c", k: "flashWall" }, { t: "t", v: "C. Step" }, { t: "c", k: "flashStep" }],
+  ] },
+  /* Right column. EXTRA STRUCTURE is bulleted rather than numbered in the
+     original — it is not a step in the roof spec, it is a scope question. */
+  { title: "EXTRA STRUCTURE", col: "R", bullet: true, rows: [
+    [{ t: "t", v: "A. Garage" }, { t: "c", k: "extraGarage" }, { t: "t", v: "B. Shed" }, { t: "c", k: "extraShed" }, { t: "t", v: "C. Barn" }, { t: "c", k: "extraBarn" }],
+  ] },
+  { kind: "figure", col: "R" },
+  { n: "9", title: "EXTRUSIONS", col: "R", rows: [
+    [{ t: "t", v: "A. Pipe Boots" }, { t: "b", k: "pipeBoots", w: 68 }, { t: "t", v: "B. Skylights" }, { t: "b", k: "skylights", w: 68 }],
+  ] },
+  { n: "10", title: "VENTILATION", col: "R", rows: [
+    [{ t: "t", v: "A. Shingle Over Ridge Vent" }, { t: "t", v: "1. Standard" }, { t: "b", k: "ridgeStandard", w: 58 }, { t: "t", v: "2. Premium" }, { t: "b", k: "ridgePremium", w: 58 }],
+    [{ t: "t", v: "B. Box / Turtle Vents" }, { t: "b", k: "boxVents", w: 50 }, { t: "t", v: "C. Power Vent" }, { t: "b", k: "powerVent", w: 56 }, { t: "t", v: "D. Turbine" }, { t: "c", k: "turbine" }],
+  ] },
+  { n: "11", title: "RIDGE CAP / HIP CAP", col: "R", rows: [
+    [{ t: "t", v: "A. Standard" }, { t: "b", k: "capStandard", w: 140 }],
+    [{ t: "t", v: "B. High Profile" }, { t: "b", k: "capHigh", w: 130 }],
+  ] },
+  { kind: "warranty", col: "R", title: "WARRANTY SYSTEM", note: "Not responsible for reattachment of satellite or HVAC.", rows: [
+    [{ t: "c", k: "warrStandard" }, { t: "t", v: "Standard" }, { t: "c", k: "warrEnhanced" }, { t: "t", v: "Enhanced" }, { t: "c", k: "warrPremium" }, { t: "t", v: "Premium" }],
+  ] },
+];
+
+const AGREEMENT_HEADER = [
+  { box: "PROPERTY & CONTACT", rows: [
+    [{ k: "customerName", label: "CUSTOMER NAME" }],
+    [{ k: "propertyAddress", label: "PROPERTY ADDRESS" }],
+    [{ k: "city", label: "CITY", flex: 3 }, { k: "state", label: "STATE", flex: 2 }, { k: "zip", label: "ZIP", flex: 2 }],
+    [{ k: "homePhone", label: "HOME PHONE" }, { k: "cellPhone", label: "CELL PHONE" }],
+    [{ k: "email", label: "EMAIL" }],
+  ] },
+  { box: "INSURANCE & CLAIM", tint: true, rows: [
+    [{ k: "carrier", label: "INSURANCE CARRIER" }],
+    [{ k: "claimNumber", label: "CLAIM NUMBER" }, { k: "dateOfLoss", label: "DATE OF LOSS" }],
+    [{ k: "outOfPocket", label: "OUT OF POCKET" }, { k: "agreementDate", label: "DATE" }],
+    [{ k: "projectAddress", label: "PROJECT ADDRESS (IF DIFFERENT)" }],
+  ] },
+];
+
+const AGREEMENT_PRICE_ROWS = [
+  { k: "finalPrice", label: "Final Contract Price (“Price Agreeable”)" },
+  { k: "deductible", label: "Insurance Deductible (Owner Responsibility)" },
+  { k: "deposit", label: "Deposit" },
+];
+
+/* The three paragraphs that sit between the notes box and the price box.
+   Verbatim from the printed agreement. {company} is substituted from the
+   tenant's branding so the same template works for any company. */
+const AGREEMENT_ACK_INSURANCE = "Property Owner(s) acknowledges that Contractor is due any and all monies received from any insurance company pursuant to an insurance claim, including overhead and profit, approved cost increases, and approved claim supplements.";
+const AGREEMENT_HOA_LINE = "Property Owner to obtain required authorization from HOA and authorities.";
+const AGREEMENT_DECK_POLICY = "State building codes require that any damaged or deteriorated roof decking discovered during the tear off process be replaced to ensure a nail fastened surface. Most insurance carriers consider deck replacement a maintenance item and may not include it in your claim. The Property Owner agrees to a rate of $%RATE% per sheet for all necessary labor and materials.";
+const AGREEMENT_TERMS_PARA = "By signing this Agreement the Property Owner authorizes {company} to pursue the Property Owner’s best interest for a project replacement or repair at a “price agreeable” to the insurance company and {company} with no additional cost to the Property Owner except the deductible. When “price agreeable” is determined it shall become the final contract price and Property Owner authorizes {company} to obtain labor and material in accordance with the “price agreeable” and the specification set out herein and on the reverse side hereof.";
+const AGREEMENT_READ_PARA = "Property Owner(s) acknowledges that they have read the front and reverse of this Agreement, understands its terms, has received a completed, signed, and dated copy, and was orally advised of the right to cancel this transaction.";
+const AGREEMENT_CANCEL_PARA = "You, the Property Owner, may cancel this transaction at any time prior to midnight of the third business day after the date of this transaction.";
+
+/* Reverse-side terms. Shipped as the default template; a tenant edits their
+   own copy in Branding, which is stored on brand.agreementTerms and wins.
+   Transcribed exactly as printed — including the typos ("DDED", "th reverse
+   side"), because silently correcting the wording of a legal document is not
+   this app's call to make. */
+const AGREEMENT_TERMS_INTRO = "This contract and any agreement made pursuant thereto (the “Agreement”) is between {company} (the “Company”) and the customer(s) named herein on th reverse side. This Agreement is subject to all appropriate law, regulations and ordinances in the State of Ohio and Kentucky and these terms and conditions.";
+const AGREEMENT_TERMS = [
+  "This Agreement is composed of this page, the reverse (or front page) side of this page, the Pre-Start Checklist, the Scope of work Attachment if applicable, and all other documents referenced in or incorporated into this Agreement.",
+  "Each Agreement is subject to approval of our credit department and office without exception. This Agreement and all applicable warranties shall not be assigned except by or with the written permission of the Company.",
+  "SHOULD DEFAULT BE MADE IN PAYMENT OF THIS AGREEMENT, CHARGES SHALL BE DDED FROM THE DATE THEREOF AT A RATE OF ONE AND ONE HALF (1 1⁄2) PERCENT PER MONTH (18% PER ANNUM) WITH A MINIMUM CHARGE OF $2.00 PER MONTH. IF PLACED IN THE HAND OF AN ATTORNEY FOR COLLECTION, YOU SHALL PAY ALL ATTORNEYS FEES, COSTS, AND LEGAL FILING FEES INCURRED.",
+  "The Company shall have no responsibility for damages from rain, fire, tornado, windstorm, or other perils, as it is normally contemplated to be covered by HOMEOWNER’S INSURANCE or BUSINESS RISK INSURANCE, or unless a specified written agreement be made therefore prior to commencement of the work at your residence (the “Project.”) During the duration of the Project, your homeowner’s insurance will be responsible for any interior damage as long as the Company has taken appropriate action to protect the roof during the repair/replacement period. The company is not responsible for any mold, fungi, interior damage resulting from mold or fungi, or the abatement of any said items.",
+  "The quotation on the face hereof does not include expenses or charges for bond insurance premiums or costs beyond normal insurance coverage, and any such additional expenses, premiums, or costs shall be added to the amount of the Agreement.",
+  "Replacement of deteriorated decking, fascia boards, and roof jacks, ventilators, flashing or other materials, unless otherwise STATED IN THIS AGREEMENT, are NOT INCLUDED and will be charged as an extra, on a time and material basis.",
+  "This Company shall not be liable for failure of performances due to labor controversies, strikes, fires, weather, inability to obtain materials from usual sources, or any other circumstances beyond the control of the Company, whether of a similar or dissimilar nature.",
+  "The Company is not responsible for any damages on or below the roof due to leaks by excessive wind driven rain, ice, or hail during the period of warranty. EXCESSIVE WIND IS 65 M.P.H. THE WARRANTY IS NON-TRANSFERRABLE.",
+  "IF THIS AGREEMENT IS CANCELLED BY THE CUSTOMER LATER THAN 3 DAYS from its execution, customer shall pay to the Company fifteen percent (15%) of the insurance proceeds awarded by your insurer as liquidated damages, not as a penalty, and the Company agrees to accept such as a reasonable and just compensation for said cancellation.",
+  "THIS CONTRACT CANNOT BE CANCELLED ONCE WORK IS COMMENCED ON THE PROJECT EXCEPT BY MUTUAL WRITTEN AGREEMENT OF THE PARTIES.",
+  "ANY REPRESENTATIONS, STATEMENTS, OR OTHER COMMUNICATIONS NOT WRITTEN ON THIS AGREEMENT ARE AGREED TO BE IMMATERIAL, not relied upon by either party, and do not survive the execution of this Agreement. This Agreement may not be amended, modified, or otherwise changed except by a writing executed by the parties. If any provision of this Agreement should be held to be invalid or unenforceable, the validity and enforceability of the remaining provisions of this contract shall not be affected thereby.",
+  "The Company’s maximum liability in the event of any default by it shall be the original cost of labor and materials for the Project which you agree shall be a liquidated sum. You hereby release, indemnify, and hold the Company (including its owners, employees, and agents) harmless from and against all other liabilities, claims, causes of action, damages, losses and expenses (including attorney’s fees and costs,) including by not limited to, any property damage or personal injury incurred by your or any other party related to or arising out of the services rendered by the Company on the Project. This indemnification extends to all responsibilities and undertakings as set forth in this Agreement and all warranty exclusions as indicated in this Agreement and in the warranty provided to you by the Company.",
+  "If there are solar panels on the roof, the homeowner agrees to take all necessary steps to remove, protect, and reinstall the same. Under no circumstances will the Company be responsible for damage to them during the Project.",
+  "The company is not responsible for construction problems associated with your home. If pointed out to the Company, we will attempt to assist you on correcting them on a time and material basis.",
+  "The Company is not responsible for any damages related to leaks from skylights unless the Company completed the skylight replacement as part of the Project.",
+  "Workmanship Warranty is for 5 years on roof replacement, 1 year on siding replacement, 1 year on gutter repairs, and 1 year on all other repairs (including interior work.)",
+  "Payments are to be made: Half down payment AND Customer agrees to our percentage of completion billing policy. The company reserves the right to bill proportionately based on the percentage of work completed. Customer understands that the company may issue a stop work order if requested progress payment is not received.",
+  "Pay per Trade Policy: Customer agrees to pay in full at the completion of each trade on the project. The company reserves the right to collect payment in full per trade prior to beginning on the next trade.",
+  "Company Retainage Policy: Customer agrees to pay in full at the completion of each trade on the project. The company reserves the right to collect payment in full per trade prior to beginning the next trade.",
+  "The Company’s failure to enforce any right under this Agreement shall not be construed as a waiver of any subsequent right to enforce the same or any other right, term or condition.",
+  "You, the consumer, may cancel this transaction at any time prior to midnight of the 3rd business day after the date of this transaction.",
+];
+
+/* The numbered roof diagram on the right of page one. Ships as a bundled
+   default and is replaceable per tenant from Branding — the artwork belongs
+   to whoever's letterhead the agreement goes out on. */
+const AGREEMENT_DIAGRAM_DEFAULT = "/reference-diagram.jpg";
+function agreementDiagram(brand) {
+  return (brand && brand.agreementDiagram) || AGREEMENT_DIAGRAM_DEFAULT;
+}
+function agreementTermsFor(brand) {
+  const custom = brand && Array.isArray(brand.agreementTerms) && brand.agreementTerms.length
+    ? brand.agreementTerms : AGREEMENT_TERMS;
+  return custom;
+}
+function agreementFill(text, brand) {
+  return String(text || "").replace(/\{company\}/g, (brand && brand.company) || "the Company");
+}
+
+/* Everything the job file already knows. Not written to the job until the
+   rep edits something — opening a job must not mutate it. */
+function agreementPrefill(job, brand) {
+  const ins = job.insurance || {};
+  const cl = job.claim || {};
+  const con = job.contract || {};
+  /* Addresses are stored as one string ("127 Market Street, Vanceburg, KY").
+     Split on commas for the street/city boxes and fall back to the whole
+     string if it does not have that shape. */
+  const parts = String(job.address || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const street = parts[0] || String(job.address || "");
+  const city = parts.length >= 2 ? parts[1] : "";
+  const tail = parts.length >= 3 ? parts[2] : "";
+  const price = num(con.price) || 0;
+  const depMode = con.depositMode || "pct";
+  const deposit = price ? (depMode === "fixed" ? num(con.depositFixed) : price * (num(con.depositPct) / 100)) : 0;
+  const layers = String((job.checklist || {}).layers || "").replace(/[^\d]/g, "");
+  return {
+    customerName: job.name || "",
+    propertyAddress: street,
+    city,
+    state: job.state || tail.replace(/\d{5}(-\d{4})?/, "").trim(),
+    zip: job.zip || (tail.match(/\d{5}(-\d{4})?/) || [""])[0],
+    homePhone: "",
+    cellPhone: job.phone || "",
+    email: job.email || "",
+    carrier: ins.carrier || "",
+    claimNumber: ins.claim || "",
+    dateOfLoss: cl.dateOfLoss || "",
+    outOfPocket: ins.deductible ? money0(num(ins.deductible)) : "",
+    agreementDate: todayIso(),
+    projectAddress: "",
+    tearoffLayers: layers,
+    finalPrice: price ? money0(price) : "",
+    deductible: ins.deductible ? money0(num(ins.deductible)) : "",
+    deposit: deposit ? money0(deposit) : "",
+    balance: "",
+  };
+}
+
+/* The agreement as it stands: prefill underneath, the rep's edits on top. */
+function agreementFor(job, brand) {
+  return { ...agreementPrefill(job, brand), ...(job.agreement || {}) };
+}
+
+function agBlank(v, w) {
+  return `<span class="agbl" style="min-width:${Math.round(w)}px">${esc(v || "")}</span>`;
+}
+function agCheck(on) {
+  return `<span class="agck${on ? " on" : ""}">${on ? "&#10003;" : ""}</span>`;
+}
+function agRowHtml(parts, a) {
+  return `<div class="agrow">${parts.map((p) => {
+    if (p.t === "c") return agCheck(!!a[p.k]);
+    if (p.t === "b") return agBlank(a[p.k], p.w || 90);
+    return `<span class="aglb">${esc(p.v)}</span>`;
+  }).join("")}</div>`;
+}
+function agSecHtml(sec, a, brand) {
+  if (sec.kind === "figure") {
+    return `<figure class="agfig">
+      <img src="${esc(agreementDiagram(brand))}" alt="Roof reference diagram, numbered to the specification">
+      <figcaption>REFERENCE DIAGRAM &mdash; NUMBERED TO SPECIFICATION</figcaption>
+    </figure>`;
+  }
+  const mark = sec.bullet ? `<span class="agdot"></span>` : (sec.n ? `<span class="agnum">${esc(sec.n)}</span>` : "");
+  const head = sec.title
+    ? `<div class="aghd">${mark}<span class="aght">${esc(sec.title)}</span></div>` : "";
+  const note = sec.note ? `<div class="agnote">${esc(sec.note)}</div>` : "";
+  const body = (sec.rows || []).map((r) => agRowHtml(r, a)).join("");
+  if (sec.kind === "warranty") {
+    return `<div class="agsec agwarr"><div class="agwt">${esc(sec.title)}</div>${body}${note}</div>`;
+  }
+  return `<div class="agsec">${head}${note}${body}</div>`;
+}
+function agFieldHtml(f, a) {
+  return `<div class="agfield" style="flex:${f.flex || 1}">
+    <div class="agflb">${esc(f.label)}</div>
+    <div class="agfval">${esc(a[f.k] || "")}</div>
+  </div>`;
+}
+
+/* The printed agreement. Page one is the form; the reverse is the terms. */
+function agreementDocHtml(job, brand) {
+  const a = agreementFor(job, brand);
+  const con = job.contract || {};
+  const left = AGREEMENT_SPEC.filter((s) => s.col === "L");
+  const right = AGREEMENT_SPEC.filter((s) => s.col === "R");
+  const mark = brand.logo
+    ? `<img class="aglogo" src="${brand.logo}" alt="${esc(brand.company)}">`
+    : `<div class="agmark">${esc(brand.company)}</div>`;
+  const price = num(String(a.finalPrice).replace(/[^0-9.]/g, ""));
+  const dep = num(String(a.deposit).replace(/[^0-9.]/g, ""));
+  /* The balance line is the one number on the sheet that is arithmetic
+     rather than negotiation, so it is computed — unless the rep has
+     deliberately written something else in it. */
+  const balance = String(a.balance || "").trim() || (price ? money0(price - dep) : "");
+  const sigCell = (img, who, role) => `<div class="agsigbox">
+    <div class="agsigwho">${esc(who)}</div>
+    <div class="agsigline">${img ? `<img src="${img}" alt="">` : ""}</div>
+    <div class="agsiglbl">${esc(role)}</div>
+  </div>`;
+
+  return `<section class="agpage">
+  <div class="agtop">
+    <div>${mark}</div>
+    <div class="agco">
+      <div class="agconame">${esc(brand.company)}</div>
+      ${brand.address ? `<div>${esc(brand.address)}</div>` : ""}
+      <div>${[brand.phone ? "Office " + esc(brand.phone) : "", esc(brand.email || "")].filter(Boolean).join(" &bull; ")}</div>
+      ${brand.website ? `<div class="agweb">${esc(brand.website)}</div>` : ""}
+    </div>
+  </div>
+  <div class="agbar"><span class="agbart">CONSTRUCTION AGREEMENT</span><span class="agbars">INSURANCE RESTORATION &bull; ROOFING &amp; EXTERIORS</span></div>
+
+  <div class="aginfo">
+    ${AGREEMENT_HEADER.map((box) => `<div class="agbox${box.tint ? " tint" : ""}">
+      <div class="agboxt">${esc(box.box)}</div>
+      ${box.rows.map((r) => `<div class="agfrow">${r.map((f) => agFieldHtml(f, a)).join("")}</div>`).join("")}
+    </div>`).join("")}
+  </div>
+
+  <div class="agrule"><span>ROOFING SPECIFICATION</span></div>
+  <div class="agspec">
+    <div class="agcol">${left.map((s) => agSecHtml(s, a, brand)).join("")}</div>
+    <div class="agcol">${right.map((s) => agSecHtml(s, a, brand)).join("")}</div>
+  </div>
+
+  <div class="agbox agnotes">
+    <div class="agboxt">NOTES</div>
+    <div class="agnoteval">${esc(a.notes || "")}</div>
+    <div class="agnoteline"></div><div class="agnoteline"></div>
+  </div>
+
+  <div class="agack">
+    <div class="agackt">${esc(AGREEMENT_ACK_INSURANCE)}</div>
+    <div class="aginit">OWNER INITIALS ${agBlank(a.ownerInit1, 70)}</div>
+  </div>
+  <div class="agack">
+    <div class="agackt"><b>HOA Approval Required</b> ${agCheck(a.hoaYes)} Yes &nbsp; ${agCheck(a.hoaNo)} No &nbsp; ${esc(AGREEMENT_HOA_LINE)}</div>
+    <div class="aginit">OWNER INITIALS ${agBlank(a.ownerInit2, 70)}</div>
+  </div>
+
+  <p class="agpara">The anticipated start date is ${agBlank(a.startWeeks, 46)} weeks from the date on which all HOA permissions, permits, and other contingencies are obtained, and the anticipated completion date is ${agBlank(a.endWeeks, 46)} weeks from the actual start date.</p>
+
+  <div class="agterm">
+    <p><b>Defective Decking and Plywood Policy</b>&nbsp; ${AGREEMENT_DECK_POLICY.split("%RATE%").map(esc).join(agBlank(a.deckRate, 70))}</p>
+    <p><b>Terms</b>&nbsp; ${esc(agreementFill(AGREEMENT_TERMS_PARA, brand))}</p>
+    <p>${esc(AGREEMENT_READ_PARA)}</p>
+  </div>
+
+  <div class="agbottom">
+    <div class="agprice">
+      <div class="agpricet">AGREEMENT PRICE</div>
+      <div class="agpriceb">
+        ${AGREEMENT_PRICE_ROWS.map((r) => `<div class="agprow"><span>${esc(r.label)}</span>${agBlank(a[r.k], 160)}</div>`).join("")}
+        <div class="agprow grand"><span>BALANCE DUE ON COMPLETION</span>${agBlank(balance, 160)}</div>
+      </div>
+    </div>
+    <div class="agbox tint agcancel">
+      <div class="agboxt">RIGHT TO CANCEL</div>
+      <div class="agcanp">${esc(AGREEMENT_CANCEL_PARA)}</div>
+      <div class="aginit">INITIALS ${agBlank(a.cancelInit, 70)}</div>
+    </div>
+  </div>
+
+  <div class="agsigs">
+    ${sigCell(con.contractorSig && con.contractorSig !== "signed" ? con.contractorSig : null, brand.company, "REPRESENTATIVE SIGNATURE / DATE")}
+    ${sigCell(con.clientSig && con.clientSig !== "signed" ? con.clientSig : null, "PROPERTY OWNER", "SIGNATURE / DATE")}
+    ${sigCell(null, "CO-OWNER", "SIGNATURE / DATE")}
+  </div>
+</section>
+
+<section class="agpage agrev">
+  <div class="agrevlogo">${mark}</div>
+  <h1 class="agrevh">TERMS AND CONDITIONS</h1>
+  <p class="agrevi">${esc(agreementFill(brand.agreementIntro || AGREEMENT_TERMS_INTRO, brand))}</p>
+  <ol class="agrevo">${agreementTermsFor(brand).map((c) => `<li>${esc(agreementFill(c, brand))}</li>`).join("")}</ol>
+</section>
+<div class="agfoot">${esc(brand.company)} &bull; Construction Agreement${a.customerName ? " &bull; " + esc(a.customerName) : ""}</div>
+${agreementCss(brand)}`;
+}
+
+function agreementCss(brand) {
+  const p = brand.primary || "#2B3440";
+  /* Page one has to be one page — a rep hands over a single sheet and the
+     reverse carries the terms. Everything below is sized against a
+     letter page at 0.6in margins (about 940 CSS px of usable height), and
+     build51 fails the build if the rendered page one exceeds it. */
+  return `<style>
+  /* The paper form is printed edge-to-edge; the shell's 0.6in document
+     margin would cost a full inch of the one page this has to fit on. */
+  @page { size: letter; margin: 0.35in 0.45in 0.3in; }
+  body { font: 9px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color: #1F2937; }
+  .agpage { page-break-after: always; }
+  .agpage:last-of-type { page-break-after: auto; }
+  .agtop { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 4px; }
+  .aglogo { height: 38px; object-fit: contain; display: block; }
+  .agmark { font: 800 16px Georgia,serif; color: ${p}; }
+  .agco { text-align: right; font-size: 9px; color: #4B5563; line-height: 1.35; }
+  .agconame { font-size: 11px; font-weight: 800; letter-spacing: .02em; color: #111827; text-transform: uppercase; }
+  .agweb { color: ${p}; }
+
+  .agbar { background: ${p}; color: #fff; display: flex; justify-content: space-between; align-items: center;
+           padding: 5px 12px; gap: 16px; }
+  .agbart { font-size: 13px; font-weight: 800; letter-spacing: .17em; }
+  .agbars { font-size: 8px; font-weight: 700; letter-spacing: .11em; opacity: .85; text-align: right; }
+
+  .aginfo { display: flex; gap: 8px; margin-top: 6px; }
+  .aginfo > .agbox { flex: 1; }
+  .agbox { border: 1px solid #D8DEE6; border-radius: 6px; padding: 4px 8px 5px; }
+  .agbox.tint { background: #F4F7FA; }
+  .agboxt { font-size: 8.5px; font-weight: 800; letter-spacing: .13em; color: ${p}; margin-bottom: 1px; }
+  .agfrow { display: flex; gap: 10px; }
+  .agfield { min-width: 0; padding-top: 1px; }
+  .agflb { font-size: 6.5px; line-height: 1.1; font-weight: 700; letter-spacing: .08em; color: #8A94A2; }
+  /* Every field prints its rule whether or not it was filled in, so a
+     half-completed agreement can still be finished with a pen on site. */
+  .agfval { border-bottom: 1px solid #C3CBD6; min-height: 9px; font-size: 9.5px; line-height: 1.15;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .agrule { display: flex; align-items: center; gap: 8px; margin: 5px 0 2px; }
+  .agrule span { font-size: 8.5px; font-weight: 800; letter-spacing: .15em; color: ${p}; white-space: nowrap; }
+  .agrule::after { content: ""; flex: 1; height: 1px; background: #D8DEE6; }
+
+  .agspec { display: flex; gap: 16px; }
+  .agcol { flex: 1; min-width: 0; }
+  .agsec { margin-bottom: 1px; page-break-inside: avoid; }
+  .aghd { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #E3E8EE; padding-bottom: 1px; margin-bottom: 1px; }
+  .agnum { width: 12px; height: 12px; border-radius: 50%; background: ${p}; color: #fff;
+           font-size: 7.5px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .agdot { width: 7px; height: 7px; border-radius: 50%; background: #9AA5B4; margin: 0 2px; flex: none; }
+  .aght { font-size: 9.5px; font-weight: 800; letter-spacing: .04em; color: #111827; }
+  .agnote { font-size: 8.5px; color: ${p}; margin: 0 0 1px 18px; }
+  .agrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; margin: 0 0 0 18px; }
+  .aglb { font-size: 9px; color: #1F2937; }
+  .agbl { display: inline-block; border-bottom: 1px solid #6B7280; font-size: 9px;
+          line-height: 1.25; padding: 0 3px; white-space: nowrap; }
+  .agck { display: inline-block; width: 9px; height: 9px; border: 1.1px solid #6B7280; border-radius: 2px;
+          font-size: 7px; line-height: 7px; text-align: center; color: #fff; }
+  .agck.on { background: ${p}; border-color: ${p}; }
+
+  .agfig { margin: 3px 0 4px; border: 1px solid #D8DEE6; border-radius: 6px; padding: 4px; text-align: center; page-break-inside: avoid; }
+  .agfig img { width: 58%; max-width: 152px; display: block; margin: 0 auto; }
+  .agfig figcaption { font-size: 7px; font-weight: 700; letter-spacing: .09em; color: ${p}; margin-top: 3px; }
+
+  .agwarr { background: #F4F7FA; border: 1px solid #D8DEE6; border-radius: 6px; padding: 4px 8px 5px; margin-top: 4px; }
+  .agwt { font-size: 8.5px; font-weight: 800; letter-spacing: .11em; color: #111827; margin-bottom: 2px; }
+  .agwarr .agrow { margin-left: 0; gap: 5px; }
+  .agwarr .agnote { margin-left: 0; margin-top: 3px; }
+
+  .agnotes { margin-top: 4px; }
+  /* Two ruled writing lines under whatever was typed, so the sheet stays
+     usable with a pen. Drawn as bordered rows rather than a repeating
+     gradient — Chromium prints repeating gradients unreliably. */
+  .agnoteline { border-bottom: 1px solid #D8DEE6; height: 8px; }
+  .agnoteval { font-size: 9px; white-space: pre-wrap; min-height: 11px; }
+
+  .agack { display: flex; align-items: center; gap: 12px; border: 1px solid #D8DEE6; border-left: 3px solid ${p};
+           border-radius: 5px; padding: 3px 9px; margin-top: 3px; page-break-inside: avoid; }
+  .agackt { flex: 1; font-size: 8.3px; line-height: 1.4; }
+  .aginit { font-size: 7.5px; font-weight: 800; letter-spacing: .09em; color: ${p}; white-space: nowrap; }
+
+  .agpara { font-size: 8px; line-height: 1.4; margin: 3px 0; }
+  .agterm { border: 1px solid #D8DEE6; border-radius: 6px; padding: 4px 8px; margin-top: 4px; }
+  .agterm p { font-size: 7.6px; line-height: 1.35; margin: 0 0 2px; }
+  .agterm p:last-child { margin-bottom: 0; }
+
+  .agbottom { display: flex; gap: 8px; margin-top: 4px; align-items: stretch; page-break-inside: avoid; }
+  .agprice { flex: 1.25; border: 1.5px solid ${p}; border-radius: 6px; overflow: hidden; }
+  .agpricet { background: ${p}; color: #fff; font-size: 8.5px; font-weight: 800; letter-spacing: .13em; padding: 4px 9px; }
+  .agpriceb { padding: 3px 9px 4px; }
+  .agprow { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 8.6px; padding: 1px 0; }
+  .agprow.grand { font-weight: 800; border-top: 1px solid #D8DEE6; margin-top: 2px; padding-top: 4px; }
+  .agcancel { flex: 1; }
+  .agcanp { font-size: 8.1px; line-height: 1.4; margin-bottom: 4px; }
+
+  .agsigs { display: flex; gap: 18px; margin-top: 5px; page-break-inside: avoid; }
+  .agsigbox { flex: 1; min-width: 0; }
+  .agsigwho { font-size: 9px; font-weight: 800; letter-spacing: .06em; color: #111827; text-transform: uppercase; }
+  .agsigline { border-bottom: 1px solid #111827; height: 18px; margin-top: 3px; display: flex; align-items: flex-end; }
+  .agsigline img { max-height: 24px; max-width: 100%; }
+  .agsiglbl { font-size: 7px; font-weight: 700; letter-spacing: .08em; color: ${p}; margin-top: 3px; }
+
+  .agrev { padding-top: 8px; }
+  .agrevlogo { text-align: center; margin-bottom: 10px; }
+  .agrevlogo .aglogo { margin: 0 auto; }
+  .agrevh { font-size: 15px; font-weight: 800; letter-spacing: .18em; text-align: center; color: #111827; margin: 0 0 10px; }
+  .agrevi { font-size: 9.5px; line-height: 1.6; font-style: italic; color: #374151; margin: 0 0 10px; }
+  .agrevo { font-size: 9.5px; line-height: 1.55; padding-left: 16px; margin: 0; }
+  .agrevo li { margin-bottom: 7px; text-align: justify; }
+
+  /* Identifies pages 2 and 3, which otherwise carry nothing naming the
+     parties. A literal page number is not reachable from HTML in browser
+     print — Chrome does not implement paged-media margin boxes. */
+  .agfoot { position: fixed; bottom: 2px; left: 0; right: 0; text-align: center;
+            font-size: 8px; color: #9AA5B4; }
+  @media print { body { padding-bottom: 16px; } }
+</style>`;
 }
 
 function reportDocHtml(job, brand) {
@@ -8607,7 +10254,7 @@ function projectNoun(job) {
   return "roofing";
 }
 
-function buildPortalSnapshot(job, brand, token) {
+function buildPortalSnapshot(job, brand, token, users = []) {
   const portal = { ...DEFAULT_PORTAL_SETTINGS, ...(job.portal || {}) };
   const pay = paymentsSummary(job);
   return {
@@ -8622,12 +10269,10 @@ function buildPortalSnapshot(job, brand, token) {
       /* Rep block: a per-job override wins over the assigned seat, so a
          different face can be put in front of a customer without
          reassigning the job. */
-      rep: portal.showRep ? {
-        name: job.repOverride?.name || job.assigneeContact?.name || job.assignee || "",
-        email: job.repOverride?.email || job.assigneeContact?.email || "",
-        phone: job.repOverride?.phone || job.assigneeContact?.phone || "",
-        title: job.repOverride?.title || job.assigneeContact?.title || "",
-      } : null,
+      rep: portal.showRep ? (() => {
+        const c = repContactFor(users, job);
+        return { name: c.name, email: c.email, phone: c.phone, title: c.title };
+      })() : null,
       /* Anything awaiting the homeowner's signature, with the exact
          content they will see so the hash binds to it. */
       signDocs: (() => {
@@ -8685,6 +10330,15 @@ function buildPortalSnapshot(job, brand, token) {
         editable: portal.allowContactEdit !== false,
       },
       progress: portalProgressFor(job), steps: PORTAL_STEPS,
+      /* Live arrival window. Only travels while a rep is actually driving and
+         has chosen to share it — an ETA the homeowner can see but nobody
+         meant to send is worse than no ETA. Carries the promise and when it
+         was made, never the rep's coordinates: the customer needs to know
+         when someone is arriving, not where that person is right now. */
+      enroute: (job.enroute && job.enroute.active && job.enroute.sharedAt) ? {
+        by: job.enroute.by || "", etaMin: job.enroute.etaMin,
+        updatedAt: job.enroute.updatedAt, miles: job.enroute.miles,
+      } : null,
       portal,
       notes: (job.notes || []).filter((n) => n.customerVisible).map((n) => ({ at: n.at, text: n.text })),
       photos: portal.photos ? (job.photos || []).filter((ph) => ph.shared).map((ph) => ({ url: ph.url || ph.dataUrl, label: ph.label || "" })) : [],
@@ -9394,6 +11048,46 @@ function PortalProposal({ estimate, accent, onSelect = () => {} }) {
   );
 }
 
+/* The homeowner's view of an en-route rep. Counts down from the promise the
+   app made rather than re-fetching, and stops rendering once the window has
+   run out — a banner still cheerfully claiming "3 minutes away" forty minutes
+   later is worse than no banner. */
+function PortalEnRoute({ er, accent }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!er) return undefined;
+    const t = setInterval(() => tick((n) => n + 1), 30000);
+    return () => clearInterval(t);
+  }, [er]);
+  if (!er || !er.updatedAt) return null;
+  const elapsed = (Date.now() - new Date(er.updatedAt).getTime()) / 60000;
+  const left = Math.round(num(er.etaMin) - elapsed);
+  /* Two hours past the promise, something went wrong that this banner can't
+     explain. Better to say nothing than to be confidently stale. */
+  if (left < -120) return null;
+  const arriving = left <= 0;
+  return (
+    <div style={{
+      background: accent, color: "#fff", borderRadius: 14, padding: "16px 18px", marginBottom: 12,
+      display: "flex", alignItems: "center", gap: 14,
+    }}>
+      <Navigation size={26} style={{ flexShrink: 0 }} />
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 16, fontWeight: 800, lineHeight: 1.3 }}>
+          {arriving
+            ? `${er.by || "Your crew"} should be arriving now`
+            : `${er.by || "Your crew"} is on the way`}
+        </div>
+        <div style={{ fontSize: 13.5, opacity: 0.9, marginTop: 3 }}>
+          {arriving
+            ? "They're at or near your address."
+            : `About ${left} ${left === 1 ? "minute" : "minutes"} out${er.miles ? ` · ${er.miles} mi` : ""}.`}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PublicPortal({ token }) {
   const [state, setState] = useState({ loading: true, data: null, err: "" });
   const [estSel, setEstSel] = useState(null);
@@ -9440,6 +11134,11 @@ function PublicPortal({ token }) {
         <div style={{ fontSize: 13.5, opacity: 0.85, marginTop: 3 }}>{d.address}</div>
       </div>
       <div style={{ padding: "16px 16px 60px" }}>
+        {/* Someone is driving here right now. This outranks every other
+            section — it is the one thing on this page that is about the
+            next twenty minutes. Sits above the ordered sections rather
+            than inside them, and disappears the moment they arrive. */}
+        <PortalEnRoute er={d.enroute} accent={prim} />
         {(d.order && d.order.length ? d.order : PORTAL_ORDER_DEFAULT).map((sid, idx) => {
           const first = idx === 0;
           const wrap = (node) => node ? <div key={sid} style={first ? undefined : { marginTop: 12 }}>{node}</div> : null;
@@ -9808,7 +11507,7 @@ function SystemCheck({ currentUser, onBack }) {
   useEffect(() => { run(); }, []);
   const failing = rows.filter((r) => !r.ok);
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="System check" onBack={onBack}
         right={<Btn small kind="ghost" onClick={run} disabled={running}>{running ? "Checking…" : "Re-run"}</Btn>} />
       <Card style={{ marginTop: 14 }}>
@@ -9911,7 +11610,7 @@ function WarrantyCenter({ jobs, onOpenJob, onBack }) {
     .sort((a, b) => String(a.laborEnd || "9999").localeCompare(String(b.laborEnd || "9999")));
   const mfrs = ["All", ...new Set(jobs.map((j) => j.warranty && j.warranty.mfr).filter(Boolean))];
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Warranties" onBack={onBack} />
       <div style={{ fontSize: 13, color: S.sub, margin: "10px 0 12px", lineHeight: 1.5 }}>
         Every roof with a warranty on record. Set them on the job's Overview tab once the install is done.
@@ -10074,6 +11773,68 @@ async function fetchCurrentWeatherFor(lat, lng) {
   } catch (e) { return null; }
 }
 
+/* Five-day forecast for a job site. Same keyless Open-Meteo source as the
+   current conditions, one call, cached an hour per rounded location.
+
+   Roofers don't want a weather widget, they want to know which of the next
+   five days they can actually tear a roof off. So this carries wind and low
+   temperature alongside rain: shingles won't seal below about 40°F, and
+   nobody is putting a crew on a steep slope in a 25 mph wind. */
+const FORECAST_CACHE = new Map();
+const FORECAST_MS = 60 * 60 * 1000;
+async function fetchForecastFor(lat, lng, days = 5) {
+  const key = `${weatherKey(lat, lng)}:${days}`;
+  const c = FORECAST_CACHE.get(key);
+  if (c && Date.now() - c.at < FORECAST_MS) return c.list;
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
+      `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max` +
+      `&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto&forecast_days=${days}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("forecast");
+    const d = await res.json();
+    const dy = d.daily || {};
+    const list = (dy.time || []).map((date, i) => ({
+      date,
+      code: dy.weather_code?.[i] ?? null,
+      hi: dy.temperature_2m_max?.[i] == null ? null : Math.round(dy.temperature_2m_max[i]),
+      lo: dy.temperature_2m_min?.[i] == null ? null : Math.round(dy.temperature_2m_min[i]),
+      pop: dy.precipitation_probability_max?.[i] ?? null,
+      inches: dy.precipitation_sum?.[i] ?? null,
+      windMph: dy.wind_speed_10m_max?.[i] == null ? null : Math.round(dy.wind_speed_10m_max[i]),
+    }));
+    FORECAST_CACHE.set(key, { at: Date.now(), list });
+    return list;
+  } catch (e) { return null; }
+}
+/* Is this a day you could actually roof? Returns the reason it isn't, which
+   is the only part a crew lead cares about. */
+function roofDayVerdict(day) {
+  if (!day) return null;
+  if (num(day.pop) >= 60 || num(day.inches) >= 0.1) return { ok: false, tone: "red", why: "Rain" };
+  if (num(day.windMph) >= 25) return { ok: false, tone: "red", why: "Wind" };
+  if (day.lo != null && day.lo < 40) return { ok: false, tone: "amber", why: "Too cold to seal" };
+  if (num(day.pop) >= 35) return { ok: false, tone: "amber", why: "Rain risk" };
+  return { ok: true, tone: "green", why: "Good" };
+}
+
+function useForecast({ lat, lng, zip, days = 5 }) {
+  const [list, setList] = useState(null);
+  const key = `${lat ?? ""}:${lng ?? ""}:${zip ?? ""}:${days}`;
+  useEffect(() => {
+    let dead = false;
+    (async () => {
+      let la = lat, ln = lng;
+      if (la == null || ln == null) { const g = await geocodeZip(zip); if (g) { la = g.lat; ln = g.lng; } }
+      if (la == null || ln == null) { setList(null); return; }
+      const out = await fetchForecastFor(la, ln, days);
+      if (!dead) setList(out);
+    })();
+    return () => { dead = true; };
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return list;
+}
+
 /* ZIP -> coords via Zippopotam.us (keyless, CORS-open) so weather works even
    when a job was created without map coordinates. Cached for the session. */
 const ZIP_GEO_CACHE = new Map();
@@ -10137,6 +11898,332 @@ function WeatherNow({ lat, lng, zip, style }) {
       <span style={{ fontSize: 14 }}>{l.e}</span>
       <b style={{ color: S.ink }}>{wx.tempF}°</b>{l.t ? ` ${l.t}` : ""}{wx.windMph >= 15 ? ` · ${wx.windMph} mph wind` : ""}
     </span>
+  );
+}
+
+/* ==================================================================
+   ON MY WAY — drive time to the property, shared with the homeowner
+
+   The single most common complaint about a roofing crew is not price or
+   workmanship, it's "nobody told me when they were coming." Every
+   dispatch product sells this feature; none of the roofing CRMs ship it.
+
+   Routing runs on OSRM's public demo server — genuinely free, no key, no
+   account, CORS-open — and falls back to straight-line distance at
+   35 mph when it's unreachable, so the feature degrades to a rough
+   number rather than to nothing. Neither path needs a paid maps plan.
+================================================================== */
+function haversineMi(aLat, aLng, bLat, bLng) {
+  const R = 3958.8, rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(bLat - aLat), dLng = rad(bLng - aLng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+async function driveEta(fromLat, fromLng, toLat, toLng) {
+  const miles = haversineMi(fromLat, fromLng, toLat, toLng);
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=false`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const d = await res.json();
+      const r = (d.routes || [])[0];
+      if (r && r.duration != null) {
+        return { minutes: Math.max(1, Math.round(r.duration / 60)), miles: +(r.distance / 1609.34).toFixed(1), routed: true };
+      }
+    }
+  } catch (e) { /* fall through to the estimate */ }
+  /* 35 mph averages town streets and a highway leg well enough for a
+     homeowner-facing number, and it is honestly labelled as an estimate. */
+  return { minutes: Math.max(1, Math.round((miles / 35) * 60)), miles: +miles.toFixed(1), routed: false };
+}
+/* Resolve the job's coordinates however we can — a stamped photo fix, the
+   property record, or the zip centroid. */
+async function jobCoords(job) {
+  if (job.lat != null && job.lng != null) return { lat: job.lat, lng: job.lng };
+  const p = job.property || {};
+  if (p.lat != null && p.lng != null) return { lat: p.lat, lng: p.lng };
+  const shot = (job.photos || []).find((x) => x.lat != null && x.lng != null);
+  if (shot) return { lat: shot.lat, lng: shot.lng };
+  return await geocodeZip(job.zip);
+}
+/* Wall-clock arrival from a start time plus a drive, for customer-facing copy. */
+function etaClock(startedAt, minutes) {
+  const base = startedAt ? new Date(startedAt) : new Date();
+  const t = new Date(base.getTime() + num(minutes) * 60000);
+  return t.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+/* Minutes left against the original promise — what the homeowner is
+   actually watching once the rep has been driving for a while. */
+function etaRemaining(er) {
+  if (!er || !er.updatedAt) return null;
+  const elapsed = (Date.now() - new Date(er.updatedAt).getTime()) / 60000;
+  return Math.max(0, Math.round(num(er.etaMin) - elapsed));
+}
+
+function EnRouteCard({ job, mut, toast, currentUser, integrations = {} }) {
+  const er = job.enroute || null;
+  const [busy, setBusy] = useState(false);
+  const [, tick] = useState(0);
+  /* Re-render once a minute so the countdown on screen matches reality
+     without re-polling GPS or re-routing. */
+  useEffect(() => {
+    if (!er || !er.active) return undefined;
+    const t = setInterval(() => tick((n) => n + 1), 60000);
+    return () => clearInterval(t);
+  }, [er && er.active]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const ping = async (announce) => {
+    setBusy(true);
+    const fix = await captureLocation();
+    if (!fix.ok) { setBusy(false); toast && toast(fix.reason); return null; }
+    const dest = await jobCoords(job);
+    if (!dest) {
+      setBusy(false);
+      toast && toast("No coordinates for this address yet — add the zip or stamp a photo on site.");
+      return null;
+    }
+    const eta = await driveEta(fix.lat, fix.lng, dest.lat, dest.lng);
+    const next = {
+      active: true,
+      by: (currentUser || {}).name || "",
+      startedAt: (er && er.startedAt) || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      etaMin: eta.minutes, miles: eta.miles, routed: eta.routed,
+      lat: fix.lat, lng: fix.lng,
+      sharedAt: er ? er.sharedAt || null : null,
+    };
+    mut((j) => ({ ...j, enroute: next }));
+    setBusy(false);
+    if (announce) toast && toast(`On your way — about ${eta.minutes} min out`);
+    return next;
+  };
+
+  const share = async (state) => {
+    const s = state || er;
+    if (!s) return;
+    const mins = etaRemaining(s) ?? s.etaMin;
+    const first = String(job.name || "").split(" ")[0];
+    const body = `Hi ${first}, ${s.by || "your crew"} is on the way to ${job.address} — about ${mins} minutes out, arriving around ${etaClock(new Date().toISOString(), mins)}.`;
+    mut((j) => ({
+      ...j,
+      enroute: { ...(j.enroute || s), sharedAt: new Date().toISOString() },
+      messages: [...(j.messages || []), {
+        id: uid("m"), kind: j.consent?.sms?.granted ? "sms" : "email", audience: "Customer",
+        to: j.consent?.sms?.granted ? (j.phone || j.name) : (j.email || j.name),
+        subject: j.consent?.sms?.granted ? "" : "On our way",
+        body, status: "Queued", at: new Date().toISOString().slice(0, 16).replace("T", " "),
+      }],
+    }));
+    toast && toast("ETA sent to the customer — it's live in their portal too");
+  };
+
+  const arrive = () => {
+    mut((j) => ({ ...j, enroute: { ...(j.enroute || {}), active: false, arrivedAt: new Date().toISOString() } }));
+    toast && toast("Marked arrived");
+  };
+
+  if (!er || !er.active) {
+    return (
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={er && er.arrivedAt ? <Chip tone="green">Arrived</Chip> : null}>On my way</CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Starts a live drive time to this address and gives the homeowner an arrival window —
+          in their portal, and by text or email if you send it.
+        </div>
+        <Btn style={{ width: "100%" }} disabled={busy} onClick={async () => { const s = await ping(true); if (s) share(s); }}>
+          <Navigation size={15} /> {busy ? "Getting your location…" : "I'm on my way"}
+        </Btn>
+      </Card>
+    );
+  }
+
+  const left = etaRemaining(er);
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle right={<Chip tone="green">En route</Chip>}>On my way</CardTitle>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <div style={{ fontSize: 30, fontWeight: 800, color: S.ink, fontVariantNumeric: "tabular-nums" }}>{left}</div>
+        <div style={{ fontSize: 14, color: S.sub }}>min out · arriving about {etaClock(new Date().toISOString(), left)}</div>
+      </div>
+      <div style={{ fontSize: 12, color: S.sub, marginTop: 4 }}>
+        {er.miles} mi{er.routed ? " by road" : " straight line — road distance unavailable, this is an estimate"}
+        {er.sharedAt ? " · customer notified" : " · not sent to the customer yet"}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+        <Btn kind="ghost" small style={{ flex: 1 }} disabled={busy} onClick={() => ping(false)}>
+          <RefreshCw size={13} /> Update
+        </Btn>
+        <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => share(null)}><Send size={13} /> Send ETA</Btn>
+        <Btn small style={{ flex: 1 }} onClick={arrive}><Check size={13} /> Arrived</Btn>
+      </div>
+    </Card>
+  );
+}
+
+/* A phone photo is 3–8 MB, and the job record is a JSONB blob that syncs on
+   every edit — storing one raw would push megabytes over the wire each time
+   someone renames a task. Downscale to a card-sized JPEG first: a 1000px
+   wide, quality-0.72 shot lands around 80 KB and still looks sharp on a
+   Retina card. Falls back to the raw data URL if canvas isn't available. */
+function imageToDataUrl(file, maxW = 1000, quality = 0.72) {
+  return new Promise((resolve) => {
+    const r = new FileReader();
+    r.onerror = () => resolve(null);
+    r.onload = () => {
+      const raw = String(r.result);
+      try {
+        const img = new Image();
+        img.onerror = () => resolve(raw);
+        img.onload = () => {
+          try {
+            const scale = Math.min(1, maxW / (img.width || maxW));
+            const c = document.createElement("canvas");
+            c.width = Math.round((img.width || maxW) * scale);
+            c.height = Math.round((img.height || maxW) * scale);
+            const ctx = c.getContext("2d");
+            ctx.drawImage(img, 0, 0, c.width, c.height);
+            resolve(c.toDataURL("image/jpeg", quality));
+          } catch (e) { resolve(raw); }
+        };
+        img.src = raw;
+      } catch (e) { resolve(raw); }
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+/* A picture of the house, on the job and on its board card.
+
+   Sounds cosmetic; it isn't. A rep with fourteen jobs in a subdivision of
+   near-identical addresses recognises the roof long before they recognise
+   "412 vs 421 Maple". JobTread put it on the card for exactly that reason. */
+function PropertyPhoto({ job, mut, toast }) {
+  const fileRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const photo = job.propertyPhoto || null;
+  /* Photos already shot on this job are the fastest source — usually the
+     front elevation is the first thing on the roll. */
+  const jobShots = (job.photos || []).filter((p) => p.url || p.dataUrl).slice(-12).reverse();
+
+  const onFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setBusy(true);
+    const dataUrl = await imageToDataUrl(file);
+    setBusy(false);
+    if (!dataUrl) { toast && toast("Couldn't read that image"); return; }
+    mut((j) => ({ ...j, propertyPhoto: { url: dataUrl, at: nowStamp() } }));
+    toast && toast("Property photo saved");
+  };
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onFile} style={{ display: "none" }} />
+      {photo ? (
+        <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: S.soft }}>
+          <img src={photo.url} alt={`${job.address}`} style={{ width: "100%", height: 168, objectFit: "cover", display: "block" }} />
+          <div style={{ position: "absolute", right: 8, bottom: 8, display: "flex", gap: 6 }}>
+            <button onClick={() => fileRef.current && fileRef.current.click()} style={photoChipBtn}>Replace</button>
+            <button onClick={() => mut((j) => ({ ...j, propertyPhoto: null }))} style={photoChipBtn}>Remove</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <button onClick={() => fileRef.current && fileRef.current.click()} disabled={busy} style={{
+            width: "100%", height: 96, border: `1.5px dashed ${S.line}`, borderRadius: 12,
+            background: S.soft, color: S.sub, cursor: busy ? "default" : "pointer", fontFamily: "inherit",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
+            fontSize: 13, fontWeight: 600,
+          }}>
+            <Camera size={20} /> {busy ? "Saving…" : "Add a photo of the property"}
+          </button>
+          {jobShots.length > 0 && (
+            <button onClick={() => setPicking(!picking)} style={{
+              ...linkBtn, display: "block", width: "100%", textAlign: "center", padding: "8px 0 0", fontSize: 12.5,
+            }}>{picking ? "Never mind" : "Or use one you've already shot"}</button>
+          )}
+          {picking && (
+            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingTop: 8 }}>
+              {jobShots.map((p) => (
+                <button key={p.id} onClick={() => {
+                  mut((j) => ({ ...j, propertyPhoto: { url: p.url || p.dataUrl, at: nowStamp(), fromPhotoId: p.id } }));
+                  setPicking(false);
+                  toast && toast("Property photo set");
+                }} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", flexShrink: 0 }}>
+                  <img src={p.url || p.dataUrl} alt={p.label || ""} style={{ width: 84, height: 62, objectFit: "cover", borderRadius: 8, display: "block" }} />
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+const photoChipBtn = {
+  border: "none", background: "rgba(17,24,39,.72)", color: "#fff", borderRadius: 999,
+  padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+};
+
+/* Five days at the job site, read as roofing days rather than as weather.
+   Renders nothing until it resolves and nothing if it can't — a job with no
+   coordinates and no zip shouldn't show an empty box. */
+function ForecastStrip({ lat, lng, zip, schedDate = null }) {
+  const days = useForecast({ lat, lng, zip, days: 5 });
+  if (!days || !days.length) return null;
+  const today = todayIso();
+  const bad = days.filter((d) => !roofDayVerdict(d).ok).length;
+  const sched = schedDate ? days.find((d) => d.date === schedDate) : null;
+  const schedVerdict = sched ? roofDayVerdict(sched) : null;
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle right={
+        <Chip tone={bad === 0 ? "green" : bad >= 4 ? "red" : "amber"}>
+          {bad === 0 ? "All 5 workable" : `${5 - bad} of 5 workable`}
+        </Chip>
+      }>Next 5 days at the site</CardTitle>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+        {days.map((d) => {
+          const v = roofDayVerdict(d);
+          const l = wmoLabel(d.code);
+          const isToday = d.date === today;
+          const isSched = schedDate && d.date === schedDate;
+          return (
+            <div key={d.date} style={{
+              textAlign: "center", padding: "9px 2px", borderRadius: 10,
+              background: isSched ? T.accentSoft : S.soft,
+              border: isSched ? `1px solid ${T.accent}` : "1px solid transparent",
+            }}>
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: S.sub, letterSpacing: ".02em" }}>
+                {isToday ? "TODAY" : new Date(d.date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short" }).toUpperCase()}
+              </div>
+              <div style={{ fontSize: 19, margin: "3px 0 1px" }}>{l.e}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: S.ink, fontVariantNumeric: "tabular-nums" }}>{d.hi}°</div>
+              <div style={{ fontSize: 11, color: S.sub, fontVariantNumeric: "tabular-nums" }}>{d.lo}°</div>
+              <div style={{
+                fontSize: 9.5, fontWeight: 800, marginTop: 5, lineHeight: 1.25,
+                color: v.tone === "green" ? "var(--rl-green-fg)" : v.tone === "red" ? "var(--rl-red-fg)" : "var(--rl-amber-fg)",
+              }}>{v.why}</div>
+            </div>
+          );
+        })}
+      </div>
+      {schedVerdict && !schedVerdict.ok && (
+        <Callout label="Install day" tone={schedVerdict.tone === "red" ? "red" : "amber"}>
+          This roof is scheduled for {sched.date} and that day reads
+          {" "}{schedVerdict.why.toLowerCase()}
+          {sched.pop != null ? ` — ${sched.pop}% rain` : ""}
+          {sched.windMph != null ? `, wind to ${sched.windMph} mph` : ""}
+          {sched.lo != null ? `, low ${sched.lo}°` : ""}. Call the crew before they load.
+        </Callout>
+      )}
+      <div style={{ fontSize: 11, color: S.sub, marginTop: 9, lineHeight: 1.45 }}>
+        A day is flagged on rain over 35%, wind at 25 mph, or a low under 40° — shingles
+        won't seal below that.
+      </div>
+    </Card>
   );
 }
 
@@ -10335,7 +12422,7 @@ function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded
   );
 
   return (
-    <div style={embedded ? { padding: 0 } : { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={embedded ? { padding: 0 } : { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       {embedded ? Header : <SubHeader title="Dispatch" onBack={onBack} right={
         <Btn small kind={day === today ? "ghost" : "soft"} onClick={() => setDay(today)}>Today</Btn>} />}
 
@@ -10598,7 +12685,7 @@ function PurchaseOrders({ jobs, mutJob, vendors, onOpenJob, onBack, toast, curre
   const eJob = e ? jobs.find((j) => j.id === e.jobId) : null;
   const setPo = (patch) => setEditing({ ...e, po: { ...e.po, ...patch } });
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Purchase orders" onBack={onBack}
         right={<Btn small onClick={() => setPickJob(true)}><Plus size={14} /> New PO</Btn>} />
       <div style={{ display: "flex", gap: 6, margin: "12px 0", flexWrap: "wrap" }}>
@@ -10719,7 +12806,7 @@ function CallLog({ jobs, leadSources, calls, setCalls, onOpenJob, onBack, curren
       value: won.reduce((a, j) => a + ((j.contract && j.contract.price) || j.value || 0), 0) };
   }).filter((r) => r.leads > 0).sort((a, b) => b.value - a.value);
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Calls & attribution" onBack={onBack} />
       <Card style={{ marginTop: 14 }}>
         <CardTitle>Log an incoming call</CardTitle>
@@ -10812,7 +12899,7 @@ function PillGroup({ options, value, onPick, multi = false }) {
             else onPick(on ? "" : o);   /* tapping the active one clears it */
           }} style={{
             border: `1.5px solid ${on ? T.accent : S.line}`,
-            background: on ? T.accentSoft : "#fff",
+            background: on ? T.accentSoft : S.card,
             color: on ? T.accent : S.ink,
             borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 600,
             cursor: "pointer", touchAction: "manipulation",
@@ -11000,31 +13087,228 @@ function claimMath(job) {
    The readiness checks below are what an owner actually looks for
    before letting a job through.
 ================================================================== */
-const HANDOFF_CHECKS = [
-  { id: "contract", label: "Signed contract on file",
+/* One registry of "is this piece of work actually done?" checks, keyed so a
+   stage rule can name the ones it cares about. Each entry is a predicate plus
+   the plain-English place to go and fix it — the same shape the sold→approval
+   gate has always used, now reusable for every stage transition. Adding a
+   check here makes it available to the workflow editor with no other change.
+
+   Every test reads a field the app already writes; none of these introduce
+   new data. */
+const STAGE_CHECKS = {
+  contract: { label: "Signed contract on file",
     test: (j) => !!(j.contract && j.contract.status === "Signed"),
     fix: "Contract section — send for signature or mark it signed." },
-  { id: "price", label: "Contract price set",
+  price: { label: "Contract price set",
     test: (j) => num(j.contract && j.contract.price) > 0 || num(j.fin && j.fin.contract) > 0,
     fix: "Contract or Financials — a job with no price cannot be capped out." },
-  { id: "deposit", label: "Deposit collected or waived",
+  deposit: { label: "Deposit collected or waived",
     test: (j) => num((j.payments || []).reduce((a, p) => a + num(p.amount), 0)) > 0 || !!j.depositWaived,
     fix: "Payments section — record the deposit, or tick waived on the approval." },
-  { id: "measure", label: "Measurements recorded",
+  measure: { label: "Measurements recorded",
     test: (j) => num(j.measurements && j.measurements.squares) > 0,
     fix: "Measurements section — import a report or key the squares." },
-  { id: "materials", label: "Material list built",
+  materials: { label: "Material list built",
     test: (j) => Array.isArray(j.materials) && j.materials.length > 0,
     fix: "Materials section — build the list so production can order." },
-  { id: "claim", label: "Claim approved by the carrier",
+  claim: { label: "Claim approved by the carrier",
     test: (j) => j.claimType !== "Insurance" || ["scope", "supplement", "scheduled", "invoiced", "closed"].includes((j.claim || {}).stage),
     fix: "Insurance claim section — the carrier has not approved a scope yet." },
-];
+  /* Available to stage rules, not used by the sold→approval gate. Checks
+     that need more than the job itself get it from ctx, which callers thread
+     through from app state (appointments live in their own collection). */
+  appt: { label: "Appointment on the calendar",
+    test: (j, ctx) => (((ctx && ctx.appointments) || []).some((a) => a.jobId === j.id)),
+    fix: "Calendar — book the inspection so the homeowner has a date." },
+  photos: { label: "Damage photos captured",
+    test: (j) => ((j.photos || []).length + (j.inspection && j.inspection.photos ? j.inspection.photos.length : 0)) > 0,
+    fix: "Photos section — a claim without photos is a claim you will lose." },
+  estimate: { label: "Estimate built and sent",
+    test: (j) => ["Sent", "Accepted", "Signed"].includes((j.estimate || {}).status),
+    fix: "Estimate section — build the options and send them to the homeowner." },
+  filed: { label: "Claim filed with the carrier",
+    test: (j) => j.claimType !== "Insurance" || !!((j.insurance || {}).claim || (j.claim || {}).claim),
+    fix: "Insurance section — record the carrier and claim number." },
+  crew: { label: "Crew assigned",
+    test: (j) => !!j.crewId,
+    fix: "Production section — assign the crew that is installing this roof." },
+  scheddate: { label: "Install date set",
+    test: (j) => !!j.schedDate,
+    fix: "Schedule — pick the install date so materials and crew line up." },
+  folder: { label: "Job folder approved",
+    test: (j) => !!j.jobFolder,
+    fix: "Handoff section — an admin has to approve the sold job first." },
+  paidfull: { label: "Balance collected in full",
+    test: (j) => { const p = paymentsSummary(j); return !p.contract || p.balance <= 0.01; },
+    fix: "Financials — there is still a balance owed on this job." },
+  reason: { label: "Reason recorded",
+    test: (j) => !!String(j.lostReason || "").trim(),
+    fix: "Say why this one went away — the move dialog will ask you." },
+};
 
-function handoffReadiness(job) {
-  const results = HANDOFF_CHECKS.map((c) => ({ ...c, ok: !!c.test(job) }));
+/* The sold→approval gate is now just a named subset of the registry, so it
+   and every other stage gate render through one checklist component. */
+const HANDOFF_CHECK_IDS = ["contract", "price", "deposit", "measure", "materials", "claim"];
+const HANDOFF_CHECKS = HANDOFF_CHECK_IDS.map((id) => ({ id, ...STAGE_CHECKS[id] }));
+
+function handoffReadiness(job, ctx) {
+  const results = HANDOFF_CHECKS.map((c) => ({ ...c, ok: !!c.test(job, ctx) }));
   const failed = results.filter((r) => !r.ok);
   return { results, failed, ready: failed.length === 0 };
+}
+
+/* ==================================================================
+   STAGE RULES — what each stage expects before and after entry
+
+   A stage is not a label, it is a container of work. A rule says: how
+   long a job should sit here before someone should care (sla), what
+   must be true to enter (gate), and what work to hand the rep once
+   they arrive (tasks).
+
+   Shipped defaults are deliberately conservative. Every gate is "warn",
+   never "block" — an upgrade that suddenly refuses to move live jobs
+   would look like the app is broken on day one. Blocking is opt-in from
+   the workflow editor, one stage at a time.
+================================================================== */
+const EMPTY_RULE = { sla: 0, gate: { mode: "off", checks: [] }, tasks: [], notify: false };
+const DEFAULT_STAGE_RULES = {
+  s1: { sla: 2, gate: { mode: "off", checks: [] },
+        tasks: [{ label: "Call the homeowner", dueIn: 0 }, { label: "Schedule inspection", dueIn: 1 }] },
+  s2: { sla: 5, gate: { mode: "warn", checks: ["appt"] },
+        tasks: [{ label: "Complete inspection", dueIn: 1 }, { label: "Document damage with photos", dueIn: 1 }] },
+  s3: { sla: 7, gate: { mode: "warn", checks: ["estimate"] },
+        tasks: [{ label: "Follow up on the estimate", dueIn: 2 }] },
+  s4: { sla: 10, gate: { mode: "warn", checks: ["filed", "photos"], when: "Insurance" },
+        tasks: [{ label: "Meet adjuster on site", dueIn: 3, when: "Insurance" }] },
+  s5: { sla: 5, gate: { mode: "warn", checks: ["contract", "price"] },
+        tasks: [{ label: "Collect deposit", dueIn: 2 }, { label: "Order materials", dueIn: 3 }] },
+  s6: { sla: 14, gate: { mode: "warn", checks: ["claim"], when: "Insurance" },
+        tasks: [{ label: "Submit supplement", dueIn: 2, when: "Insurance" }] },
+  s7: { sla: 7, gate: { mode: "warn", checks: ["deposit", "scheddate"] },
+        tasks: [{ label: "Confirm material delivery", dueIn: 1 }], notify: true },
+  s8: { sla: 7, gate: { mode: "warn", checks: ["folder", "crew", "scheddate"] },
+        tasks: [{ label: "Confirm crew and delivery", dueIn: 1 }, { label: "Complete installation", dueIn: 3 }], notify: true },
+  s9: { sla: 10, gate: { mode: "warn", checks: ["measure"] },
+        tasks: [{ label: "Send final invoice", dueIn: 1 }, { label: "Collect depreciation & deductible", dueIn: 5, when: "Insurance" }] },
+  s10: { sla: 0, gate: { mode: "warn", checks: ["paidfull"] },
+         tasks: [{ label: "Request review", dueIn: 1 }], notify: true },
+  s11: { sla: 0, gate: { mode: "warn", checks: ["reason"] }, tasks: [] },
+  s12: { sla: 0, gate: { mode: "warn", checks: ["reason"] }, tasks: [] },
+};
+/* Automation is shipped as a menu, never a blank canvas. Nobody opens a
+   workflow editor wanting to design a state machine; they want the four or
+   five plays every roofing company already runs. Each recipe is a patch over
+   the stage's rule, and "Customize" underneath is the escape hatch. */
+const STAGE_RECIPES = [
+  { id: "followup", name: "Put a follow-up clock on it",
+    blurb: "Flags the job after 3 days and drops a follow-up task on arrival.",
+    patch: { sla: 3, tasks: [{ label: "Follow up with the homeowner", dueIn: 2 }] } },
+  { id: "requirecontract", name: "Require a signed contract",
+    blurb: "Warns if the job arrives here with no signature or no price.",
+    patch: { gate: { mode: "warn", checks: ["contract", "price"] } } },
+  { id: "lockproduction", name: "Lock production until it's really ready",
+    blurb: "Blocks the move without an approved folder, a crew and an install date.",
+    patch: { gate: { mode: "block", checks: ["folder", "crew", "scheddate"] } } },
+  { id: "kickoff", name: "Production kickoff",
+    blurb: "Hands the rep the order-and-confirm work the day the job lands here.",
+    patch: { tasks: [{ label: "Order materials", dueIn: 1 }, { label: "Confirm crew and delivery", dueIn: 1 }] } },
+  { id: "adjuster", name: "Run the adjuster play",
+    blurb: "Insurance jobs only: claim filed and photos on file, then meet the adjuster.",
+    patch: { gate: { mode: "warn", checks: ["filed", "photos"], when: "Insurance" },
+             tasks: [{ label: "Meet adjuster on site", dueIn: 3, when: "Insurance" }] } },
+  { id: "tellhomeowner", name: "Tell the homeowner",
+    blurb: "Queues a portal update to the customer when a job reaches this stage.",
+    patch: { notify: true } },
+  { id: "requirereason", name: "Require a reason",
+    blurb: "Won't close the job out until someone says why — that's your loss report.",
+    patch: { gate: { mode: "block", checks: ["reason"] } } },
+];
+/* Stages that other parts of the app reason about by id — won, dead, and the
+   entry point. Renaming them is fine; deleting one silently re-homes every
+   completed job to stage one and there is no undo. */
+const LOCKED_STAGES = ["s1", "s10", "s11", "s12"];
+/* A rule may only apply to one job type — this is the cheap 80% of
+   "separate pipelines" without forking the stage list itself. */
+const ruleApplies = (item, job) => !item || !item.when || (job && job.claimType) === item.when;
+function stageRuleFor(rules, stageId) {
+  const r = (rules || {})[stageId];
+  if (!r) return EMPTY_RULE;
+  return { ...EMPTY_RULE, ...r, gate: { ...EMPTY_RULE.gate, ...(r.gate || {}) } };
+}
+/* Same {results, failed, ready} shape handoffReadiness returns, so one
+   checklist UI renders both. mode is carried through so the caller knows
+   whether an unmet gate should warn or actually stop the move. */
+function stageGate(job, stageId, rules, ctx) {
+  const rule = stageRuleFor(rules, stageId);
+  const g = rule.gate;
+  const on = !!job && g.mode !== "off" && ruleApplies(g, job);
+  const ids = on ? (g.checks || []).filter((id) => STAGE_CHECKS[id]) : [];
+  const results = ids.map((id) => ({ id, ...STAGE_CHECKS[id], ok: !!STAGE_CHECKS[id].test(job, ctx) }));
+  const failed = results.filter((r) => !r.ok);
+  return { mode: on ? g.mode : "off", results, failed, ready: failed.length === 0 };
+}
+
+/* What a blocked move looks like. It never just says "no": it lists exactly
+   what is missing and where to go fix each one, and — following the same rule
+   the sold→approval gate has always used — an admin can push it through, on
+   the record. If the stage wants a reason, this is where it gets asked for,
+   which is the only place a rep would ever think to type one. */
+function StageGateSheet({ prompt, onClose, onConfirm, isAdmin, currentUser }) {
+  const [why, setWhy] = useState("");
+  useEffect(() => { setWhy(""); }, [prompt && prompt.jobId, prompt && prompt.stageId]);
+  if (!prompt) return null;
+  const { gate, stageName, jobName } = prompt;
+  const wantsReason = gate.failed.some((f) => f.id === "reason");
+  const remaining = wantsReason && why.trim() ? gate.failed.filter((f) => f.id !== "reason") : gate.failed;
+  const clear = remaining.length === 0;
+  return (
+    <Sheet open onClose={onClose} title={`Not ready for ${stageName}`}>
+      <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.5, marginBottom: 12 }}>
+        {jobName} can’t move to <strong style={{ color: S.ink }}>{stageName}</strong> until
+        {gate.failed.length === 1 ? " this is" : " these are"} done.
+      </div>
+      {gate.results.map((c) => (
+        <div key={c.id} style={{
+          display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 0",
+          borderTop: `1px solid ${S.line}`,
+        }}>
+          <span style={{ marginTop: 1, color: c.ok ? "var(--rl-green-fg)" : "var(--rl-red-fg)" }}>
+            {c.ok ? <Check size={16} /> : <AlertTriangle size={16} />}
+          </span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{c.label}</div>
+            {!c.ok && <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2, lineHeight: 1.45 }}>{c.fix}</div>}
+          </div>
+        </div>
+      ))}
+      {wantsReason && (
+        <div style={{ marginTop: 12 }}>
+          <Field label="Reason">
+            <input style={inputStyle} value={why} onChange={(e) => setWhy(e.target.value)}
+              placeholder="Went with another contractor, price, no damage found…" />
+          </Field>
+        </div>
+      )}
+      {isAdmin && !clear && (
+        <div style={{ fontSize: 11.5, color: "#9A6B00", marginTop: 12, lineHeight: 1.5 }}>
+          {remaining.length} {remaining.length === 1 ? "requirement has" : "requirements have"} not been met.
+          Moving it anyway is allowed — it is recorded against your name.
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+        <Btn kind="ghost" style={{ flex: 1 }} onClick={onClose}>Not yet</Btn>
+        {(clear || isAdmin) && (
+          <Btn style={{ flex: 1 }}
+            onClick={() => onConfirm({
+              patch: wantsReason && why.trim() ? { lostReason: why.trim() } : null,
+              override: !clear ? ((currentUser || {}).name || "an admin") : null,
+            })}>
+            {clear ? `Move to ${stageName}` : "Move anyway"}
+          </Btn>
+        )}
+      </div>
+    </Sheet>
+  );
 }
 
 /* The folder is a snapshot, not a live view. Production should be
@@ -11050,7 +13334,7 @@ function buildJobFolder(job, approver) {
   };
 }
 
-function TabHandoff({ job, mut, toast, isAdmin, currentUser, stages, onMoveStage }) {
+function TabHandoff({ job, mut, toast, isAdmin, currentUser, stages, onMoveStage, showMoney = true }) {
   const r = handoffReadiness(job);
   const folder = job.jobFolder || null;
   const requested = !!job.soldRequestedAt;
@@ -11068,7 +13352,10 @@ function TabHandoff({ job, mut, toast, isAdmin, currentUser, stages, onMoveStage
     /* Move into production once approved — the whole point of the gate
        is that the stage change and the folder happen together. */
     const prod = (stages || []).find((s) => /deposit paid|production/i.test(s.name));
-    if (prod && onMoveStage) onMoveStage(job.id, prod.id);
+    /* Forced on purpose: this approval *is* the review. Letting a stage gate
+       veto it would create the folder and leave the job behind — the failure
+       mode looks like the app quietly ignored the admin. */
+    if (prod && onMoveStage) onMoveStage(job.id, prod.id, { force: true });
     toast("Approved — job folder created and moved to production");
   };
 
@@ -11089,7 +13376,7 @@ function TabHandoff({ job, mut, toast, isAdmin, currentUser, stages, onMoveStage
           </div>
           <KV k="Customer" v={folder.customer} />
           <KV k="Address" v={folder.address} />
-          <KV k="Contract price" v={money(folder.contractPrice)} strong />
+          {showMoney && <KV k="Contract price" v={money(folder.contractPrice)} strong />}
           <KV k="Squares" v={folder.squares || "—"} />
           <KV k="Pitch" v={folder.pitch || "—"} />
           <KV k="Layers" v={folder.layers || "—"} />
@@ -11232,7 +13519,7 @@ function changeOrderTotals(job) {
   };
 }
 
-function TabChangeOrders({ job, mut, toast, currentUser, brand }) {
+function TabChangeOrders({ job, mut, toast, currentUser, brand, showMoney = true }) {
   const t = changeOrderTotals(job);
   const base = num(job.contract && job.contract.price) || num(job.fin && job.fin.contract);
   const [openId, setOpenId] = useState(null);
@@ -11318,22 +13605,24 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand }) {
 
   return (
     <>
-      <Card>
-        <CardTitle right={t.pendingCount > 0 ? <Chip tone="amber">{t.pendingCount} pending</Chip> : null}>
-          Contract value
-        </CardTitle>
-        <KV k="Original contract" v={money(base)} />
-        <KV k="Approved changes" v={`${t.approvedTotal >= 0 ? "+" : "-"}${money(Math.abs(t.approvedTotal))}`} />
-        <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 8, paddingTop: 8 }}>
-          <KV k="Current contract value" v={money(base + t.approvedTotal)} strong />
-        </div>
-        {t.pendingTotal !== 0 && (
-          <div style={{ fontSize: 12, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
-            {money(t.pendingTotal)} is out for signature and is not counted above.
-            Only approved changes move the contract.
+      {showMoney && (
+        <Card>
+          <CardTitle right={t.pendingCount > 0 ? <Chip tone="amber">{t.pendingCount} pending</Chip> : null}>
+            Contract value
+          </CardTitle>
+          <KV k="Original contract" v={money(base)} />
+          <KV k="Approved changes" v={`${t.approvedTotal >= 0 ? "+" : "-"}${money(Math.abs(t.approvedTotal))}`} />
+          <div style={{ borderTop: `1px solid ${S.line}`, marginTop: 8, paddingTop: 8 }}>
+            <KV k="Current contract value" v={money(base + t.approvedTotal)} strong />
           </div>
-        )}
-      </Card>
+          {t.pendingTotal !== 0 && (
+            <div style={{ fontSize: 12, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+              {money(t.pendingTotal)} is out for signature and is not counted above.
+              Only approved changes move the contract.
+            </div>
+          )}
+        </Card>
+      )}
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Change orders</CardTitle>
@@ -11364,9 +13653,11 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand }) {
                   </span>
                 </span>
                 <span style={{ textAlign: "right", flexShrink: 0 }}>
-                  <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: total < 0 ? "#177245" : S.ink }}>
-                    {money(total)}
-                  </span>
+                  {showMoney && (
+                    <span style={{ display: "block", fontSize: 15, fontWeight: 800, color: total < 0 ? "#177245" : S.ink }}>
+                      {money(total)}
+                    </span>
+                  )}
                   <Chip tone={tone}>{c.status}</Chip>
                 </span>
               </button>
@@ -11385,41 +13676,49 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand }) {
                     </select>
                   </Field>
 
-                  <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", margin: "4px 0 7px" }}>LINES</div>
-                  {(c.lines || []).map((l) => (
-                    <div key={l.id} style={{ background: S.bg, borderRadius: 10, padding: 10, marginBottom: 8 }}>
-                      <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
-                        <input style={{ ...inputStyle, flex: 1, padding: "8px 10px" }} value={l.desc}
-                          placeholder="Replace decking" onChange={(e) => editLine(c.id, l.id, "desc", e.target.value)} />
-                        <button onClick={() => delLine(c.id, l.id)} style={{ border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}>
-                          <Trash2 size={14} color="#B42318" />
-                        </button>
-                      </div>
-                      <div style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 7 }}>
-                        <input style={{ ...inputStyle, width: 62, textAlign: "right", padding: "8px 8px" }} inputMode="decimal"
-                          value={l.qty} onChange={(e) => editLine(c.id, l.id, "qty", e.target.value)} />
-                        <select style={{ ...selStyle, width: 78, padding: "8px 6px" }} value={l.unit || "ea"}
-                          onChange={(e) => editLine(c.id, l.id, "unit", e.target.value)}>
-                          {["ea", "sq", "LF", "SF", "hr", "day", "sheet", "bundle"].map((u) => <option key={u}>{u}</option>)}
-                        </select>
-                        <span style={{ fontSize: 13, color: S.sub }}>×</span>
-                        <span style={{ fontSize: 13, color: S.sub }}>$</span>
-                        <input style={{ ...inputStyle, flex: 1, textAlign: "right", padding: "8px 10px" }} inputMode="decimal"
-                          value={l.price} placeholder="0.00" onChange={(e) => editLine(c.id, l.id, "price", e.target.value)} />
-                      </div>
-                      <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: S.ink, marginTop: 6 }}>
-                        {money(lineTotal(l.qty, l.price))}
-                      </div>
-                    </div>
-                  ))}
-                  <Btn kind="soft" small style={{ width: "100%" }} onClick={() => addLine(c.id)}>
-                    <Plus size={13} /> Add line
-                  </Btn>
+                  {showMoney ? (
+                    <>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: ".04em", margin: "4px 0 7px" }}>LINES</div>
+                      {(c.lines || []).map((l) => (
+                        <div key={l.id} style={{ background: S.bg, borderRadius: 10, padding: 10, marginBottom: 8 }}>
+                          <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
+                            <input style={{ ...inputStyle, flex: 1, padding: "8px 10px" }} value={l.desc}
+                              placeholder="Replace decking" onChange={(e) => editLine(c.id, l.id, "desc", e.target.value)} />
+                            <button onClick={() => delLine(c.id, l.id)} style={{ border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}>
+                              <Trash2 size={14} color="#B42318" />
+                            </button>
+                          </div>
+                          <div style={{ display: "flex", gap: 7, alignItems: "center", marginTop: 7 }}>
+                            <input style={{ ...inputStyle, width: 62, textAlign: "right", padding: "8px 8px" }} inputMode="decimal"
+                              value={l.qty} onChange={(e) => editLine(c.id, l.id, "qty", e.target.value)} />
+                            <select style={{ ...selStyle, width: 78, padding: "8px 6px" }} value={l.unit || "ea"}
+                              onChange={(e) => editLine(c.id, l.id, "unit", e.target.value)}>
+                              {["ea", "sq", "LF", "SF", "hr", "day", "sheet", "bundle"].map((u) => <option key={u}>{u}</option>)}
+                            </select>
+                            <span style={{ fontSize: 13, color: S.sub }}>×</span>
+                            <span style={{ fontSize: 13, color: S.sub }}>$</span>
+                            <input style={{ ...inputStyle, flex: 1, textAlign: "right", padding: "8px 10px" }} inputMode="decimal"
+                              value={l.price} placeholder="0.00" onChange={(e) => editLine(c.id, l.id, "price", e.target.value)} />
+                          </div>
+                          <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: S.ink, marginTop: 6 }}>
+                            {money(lineTotal(l.qty, l.price))}
+                          </div>
+                        </div>
+                      ))}
+                      <Btn kind="soft" small style={{ width: "100%" }} onClick={() => addLine(c.id)}>
+                        <Plus size={13} /> Add line
+                      </Btn>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}` }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>Change order total</span>
-                    <span style={{ fontSize: 19, fontWeight: 800, color: total < 0 ? "#177245" : S.ink }}>{money(total)}</span>
-                  </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}` }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>Change order total</span>
+                        <span style={{ fontSize: 19, fontWeight: 800, color: total < 0 ? "#177245" : S.ink }}>{money(total)}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 4 }}>
+                      Pricing on this change order isn't shown for your role. Ask the office for the amount.
+                    </div>
+                  )}
 
                   <div style={{ display: "flex", gap: 5, marginTop: 11, flexWrap: "wrap" }}>
                     {CO_STATUS.map((st) => {
@@ -13132,7 +15431,7 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
    cleanly and nothing here breaks the flattened items every other reader
    depends on.
    ================================================================ */
-function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClose, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {} }) {
+function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClose, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {}, users = [] }) {
   const doc = normalizeProposalDoc(est.doc);
   const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
   /* Notes/terms template helpers, matching the estimate tab. */
@@ -13144,7 +15443,7 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
   const coverRef = useRef(null);
   const pdfRef = useRef(null);
 
-  const BUILTIN = { cover: "Cover page", items: "Line items & pricing", notes: "Special notes", terms: "Terms & conditions" };
+  const BUILTIN = Object.fromEntries(Object.entries(PROPOSAL_SECTION_LABELS).map(([k, v]) => [k, v[0]]));
   const has = (key) => doc.sections.includes(key);
   const labelFor = (sec) => BUILTIN[sec]
     || (blocks[sec] ? (blocks[sec].type === "pdf" ? `PDF · ${blocks[sec].name || "Attachment"}` : (blocks[sec].title || "Custom section")) : sec);
@@ -13206,7 +15505,7 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
           <div style={{ fontSize: 16, fontWeight: 800, color: S.ink }}>Proposal builder</div>
           <div style={{ fontSize: 12, color: S.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{job.name} · {est.number || "Draft"}</div>
         </div>
-        <Btn kind="ghost" small onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand), toast)}><Printer size={14} /> PDF</Btn>
+        <Btn kind="ghost" small onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand, users), toast, { bare: true })}><Printer size={14} /> PDF</Btn>
       </div>
       {/* Build / Preview toggle */}
       <div style={{ display: "flex", gap: 6, padding: "12px 16px 0" }}>
@@ -13279,6 +15578,57 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
                       )}
                     </div>
                   )}
+                  {sec === "items" && (() => {
+                    const tiers = (est.tiers || []).filter((t) => (t.items || []).length);
+                    const withTiers = tiers.length >= 2;
+                    const on = doc.showLinePrices === undefined ? !withTiers : !!doc.showLinePrices;
+                    return (
+                      <div style={{ marginTop: 8, paddingLeft: 24 }}>
+                        <label style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 13, cursor: locked ? "default" : "pointer" }}>
+                          <input type="checkbox" checked={on} disabled={locked}
+                            onChange={(e) => setDoc({ showLinePrices: e.target.checked })}
+                            style={{ width: 17, height: 17, accentColor: T.accent, marginTop: 1 }} />
+                          <span>Show unit and line prices on the itemised list</span>
+                        </label>
+                        <div style={{ fontSize: 11.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }}>
+                          {withTiers
+                            ? "Off by default when you're offering options — the option price is the price, and two sets of numbers invite line-by-line haggling. Turn it on for insurance jobs: the carrier's scope is itemised and the homeowner has to reconcile yours against it."
+                            : "On by default when there's a single price, since a proposal with no numbers on it is no use to anyone."}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {sec === "options" && (() => {
+                    const tiers = (est.tiers || []).filter((t) => (t.items || []).length);
+                    if (tiers.length < 2) {
+                      return <div style={{ marginTop: 8, paddingLeft: 24, fontSize: 12.5, color: S.sub }}>
+                        Add a second option tier on the Estimate tab and this becomes a Good/Better/Best page.
+                      </div>;
+                    }
+                    return (
+                      <div style={{ marginTop: 8, paddingLeft: 24 }}>
+                        <div style={{ fontSize: 11.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
+                          The side-by-side table fills itself in from the shingles named in each option.
+                          Override anything it gets wrong or can't find. Rows that come out the same on
+                          every option are left off — they'd argue against the upgrade.
+                        </div>
+                        {tiers.map((t) => {
+                          const auto = tierSpecFor(t, {});
+                          const ov = (doc.compare || {})[t.id] || {};
+                          return (
+                            <div key={t.id} style={{ marginBottom: 10 }}>
+                              <div style={{ fontSize: 12.5, fontWeight: 700, color: S.ink, marginBottom: 4 }}>{t.name || "Option"}</div>
+                              {TIER_COMPARE_ROWS.map(([k, label]) => (
+                                <input key={k} style={{ ...inputStyle, padding: "7px 10px", marginBottom: 5, fontSize: 12.5 }}
+                                  disabled={locked} value={ov[k] || ""} placeholder={auto[k] || label}
+                                  onChange={(e) => setDoc({ compare: { ...(doc.compare || {}), [t.id]: { ...ov, [k]: e.target.value } } })} />
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                   {sec === "notes" && (
                     <div style={{ marginTop: 8 }}>
                       <TemplateBar label="Notes" list={docTemplates.notes} setList={setDocTpl("notes")} value={doc.notes} locked={locked}
@@ -13310,10 +15660,10 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
               ))}
               {addOpen && (
                 <div style={{ marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {!has("cover") && <button style={chip(false)} onClick={() => addBuiltin("cover")}>+ Cover</button>}
-                  {!has("items") && <button style={chip(false)} onClick={() => addBuiltin("items")}>+ Line items</button>}
-                  {!has("notes") && <button style={chip(false)} onClick={() => addBuiltin("notes")}>+ Notes</button>}
-                  {!has("terms") && <button style={chip(false)} onClick={() => addBuiltin("terms")}>+ Terms</button>}
+                  {Object.keys(PROPOSAL_SECTION_LABELS).filter((k) => !has(k)).map((k) => (
+                    <button key={k} style={chip(false)} title={PROPOSAL_SECTION_LABELS[k][1]}
+                      onClick={() => addBuiltin(k)}>+ {PROPOSAL_SECTION_LABELS[k][0]}</button>
+                  ))}
                   <button style={chip(false)} onClick={addText}>+ Custom text</button>
                   <button style={chip(false)} onClick={() => pdfRef.current && pdfRef.current.click()}>+ Attach PDF</button>
                   <button style={{ ...chip(false), color: S.sub }} onClick={() => setAddOpen(false)}>Cancel</button>
@@ -13322,7 +15672,7 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
             </Card>
           </>
         ) : (
-          <ProposalPreview job={job} brand={brand} est={est} doc={doc} total={total} />
+          <ProposalPreview job={job} brand={brand} est={est} doc={doc} total={total} users={users} />
         )}
       </div>
     </div>
@@ -13380,84 +15730,23 @@ function CoverThumb({ style, accent, primary }) {
   );
 }
 
-function ProposalPreview({ job, brand, est, doc, total }) {
-  const blocks = doc.blocks || {};
-  const style = doc.style || "classic";
-  const title = doc.title || "Roofing Proposal";
-  const photoHero = style === "photo" && doc.coverImage;
-  const coverWrap = style === "bold"
-    ? { background: T.primary, color: "#fff", padding: 22, borderRadius: 14 }
-    : style === "minimal" ? { padding: "6px 2px" } : { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" };
-  const onDark = style === "bold";
+/* The preview IS the document. It used to be a second React re-creation of
+   the proposal layout, which meant the rep previewed one thing and the
+   customer received another the moment either drifted — and after the
+   rebuild they had drifted completely. Rendering the real HTML in a
+   sandboxed iframe makes divergence impossible: one renderer, one output. */
+function ProposalPreview({ job, brand, est, doc, total, users = [] }) {
+  const html = useMemo(
+    () => docShell(doc.title || "Roofing Proposal", brand, estimateDocHtml({ ...job, estimate: { ...est, doc } }, brand, users), { bare: true }),
+    [job, brand, est, doc, users],
+  );
   return (
-    <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }}>
-      {doc.sections.map((sec) => {
-        if (sec === "cover" && photoHero) return (
-          <div key={sec} style={{ marginBottom: 16, position: "relative", borderRadius: 14, overflow: "hidden", minHeight: 300, background: `#111 url(${JSON.stringify(doc.coverImage)}) center/cover no-repeat` }}>
-            <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: 18, background: "linear-gradient(transparent, rgba(0,0,0,.78))", color: "#fff" }}>
-              <div style={{ fontSize: 22, fontWeight: 800 }}>{title}</div>
-              <div style={{ marginTop: 10, fontSize: 13.5 }}>
-                <div style={{ fontWeight: 700 }}>Prepared for {job.name}</div>
-                <div style={{ opacity: 0.85 }}>{job.address}</div>
-                <div style={{ opacity: 0.85, marginTop: 4 }}>{est.number} · {est.date}</div>
-              </div>
-            </div>
-          </div>
-        );
-        if (sec === "cover") return (
-          <div key={sec} style={{ marginBottom: 16, ...coverWrap }}>
-            {doc.coverImage && <img src={doc.coverImage} alt="" style={{ width: "100%", height: 400, objectFit: "cover", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 }} />}
-            <div style={{ padding: style === "bold" ? 0 : (style === "minimal" ? "10px 0" : 16) }}>
-              {brand.logo && !onDark
-                ? <img src={brand.logo} alt="" style={{ height: 34, objectFit: "contain", marginBottom: 8, display: "block" }} />
-                : <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 4, color: onDark ? "#fff" : S.ink }}>{brand.company}</div>}
-              <div style={{ fontSize: 22, fontWeight: 800, color: onDark ? "#fff" : brand.primary }}>{title}</div>
-              <div style={{ marginTop: 12, fontSize: 13.5, color: onDark ? "rgba(255,255,255,.9)" : S.ink }}>
-                <div style={{ fontWeight: 700 }}>Prepared for {job.name}</div>
-                <div style={{ opacity: 0.85 }}>{job.address}</div>
-                <div style={{ opacity: 0.85, marginTop: 4 }}>{est.number} · {est.date}</div>
-              </div>
-            </div>
-          </div>
-        );
-        if (sec === "items") return (
-          <div key={sec} style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>SCOPE & PRICING</div>
-            {est.scope && <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.5, marginBottom: 8, whiteSpace: "pre-wrap" }}>{est.scope}</div>}
-            {(est.items || []).map((it) => <PortalEstLine key={it.id} it={it} />)}
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 800, marginTop: 8, paddingTop: 8, borderTop: `2px solid ${S.line}` }}>
-              <span>Total</span><span>{money(total)}</span>
-            </div>
-          </div>
-        );
-        if (sec === "notes" && doc.notes) return (
-          <div key={sec} style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>SPECIAL NOTES</div>
-            <div style={{ fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{doc.notes}</div>
-          </div>
-        );
-        if (sec === "terms" && doc.terms) return (
-          <div key={sec} style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>TERMS & CONDITIONS</div>
-            <div style={{ fontSize: 12.5, lineHeight: 1.6, color: S.sub, whiteSpace: "pre-wrap" }}>{doc.terms}</div>
-          </div>
-        );
-        const b = blocks[sec];
-        if (b && b.type === "text" && (b.title || b.body)) return (
-          <div key={sec} style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>{(b.title || "").toUpperCase()}</div>
-            <div style={{ fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{b.body}</div>
-          </div>
-        );
-        if (b && b.type === "pdf") return (
-          <div key={sec} style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 10, border: `1px solid ${S.line}`, borderRadius: 10, padding: "12px 14px" }}>
-            <FileText size={20} color={T.accent} />
-            <div style={{ fontSize: 13.5, fontWeight: 700 }}>{b.name || "Attachment"}</div>
-            <span style={{ marginLeft: "auto", fontSize: 12, color: S.sub }}>PDF page</span>
-          </div>
-        );
-        return null;
-      })}
+    <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" }}>
+      <div style={{ fontSize: 11.5, color: S.sub, padding: "9px 12px", borderBottom: `1px solid ${S.line}` }}>
+        Exactly what the customer receives — same renderer as the PDF.
+      </div>
+      <iframe title="Proposal preview" srcDoc={html} sandbox=""
+        style={{ width: "100%", height: "70vh", border: 0, display: "block", background: "#fff" }} />
     </div>
   );
 }
@@ -13513,7 +15802,7 @@ function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
   );
 }
 
-function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {}, priceList = [], docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {} }) {
+function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {}, priceList = [], docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {}, users = [] }) {
   /* job.estimate for any REAL job created before tiers/upgrades
      existed has neither field at all (undefined, not []) — this
      JSONB blob is exactly what was last saved, and mkEstimate()'s
@@ -13903,7 +16192,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
       </Card>
 
       <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-        <Btn kind="ghost" onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand), toast)}><Printer size={15} /> PDF</Btn>
+        <Btn kind="ghost" onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand, users), toast, { bare: true })}><Printer size={15} /> PDF</Btn>
         {!locked && (
           <>
             <Btn kind="ghost" onClick={() => {
@@ -14005,14 +16294,167 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
       {builderOpen && (
         <ProposalBuilder job={job} brand={brand} est={est} setEst={setEst} locked={locked}
           toast={toast} total={total} onClose={() => setBuilderOpen(false)}
-          docTemplates={docTemplates} setDocTemplates={setDocTemplates} />
+          docTemplates={docTemplates} setDocTemplates={setDocTemplates} users={users} />
       )}
     </>
   );
 }
 
 /* ---------- Contract ---------- */
-function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {} }) {
+/* ==================================================================
+   CONSTRUCTION AGREEMENT — the in-app form
+
+   Every input below is generated from AGREEMENT_SPEC / AGREEMENT_HEADER,
+   the same definitions agreementDocHtml prints from. There is no second
+   list of fields to keep in step: add a row to the spec and it shows up
+   here and on the printed page together.
+================================================================== */
+function AgreementBox({ on, onClick, label, disabled }) {
+  return (
+    <button type="button" disabled={disabled} onClick={onClick}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6, border: "none", background: "none",
+        padding: "3px 0", cursor: disabled ? "default" : "pointer", color: S.ink, fontSize: 13.5, fontFamily: "inherit",
+      }}>
+      <span style={{
+        width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+        border: `1.5px solid ${on ? T.accent : S.line}`, background: on ? T.accent : S.card,
+        color: "#fff", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800,
+      }}>{on ? "✓" : ""}</span>
+      {label}
+    </button>
+  );
+}
+
+function AgreementForm({ job, brand, mut, toast, locked }) {
+  const a = agreementFor(job, brand);
+  /* The first edit freezes today's prefill onto the job. After that the
+     agreement is its own record — re-reading the job file later must not
+     quietly rewrite a document the homeowner has already been shown. */
+  const set = (k, v) => mut((j) => ({
+    ...j, agreement: { ...agreementPrefill(j, brand), ...(j.agreement || {}), [k]: v },
+  }));
+  const repull = () => {
+    mut((j) => ({ ...j, agreement: { ...(j.agreement || {}), ...agreementPrefill(j, brand) } }));
+    toast("Re-read the job file into the agreement");
+  };
+  const txt = (k, extra = {}) => (
+    <input style={{ ...inputStyle, ...extra }} value={a[k] || ""} disabled={locked}
+      onChange={(e) => set(k, e.target.value)} />
+  );
+  const partInput = (p, i) => {
+    if (p.t === "t") return <span key={i} style={{ fontSize: 13.5, color: S.ink }}>{p.v}</span>;
+    if (p.t === "c") return <AgreementBox key={i} on={!!a[p.k]} disabled={locked} onClick={() => set(p.k, !a[p.k])} />;
+    return (
+      /* Roughly the width of the printed blank, but capped so a long label
+         and its blank still fit inside a phone-width card. */
+      <input key={i} style={{ ...inputStyle, width: Math.min(180, Math.max(70, Math.round(p.w * 0.9))), maxWidth: "100%", padding: "7px 9px", fontSize: 13.5 }}
+        value={a[p.k] || ""} disabled={locked} onChange={(e) => set(p.k, e.target.value)} />
+    );
+  };
+  const price = num(String(a.finalPrice).replace(/[^0-9.]/g, ""));
+  const dep = num(String(a.deposit).replace(/[^0-9.]/g, ""));
+
+  return (
+    <>
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={!locked && <Btn kind="ghost" small onClick={repull}>Re-read job file</Btn>}>
+          Construction agreement
+        </CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55 }}>
+          Fill this in here and it prints exactly like the paper form — the customer and claim boxes
+          come from the job file, the specification numbers match the reference diagram, and the
+          reverse side carries your terms and conditions.
+        </div>
+      </Card>
+
+      {AGREEMENT_HEADER.map((box) => (
+        <Card key={box.box} style={{ marginTop: 12 }}>
+          <CardTitle>{box.box.charAt(0) + box.box.slice(1).toLowerCase()}</CardTitle>
+          {/* City / state / zip share a line on the printed form. On a phone
+              three boxes in a row truncate the city, so they wrap instead of
+              shrinking. */}
+          {box.rows.map((row, ri) => (
+            <div key={ri} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+              {row.map((f) => (
+                <Field key={f.k} label={f.label.charAt(0) + f.label.slice(1).toLowerCase()}>{txt(f.k)}</Field>
+              ))}
+            </div>
+          ))}
+        </Card>
+      ))}
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Roofing specification</CardTitle>
+        {AGREEMENT_SPEC.filter((s) => s.kind !== "figure").map((sec) => (
+          <div key={sec.title} style={{ paddingTop: 12, marginTop: 12, borderTop: `1px solid ${S.line}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              {sec.n && (
+                <span style={{
+                  width: 20, height: 20, borderRadius: 99, background: T.primary, color: "#fff",
+                  fontSize: 11, fontWeight: 800, display: "grid", placeItems: "center", flexShrink: 0,
+                }}>{sec.n}</span>
+              )}
+              <span style={{ fontSize: 14, fontWeight: 800, color: S.ink }}>{sec.title}</span>
+            </div>
+            {sec.note && <div style={{ fontSize: 12.5, color: T.accent, marginBottom: 6 }}>{sec.note}</div>}
+            {sec.rows.map((row, ri) => (
+              <div key={ri} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 9, margin: "6px 0" }}>
+                {row.map(partInput)}
+              </div>
+            ))}
+          </div>
+        ))}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Notes</CardTitle>
+        <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} value={a.notes || ""} disabled={locked}
+          onChange={(e) => set("notes", e.target.value)} />
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Acknowledgements &amp; schedule</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 8 }}>{AGREEMENT_ACK_INSURANCE}</div>
+        <Field label="Owner initials"><input style={{ ...inputStyle, width: 120 }} value={a.ownerInit1 || ""} disabled={locked}
+          onChange={(e) => set("ownerInit1", e.target.value)} /></Field>
+        <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 8 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 700 }}>HOA approval required</span>
+          <AgreementBox on={!!a.hoaYes} disabled={locked} label="Yes" onClick={() => set("hoaYes", !a.hoaYes)} />
+          <AgreementBox on={!!a.hoaNo} disabled={locked} label="No" onClick={() => set("hoaNo", !a.hoaNo)} />
+        </div>
+        <Field label="Owner initials (HOA)"><input style={{ ...inputStyle, width: 120 }} value={a.ownerInit2 || ""} disabled={locked}
+          onChange={(e) => set("ownerInit2", e.target.value)} /></Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <Field label="Anticipated start (weeks)">{txt("startWeeks")}</Field>
+          <Field label="Anticipated completion (weeks)">{txt("endWeeks")}</Field>
+        </div>
+        <Field label="Defective decking rate ($ per sheet)" hint="Printed into the Defective Decking and Plywood Policy paragraph.">
+          {txt("deckRate")}
+        </Field>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Agreement price</CardTitle>
+        {AGREEMENT_PRICE_ROWS.map((r) => <Field key={r.k} label={r.label}>{txt(r.k)}</Field>)}
+        <Field label="Balance due on completion"
+          hint={price ? `Leave blank to print ${money0(price - dep)} — the contract price less the deposit.` : "Leave blank to print the contract price less the deposit."}>
+          <input style={inputStyle} value={a.balance || ""} disabled={locked} placeholder={price ? money0(price - dep) : ""}
+            onChange={(e) => set("balance", e.target.value)} />
+        </Field>
+        <Field label="Right-to-cancel initials"><input style={{ ...inputStyle, width: 120 }} value={a.cancelInit || ""} disabled={locked}
+          onChange={(e) => set("cancelInit", e.target.value)} /></Field>
+      </Card>
+
+      <Btn kind="ghost" style={{ marginTop: 14, width: "100%" }}
+        onClick={() => openDoc(`Construction Agreement — ${job.name}`, brand, agreementDocHtml(job, brand), toast, { bare: true })}>
+        <Printer size={15} /> Print the agreement
+      </Btn>
+    </>
+  );
+}
+
+function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {}, currentUser = null, integrations = {} }) {
   const con = job.contract;
   const [sigFor, setSigFor] = useState(null); // "client" | "contractor"
   const [fillerOpen, setFillerOpen] = useState(false);
@@ -14032,6 +16474,9 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
   const estTotal = estimateTotal(job.estimate);
   const depositMode = con.depositMode || "pct";
   const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
+  /* Which paper this job goes out on. The signature, status, attachment and
+     portal plumbing is shared — only the body of the document differs. */
+  const form = con.form === "agreement" ? "agreement" : "simple";
   const SigLine = ({ label, value, onSign }) => (
     <div style={{ flex: 1, minWidth: 220 }}>
       <div style={{
@@ -14059,19 +16504,38 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
           This agreement is between <b>{brand.company}</b>, {brand.address}, {brand.phone}, and
           <b> {job.name}</b>, {job.address}.
         </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+          {[["simple", "Service contract"], ["agreement", "Construction agreement"]].map(([id, label]) => (
+            <button key={id} disabled={locked} onClick={() => setCon({ form: id })}
+              style={{
+                border: `1.5px solid ${form === id ? T.accent : S.line}`,
+                background: form === id ? T.accentSoft : S.card,
+                color: form === id ? T.accent : S.ink,
+                borderRadius: 999, padding: "7px 14px", fontSize: 13, fontWeight: 600,
+                cursor: locked ? "default" : "pointer",
+              }}>{label}</button>
+          ))}
+        </div>
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+          {form === "agreement"
+            ? "Prints the numbered specification form with your terms and conditions on the reverse."
+            : "Prints a plain scope-and-price contract."}
+        </div>
       </Card>
-      <Card style={{ marginTop: 12 }}>
-        <CardTitle>Scope of work</CardTitle>
-        <textarea style={{ ...inputStyle, minHeight: 100 }} disabled={locked} value={con.scope}
-          placeholder="References the accepted estimate…"
-          onChange={(e) => setCon({ scope: e.target.value })} />
-        {estTotal > 0 && !con.scope && !locked && (
-          <button style={{ ...linkBtn, marginTop: 8 }} onClick={() =>
-            setCon({ scope: `Per Estimate ${job.estimate.number || ""} dated ${job.estimate.date || ""}: ${job.estimate.scope}` })}>
-            Pull scope from estimate
-          </button>
-        )}
-      </Card>
+      {form === "simple" && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle>Scope of work</CardTitle>
+          <textarea style={{ ...inputStyle, minHeight: 100 }} disabled={locked} value={con.scope}
+            placeholder="References the accepted estimate…"
+            onChange={(e) => setCon({ scope: e.target.value })} />
+          {estTotal > 0 && !con.scope && !locked && (
+            <button style={{ ...linkBtn, marginTop: 8 }} onClick={() =>
+              setCon({ scope: `Per Estimate ${job.estimate.number || ""} dated ${job.estimate.date || ""}: ${job.estimate.scope}` })}>
+              Pull scope from estimate
+            </button>
+          )}
+        </Card>
+      )}
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Price & payment schedule</CardTitle>
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
@@ -14124,6 +16588,8 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
         <KV k={depositMode === "fixed" ? "Due at signing (fixed)" : `Due at signing (${con.depositPct}%)`} v={money(deposit)} />
         <KV k="Due on substantial completion" v={money((con.price || 0) - deposit)} strong />
       </Card>
+      {form === "agreement" && <AgreementForm job={job} brand={brand} mut={mut} toast={toast} locked={locked} />}
+      {form === "simple" && (
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Terms</CardTitle>
         <TemplateBar label="Terms" list={docTemplates.terms} setList={setDocTpl("terms")} value={con.terms} locked={locked}
@@ -14141,6 +16607,7 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
           </div>
         )}
       </Card>
+      )}
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="gray">{(con.attachments || []).length} on file</Chip>}>Attachments — T&amp;C, addenda, filled forms</CardTitle>
         <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
@@ -14192,8 +16659,13 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
         {locked && <div style={{ fontSize: 13, color: "#177245", marginTop: 12, fontWeight: 600 }}>Executed {con.signedAt}. Changes require a written change order.</div>}
       </Card>
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-        <Btn kind="ghost" onClick={() => openDoc(`Contract — ${job.name}`, brand, contractDocHtml(job, brand), toast)}><Printer size={15} /> PDF</Btn>
-        <Btn kind="ghost" onClick={() => toast("Contract emailed to client")}><Send size={15} /> Email to client</Btn>
+        <Btn kind="ghost" onClick={() => (form === "agreement"
+          ? openDoc(`Construction Agreement — ${job.name}`, brand, agreementDocHtml(job, brand), toast, { bare: true })
+          : openDoc(`Contract — ${job.name}`, brand, contractDocHtml(job, brand), toast))}><Printer size={15} /> PDF</Btn>
+        <Btn kind="ghost" onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
+          subject: `Your contract is ready — ${brand.company}`,
+          body: `Hi ${job.name}, your contract for ${job.address} is ready to review and sign. Reply to this email with any questions.`,
+        })}><Send size={15} /> Email to client</Btn>
       </div>
       <SignaturePad open={!!sigFor} onClose={() => setSigFor(null)}
         title={sigFor === "client" ? "Client signature" : "Company signature"}
@@ -14206,7 +16678,7 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
 }
 
 /* ---------- Inspection report (fed from checklist) ---------- */
-function TabReport({ job, brand, juris }) {
+function TabReport({ job, brand, juris, mut, toast, currentUser = null, integrations = {} }) {
   const c = job.checklist;
   if (!c.complete) {
     return (
@@ -14250,7 +16722,7 @@ function TabReport({ job, brand, juris }) {
           <div style={{ fontSize: 20, fontWeight: 800, margin: "6px 0 2px" }}>{job.name}</div>
           <div style={{ fontSize: 13, opacity: 0.85 }}>{job.address}</div>
           <div style={{ fontSize: 12, opacity: 0.7, marginTop: 10 }}>{brand.company} · {brand.phone}</div>
-          <button onClick={() => openDoc(`Inspection report — ${job.name}`, brand, reportDocHtml(job, brand))}
+          <button onClick={() => openDoc(`Inspection report — ${job.name}`, brand, reportDocHtml(job, brand), toast)}
             style={{
               marginTop: 12, border: "1.5px solid rgba(255,255,255,.4)", background: "rgba(255,255,255,.12)",
               color: "#fff", borderRadius: 10, padding: "9px 14px", fontSize: 13.5, fontWeight: 700,
@@ -14319,9 +16791,17 @@ function TabReport({ job, brand, juris }) {
         </div>
       </Section>
       <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-        <Btn kind="ghost" onClick={() => openDoc(`Work order — ${job.name}`, brand, workOrderDocHtml(job, brand, crew), toast)}><Printer size={15} /> Print / PDF</Btn>
-        <Btn kind="ghost"><Send size={15} /> Email to client</Btn>
-        <Btn kind="ghost"><Share2 size={15} /> Share link</Btn>
+        <Btn kind="ghost" onClick={() => openDoc(`Inspection report — ${job.name}`, brand, reportDocHtml(job, brand), toast)}><Printer size={15} /> Print / PDF</Btn>
+        <Btn kind="ghost" onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
+          subject: `Your inspection report — ${brand.company}`,
+          body: `Hi ${job.name}, your roof inspection report for ${job.address} is ready. Reply to this email with any questions.`,
+        })}><Send size={15} /> Email to client</Btn>
+        <Btn kind="ghost" onClick={() => {
+          if (!job.portalToken) { toast("Publish the customer portal first — see Client portal"); return; }
+          const url = `${window.location.origin}/?portal=${job.portalToken}`;
+          try { navigator.clipboard.writeText(url); toast("Portal link copied"); }
+          catch (e) { toast("Couldn't copy — the link is under Client portal"); }
+        }}><Share2 size={15} /> Share link</Btn>
       </div>
     </>
   );
@@ -14333,6 +16813,40 @@ const SHOT_LIST = [
   "Granule loss close-up", "Hail impact w/ chalk circle", "Wind-creased tabs",
   "Flashing at walls / chimney", "Pipe boots", "Gutters — granules", "Attic — decking underside",
 ];
+/* Shared "email this document to the client" action for Contract/Invoice/
+   Report — mirrors TabMessages' honest send-or-queue pattern below instead of
+   a bare toast claiming success. Requires email consent on file, sends
+   through the rep's connected Gmail when available, and always records a
+   real job.messages entry with the true outcome (Sent / Queued / Failed) so
+   the thread never lies about what happened. */
+async function sendClientEmail(job, mut, currentUser, integrations, toast, { subject, body }) {
+  if (!job.consent?.email?.granted) { toast("No email consent on file — cannot send"); return; }
+  const addr = job.email;
+  if (!addr) { toast("No contact email on file"); return; }
+  const msgId = uid("msg");
+  const record = (status) => mut((j) => ({
+    ...j,
+    messages: [...(j.messages || []), { id: msgId, kind: "email", audience: "Customer", to: addr, subject, body, at: nowStamp(), by: currentUser.name, status }],
+  }));
+  const myGmail = ((integrations && integrations.gmailByUser) || {})[currentUser.id] || { connected: false };
+  const auth = AUTH();
+  if (myGmail.connected && auth && auth.sendGmail) {
+    try {
+      await auth.sendGmail({ to: addr, subject, body });
+      record("Sent");
+      toast(`Email sent${myGmail.email ? ` from ${myGmail.email}` : ""}`);
+    } catch (e) {
+      const m = (e && e.message) || "Could not send";
+      const notSetUp = /not configured|Function not found|Failed to send a request|non-2xx|isn't connected/i.test(m);
+      record(notSetUp ? "Queued — email not set up yet" : `Failed — ${m}`);
+      toast(notSetUp ? "Email sending isn't deployed yet — saved to the thread" : `Gmail: ${m}`);
+    }
+    return;
+  }
+  record("Queued — no provider connected");
+  toast("Saved to thread — connect your Gmail to deliver");
+}
+
 /* ================================================================
    MESSAGES — send email or SMS to the customer or crew from the job,
    with the thread kept on the job record.
@@ -14827,7 +17341,7 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
    each sub-tab is still the exact same component as before (nothing
    about TabFinancials/TabPayments/TabInvoice changed), just reached
    through one door instead of three. */
-function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand }) {
+function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, integrations = {} }) {
   const [sub, setSub] = useState("costs");
   const SUBS = [["costs", "Costs & profit"], ["payments", "Payments"], ["invoice", "Invoice"]];
   return (
@@ -14844,7 +17358,7 @@ function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand })
       </div>
       {sub === "costs" && <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />}
       {sub === "payments" && <TabPayments job={job} mut={mut} toast={toast} />}
-      {sub === "invoice" && <TabInvoice job={job} brand={brand} mut={mut} toast={toast} />}
+      {sub === "invoice" && <TabInvoice job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser} integrations={integrations} />}
     </>
   );
 }
@@ -14873,19 +17387,24 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
     const secRow = (title) => `<tr class="band"><td colspan="4">${esc(title)}</td></tr>`;
     const line = (l) => `<tr><td>${esc(l.label)}</td><td class="r">${money2(l.amt)}</td>`
       + `<td class="muted">${esc(l.by ? (l.by + " " + (l.reimburse ? "reimbursement" : "")).trim() : "")}</td>`
-      + `<td class="r">${l.reimburse ? (l.status === "Needs paid" ? '<b style="color:#B3261E">NEEDS PAID</b>' : "Yes") : ""}</td></tr>`;
-    const totRow = (title, amt) => `<tr class="tot"><td><b>${esc(title)}</b></td><td class="r"><b>${money2(amt)}</b></td><td></td><td></td></tr>`;
-    const kv = (k, v, cls) => `<tr class="${cls || ""}"><td>${esc(k)}</td><td class="r">${esc(v)}</td><td colspan="2" class="muted"></td></tr>`;
+      + `<td>${l.reimburse ? (l.status === "Needs paid" ? '<b style="color:#B3261E">NEEDS PAID</b>' : "Yes") : ""}</td></tr>`;
+    const totRow = (title, amt, desc) => `<tr class="captot"><td><b>${esc(title)}</b></td><td class="r"><b>${money2(amt)}</b></td><td class="muted">${esc(desc || "")}</td><td></td></tr>`;
+    /* Third argument is the "how this number was arrived at" note the company
+       spreadsheet carries in its Description column. A cap-out sheet gets
+       argued over; every figure should say where it came from. */
+    const kv = (k, v, desc) => `<tr><td>${esc(k)}</td><td class="r">${esc(v)}</td><td class="muted">${esc(desc || "")}</td><td></td></tr>`;
     const rep = job.assignee || "";
     let html = `
       <div class="capband" style="background:#1F3A5F;color:#fff;padding:14px 16px;border-radius:6px 6px 0 0">
         <div style="font-size:20px;font-weight:800">CAP OUT SHEET</div>
         <div style="opacity:.85;font-size:12.5px;margin-top:3px">${esc(job.name)} | ${esc(job.address)}${job.invoiceNo ? " | Invoice #" + esc(job.invoiceNo) : ""} | Rep: ${esc(rep)}</div>
       </div>
-      <table class="cap"><tbody>
-        <tr class="head"><td><b>Line Item</b></td><td class="r"><b>Amount</b></td><td><b>Description</b></td><td class="r"><b>Reimbursement</b></td></tr>
+      <table class="cap">
+      <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
+      <tbody>
+        <tr class="caphead"><td><b>Line Item</b></td><td class="r"><b>Amount</b></td><td><b>Description</b></td><td><b>Reimbursement</b></td></tr>
         ${secRow("REVENUE")}
-        ${kv("Gross Revenue", money2(cap.contract))}
+        ${kv("Gross Revenue", money2(cap.contract), "Contract total")}
         ${totRow("Net Revenue", cap.contract)}
         ${secRow("MATERIAL COSTS")}
         ${fin.materials.map(line).join("")}
@@ -14898,19 +17417,19 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
         ${totRow("Total Other Costs", cap.other)}
         <tr class="band dark"><td><b>TOTAL COGS</b></td><td class="r"><b>${money2(cap.cogs)}</b></td><td class="muted">Material + Labor + Other</td><td></td></tr>
         ${secRow("PROFIT")}
-        ${kv("Gross Profit", money2(cap.gross))}
-        ${kv("Gross Profit Margin", cap.grossMargin.toFixed(2) + "%")}
+        ${kv("Gross Profit", money2(cap.gross), "Net revenue less all COGS")}
+        ${kv("Gross Profit Margin", cap.grossMargin.toFixed(2) + "%", "Gross profit ÷ net revenue")}
         ${secRow("COMMISSION — " + st.label)}
-        ${kv("Commission Rate", (fin.commissionRate ?? 60) + "%")}
-        <tr class="tot"><td><b>Commission</b></td><td class="r"><b>${money2(cap.commission)}</b></td><td class="muted">${esc(cap.baseLabel)} × rate</td><td></td></tr>
-        ${kv("Net Profit (to company)", money2(cap.netCompany))}
+        ${kv("Commission Rate", (fin.commissionRate ?? 60) + "%", "% of " + cap.baseLabel.toLowerCase())}
+        <tr class="captot"><td><b>Commission</b></td><td class="r"><b>${money2(cap.commission)}</b></td><td class="muted">${esc(cap.baseLabel)} × rate</td><td></td></tr>
+        ${kv("Net Profit (to company)", money2(cap.netCompany), "Gross profit less commission")}
         ${secRow("PROFIT SPLIT")}
-        ${kv("Your Share of Gross Profit", cap.repPctGross.toFixed(2) + "%")}
-        ${kv("Company Share of Gross Profit", cap.coPctGross.toFixed(2) + "%")}
-        ${kv("Your Commission (% of Job)", cap.repPctJob.toFixed(2) + "%")}
-        ${kv("Company Profit (% of Job)", cap.coPctJob.toFixed(2) + "%")}
+        ${kv("Your Share of Gross Profit", cap.repPctGross.toFixed(2) + "%", "Your commission ÷ gross profit")}
+        ${kv("Company Share of Gross Profit", cap.coPctGross.toFixed(2) + "%", "Company net profit ÷ gross profit")}
+        ${kv("Your Commission (% of Job)", cap.repPctJob.toFixed(2) + "%", "Your commission ÷ job total")}
+        ${kv("Company Profit (% of Job)", cap.coPctJob.toFixed(2) + "%", "Company net profit ÷ job total")}
         ${secRow("REIMBURSEMENTS (out of pocket)")}
-        ${totRow("Total Reimbursements", cap.reimbTotal)}
+        ${totRow("Total Reimbursements", cap.reimbTotal, "All lines marked reimbursable, net of returns")}
         ${cap.needsPaidTotal > 0 ? `<tr><td style="color:#B3261E"><b>Still owed (Needs paid)</b></td><td class="r" style="color:#B3261E"><b>${money2(cap.needsPaidTotal)}</b></td><td class="muted">Vendors/reps not yet paid</td><td></td></tr>` : ""}
         ${cap.repShares.length > 1 ? `
         ${secRow("COMMISSION SPLIT")}
@@ -14926,15 +17445,26 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
         <div><div class="sigline"></div><div class="siglbl">Approved by / date</div></div>
       </div>
       <style>
-        table.cap{width:100%;border-collapse:collapse;font-size:12.5px}
-        table.cap td{border:1px solid #E2E6EB;padding:6px 9px;vertical-align:top}
-        table.cap tr.head td{background:#F2F4F7;font-size:11.5px}
+        /* A fixed grid, in the proportions of the company's own cap-out
+           spreadsheet: line item, amount, a wide description, reimbursement.
+           Without table-layout:fixed the description column sizes to its
+           longest unbroken line and pushes the whole sheet off the page. */
+        table.cap{width:100%;table-layout:fixed;border-collapse:collapse;font-size:12.5px}
+        table.cap col.c1{width:26%} table.cap col.c2{width:15%}
+        table.cap col.c3{width:37%} table.cap col.c4{width:22%}
+        table.cap td{border:1px solid #E2E6EB;padding:6px 9px;vertical-align:top;
+                     overflow-wrap:break-word;word-break:break-word}
+        table.cap tr.caphead td{background:#F2F4F7;font-size:11.5px}
         table.cap tr.band td{background:#2F5C9E;color:#fff;font-weight:800;font-size:11.5px}
         table.cap tr.band.dark td{background:#1F3A5F}
         table.cap tr.band.payout td{background:#4F7A34}
-        table.cap tr.tot td{background:#F7F9FB}
+        table.cap tr.captot td{background:#F7F9FB}
+        /* Numbers never wrap; prose always may. Both columns used to be .r,
+           which meant a long reimbursement note couldn't break and forced the
+           table wider than the page. */
         table.cap td.r{text-align:right;white-space:nowrap}
         table.cap td.muted{color:#667085}
+        table.cap tr{page-break-inside:avoid}
       </style>`;
     openDoc(`Cap out — ${job.name}`, brand, html, toast);
   };
@@ -15240,7 +17770,7 @@ function TabPayments({ job, mut, toast }) {
 }
 
 /* ---------- Invoice ---------- */
-function TabInvoice({ job, brand, mut, toast }) {
+function TabInvoice({ job, brand, mut, toast, currentUser = null, integrations = {} }) {
   const pay = paymentsSummary(job);
   return (
     <>
@@ -15290,7 +17820,10 @@ function TabInvoice({ job, brand, mut, toast }) {
       </Card>
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
         <Btn kind="ghost" style={{ flex: 1 }} onClick={() => openDoc(`Invoice — ${job.name}`, brand, invoiceDocHtml(job, brand), toast)}><Printer size={15} /> PDF</Btn>
-        <Btn style={{ flex: 1 }} onClick={() => toast("Invoice emailed to client")}><Send size={15} /> Send invoice</Btn>
+        <Btn style={{ flex: 1 }} onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
+          subject: `Invoice — ${job.name}, ${money(pay.balance)} due`,
+          body: `Hi ${job.name}, here is your invoice for ${job.address}. Balance due: ${money(pay.balance)}. Reply to this email with any questions.`,
+        })}><Send size={15} /> Send invoice</Btn>
       </div>
     </>
   );
@@ -15977,12 +18510,13 @@ function PortalContactApprovals({ token, job, mut, toast }) {
   );
 }
 
-function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "" }) {
+function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "", users = [] }) {
   const [busy, setBusy] = useState(false);
   const portalUrl = (tok) => `${window.location.origin}/?portal=${tok}`;
   const portalSettings = { ...DEFAULT_PORTAL_SETTINGS, ...(job.portal || {}) };
   const progress = portalProgressFor({ ...job, stageLabel });
-  const snapshot = (tok) => buildPortalSnapshot({ ...job, stageLabel }, brand, tok);
+  const snapshot = (tok) => buildPortalSnapshot({ ...job, stageLabel }, brand, tok, users);
+  const contact = repContactFor(users, job);
   const publishPortal = async () => {
     const db = DB();
     const tok = job.portalToken || (uid("p") + Math.random().toString(36).slice(2, 10));
@@ -16116,32 +18650,60 @@ function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "" }) {
         </div>
         {portalSettings.showRep && (
           <div style={{ marginTop: 16 }}>
-            <CardTitle>Project contact shown to the customer</CardTitle>
+            <CardTitle right={contact.overridden ? <Chip tone="amber">Custom</Chip> : <Chip tone="gray">From their card</Chip>}>
+              Project contact shown to the customer
+            </CardTitle>
+            {/* Prefilled, not blank. The fields show what the customer will
+                actually see, resolved from the assigned rep's own contact
+                card — including the number they carry in this job's state.
+                Typing over a field overrides it for this job only; the reset
+                puts it back on the seat, so a rep who changes their number
+                fixes every job at once instead of one at a time. */}
             <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
-              Blank fields fall back to the assigned rep, {job.assignee || "unassigned"}.
-              Fill these in to put a different person in front of this customer
-              without reassigning the job.
+              {contact.seat
+                ? <>Filled in from {contact.seat.name}’s contact card{contact.base.lineState ? ` — their ${contact.base.lineState} line` : ""}. Edit any field to put a different person, or a different number, in front of this customer without reassigning the job.</>
+                : <>No seat matches “{job.assignee || "unassigned"}”, so nothing prefilled. Assign the job to a team member, or type the contact details here.</>}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <Field label="Name">
-                <input style={inputStyle} value={job.repOverride?.name || ""}
-                  onChange={(e) => mut((j) => ({ ...j, repOverride: { ...(j.repOverride || {}), name: e.target.value } }))}
-                  placeholder={job.assignee || ""} />
-              </Field>
-              <Field label="Title">
-                <input style={inputStyle} value={job.repOverride?.title || ""}
-                  onChange={(e) => mut((j) => ({ ...j, repOverride: { ...(j.repOverride || {}), title: e.target.value } }))}
-                  placeholder="Project manager" />
-              </Field>
-            </div>
-            <Field label="Phone">
-              <input style={inputStyle} type="tel" value={job.repOverride?.phone || ""}
-                onChange={(e) => mut((j) => ({ ...j, repOverride: { ...(j.repOverride || {}), phone: e.target.value } }))} />
-            </Field>
-            <Field label="Email">
-              <input style={inputStyle} type="email" value={job.repOverride?.email || ""}
-                onChange={(e) => mut((j) => ({ ...j, repOverride: { ...(j.repOverride || {}), email: e.target.value } }))} />
-            </Field>
+            {(() => {
+              const RepField = ({ k, label, type, span }) => {
+                const overridden = String((job.repOverride || {})[k] || "").trim() !== "";
+                return (
+                  <div style={span ? undefined : { minWidth: 0 }}>
+                    <Field label={label}>
+                      <input style={inputStyle} type={type || "text"} value={contact[k] || ""}
+                        onChange={(e) => mut((j) => ({ ...j, repOverride: { ...(j.repOverride || {}), [k]: e.target.value } }))} />
+                    </Field>
+                    {overridden && contact.base[k] && contact.base[k] !== contact[k] && (
+                      <button onClick={() => mut((j) => {
+                        const next = { ...(j.repOverride || {}) };
+                        delete next[k];
+                        return { ...j, repOverride: next };
+                      })} style={{ ...linkBtn, fontSize: 11.5, padding: "0 0 10px" }}>
+                        Reset to {contact.base[k]}
+                      </button>
+                    )}
+                  </div>
+                );
+              };
+              return (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <RepField k="name" label="Name" />
+                    <RepField k="title" label="Title" />
+                  </div>
+                  <RepField k="phone" label="Phone" type="tel" span />
+                  <RepField k="email" label="Email" type="email" span />
+                </>
+              );
+            })()}
+            {contact.seat && (contact.seat.lines || []).length > 0 && (
+              <div style={{ fontSize: 11.5, color: S.sub, lineHeight: 1.5 }}>
+                {contact.seat.name} has {contact.seat.lines.length} state
+                {contact.seat.lines.length === 1 ? " line" : " lines"} on file
+                ({contact.seat.lines.map((l) => l.state).filter(Boolean).join(", ")}).
+                This job is in {job.state || "no state"}.
+              </div>
+            )}
           </div>
         )}
 
@@ -16480,48 +19042,180 @@ function buildClaimCorpus() {
   (typeof CARRIER_PATTERNS !== "undefined" ? CARRIER_PATTERNS : []).forEach((c) => items.push({ title: c.title, body: `${c.pattern || ""} ${(c.answer || []).join(" ")}`, source: "Carrier patterns", tag: "Carrier" }));
   (SUPPLEMENT_TEMPLATES || []).forEach((t) => items.push({ title: t.title, body: `${t.scenario || ""} ${t.wording || ""}`, source: "Supplement template", tag: "Supplement" }));
   (typeof POLICY_CARDS !== "undefined" ? POLICY_CARDS : []).forEach((c) => items.push({ title: c.title, body: `${c.body || ""} ${(c.callout && c.callout.text) || ""}`, source: "Policy provisions", tag: "Policy" }));
+  /* Everything below was already bundled and already maintained — it just
+     wasn't reachable from the assistant, so a rep asking "what nail count
+     does GAF require?" got nothing while the answer sat two screens away. */
+  (typeof INSTALL_SPECS !== "undefined" ? INSTALL_SPECS : []).forEach((s) => items.push({ title: `${s.mfr} — ${s.topic}`, body: s.spec, cite: s.cite, source: "Manufacturer install spec", tag: "Manufacturer" }));
+  (typeof NRCA_PRACTICE !== "undefined" ? NRCA_PRACTICE : []).forEach((n) => items.push({ title: `NRCA — ${n.topic}`, body: n.body, cite: n.cite, source: "NRCA best practice", tag: "NRCA" }));
+  (typeof IRC_DEEP !== "undefined" ? IRC_DEEP : []).forEach((c) => items.push({ title: `${c.topic}`, body: c.body, cite: c.cite, source: "Building code (IRC)", tag: "Code" }));
+  (typeof IRC_BASE !== "undefined" ? IRC_BASE : {}) && Object.entries(IRC_BASE || {}).forEach(([k, v]) => items.push({ title: k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()), body: v.note, cite: v.cite, source: "Building code (IRC)", tag: "Code" }));
+  (typeof PROVISION_TOPICS !== "undefined" ? PROVISION_TOPICS : []).forEach((p) => items.push({ title: p.topic, body: p.note, cite: p.oh, source: "Code provisions", tag: "Code" }));
+  /* Per-state code provisions: one record per state × topic, so "ice barrier
+     in Texas" resolves to the Texas cite rather than the Ohio one. */
+  Object.entries(typeof CODE_PROVISIONS !== "undefined" ? CODE_PROVISIONS : {}).forEach(([st, topics]) => {
+    Object.entries(topics || {}).forEach(([k, v]) => {
+      if (!v || !v.note) return;
+      items.push({ title: `${st} — ${k.replace(/([A-Z])/g, " $1").toLowerCase().trim()}`, body: v.note, cite: v.cite, source: `Building code (${st})`, tag: "Code" });
+    });
+  });
+  (typeof MFR_SPECS !== "undefined" ? MFR_SPECS : []).forEach((m) => items.push({
+    title: `${m.mfr} ${m.flagship} — specification`,
+    body: `Shingle ${m.w} by ${m.l}, ${m.exp} exposure. Wind: ${m.wind}. Algae: ${m.algae}. Warranty: ${m.warranty}. Impact-rated lines: ${m.class4}. Matching: ${m.dnm}`,
+    source: "Manufacturer spec", tag: "Manufacturer" }));
+  (typeof SHINGLE_DB !== "undefined" ? SHINGLE_DB : []).forEach((s) => items.push({
+    title: `${s.mfr} ${s.line}`,
+    body: `${s.type}, ${s.status === "disco" ? "discontinued" : "current"}${s.years ? ` (${s.years})` : ""}. ${s.w} by ${s.l} with ${s.exp} exposure. ${s.note || ""}`,
+    source: "Shingle database", tag: "Manufacturer" }));
+  (typeof SUPPLEMENT_TRIGGERS !== "undefined" ? SUPPLEMENT_TRIGGERS : []).forEach(([label, cite]) => items.push({ title: label, body: `Commonly omitted from a carrier's scope and supportable on code grounds.`, cite, source: "Supplement trigger", tag: "Supplement" }));
+  (typeof LETTER_TEMPLATES !== "undefined" ? LETTER_TEMPLATES : []).forEach((t) => items.push({ title: `Letter — ${t.title}`, body: `${t.when || ""} ${t.body || ""}`, source: "Letter template", tag: "Letter" }));
+  (typeof LAW_ITEMS !== "undefined" ? LAW_ITEMS : []).forEach((l) => items.push({ title: l.title, body: l.body, source: "Regulation", tag: "Policy" }));
+  (typeof KEY_CONTACTS !== "undefined" ? KEY_CONTACTS : []).forEach(([name, phone, web]) => items.push({ title: name, body: `Technical services / consumer line. ${[phone, web].filter(Boolean).join("  ·  ")}`, source: "Contacts", tag: "Term" }));
+  (typeof SIDING_MATCHING !== "undefined" ? [SIDING_MATCHING] : []).forEach((s) => items.push({ title: "Vinyl siding — the matching reality", body: `${(s.points || []).join(" ")} ${s.argument || ""}`, source: "Claim playbook", tag: "Playbook" }));
+  (typeof VENT_EXHAUST !== "undefined" ? VENT_EXHAUST : []).forEach((v) => items.push({ title: `Exhaust vent — ${v.name || v[0]}`, body: JSON.stringify(v).replace(/["{}]/g, " "), source: "Ventilation", tag: "Term" }));
+  (typeof VENT_INTAKE !== "undefined" ? VENT_INTAKE : []).forEach((v) => items.push({ title: `Intake vent — ${v.name || v[0]}`, body: JSON.stringify(v).replace(/["{}]/g, " "), source: "Ventilation", tag: "Term" }));
+  /* The app's own help articles, so "how do I send an estimate" is answerable
+     by the same box that answers "do I get drip edge". */
+  (typeof HELP_ARTICLES !== "undefined" ? HELP_ARTICLES : []).forEach((a) => items.push({ title: a.title, body: `${a.summary || ""} ${(a.body || []).join(" ")}`, source: "RoofStride help", tag: "Help" }));
   return items;
 }
-const CLAIM_CORPUS = buildClaimCorpus();
-function answerClaim(q) {
-  const terms = String(q || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !CLAIM_STOPWORDS.has(w));
-  if (!terms.length) return [];
-  return CLAIM_CORPUS.map((it) => {
-    const title = it.title.toLowerCase(), body = it.body.toLowerCase();
-    let score = 0;
-    terms.forEach((t) => { if (title.includes(t)) score += 3; if (body.includes(t)) score += 1; });
+/* Built on first use, not at module load. The corpus now reaches constants
+   declared further down the file (the help articles in particular), and a
+   const in its temporal dead zone throws on access — typeof does not protect
+   against that. Building lazily also keeps ~500 records off the cold-start
+   path for a screen most sessions never open. */
+let _claimCorpus = null;
+function claimCorpus() {
+  if (!_claimCorpus) _claimCorpus = buildClaimCorpus();
+  return _claimCorpus;
+}
+/* Local retrieval. This is the fallback when no AI key is deployed, and it
+   is also what selects the grounding records when one is — so it keeps a
+   permanent job either way. limit is higher for the model than for the
+   on-screen cards, which only have room for a handful. */
+function answerClaim(q, limit = 4) {
+  const raw = String(q || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/)
+    .filter((w) => w.length > 2 && !CLAIM_STOPWORDS.has(w));
+  if (!raw.length) return [];
+  /* Crude stemming so "nails" finds "nail" and "valleys" finds "valley".
+     Full stemming isn't worth it here — the vocabulary is small and the
+     failure it fixes is almost always a trailing plural. */
+  const stem = (w) => w.replace(/ies$/, "y").replace(/(sses|ches|shes|xes)$/, (m) => m.slice(0, -2)).replace(/s$/, "");
+  const terms = [...new Set(raw.map(stem))].filter(Boolean);
+  return claimCorpus().map((it) => {
+    const title = String(it.title || "").toLowerCase(), body = String(it.body || "").toLowerCase();
+    let score = 0, covered = 0;
+    terms.forEach((t) => {
+      const inTitle = title.includes(t), inBody = body.includes(t);
+      if (inTitle) score += 3;
+      if (inBody) score += 1;
+      if (inTitle || inBody) covered++;
+    });
+    /* Coverage dominates. Without this, a record that repeats one common
+       word ("shingle") outranks the one that actually answers the whole
+       question — which is how "how many nails per shingle" used to return
+       the minimum-slope rule. */
+    score += covered * covered * 2;
     return { it, score };
-  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 4).map((x) => x.it);
+  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map((x) => x.it);
 }
 
-function ClaimAssistant() {
+/* A compact, money-free summary of the open job, so "what's missing on this
+   roof?" can be answered specifically. Deliberately narrow: this is the only
+   tenant data that ever leaves the browser for the assistant, so it carries
+   the roof, not the customer's file. No name, no address, no phone, no
+   dollars — none of which the assistant needs to answer a roofing question. */
+function assistantJobContext(job) {
+  if (!job) return null;
+  const m = job.measurements || {};
+  return {
+    type: job.claimType || "Retail",
+    state: job.state || "",
+    stage: job.stageId || "",
+    squares: m.squares || "",
+    pitch: m.pitch || "",
+    layers: (job.intake || {}).layers || "",
+    roofAge: (job.checklist || {}).roofAge || "",
+    carrier: job.claimType === "Insurance" ? (job.insurance || {}).carrier || "" : "",
+    claimStage: (job.claim || {}).stage || "",
+    materials: (job.materials || []).slice(0, 12).map((x) => x.name || x.label).filter(Boolean),
+    scheduled: !!job.schedDate,
+  };
+}
+
+function ClaimAssistant({ job = null }) {
+  const auth = AUTH();
+  const jobSuggestions = job ? [
+    "What's missing on this roof before it goes to production?",
+    job.claimType === "Insurance"
+      ? "What should I be supplementing for on this claim?"
+      : "What does code require on a replacement here?",
+  ] : [];
   const SUGGESTIONS = [
+    ...jobSuggestions,
     "Adjuster only paid ACV — how does the homeowner recover depreciation?",
     "Carrier says the damage is cosmetic only",
-    "Do I get drip edge on a full replacement?",
+    "How many nails per shingle does the manufacturer require?",
+    "Can I put ridge vent and box vents on the same attic?",
     "What is a matching claim and when does it apply?",
-    "They applied a roof payment schedule (RPS)",
   ];
   const [msgs, setMsgs] = useState([]);
   const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [useJob, setUseJob] = useState(!!job);
   const scrollRef = useRef(null);
-  const ask = (text) => {
+  const corpusSize = claimCorpus().length;
+
+  const ask = async (text) => {
     const question = (text || "").trim();
-    if (!question) return;
-    const hits = answerClaim(question);
-    setMsgs((m) => [...m, { role: "user", text: question }, { role: "bot", hits, text: hits.length ? "" : "I couldn't find that in the knowledge base. Try a component (drip edge, valley), a term (ACV, betterment, matching), or a carrier position." }]);
+    if (!question || busy) return;
+    /* The local scorer runs first, always. It is the answer when no key is
+       deployed, and it is what selects the grounding records when one is —
+       so the assistant is never worse than it was, only sometimes better. */
+    const hits = answerClaim(question, 4);
+    const grounding = answerClaim(question, 12);
     setQ("");
+    setMsgs((m) => [...m, { role: "user", text: question }, {
+      role: "bot", hits, pending: true,
+      text: hits.length ? "" : "I couldn't find that in the knowledge base. Try a component (drip edge, valley, step flashing), a term (ACV, betterment, matching), a manufacturer, or a carrier position.",
+    }]);
+    if (!grounding.length || !auth || !auth.askAssistant) {
+      setMsgs((m) => m.map((x) => (x.pending ? { ...x, pending: false } : x)));
+      return;
+    }
+    setBusy(true);
+    let answer = null;
+    try {
+      answer = await auth.askAssistant({
+        question,
+        records: grounding.map((h) => ({ title: h.title, body: h.body, cite: h.cite || "", source: h.source })),
+        job: useJob ? assistantJobContext(job) : null,
+      });
+    } catch { answer = null; }
+    setBusy(false);
+    /* A null answer means no key, no network, or a provider hiccup. The
+       cited cards are already on screen, so nothing has to be said about it —
+       the assistant just looks like the retrieval assistant it has always
+       been rather than announcing a failure the rep can't act on. */
+    setMsgs((m) => m.map((x) => (x.pending ? { ...x, pending: false, answer: answer || null } : x)));
   };
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs]);
-  const tone = { Code: "blue", Term: "gray", Playbook: "green", Carrier: "amber", Supplement: "blue", Policy: "slate" };
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs, busy]);
+  const tone = { Code: "blue", Term: "gray", Playbook: "green", Carrier: "amber", Supplement: "blue", Policy: "slate", Manufacturer: "blue", NRCA: "green", Letter: "slate", Help: "gray" };
   return (
     <div style={{ marginTop: 14 }}>
       <Card>
-        <CardTitle right={<Chip tone="green">{CLAIM_CORPUS.length} sources</Chip>}>Claim assistant</CardTitle>
+        <CardTitle right={<Chip tone="green">{corpusSize} sources</Chip>}>Roofing assistant</CardTitle>
         <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
-          Ask a claim, code, or adjuster question in plain words. Answers come straight from Supreme's own code library,
-          glossary, playbook and carrier patterns — with the source shown so you can verify before you quote it.
+          Ask a claim, code, manufacturer, or adjuster question in plain words. Answers are grounded in this app's own
+          library — building code, manufacturer install specs and warranty terms, NRCA best practice, policy provisions,
+          carrier patterns and the claim playbook — with every source shown so you can verify before you quote it.
         </div>
+        {job && (
+          <label style={{ display: "flex", gap: 9, alignItems: "center", fontSize: 13, cursor: "pointer", marginTop: 10 }}>
+            <input type="checkbox" checked={useJob} onChange={(e) => setUseJob(e.target.checked)}
+              style={{ width: 17, height: 17, accentColor: T.accent }} />
+            <span>Answer for this roof — {job.claimType} job{(job.measurements || {}).squares ? `, ${job.measurements.squares} squares` : ""}</span>
+          </label>
+        )}
       </Card>
 
       {msgs.length === 0 && (
@@ -16542,6 +19236,17 @@ function ClaimAssistant() {
           ) : (
             <div key={i} style={{ margin: "8px 0" }}>
               {m.text && <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 8 }}>{m.text}</div>}
+              {m.pending && (
+                <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>Reading the sources…</div>
+              )}
+              {m.answer && (
+                <Card style={{ marginBottom: 8, borderLeft: `3px solid ${T.accent}` }}>
+                  <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{m.answer}</div>
+                </Card>
+              )}
+              {m.answer && (m.hits || []).length > 0 && (
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: S.sub, letterSpacing: ".04em", margin: "2px 0 6px" }}>SOURCES</div>
+              )}
               {(m.hits || []).map((h, j) => (
                 <Card key={j} style={{ marginBottom: 8 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 5 }}>
@@ -16555,15 +19260,16 @@ function ClaimAssistant() {
             </div>
           ))}
           <div style={{ fontSize: 11, color: S.sub, textAlign: "center", padding: "6px 0", lineHeight: 1.5 }}>
-            Guidance from your knowledge base — not legal advice. Confirm the cite and the policy before filing.
+            Guidance from your knowledge base — not legal advice. Code varies by jurisdiction and policies vary by
+            carrier. Confirm the cite and the policy before you file or quote it.
           </div>
         </div>
       )}
 
       <div style={{ display: "flex", gap: 8, marginTop: 12, position: "sticky", bottom: 0, background: S.bg, paddingTop: 6 }}>
-        <input style={{ ...inputStyle, flex: 1 }} value={q} placeholder="Ask about a claim, code, or adjuster position…"
+        <input style={{ ...inputStyle, flex: 1 }} value={q} placeholder="Ask about code, a manufacturer, a claim, or an adjuster position…"
           onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") ask(q); }} />
-        <Btn onClick={() => ask(q)} disabled={!q.trim()}><Send size={15} /></Btn>
+        <Btn onClick={() => ask(q)} disabled={!q.trim() || busy}><Send size={15} /></Btn>
       </div>
     </div>
   );
@@ -16623,14 +19329,14 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
     return out;
   })();
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Insurance" onBack={onBack} />
       <div style={{ display: "flex", gap: 6, marginTop: 14, overflowX: "auto" }}>
         {tabs.map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{
             border: "none", borderRadius: 999, padding: "9px 16px", fontSize: 14, fontWeight: 700,
             cursor: "pointer", whiteSpace: "nowrap",
-            background: tab === id ? T.primary : "#fff", color: tab === id ? "#fff" : S.ink,
+            background: tab === id ? T.primary : S.card, color: tab === id ? "#fff" : S.ink,
           }}>{label}</button>
         ))}
       </div>
@@ -16647,7 +19353,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
             {[["all", "Everything"], ...KB_SYSTEMS].map(([id, label]) => (
               <button key={id} onClick={() => setKbSys(id)} style={{
                 border: `1.5px solid ${kbSys === id ? T.accent : S.line}`,
-                background: kbSys === id ? T.accentSoft : "#fff", color: kbSys === id ? T.accent : S.ink,
+                background: kbSys === id ? T.accentSoft : S.card, color: kbSys === id ? T.accent : S.ink,
                 borderRadius: 999, padding: "6px 12px", fontSize: 12.5, fontWeight: 700,
                 cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit",
               }}>{label}</button>
@@ -17441,7 +20147,7 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
   const posted = jobs.filter((j) => j.review.posted);
   const set = (k) => (v) => setSettings({ ...settings, [k]: v });
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Review automation" onBack={onBack} />
       <Card style={{ marginTop: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -17744,7 +20450,7 @@ function ActivityFeed({ activity, currentUser, onOpenJob, onBack }) {
   const list = mine.filter((a) => kind === "All" || a.kind === kind);
   const initials = (n) => n.split(" ").map((x) => x[0]).join("").slice(0, 2).toUpperCase();
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Activity feed" onBack={onBack} />
       <div style={{ fontSize: 13, color: S.sub, margin: "10px 0 12px" }}>
         {isMgr ? "Everything anyone has done, newest first." : "Your activity, newest first. Admins and managers see the whole team's."}
@@ -18224,7 +20930,7 @@ function VendorManager({ vendors, setVendors, currentUser, onBack, toast }) {
     setEditing(null); toast("Vendor saved");
   };
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Vendors & suppliers" onBack={onBack}
         right={canEdit && <Btn small onClick={() => open(null)}><Plus size={14} /> Add vendor</Btn>} />
       {vendors.map((v) => (
@@ -18278,7 +20984,7 @@ function LeadSourceManager({ sources, setSources, jobs, onBack, toast }) {
     setSources([...sources, v]); setDraft(""); toast("Source added");
   };
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Lead sources" onBack={onBack} />
       <Card style={{ marginTop: 14 }}>
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 12, lineHeight: 1.5 }}>
@@ -18317,6 +21023,93 @@ function LeadSourceManager({ sources, setSources, jobs, onBack, toast }) {
         </Card>
       ))}
     </div>
+  );
+}
+
+/* The two parts of the construction agreement that belong to the company
+   rather than to any one job: the numbered roof diagram and the reverse-side
+   terms. Both ship with a working default and both are replaceable, because
+   the artwork and the legal text belong to whoever's name is on the page. */
+function AgreementBranding({ brand, setBrand, toast }) {
+  const diagRef = useRef(null);
+  const [openTerms, setOpenTerms] = useState(false);
+  const terms = agreementTermsFor(brand);
+  const custom = Array.isArray(brand.agreementTerms) && brand.agreementTerms.length;
+  const setClause = (i, v) => setBrand({ ...brand, agreementTerms: terms.map((c, x) => (x === i ? v : c)) });
+  const onDiagram = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast("That file isn't an image"); return; }
+    const url = await imageToDataUrl(file, 900, 0.78);
+    if (!url) { toast("Couldn't read that image"); return; }
+    setBrand({ ...brand, agreementDiagram: url });
+    toast(`Reference diagram updated (${Math.round(url.length / 1024)} KB)`);
+  };
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle>Construction agreement</CardTitle>
+      <div style={{ fontSize: 13, color: S.sub, marginBottom: 12, lineHeight: 1.5 }}>
+        The reference diagram and terms &amp; conditions printed on every construction agreement.
+        Anywhere <code>{"{company}"}</code> appears in the text it is replaced with your company name.
+      </div>
+      <input ref={diagRef} type="file" accept="image/*" onChange={onDiagram} style={{ display: "none" }} />
+      <Field label="Reference diagram" hint="The numbered roof illustration beside the specification. Numbers should match items 1–11 on the form.">
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <img src={agreementDiagram(brand)} alt="Agreement reference diagram"
+            style={{ width: 130, borderRadius: 8, border: `1px solid ${S.line}`, background: "#fff" }} />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Btn kind="ghost" small onClick={() => diagRef.current && diagRef.current.click()}>
+              <Upload size={13} /> {brand.agreementDiagram ? "Replace" : "Upload"}
+            </Btn>
+            {brand.agreementDiagram && (
+              <Btn kind="danger" small onClick={() => setBrand({ ...brand, agreementDiagram: null })}>Reset</Btn>
+            )}
+          </div>
+        </div>
+      </Field>
+      <Field label="Opening paragraph" hint="Sets out who the parties are and which state's law applies.">
+        <textarea style={{ ...inputStyle, minHeight: 90, resize: "vertical", fontSize: 13, lineHeight: 1.6 }}
+          value={brand.agreementIntro === undefined ? AGREEMENT_TERMS_INTRO : brand.agreementIntro}
+          onChange={(e) => setBrand({ ...brand, agreementIntro: e.target.value })} />
+      </Field>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 8, borderTop: `1px solid ${S.line}` }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Numbered clauses</div>
+          <div style={{ fontSize: 12.5, color: S.sub }}>
+            {terms.length} clauses · {custom ? "edited by you" : "the text supplied with the app"}
+          </div>
+        </div>
+        <Btn kind="ghost" small onClick={() => setOpenTerms(!openTerms)}>{openTerms ? "Hide" : "Edit"}</Btn>
+      </div>
+      {openTerms && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{
+            background: "#FFF8E6", border: "1px solid #F0DCA8", borderRadius: 10, padding: "10px 12px",
+            fontSize: 12.5, color: "#6B4E0E", lineHeight: 1.5, marginBottom: 12,
+          }}>
+            This is contract language. Have your attorney review anything you change here — it prints on
+            every agreement your reps sign.
+          </div>
+          {terms.map((c, i) => (
+            <Field key={i} label={`Clause ${i + 1}`}>
+              <textarea style={{ ...inputStyle, minHeight: 78, resize: "vertical", fontSize: 12.5, lineHeight: 1.6 }}
+                value={c} onChange={(e) => setClause(i, e.target.value)} />
+            </Field>
+          ))}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Btn kind="ghost" small onClick={() => setBrand({ ...brand, agreementTerms: [...terms, ""] })}>
+              <Plus size={13} /> Add a clause
+            </Btn>
+            {custom && (
+              <Btn kind="danger" small onClick={() => { setBrand({ ...brand, agreementTerms: null, agreementIntro: undefined }); toast("Terms reset to the supplied text"); }}>
+                Reset to supplied text
+              </Btn>
+            )}
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -18368,7 +21161,7 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
   const rmLoc = (i) => setBrand({ ...brand, locations: locations.filter((_, x) => x !== i) });
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <input ref={logoRef} type="file" accept="image/*" onChange={onLogo} style={{ display: "none" }} />
       <SubHeader title="Company branding" onBack={onBack} />
       {brandErr && (
@@ -18441,6 +21234,8 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
           );
         })}
       </Card>
+
+      <AgreementBranding brand={brand} setBrand={setBrand} toast={toast} />
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Btn kind="soft" small onClick={addLoc}><Plus size={13} /> Add location</Btn>}>Locations</CardTitle>
@@ -18524,7 +21319,7 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   };
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <input ref={fileRef} type="file" onChange={onFile} style={{ display: "none" }} />
       <SubHeader title="Documents" onBack={onBack}
         right={canEdit && <Btn small onClick={() => fileRef.current && fileRef.current.click()}><Upload size={14} /> Upload</Btn>} />
@@ -18705,7 +21500,7 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
   };
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onFile} style={{ display: "none" }} />
       <SubHeader title="Price list" onBack={onBack}
         right={canEdit && <Btn small onClick={() => fileRef.current && fileRef.current.click()}><Upload size={14} /> Import CSV</Btn>} />
@@ -18882,7 +21677,7 @@ function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, 
   };
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <input ref={fileRef} type="file" accept=".txt,.md,.html,text/plain" onChange={onFile} style={{ display: "none" }} />
       <SubHeader title="Message templates" onBack={onBack}
         right={canEdit && <Btn small onClick={() => open(null)}><Plus size={14} /> New</Btn>} />
@@ -19077,7 +21872,7 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
     setEditing(null); toast("Crew saved");
   };
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Crews" onBack={onBack}
         right={canEdit && <Btn small onClick={() => open(null)}><Plus size={14} /> Add crew</Btn>} />
       {canEdit && (
@@ -19579,7 +22374,7 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
     setIntegrations({ ...integrations, gmailByUser: { ...byUser, [currentUser.id]: val } });
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Integrations" onBack={onBack} />
 
       <Card style={{ marginTop: 14 }}>
@@ -19994,7 +22789,7 @@ function JobImport({ jobs, setJobs, stages, users, onBack, toast, currentUser })
       id: uid("j"), name: r.name, address: r.address, zip: r.zip, state: r.state,
       lat: null, lng: null,
       value: r.value, stageId: r.stageId, assignee: r.assignee, leadSource: r.leadSource,
-      daysInStage: 0, updated: "imported", claimType: "Unknown", schedDate: null,
+      daysInStage: 0, stageAt: todayIso(), updated: "imported", claimType: "Unknown", schedDate: null,
       phone: r.phone, email: r.email,
       consent: { sms: { granted: false, at: null, source: null }, email: { granted: false, at: null, source: null } },
       insurance: null, checklist: { ...BLANK_CHECKLIST }, measurements: { ...BLANK_MEASURE },
@@ -20010,7 +22805,7 @@ function JobImport({ jobs, setJobs, stages, users, onBack, toast, currentUser })
   };
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onFile} style={{ display: "none" }} />
       <SubHeader title="Import jobs" onBack={onBack} />
       <Card style={{ marginTop: 14 }}>
@@ -20194,7 +22989,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
 
   if (!isAdmin) {
     return (
-      <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
         <SubHeader title="Team" onBack={onBack} />
         <Card style={{ marginTop: 14 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
@@ -20223,7 +23018,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
   }
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Team & seats" onBack={onBack}
         right={<Btn small onClick={() => open(null)}><Plus size={14} /> Add seat</Btn>} />
       <Card style={{ marginTop: 14 }}>
@@ -20355,6 +23150,37 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
             <input style={inputStyle} type="email" value={f.workEmail || ""} onChange={(e) => setF((p2) => ({ ...p2, workEmail: e.target.value }))} />
           </Field>
         </div>
+        {/* A rep working several states usually carries a different number in
+            each. A job in that state picks up the matching line automatically
+            on its customer-facing contact, so nobody has to remember which
+            number goes on which file. */}
+        {f.role !== "crew" && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: S.ink, marginBottom: 6 }}>Numbers by state</div>
+            <div style={{ fontSize: 12, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
+              Optional. A job in one of these states shows that line to the customer instead
+              of the direct phone above.
+            </div>
+            {(f.lines || []).map((l, i) => (
+              <div key={l.id || i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                <select style={{ ...selStyle, width: 92, padding: "9px 8px" }} value={l.state || ""}
+                  onChange={(e) => setF((p2) => ({ ...p2, lines: (p2.lines || []).map((x, k) => k === i ? { ...x, state: e.target.value } : x) }))}>
+                  <option value="">State</option>
+                  {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} inputMode="tel" placeholder="Phone" value={l.phone || ""}
+                  onChange={(e) => setF((p2) => ({ ...p2, lines: (p2.lines || []).map((x, k) => k === i ? { ...x, phone: formatPhone(e.target.value) } : x) }))} />
+                <button onClick={() => setF((p2) => ({ ...p2, lines: (p2.lines || []).filter((x, k) => k !== i) }))}
+                  style={{ border: "none", background: "none", cursor: "pointer", padding: 4 }}>
+                  <Trash2 size={15} color="#B42318" />
+                </button>
+              </div>
+            ))}
+            <Btn kind="soft" small onClick={() => setF((p2) => ({ ...p2, lines: [...(p2.lines || []), { id: uid("ln"), state: "", phone: "", email: "" }] }))}>
+              <Plus size={13} /> Add a state line
+            </Btn>
+          </div>
+        )}
         {f.role !== "crew" && (
           <Field label="Default commission rate (%)" hint="Starting rate on new jobs. Can be changed per job by an admin.">
             <input style={inputStyle} inputMode="decimal" value={f.commissionRate}
@@ -20385,18 +23211,18 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
 ------------------------------------------------------------------- */
 const SETUP_ITEMS = [
   {
-    id: "anthropic", label: "AI assistant (Anthropic)", secret: true,
-    unlocks: "Knowledge assistant, email and text drafting, document search.",
-    where: "Vercel → Settings → Environment Variables",
+    id: "anthropic", label: "Roofing assistant (Anthropic)", secret: true,
+    unlocks: "Written answers on top of the cited sources. The assistant already works without this — it returns the matching library entries. Adding a key lets it explain them in plain English and answer for the specific roof you have open.",
+    where: "Supabase → Edge Functions → Secrets",
     keyName: "ANTHROPIC_API_KEY",
     steps: [
       "Go to console.anthropic.com and sign in.",
       "API keys → Create key. Copy it once — it is never shown again.",
-      "Vercel → project 'ridgeline' → Settings → Environment Variables.",
-      "Add ANTHROPIC_API_KEY, paste the value, scope Production, Save.",
-      "Deployments → latest → Redeploy so the new variable is picked up.",
+      "Supabase → your project → Edge Functions → Secrets.",
+      "Add ANTHROPIC_API_KEY with that value and save.",
+      "Deploy the function: supabase functions deploy ai-assistant",
     ],
-    note: "Never add this with a VITE_ prefix. VITE_ variables are compiled into the browser bundle and would be public.",
+    note: "Never add this with a VITE_ prefix, and never put it in Vercel. VITE_ variables are compiled into the browser bundle and would be public. The key belongs only in the Edge Function, which is why the assistant calls a server function instead of the API directly.",
   },
   {
     id: "twilio", label: "Texting (Twilio)", secret: true,
@@ -20535,7 +23361,7 @@ function ClaimsDashboard({ jobs, onBack, onOpenJob, embedded = false }) {
   const unwaived = rows.filter((r) => r.m.deductible - r.m.deductibleCollected > 0).length;
 
   return (
-    <div style={{ padding: embedded ? 0 : "20px 16px 110px", background: embedded ? "transparent" : S.bg, minHeight: embedded ? undefined : "100vh" }}>
+    <div style={{ padding: embedded ? 0 : "20px 16px 28px", background: embedded ? "transparent" : S.bg, minHeight: embedded ? undefined : "100%" }}>
       {!embedded && <SubHeader title="Claims" onBack={onBack} />}
 
       <Card style={{ marginTop: 14, borderLeft: `4px solid ${owed > 0 ? "#E8B931" : S.line}` }}>
@@ -20640,7 +23466,7 @@ function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
   const [crewId, setCrewId] = useState("all");
   if (!isAdmin) {
     return (
-      <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
         <SubHeader title="Crew payouts" onBack={onBack} />
         <Card style={{ marginTop: 16 }}>
           <div style={{ fontSize: 14, color: S.sub }}>This screen is restricted to admins.</div>
@@ -20679,7 +23505,7 @@ function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
   const payTotal = payQueue.reduce((a, r) => a + r.amt, 0);
 
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Crew payouts" onBack={onBack} />
       <Card style={{ marginTop: 14 }}>
         <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }}>OWED TO CREWS</div>
@@ -20758,7 +23584,7 @@ function AdminControls({ features, setFeatures, activity, users, currentUser, on
   const [q, setQ] = useState("");
   if (!admin) {
     return (
-      <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
         <SubHeader title="Admin controls" onBack={onBack} />
         <Card style={{ marginTop: 16 }}>
           <div style={{ fontSize: 14, color: S.sub }}>This screen is restricted to admins.</div>
@@ -20774,7 +23600,7 @@ function AdminControls({ features, setFeatures, activity, users, currentUser, on
     || String(a.by || "").toLowerCase().includes(needle));
 
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Admin controls" onBack={onBack} />
       <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
         {[["features", "Features"], ["security", "Security"], ["log", "Audit log"]].map(([id, label]) => (
@@ -20884,7 +23710,7 @@ function SetupKeys({ apiSetup, setApiSetup, currentUser, onBack, toast }) {
   const [openId, setOpenId] = useState(null);
   if (!admin) {
     return (
-      <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
         <SubHeader title="Setup & keys" onBack={onBack} />
         <Card style={{ marginTop: 16 }}>
           <div style={{ fontSize: 14, color: S.sub }}>
@@ -20901,7 +23727,7 @@ function SetupKeys({ apiSetup, setApiSetup, currentUser, onBack, toast }) {
   const remaining = SETUP_ITEMS.filter((it) => statusOf(it) !== "done").length;
 
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Setup & keys" onBack={onBack} />
       <Card style={{ marginTop: 16 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>
@@ -21351,7 +24177,7 @@ function HelpDesk({ onBack, brand }) {
 
   if (art) {
     return (
-      <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
         <button onClick={() => setOpen(null)} style={{
           border: "none", background: "none", color: T.accent, fontWeight: 600,
           fontSize: 14, cursor: "pointer", padding: 0, marginBottom: 14,
@@ -21370,7 +24196,7 @@ function HelpDesk({ onBack, brand }) {
   }
 
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <button onClick={onBack} style={{
         border: "none", background: "none", color: T.accent, fontWeight: 600,
         fontSize: 14, cursor: "pointer", padding: 0, marginBottom: 14,
@@ -21459,8 +24285,8 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       admin && ["crewpay", HardHat, "Crew payouts", "What each crew is owed and has been paid"],
     ]],
     ["Insurance & resources", [
+      ["insurance:ask", MessageCircle, "Roofing assistant", "Code, manufacturers, NRCA, claims — cited answers"],
       ["insurance", Shield, "Insurance & claims", "Clients, claims, supplements & depreciation"],
-      ["insurance:ask", MessageCircle, "Claim assistant", "Ask a claim, code or adjuster question — cited answers"],
       ["insurance:codes", ScrollText, "Code lookup", "Adopted code & building department by zip"],
       ["insurance:resources", BookOpen, "Roofing resources", "Manufacturer specs, policy provisions, letters, playbook"],
     ]],
@@ -21493,7 +24319,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
         .filter(([, , label, sub]) => (label + " " + (sub || "")).toLowerCase().includes(needle)))
     : null;
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <div style={{ fontSize: 24, fontWeight: 800, color: S.ink, marginBottom: 4 }}>More</div>
       <div style={{ fontSize: 13, color: S.sub, marginBottom: 4 }}>{brand.company}</div>
       {currentUser && (
@@ -21599,7 +24425,7 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
     return true;
   });
   return (
-    <div style={{ padding: "18px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "18px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>Inbox</div>
         {pane === "customers" && <Btn small onClick={onCompose}><Plus size={14} /> New message</Btn>}
@@ -21923,7 +24749,7 @@ function useDbSync(st) {
           const published = changed.filter((j) => j.portalToken);
           if (published.length && st.brandRef) {
             const snaps = published.map((j) => ({
-              ...buildPortalSnapshot({ ...j, stageLabel: ((st.stagesRef || []).find((x) => x.id === j.stageId) || {}).name || ((st.stagesRef || []).find((x) => x.id === j.stageId) || {}).label || "" }, st.brandRef, j.portalToken),
+              ...buildPortalSnapshot({ ...j, stageLabel: ((st.stagesRef || []).find((x) => x.id === j.stageId) || {}).name || ((st.stagesRef || []).find((x) => x.id === j.stageId) || {}).label || "" }, st.brandRef, j.portalToken, st.usersRef || []),
               revoked: false,
             }));
             await db.from("crm_portal").upsert(snaps);
@@ -22229,9 +25055,11 @@ export default function SupremeCRM() {
   const [ccToken, setCcToken] = useState(null);
   const [brand, setBrand] = useState(DEFAULT_BRAND);
   const [stages, setStages] = useState(DEFAULT_STAGES);
+  const [stageRules, setStageRules] = useState(DEFAULT_STAGE_RULES);
   const [jobs, setJobs] = useState(() => (liveDb() ? [] : seedJobs));
   const [nav, setNav] = useState("home");        // home | jobs | inbox | more | sub-screens
   const [openJobId, setOpenJobId] = useState(null);
+  useEffect(() => { if (scrollPane.current) scrollPane.current.scrollTop = 0; }, [nav, openJobId]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [codeSeed, setCodeSeed] = useState(null);
@@ -22255,20 +25083,41 @@ export default function SupremeCRM() {
   }, [boardView]);
   /* Dark/light appearance. Follows the OS until the user picks one, then the
      choice persists on the device. Flipping data-theme on <html> repaints the
-     whole app via the CSS variables in index.html. */
-  const [theme, setTheme] = useState(() => {
+     whole app via the CSS variables in index.html.
+
+     themeExplicit tracks whether `theme` came from a stored preference (or a
+     just-now toggle) versus the computed OS-derived default — only an
+     explicit choice gets persisted/stamped. Without this, the effect below
+     would fire on the very first render too (keyed on `theme`), locking in
+     whatever the OS happened to be on day one and permanently overriding the
+     index.html `@media (prefers-color-scheme: dark)` rule — so the app would
+     stop following the OS the moment it changed, contrary to the design. */
+  /* The scrolling pane inside the shell. Screens scroll here rather than in
+     the document, so opening a job or switching tabs has to put the new
+     screen at the top — otherwise you land halfway down a job because that's
+     where you happened to be on the board. */
+  const scrollPane = useRef(null);
+  const themeExplicit = useRef(false);
+  const [theme, setThemeState] = useState(() => {
     try {
-      return localStorage.getItem("rl_theme")
-        || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    } catch (e) { return "light"; }
+      const saved = localStorage.getItem("rl_theme");
+      if (saved === "dark" || saved === "light") { themeExplicit.current = true; return saved; }
+    } catch (e) { /* private mode */ }
+    try { return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; }
+    catch (e) { return "light"; }
   });
+  const setTheme = (next) => { themeExplicit.current = true; setThemeState(next); };
   useEffect(() => {
-    try { localStorage.setItem("rl_theme", theme); } catch (e) { /* private mode */ }
+    /* The browser-chrome meta color is cosmetic only (doesn't affect which
+       theme the page CSS follows), so it's safe to keep it in sync with the
+       current appearance even for the computed default. */
     try {
-      document.documentElement.dataset.theme = theme;
       const m = document.querySelector('meta[name="theme-color"]');
       if (m) m.setAttribute("content", theme === "dark" ? "#0F1216" : "#20242A");
     } catch (e) { /* non-browser test env */ }
+    if (!themeExplicit.current) return; // computed default — don't persist or override the OS-following CSS
+    try { localStorage.setItem("rl_theme", theme); } catch (e) { /* private mode */ }
+    try { document.documentElement.dataset.theme = theme; } catch (e) { /* non-browser test env */ }
   }, [theme]);
   const [leadSeed, setLeadSeed] = useState(null);
   const [qt, setQt] = useState({ jobId: "", label: "", due: "", time: "" });
@@ -22314,9 +25163,9 @@ export default function SupremeCRM() {
   };
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
-    announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, docTemplates,
+    announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates,
     priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate,
     features, security, jurisContacts, learnedJuris, version: 1,
   });
@@ -22324,6 +25173,10 @@ export default function SupremeCRM() {
     if (d.announcements) setAnnouncements(d.announcements);
     if (d.calls) setCalls(d.calls);
     if (d.stages) setStages(d.stages);
+    /* Orgs saved before stage rules existed have no key — they keep the
+       shipped defaults, which are all "warn", so nothing they have in flight
+       is suddenly blocked by an upgrade. */
+    if (d.stageRules) setStageRules(d.stageRules);
     if (d.leadSources) setLeadSources(d.leadSources);
     if (d.apptTypes) setApptTypes(d.apptTypes);
     if (d.templates) setTemplates(d.templates);
@@ -22350,7 +25203,7 @@ export default function SupremeCRM() {
     jobs, setJobs, appointments, setAppointments,
     activity, setActivity, chatMsgs, setChatMsgs,
     orgPack, unpackOrg, orgDeps,
-    brandRef: brand, stagesRef: stages,
+    brandRef: brand, stagesRef: stages, usersRef: users,
   });
 
   /* Copy brand colors into the live theme before anything renders. */
@@ -22419,17 +25272,26 @@ export default function SupremeCRM() {
 
   /* Finish the Gmail OAuth handshake when Google redirects back with
      ?state=gmail&code=... — exchange the code, mark the seat connected, and
-     clean the URL. Runs once when a code is present. */
+     clean the URL. Runs once when a code is present.
+
+     currentUser starts null on every fresh mount (session restore is async),
+     and a real Google redirect is a full-page navigation, so this effect's
+     first firing almost always lands before currentUser has hydrated. Only
+     latch gmailCbDone/clean() on a TERMINAL outcome (no backend at all, or the
+     exchange actually ran) — otherwise wait and let the effect re-fire once
+     currentUser is set, rather than consuming the one-shot code and giving up
+     silently. */
   const gmailCbDone = useRef(false);
   useEffect(() => {
     if (gmailCbDone.current || typeof window === "undefined") return;
     const qs = new URLSearchParams(window.location.search);
     if (qs.get("state") !== "gmail" || !qs.get("code")) return;
-    gmailCbDone.current = true;
-    const code = qs.get("code");
     const a = AUTH();
     const clean = () => { try { window.history.replaceState({}, "", window.location.pathname); } catch { /* ignore */ } };
-    if (!a || !a.gmailExchange || !currentUser) { clean(); return; }
+    if (!a || !a.gmailExchange) { gmailCbDone.current = true; clean(); return; }
+    if (!currentUser) return; // wait — effect re-runs once currentUser hydrates
+    gmailCbDone.current = true;
+    const code = qs.get("code");
     a.gmailExchange(code).then((res) => {
       setIntegrations((prev) => ({
         ...prev,
@@ -22443,13 +25305,48 @@ export default function SupremeCRM() {
   /* Callable both ways: mutJob(id)(fn) and mutJob(id, fn). */
   const mutJob = (id, fn) => (fn ? applyJob(id, fn) : (f2) => applyJob(id, f2));
 
-  const moveStage = (jobId, stageId) => {
+  /* The one dialog every blocked move opens. Null when nothing is blocked. */
+  const [gatePrompt, setGatePrompt] = useState(null);
+
+  /* Every stage change in the app funnels through here, so this is where the
+     gate is enforced and where a stage's own work gets handed to the rep.
+
+     opts.force skips the gate (an admin override, or an approval flow that has
+     already had its own review). opts.patch merges extra fields onto the job —
+     the gate dialog uses it to save the reason it just asked for. Returns
+     whether the move actually happened so callers like bulk move can count. */
+  const moveStage = (jobId, stageId, opts = {}) => {
     const jb = jobs.find((x) => x.id === jobId);
     const stage = stages.find((x) => x.id === stageId);
-    const stageName = stage ? (stage.name || stage.label || "the next stage") : "";
+    if (!jb || !stage) return false;
+    const stageName = stage.name || stage.label || "the next stage";
+    const gate = stageGate(jb, stageId, stageRules, { appointments });
+    if (!opts.force && gate.mode === "block" && !gate.ready) {
+      if (!opts.silent) setGatePrompt({ jobId, stageId, stageName, jobName: jb.name, gate });
+      return false;
+    }
+    const rule = stageRuleFor(stageRules, stageId);
     setJobs((prev) => prev.map((j) => {
       if (j.id !== jobId) return j;
-      const next = { ...j, stageId, daysInStage: 0, updated: "just now" };
+      const next = { ...j, ...(opts.patch || {}), stageId, stageAt: todayIso(), daysInStage: 0, updated: "just now" };
+      /* Hand the rep this stage's work — once. stageSeeded remembers which
+         stages have already dealt their tasks, so bouncing a job back and
+         forth never piles up duplicates, and a label the rep already has
+         (however they added it) is never added twice. */
+      const seeded = { ...(j.stageSeeded || {}) };
+      if (!seeded[stageId]) {
+        const have = new Set((j.tasks || []).map((t) => String(t.label || "").toLowerCase()));
+        const add = (rule.tasks || [])
+          .filter((t) => ruleApplies(t, j) && !have.has(String(t.label || "").toLowerCase()));
+        if (add.length) {
+          next.tasks = [...(j.tasks || []), ...add.map((t) => ({
+            id: uid("t"), label: t.label, done: false, time: null, auto: true,
+            due: num(t.dueIn) >= 0 ? plusDays(todayIso(), t.dueIn) : null,
+          }))];
+        }
+        seeded[stageId] = todayIso();
+        next.stageSeeded = seeded;
+      }
       /* Production → Invoicing (s9): the sub's pay is temporary until confirmed
          after install, so this flags their invoice for review. Seed a draft if
          none exists; never downgrade an already-confirmed/paid invoice. */
@@ -22476,14 +25373,40 @@ export default function SupremeCRM() {
       }
       return next;
     }));
-    if (jb && stage) {
-      logAct({ kind: "stage", jobId, jobName: jb.name, text: `moved ${jb.name} to "${stageName}"` });
-      toast(`Moved to ${stageName}${jb.portal?.notifyStage ? " — customer update queued when consent is available" : ""}`);
-      if (stageId === "s9" && jb.crewId) {
-        const crew = crews.find((c) => c.id === jb.crewId);
-        logAct({ kind: "sub", jobId, jobName: jb.name, text: `sub invoice for ${crew ? crew.name : "the crew"} needs review before payment` });
+    logAct({ kind: "stage", jobId, jobName: jb.name, text: `moved ${jb.name} to "${stageName}"` });
+    if (!opts.silent) {
+      /* A warn gate never stops the move, but it should say what is missing —
+         silence here is how jobs reach production with no crew assigned. */
+      if (!gate.ready && gate.failed.length) {
+        toast(`Moved to ${stageName} — still missing: ${gate.failed.map((f) => f.label.toLowerCase()).join(", ")}`);
+      } else {
+        toast(`Moved to ${stageName}${jb.portal?.notifyStage ? " — customer update queued when consent is available" : ""}`);
       }
     }
+    if (!gate.ready && gate.failed.length) {
+      logAct({ kind: "stage", jobId, jobName: jb.name,
+        text: `${jb.name} entered "${stageName}" with ${gate.failed.length} unmet ${gate.failed.length === 1 ? "requirement" : "requirements"}` });
+    }
+    if (stageId === "s9" && jb.crewId) {
+      const crew = crews.find((c) => c.id === jb.crewId);
+      logAct({ kind: "sub", jobId, jobName: jb.name, text: `sub invoice for ${crew ? crew.name : "the crew"} needs review before payment` });
+    }
+    return true;
+  };
+
+  /* Bulk move can't just loop moveStage: the first blocked job would open the
+     gate dialog and every job after it would silently vanish into a dialog
+     that only knows about one of them. So move what passes, keep quiet about
+     each one, and report the split once. */
+  const bulkMoveStage = (ids, stageId) => {
+    const stage = stages.find((x) => x.id === stageId);
+    const stageName = stage ? (stage.name || stage.label || "the next stage") : "";
+    const list = [...ids];
+    const blocked = list.filter((id) => !moveStage(id, stageId, { silent: true }));
+    const moved = list.length - blocked.length;
+    if (!blocked.length) toast(`Moved ${moved} ${moved === 1 ? "job" : "jobs"} to ${stageName}`);
+    else if (!moved) toast(`None moved — ${blocked.length} ${blocked.length === 1 ? "job is" : "jobs are"} missing what ${stageName} requires`);
+    else toast(`${moved} of ${list.length} moved to ${stageName} — ${blocked.length} blocked`);
   };
 
   const applyRemovedStages = (nextStages) => {
@@ -22533,7 +25456,7 @@ export default function SupremeCRM() {
       zip: existingPropertyJob?.zip || f.zip.trim(), state: existingPropertyJob?.state || f.stateSel,
       lat: existingPropertyJob?.lat ?? f.lat ?? null, lng: existingPropertyJob?.lng ?? f.lng ?? null,
       value: 0, stageId: stages[0].id, assignee: f.assignee, leadSource: f.leadSource || "—",
-      daysInStage: 0, updated: "just now", claimType: f.claimType, schedDate: null,
+      daysInStage: 0, stageAt: todayIso(), updated: "just now", claimType: f.claimType, schedDate: null,
       phone: f.phone, email: f.email,
       consent: {
         sms: { granted: f.smsConsent, at: f.smsConsent ? at : null, source: f.smsConsent ? "New lead form" : null },
@@ -22691,7 +25614,12 @@ export default function SupremeCRM() {
   const openCodeLookup = (zip) => { setCodeSeed({ zip: zip || "" }); setOpenJobId(null); setNav("insurance"); };
 
   return (
-    <div style={{ fontFamily: "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif", background: S.bg, minHeight: "100vh" }}>
+    <div className="rl-shell" style={{ fontFamily: "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif", background: S.bg }}>
+      {/* Everything above the nav scrolls in here rather than in the document.
+          See .rl-shell in index.html for why. Sheets, toasts and the banners
+          stay position:fixed — overflow doesn't create a containing block for
+          them, so they still cover the whole viewport including the nav. */}
+      <div className="rl-scroll" ref={scrollPane}>
       {openJob ? (
         <JobDetail job={openJob} stages={stages} brand={brand} onBack={backToBoard}
           onMoveStage={moveStage} mut={mutJob(openJob.id)} toast={toast} reviewSettings={reviewSettings}
@@ -22718,6 +25646,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             setAppointments={setAppointments} setApptTypes={setApptTypes} toast={toast}
             onQueueMessage={(jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))}
             onLog={logAct} users={users} mutJob={mutJob}
+            stageRules={stageRules} currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             onToggleTask={(jobId, taskId) => mutJob(jobId, (j) => ({ ...j, tasks: j.tasks.map((x) => x.id === taskId ? { ...x, done: !x.done, doneAt: !x.done ? new Date().toISOString().slice(0, 16).replace("T", " ") : null } : x) }))}
             chatMsgs={chatMsgs}
             onSendChat={(text) => {
@@ -22735,6 +25664,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onQuickAction={(jobId) => setQuickJobId(jobId)}
           focusStage={boardStage} onClearFocus={() => setBoardStage(null)}
           view={boardView} setView={setBoardView}
+          stageRules={stageRules} onBulkMoveStage={bulkMoveStage}
           onBulkUpdate={(ids, patch) => setJobs((prev) => prev.map((j) => ids.includes(j.id) ? { ...j, ...patch } : j))} />
       ) : nav === "inbox" ? (
         <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)}
@@ -22856,6 +25786,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "branding" ? (
         <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} brandErr={brandErr} />
       ) : null}
+      </div>
 
       {!liveDb() && (
         <div style={{
@@ -22887,7 +25818,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
          its own thing: "Add" is just a fifth tab with a filled accent
          icon, flush with the other four. */}
       <div style={{
-        position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50,
+        flexShrink: 0, zIndex: 50,
         background: S.card, borderTop: `1px solid ${S.line}`,
         display: "flex", alignItems: "stretch", paddingBottom: "env(safe-area-inset-bottom)",
       }}>
@@ -22957,7 +25888,19 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       <FiltersSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} stages={stages}
         filters={filters} setFilters={setFilters} />
       <WorkflowEditor open={workflowOpen} onClose={() => setWorkflowOpen(false)} stages={stages}
-        setStages={applyRemovedStages} />
+        setStages={applyRemovedStages} stageRules={stageRules} setStageRules={setStageRules} />
+      <StageGateSheet prompt={gatePrompt} isAdmin={isAdmin} currentUser={liveUser}
+        onClose={() => setGatePrompt(null)}
+        onConfirm={({ patch, override }) => {
+          const p = gatePrompt;
+          setGatePrompt(null);
+          if (!p) return;
+          moveStage(p.jobId, p.stageId, { force: true, patch });
+          if (override) {
+            logAct({ kind: "stage", jobId: p.jobId, jobName: p.jobName,
+              text: `${override} moved ${p.jobName} to "${p.stageName}" without meeting its requirements` });
+          }
+        }} />
       <Toast msg={toastMsg} />
     </div>
   );

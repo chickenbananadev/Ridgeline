@@ -5,7 +5,11 @@ const ok = (c, l) => { if (!c) { fails++; console.log("FAIL: " + l); } };
 
 /* --- Claim Assistant --- */
 ok(src.includes("function buildClaimCorpus"), "claim corpus builder exists");
-ok(/CLAIM_CORPUS = buildClaimCorpus\(\)/.test(src), "corpus is built once");
+/* Now memoized behind claimCorpus() rather than built at module load — the
+   corpus reaches constants declared later in the file, and a const in its
+   temporal dead zone throws on access. Still built exactly once. */
+ok(/_claimCorpus = buildClaimCorpus\(\)/.test(src) && /if \(!_claimCorpus\)/.test(src),
+  "corpus is built once, lazily");
 ok(src.includes("function answerClaim"), "retrieval scorer exists");
 ok(src.includes("function ClaimAssistant"), "assistant component exists");
 ok(src.includes('["ask", "Assistant"]'), "assistant is a hub tab");

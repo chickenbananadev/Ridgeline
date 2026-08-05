@@ -83,7 +83,7 @@ the invite/reset links land back on the app.
 `my_tenant()` (migration `021`). Adding a seat past the plan's allowance is
 blocked with a prompt to add seats in Manage billing. To actually bill for the
 extra seat, raise the subscription quantity in the Stripe customer portal (or,
-as a follow-up, wire the checkout quantity — see §6).
+as a follow-up, wire the checkout quantity — see §9).
 
 ---
 
@@ -129,7 +129,38 @@ than sent (SMS via Twilio is unaffected).
 > queued in the thread — delivering those on a timer needs a small scheduled
 > function (a follow-up), since a schedule has to run server-side.
 
-## 6. Everything else already in the repo
+## 6. Roofing assistant — optional, and optional on purpose
+
+The assistant works with no key: it searches the app's own library (building
+code, manufacturer install specs and warranty terms, NRCA best practice, policy
+provisions, carrier patterns, the claim playbook) and shows the matching
+entries with their citations. That is the baseline and it is offline.
+
+Adding an Anthropic key lets it write the answer in plain English on top of
+those same sources, and answer for the specific roof you have open.
+
+```bash
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+supabase functions deploy ai-assistant
+```
+
+**Never give this key a `VITE_` prefix and never put it in Vercel.** `VITE_`
+variables are compiled into the browser bundle and would be public to anyone
+who views source. The key lives only in the Edge Function — which is the whole
+reason the app calls a server function instead of the API directly.
+
+The function is a sandbox: it has no database access and no tools, and it only
+ever sees the handful of library records the app already matched locally, plus
+(if the rep leaves the box ticked) a roof summary with no name, address, phone
+or dollar figures in it. Its system prompt confines answers to those records,
+requires a citation, and refuses legal advice.
+
+If the key is missing, the provider is down, or the phone is offline, the
+function returns a soft failure and the app falls back to the cited entries it
+always showed. Nothing in the UI reports an error, because there is nothing
+the rep could do about it.
+
+## 7. Everything else already in the repo
 
 These functions exist and just need deploying if you haven't already:
 
@@ -152,6 +183,7 @@ Secrets used across these (set the ones you use):
 | `APP_URL` | checkout, portal | your domain, no trailing slash |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` | send-sms | Twilio console |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | gmail-oauth, gmail-send | Google Cloud → Credentials |
+| `ANTHROPIC_API_KEY` | ai-assistant | console.anthropic.com → API keys (never `VITE_`) |
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are
 injected into every function automatically — don't set them by hand.
@@ -163,7 +195,7 @@ For the Stripe **webhook**, add an endpoint in the Stripe dashboard pointing at
 
 ---
 
-## 5. Front-end environment variables (Vercel)
+## 8. Front-end environment variables (Vercel)
 
 Set these in the Vercel project (Project → Settings → Environment Variables),
 then redeploy:
@@ -181,7 +213,7 @@ missing key never white-screens the site.
 
 ---
 
-## 6. Optional follow-up: sync Stripe seat quantity
+## 9. Optional follow-up: sync Stripe seat quantity
 
 `create-checkout-session` currently starts every subscription at
 `quantity: 1`. To bill per active seat automatically, update the subscription

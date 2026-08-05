@@ -48,7 +48,12 @@
     "test:build39": "node build39.test.cjs",
     "test:build40": "node build40.test.cjs",
     "test:build41": "node build41.test.cjs",
-    "test:build46": "node build46.test.cjs"
+    "test:build46": "node build46.test.cjs",
+    "test:build47": "node build47.test.cjs",
+    "test:build48": "node build48.test.cjs",
+    "test:build49": "node build49.test.cjs",
+    "test:build50": "node build50.test.cjs",
+    "test:build51": "node build51.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
@@ -61,6 +66,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
     "jsdom": "^29.1.1",
+    "jsqr": "^1.4.0",
     "vite": "^5.4.0"
   }
 }

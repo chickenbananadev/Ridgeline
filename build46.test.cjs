@@ -85,8 +85,14 @@ ok(/rl_theme/.test(main), "main.jsx applies saved theme pre-mount");
 ok(/function ProposalBuilder\(\{[^}]*docTemplates/.test(src), "ProposalBuilder receives docTemplates (no ReferenceError)");
 ok(/<ProposalBuilder[\s\S]{0,220}docTemplates=\{docTemplates\}/.test(src), "docTemplates passed into ProposalBuilder");
 ok(/function CoverThumb\(/.test(src) && /<CoverThumb style=\{s\.id\}/.test(src), "visual cover-layout thumbnails");
-ok(/\.cover img\.hero \{[^}]*height: 4\.8in[^}]*object-fit: cover/.test(src), "print cover image is ~50% page height");
-ok(/height: 400, objectFit: "cover"/.test(src), "builder cover image is ~50% page height");
+/* Moved into proposalCss when the proposal was rebuilt — 4.4in of a 9.4in
+   usable page, still about half, and now the only rule that sets it. */
+ok(/\.cover \.hero \{[^}]*height: 4\.4in[^}]*object-fit: cover/.test(src), "print cover image is ~50% page height");
+/* The builder no longer re-creates the cover in React — the preview renders
+   the real document in an iframe, so there is exactly one cover-image rule
+   and the one above is it. */
+ok(/<iframe title="Proposal preview" srcDoc=\{html\}/.test(src),
+  "the builder previews the real document rather than a second implementation");
 
 /* P10 — Activity opens as a centered dialog, not a bottom sheet */
 ok(/function Sheet\(\{[^}]*center/.test(src), "Sheet supports a center (dialog) variant");
