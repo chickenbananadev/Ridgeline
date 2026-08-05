@@ -189,6 +189,25 @@ if (url && anon) {
       if (data && data.error) throw new Error(data.error);
       return data;
     },
+    /* Knowledge assistant. Retrieval happens in the app — it already holds
+       the whole reference library — so only the matched records travel. The
+       API key lives in the Edge Function and never in this bundle.
+
+       Never throws: every failure path (no key deployed, provider down,
+       offline) resolves to null, and the caller falls back to the local
+       cited answer it has always given. A knowledge base that quietly stops
+       working is worse than one that never claimed to be smart. */
+    async askAssistant({ question, records, job }) {
+      try {
+        const { data, error } = await supabase.functions.invoke("ai-assistant", {
+          body: { question, records, job },
+        });
+        if (error || !data || !data.ok || !data.answer) return null;
+        return data.answer;
+      } catch {
+        return null;
+      }
+    },
     /* Called once, when the browser lands back on the app with
        ?checkout=success&session_id=... in the URL. */
     async completeSignupAfterCheckout(sessionId) {

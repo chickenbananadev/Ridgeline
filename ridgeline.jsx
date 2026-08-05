@@ -881,6 +881,106 @@ const SIDING_MATCHING = {
 };
 
 /* ================================================================
+   INSTALL SPECIFICATIONS — what the manufacturer actually requires
+
+   The specs above are product identity (dimensions, wind rating, what
+   can be matched to what). These are the install requirements that get
+   argued about on a claim: fastening, starters, low slope, ventilation
+   as a warranty condition. Every one of them is a line a carrier's
+   scope routinely omits and a supplement routinely wins.
+   ================================================================ */
+const INSTALL_SPECS = [
+  { mfr: "All manufacturers", topic: "Fastener count",
+    spec: "Four nails per shingle in the standard field, six in high-wind areas and on the perimeter. Nails must land in the manufacturer's nail zone — high-nailed shingles fail the seal strip and void the wind warranty regardless of the product's rating.",
+    cite: "Manufacturer application instructions (printed on every bundle wrapper)" },
+  { mfr: "All manufacturers", topic: "Starter course",
+    spec: "A manufacturer starter strip is required at eaves and, for most current laminates, at rakes. A reversed three-tab is not an approved substitute on laminate systems and voids the wind warranty. Starter is a separate scope line from field shingles — a carrier scope that omits rake starter is short.",
+    cite: "Manufacturer application instructions" },
+  { mfr: "All manufacturers", topic: "Low slope",
+    spec: "Asphalt shingles are not approved below 2:12 under any manufacturer's instructions. Between 2:12 and 4:12 a double-layer underlayment or a self-adhering membrane over the whole low-slope area is required. Any slope under 2:12 needs a different roof covering entirely, which is a scope change, not a supplement.",
+    cite: "IRC R905.2.2 and manufacturer instructions" },
+  { mfr: "All manufacturers", topic: "Ventilation as a warranty condition",
+    spec: "Every major shingle warranty conditions coverage on attic ventilation meeting code — generally 1 sq ft of net free area per 150 sq ft of attic floor, or 1:300 when a vapor retarder is present or the intake/exhaust split is balanced 50/50 with at least 40% at the eave. Installing new shingles over a non-compliant attic hands the manufacturer a denial. Bringing ventilation to code is a legitimate code-upgrade supplement.",
+    cite: "IRC R806.2; manufacturer warranty terms" },
+  { mfr: "All manufacturers", topic: "Mixing exhaust types",
+    spec: "Ridge vent combined with powered or box vents on the same attic space short-circuits the airflow: the ridge pulls from the nearest opening instead of from the soffit, and the far end of the attic stops ventilating. Manufacturers and NRCA both call this out. One exhaust type per attic space.",
+    cite: "NRCA Roofing Manual; manufacturer technical bulletins" },
+  { mfr: "GAF", topic: "System warranty requirements",
+    spec: "GAF's enhanced warranties (System Plus, Golden Pledge) require a certified contractor plus a defined count of GAF accessory components — starter, ridge cap, leak barrier, ventilation, and underlayment. Substituting a non-GAF component drops the roof to the standard shingle-only limited warranty.",
+    cite: "GAF warranty terms; GAF Technical Services 1-800-ROOF-411" },
+  { mfr: "GAF", topic: "HD vs HDZ",
+    spec: "GAF states Timberline HD (2007–2018) and HDZ are not interchangeable — the nail zone, exposure and sealant differ. An HD roof cannot be repair-matched with current HDZ product, which is the manufacturer-sourced basis for a full-slope or full-roof matching argument on any HD-era roof.",
+    cite: "GAF technical bulletin" },
+  { mfr: "Owens Corning", topic: "SureNail and system warranty",
+    spec: "Duration's 130 mph rating depends on nailing within the SureNail fabric strip. OC's Preferred and Platinum warranties require the full OC component system installed by a Preferred or Platinum contractor; component substitution drops coverage to the base limited warranty.",
+    cite: "Owens Corning warranty terms; OC Technical Services 1-800-GET-PINK" },
+  { mfr: "CertainTeed", topic: "Integrity Roof System",
+    spec: "CertainTeed's SureStart Plus and 5-Star coverage require the Integrity Roof System — CertainTeed underlayment, starter, shingles, hip and ridge, and ventilation together — installed by a credentialed contractor. Partial systems get the standard limited warranty only.",
+    cite: "CertainTeed warranty terms" },
+  { mfr: "Malarkey", topic: "Polymer-modified asphalt",
+    spec: "Malarkey's Vista and Legacy use rubberized SBS-modified asphalt, which stays flexible in cold and resists granule loss. Many Legacy products carry a Class 4 impact rating, which matters for both hail performance and for impact-resistant-roof premium discounts a homeowner may already be paying for.",
+    cite: "Malarkey product data sheets" },
+];
+
+/* ================================================================
+   NRCA BEST PRACTICE — what the trade association recommends
+
+   NRCA guidance is not code and not a manufacturer requirement, but it
+   is the standard of care an expert will be measured against, and it
+   is frequently more demanding than minimum code. Useful when a carrier
+   argues that a repair meets code: code is the floor, not the finish.
+   ================================================================ */
+const NRCA_PRACTICE = [
+  { topic: "Repair versus replacement",
+    body: "NRCA's position is that a roof system is a system, and spot repairs to a weathered asphalt roof rarely restore its expected service life. Aged shingles lose the flexibility needed to lift and reseal without breaking, so removing a damaged shingle typically damages the surrounding courses. This is the trade-practice basis for arguing that a repair-only scope on a mature roof is not a like-kind-and-quality restoration.",
+    cite: "NRCA Roofing Manual — Steep-slope Roof Systems" },
+  { topic: "Test squares and damage density",
+    body: "Hail damage is assessed by test square — conventionally a 10 ft by 10 ft area on each slope. Density of functional damage within the square, not the presence of any single hit, is what determines whether a slope is replaced. Photograph and chalk each square by slope and elevation; a scope disputing your count is much harder to sustain against documented squares.",
+    cite: "NRCA / industry standard practice" },
+  { topic: "Functional versus cosmetic damage",
+    body: "Functional hail damage is evidenced by a fractured or bruised mat under the impact, granule displacement exposing the asphalt, and a broken seal bond — all of which shorten service life. Spatter marks and granule scuffing without mat fracture are cosmetic. Document function separately from appearance: photograph the bruise, not just the mark, because a cosmetic-damage exclusion is defeated by evidence of function, not by more pictures of spatter.",
+    cite: "NRCA / industry standard practice" },
+  { topic: "Underlayment and ice barrier",
+    body: "NRCA recommends self-adhering membrane at all eaves in freeze climates, in valleys, and around all penetrations — beyond the code minimum of 24 in. inside the warm wall line. Where the carrier pays only the code minimum, the difference is a legitimate upgrade discussion with the homeowner, not a supplement.",
+    cite: "NRCA Roofing Manual" },
+  { topic: "Flashing replacement",
+    body: "NRCA's guidance is that flashings are replaced, not reused, whenever the roof covering is replaced. Reused step and counter flashing is the most common source of a callback leak on an otherwise sound new roof, and reuse is not consistent with restoring the assembly to its pre-loss condition.",
+    cite: "NRCA Roofing Manual" },
+  { topic: "Decking condition",
+    body: "Decking must be sound, dry and properly fastened before new covering. Delaminated, saw-kerfed, or 1x plank decking with gaps beyond the shingle manufacturer's tolerance requires replacement or re-sheathing. Carriers commonly allow a token number of sheets; document actual condition per slope with photographs taken during tear-off, because after the roof is on, the argument is unwinnable.",
+    cite: "NRCA Roofing Manual; IRC R803" },
+  { topic: "Ventilation balance",
+    body: "NRCA recommends a balanced system with at least half of the required net free area at the intake (soffit) and the remainder at the exhaust. Exhaust-heavy systems pull makeup air from the conditioned space or from the nearest roof opening rather than from the eave, which drives moisture into the attic and shortens deck and shingle life.",
+    cite: "NRCA Roofing Manual; IRC R806" },
+];
+
+/* Deeper IRC provisions the code lookup does not surface on its own.
+   Kept generic (IRC, not a state amendment) — the jurisdiction lookup
+   layers local amendments on top. */
+const IRC_DEEP = [
+  { cite: "IRC R905.2.1", topic: "Sheathing for asphalt shingles",
+    body: "Asphalt shingles shall be fastened to solidly sheathed decks. Spaced or skip sheathing does not qualify, which is why a plank-decked older home commonly requires re-sheathing as part of a compliant replacement." },
+  { cite: "IRC R905.2.2", topic: "Minimum slope",
+    body: "Asphalt shingles shall only be used on roof slopes of 2:12 or greater. For slopes from 2:12 up to 4:12, double underlayment application is required." },
+  { cite: "IRC R905.2.5", topic: "Fasteners",
+    body: "Fasteners shall be galvanized steel, stainless steel, aluminum or copper roofing nails, minimum 12 gauge with a 3/8 in. head, of a length to penetrate through the sheathing or at least 3/4 in. into the sheathing." },
+  { cite: "IRC R905.2.6", topic: "Attachment",
+    body: "Shingles shall be fastened per the manufacturer's installation instructions. In areas with a basic wind speed of 110 mph or higher, or where the eave is more than 20 ft above grade, special methods of fastening are required." },
+  { cite: "IRC R905.2.8.2", topic: "Valleys",
+    body: "Valley linings shall be installed per the manufacturer's instructions before the shingles are applied. For open valleys the code specifies minimum lining widths and material types; a closed-cut valley still requires a lining." },
+  { cite: "IRC R905.2.8.3", topic: "Sidewall flashing",
+    body: "Base flashing against a vertical sidewall shall be continuous or step flashing, with each piece not less than 4 in. in height and 4 in. in width. Step flashing is per-course and cannot be substituted with a continuous strip." },
+  { cite: "IRC R703.4", topic: "Kickout flashing",
+    body: "A kickout (diverter) flashing is required where the roof meets a wall that continues past the eave, to divert water away from the wall assembly. Its absence is the most common cause of hidden wall rot and is a code item, not an upgrade." },
+  { cite: "IRC R806.2", topic: "Ventilation area",
+    body: "The minimum net free ventilating area shall be 1/150 of the vented space. 1/300 is permitted where a Class I or II vapor retarder is installed on the warm side, or where 40 to 50 percent of the required area is provided by ventilators at least 3 ft above the eave with the balance at the eave." },
+  { cite: "IRC R803.2.3", topic: "Deck condition",
+    body: "Wood structural panel sheathing shall be installed with the long dimension perpendicular to the supports, with edges supported or clipped as required by the span rating. Delaminated or water-damaged panels do not meet this and must be replaced." },
+  { cite: "IRC R908.3", topic: "Recover limits",
+    body: "Roof recover is prohibited where the existing roof has two or more applications of any type of covering, where the existing covering is water-soaked or deteriorated, or where the existing covering is slate, clay, cement or asbestos-cement tile. Any of these requires a complete tear-off." },
+];
+
+/* ================================================================
    LETTER TEMPLATES — fill the bracketed fields, send in writing.
    Written communication is what survives a contested claim.
    ================================================================ */
@@ -7214,7 +7314,8 @@ const JOB_TABS = [
   ["report", "Report"], ["messages", "Messages"],
   ["photos", "Photos"], ["financials", "Financials"],
   ["payments", "Payments"], ["invoice", "Invoice"], ["workorder", "Work order"],
-  ["tasks", "Tasks"], ["files", "Files"], ["portal", "Portal"], ["claim", "Insurance claim"],
+  ["tasks", "Tasks"], ["files", "Files"], ["assistant", "Ask the assistant"],
+  ["portal", "Portal"], ["claim", "Insurance claim"],
 ];
 
 /* Collapsible sections, in the order they are worked. Replaces a
@@ -7249,6 +7350,7 @@ const JOB_SECTIONS = [
   ["handoff", "Sold & handoff", Share2, "Build"],
   ["tasks", "Tasks", CheckCircle2, "Build"],
   ["files", "Attachments", Layers, "Build"],
+  ["assistant", "Ask the assistant", MessageCircle, "Build"],
   // Money
   ["financials", "Financials", DollarSign, "Money"],
   // Customer
@@ -7260,7 +7362,7 @@ const JOB_SECTIONS = [
 const JOB_TAB_GROUPS = [
   ["Inspect", ["overview", "checklist", "ventilation", "measure", "photos"]],
   ["Sell", ["estimate", "contract", "materials", "report"]],
-  ["Build", ["workorder", "tasks", "files"]],
+  ["Build", ["workorder", "tasks", "files", "assistant"]],
   ["Money", ["financials", "payments", "invoice"]],
   ["Customer", ["messages", "portal"]],
 ];
@@ -7481,6 +7583,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
                 crews={crews} templates={templates} currentUser={currentUser} users={users} />;
               case "tasks": return <TabTasks job={job} mut={mut} toast={toast} />;
               case "files": return <TabFiles job={job} mut={mut} toast={toast} />;
+              case "assistant": return <ClaimAssistant job={job} />;
               case "portal": return <TabPortal job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser}
                 stageLabel={(stages.find((stage) => stage.id === job.stageId) || {}).name || ""} />;
               default: return null;
@@ -16968,48 +17071,180 @@ function buildClaimCorpus() {
   (typeof CARRIER_PATTERNS !== "undefined" ? CARRIER_PATTERNS : []).forEach((c) => items.push({ title: c.title, body: `${c.pattern || ""} ${(c.answer || []).join(" ")}`, source: "Carrier patterns", tag: "Carrier" }));
   (SUPPLEMENT_TEMPLATES || []).forEach((t) => items.push({ title: t.title, body: `${t.scenario || ""} ${t.wording || ""}`, source: "Supplement template", tag: "Supplement" }));
   (typeof POLICY_CARDS !== "undefined" ? POLICY_CARDS : []).forEach((c) => items.push({ title: c.title, body: `${c.body || ""} ${(c.callout && c.callout.text) || ""}`, source: "Policy provisions", tag: "Policy" }));
+  /* Everything below was already bundled and already maintained — it just
+     wasn't reachable from the assistant, so a rep asking "what nail count
+     does GAF require?" got nothing while the answer sat two screens away. */
+  (typeof INSTALL_SPECS !== "undefined" ? INSTALL_SPECS : []).forEach((s) => items.push({ title: `${s.mfr} — ${s.topic}`, body: s.spec, cite: s.cite, source: "Manufacturer install spec", tag: "Manufacturer" }));
+  (typeof NRCA_PRACTICE !== "undefined" ? NRCA_PRACTICE : []).forEach((n) => items.push({ title: `NRCA — ${n.topic}`, body: n.body, cite: n.cite, source: "NRCA best practice", tag: "NRCA" }));
+  (typeof IRC_DEEP !== "undefined" ? IRC_DEEP : []).forEach((c) => items.push({ title: `${c.topic}`, body: c.body, cite: c.cite, source: "Building code (IRC)", tag: "Code" }));
+  (typeof IRC_BASE !== "undefined" ? IRC_BASE : {}) && Object.entries(IRC_BASE || {}).forEach(([k, v]) => items.push({ title: k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()), body: v.note, cite: v.cite, source: "Building code (IRC)", tag: "Code" }));
+  (typeof PROVISION_TOPICS !== "undefined" ? PROVISION_TOPICS : []).forEach((p) => items.push({ title: p.topic, body: p.note, cite: p.oh, source: "Code provisions", tag: "Code" }));
+  /* Per-state code provisions: one record per state × topic, so "ice barrier
+     in Texas" resolves to the Texas cite rather than the Ohio one. */
+  Object.entries(typeof CODE_PROVISIONS !== "undefined" ? CODE_PROVISIONS : {}).forEach(([st, topics]) => {
+    Object.entries(topics || {}).forEach(([k, v]) => {
+      if (!v || !v.note) return;
+      items.push({ title: `${st} — ${k.replace(/([A-Z])/g, " $1").toLowerCase().trim()}`, body: v.note, cite: v.cite, source: `Building code (${st})`, tag: "Code" });
+    });
+  });
+  (typeof MFR_SPECS !== "undefined" ? MFR_SPECS : []).forEach((m) => items.push({
+    title: `${m.mfr} ${m.flagship} — specification`,
+    body: `Shingle ${m.w} by ${m.l}, ${m.exp} exposure. Wind: ${m.wind}. Algae: ${m.algae}. Warranty: ${m.warranty}. Impact-rated lines: ${m.class4}. Matching: ${m.dnm}`,
+    source: "Manufacturer spec", tag: "Manufacturer" }));
+  (typeof SHINGLE_DB !== "undefined" ? SHINGLE_DB : []).forEach((s) => items.push({
+    title: `${s.mfr} ${s.line}`,
+    body: `${s.type}, ${s.status === "disco" ? "discontinued" : "current"}${s.years ? ` (${s.years})` : ""}. ${s.w} by ${s.l} with ${s.exp} exposure. ${s.note || ""}`,
+    source: "Shingle database", tag: "Manufacturer" }));
+  (typeof SUPPLEMENT_TRIGGERS !== "undefined" ? SUPPLEMENT_TRIGGERS : []).forEach(([label, cite]) => items.push({ title: label, body: `Commonly omitted from a carrier's scope and supportable on code grounds.`, cite, source: "Supplement trigger", tag: "Supplement" }));
+  (typeof LETTER_TEMPLATES !== "undefined" ? LETTER_TEMPLATES : []).forEach((t) => items.push({ title: `Letter — ${t.title}`, body: `${t.when || ""} ${t.body || ""}`, source: "Letter template", tag: "Letter" }));
+  (typeof LAW_ITEMS !== "undefined" ? LAW_ITEMS : []).forEach((l) => items.push({ title: l.title, body: l.body, source: "Regulation", tag: "Policy" }));
+  (typeof KEY_CONTACTS !== "undefined" ? KEY_CONTACTS : []).forEach(([name, phone, web]) => items.push({ title: name, body: `Technical services / consumer line. ${[phone, web].filter(Boolean).join("  ·  ")}`, source: "Contacts", tag: "Term" }));
+  (typeof SIDING_MATCHING !== "undefined" ? [SIDING_MATCHING] : []).forEach((s) => items.push({ title: "Vinyl siding — the matching reality", body: `${(s.points || []).join(" ")} ${s.argument || ""}`, source: "Claim playbook", tag: "Playbook" }));
+  (typeof VENT_EXHAUST !== "undefined" ? VENT_EXHAUST : []).forEach((v) => items.push({ title: `Exhaust vent — ${v.name || v[0]}`, body: JSON.stringify(v).replace(/["{}]/g, " "), source: "Ventilation", tag: "Term" }));
+  (typeof VENT_INTAKE !== "undefined" ? VENT_INTAKE : []).forEach((v) => items.push({ title: `Intake vent — ${v.name || v[0]}`, body: JSON.stringify(v).replace(/["{}]/g, " "), source: "Ventilation", tag: "Term" }));
+  /* The app's own help articles, so "how do I send an estimate" is answerable
+     by the same box that answers "do I get drip edge". */
+  (typeof HELP_ARTICLES !== "undefined" ? HELP_ARTICLES : []).forEach((a) => items.push({ title: a.title, body: `${a.summary || ""} ${(a.body || []).join(" ")}`, source: "RoofStride help", tag: "Help" }));
   return items;
 }
-const CLAIM_CORPUS = buildClaimCorpus();
-function answerClaim(q) {
-  const terms = String(q || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !CLAIM_STOPWORDS.has(w));
-  if (!terms.length) return [];
-  return CLAIM_CORPUS.map((it) => {
-    const title = it.title.toLowerCase(), body = it.body.toLowerCase();
-    let score = 0;
-    terms.forEach((t) => { if (title.includes(t)) score += 3; if (body.includes(t)) score += 1; });
+/* Built on first use, not at module load. The corpus now reaches constants
+   declared further down the file (the help articles in particular), and a
+   const in its temporal dead zone throws on access — typeof does not protect
+   against that. Building lazily also keeps ~500 records off the cold-start
+   path for a screen most sessions never open. */
+let _claimCorpus = null;
+function claimCorpus() {
+  if (!_claimCorpus) _claimCorpus = buildClaimCorpus();
+  return _claimCorpus;
+}
+/* Local retrieval. This is the fallback when no AI key is deployed, and it
+   is also what selects the grounding records when one is — so it keeps a
+   permanent job either way. limit is higher for the model than for the
+   on-screen cards, which only have room for a handful. */
+function answerClaim(q, limit = 4) {
+  const raw = String(q || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/)
+    .filter((w) => w.length > 2 && !CLAIM_STOPWORDS.has(w));
+  if (!raw.length) return [];
+  /* Crude stemming so "nails" finds "nail" and "valleys" finds "valley".
+     Full stemming isn't worth it here — the vocabulary is small and the
+     failure it fixes is almost always a trailing plural. */
+  const stem = (w) => w.replace(/ies$/, "y").replace(/(sses|ches|shes|xes)$/, (m) => m.slice(0, -2)).replace(/s$/, "");
+  const terms = [...new Set(raw.map(stem))].filter(Boolean);
+  return claimCorpus().map((it) => {
+    const title = String(it.title || "").toLowerCase(), body = String(it.body || "").toLowerCase();
+    let score = 0, covered = 0;
+    terms.forEach((t) => {
+      const inTitle = title.includes(t), inBody = body.includes(t);
+      if (inTitle) score += 3;
+      if (inBody) score += 1;
+      if (inTitle || inBody) covered++;
+    });
+    /* Coverage dominates. Without this, a record that repeats one common
+       word ("shingle") outranks the one that actually answers the whole
+       question — which is how "how many nails per shingle" used to return
+       the minimum-slope rule. */
+    score += covered * covered * 2;
     return { it, score };
-  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 4).map((x) => x.it);
+  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map((x) => x.it);
 }
 
-function ClaimAssistant() {
+/* A compact, money-free summary of the open job, so "what's missing on this
+   roof?" can be answered specifically. Deliberately narrow: this is the only
+   tenant data that ever leaves the browser for the assistant, so it carries
+   the roof, not the customer's file. No name, no address, no phone, no
+   dollars — none of which the assistant needs to answer a roofing question. */
+function assistantJobContext(job) {
+  if (!job) return null;
+  const m = job.measurements || {};
+  return {
+    type: job.claimType || "Retail",
+    state: job.state || "",
+    stage: job.stageId || "",
+    squares: m.squares || "",
+    pitch: m.pitch || "",
+    layers: (job.intake || {}).layers || "",
+    roofAge: (job.checklist || {}).roofAge || "",
+    carrier: job.claimType === "Insurance" ? (job.insurance || {}).carrier || "" : "",
+    claimStage: (job.claim || {}).stage || "",
+    materials: (job.materials || []).slice(0, 12).map((x) => x.name || x.label).filter(Boolean),
+    scheduled: !!job.schedDate,
+  };
+}
+
+function ClaimAssistant({ job = null }) {
+  const auth = AUTH();
+  const jobSuggestions = job ? [
+    "What's missing on this roof before it goes to production?",
+    job.claimType === "Insurance"
+      ? "What should I be supplementing for on this claim?"
+      : "What does code require on a replacement here?",
+  ] : [];
   const SUGGESTIONS = [
+    ...jobSuggestions,
     "Adjuster only paid ACV — how does the homeowner recover depreciation?",
     "Carrier says the damage is cosmetic only",
-    "Do I get drip edge on a full replacement?",
+    "How many nails per shingle does the manufacturer require?",
+    "Can I put ridge vent and box vents on the same attic?",
     "What is a matching claim and when does it apply?",
-    "They applied a roof payment schedule (RPS)",
   ];
   const [msgs, setMsgs] = useState([]);
   const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [useJob, setUseJob] = useState(!!job);
   const scrollRef = useRef(null);
-  const ask = (text) => {
+  const corpusSize = claimCorpus().length;
+
+  const ask = async (text) => {
     const question = (text || "").trim();
-    if (!question) return;
-    const hits = answerClaim(question);
-    setMsgs((m) => [...m, { role: "user", text: question }, { role: "bot", hits, text: hits.length ? "" : "I couldn't find that in the knowledge base. Try a component (drip edge, valley), a term (ACV, betterment, matching), or a carrier position." }]);
+    if (!question || busy) return;
+    /* The local scorer runs first, always. It is the answer when no key is
+       deployed, and it is what selects the grounding records when one is —
+       so the assistant is never worse than it was, only sometimes better. */
+    const hits = answerClaim(question, 4);
+    const grounding = answerClaim(question, 12);
     setQ("");
+    setMsgs((m) => [...m, { role: "user", text: question }, {
+      role: "bot", hits, pending: true,
+      text: hits.length ? "" : "I couldn't find that in the knowledge base. Try a component (drip edge, valley, step flashing), a term (ACV, betterment, matching), a manufacturer, or a carrier position.",
+    }]);
+    if (!grounding.length || !auth || !auth.askAssistant) {
+      setMsgs((m) => m.map((x) => (x.pending ? { ...x, pending: false } : x)));
+      return;
+    }
+    setBusy(true);
+    let answer = null;
+    try {
+      answer = await auth.askAssistant({
+        question,
+        records: grounding.map((h) => ({ title: h.title, body: h.body, cite: h.cite || "", source: h.source })),
+        job: useJob ? assistantJobContext(job) : null,
+      });
+    } catch { answer = null; }
+    setBusy(false);
+    /* A null answer means no key, no network, or a provider hiccup. The
+       cited cards are already on screen, so nothing has to be said about it —
+       the assistant just looks like the retrieval assistant it has always
+       been rather than announcing a failure the rep can't act on. */
+    setMsgs((m) => m.map((x) => (x.pending ? { ...x, pending: false, answer: answer || null } : x)));
   };
-  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs]);
-  const tone = { Code: "blue", Term: "gray", Playbook: "green", Carrier: "amber", Supplement: "blue", Policy: "slate" };
+  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [msgs, busy]);
+  const tone = { Code: "blue", Term: "gray", Playbook: "green", Carrier: "amber", Supplement: "blue", Policy: "slate", Manufacturer: "blue", NRCA: "green", Letter: "slate", Help: "gray" };
   return (
     <div style={{ marginTop: 14 }}>
       <Card>
-        <CardTitle right={<Chip tone="green">{CLAIM_CORPUS.length} sources</Chip>}>Claim assistant</CardTitle>
+        <CardTitle right={<Chip tone="green">{corpusSize} sources</Chip>}>Roofing assistant</CardTitle>
         <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
-          Ask a claim, code, or adjuster question in plain words. Answers come straight from Supreme's own code library,
-          glossary, playbook and carrier patterns — with the source shown so you can verify before you quote it.
+          Ask a claim, code, manufacturer, or adjuster question in plain words. Answers are grounded in this app's own
+          library — building code, manufacturer install specs and warranty terms, NRCA best practice, policy provisions,
+          carrier patterns and the claim playbook — with every source shown so you can verify before you quote it.
         </div>
+        {job && (
+          <label style={{ display: "flex", gap: 9, alignItems: "center", fontSize: 13, cursor: "pointer", marginTop: 10 }}>
+            <input type="checkbox" checked={useJob} onChange={(e) => setUseJob(e.target.checked)}
+              style={{ width: 17, height: 17, accentColor: T.accent }} />
+            <span>Answer for this roof — {job.claimType} job{(job.measurements || {}).squares ? `, ${job.measurements.squares} squares` : ""}</span>
+          </label>
+        )}
       </Card>
 
       {msgs.length === 0 && (
@@ -17030,6 +17265,17 @@ function ClaimAssistant() {
           ) : (
             <div key={i} style={{ margin: "8px 0" }}>
               {m.text && <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 8 }}>{m.text}</div>}
+              {m.pending && (
+                <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8 }}>Reading the sources…</div>
+              )}
+              {m.answer && (
+                <Card style={{ marginBottom: 8, borderLeft: `3px solid ${T.accent}` }}>
+                  <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{m.answer}</div>
+                </Card>
+              )}
+              {m.answer && (m.hits || []).length > 0 && (
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: S.sub, letterSpacing: ".04em", margin: "2px 0 6px" }}>SOURCES</div>
+              )}
               {(m.hits || []).map((h, j) => (
                 <Card key={j} style={{ marginBottom: 8 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 5 }}>
@@ -17043,15 +17289,16 @@ function ClaimAssistant() {
             </div>
           ))}
           <div style={{ fontSize: 11, color: S.sub, textAlign: "center", padding: "6px 0", lineHeight: 1.5 }}>
-            Guidance from your knowledge base — not legal advice. Confirm the cite and the policy before filing.
+            Guidance from your knowledge base — not legal advice. Code varies by jurisdiction and policies vary by
+            carrier. Confirm the cite and the policy before you file or quote it.
           </div>
         </div>
       )}
 
       <div style={{ display: "flex", gap: 8, marginTop: 12, position: "sticky", bottom: 0, background: S.bg, paddingTop: 6 }}>
-        <input style={{ ...inputStyle, flex: 1 }} value={q} placeholder="Ask about a claim, code, or adjuster position…"
+        <input style={{ ...inputStyle, flex: 1 }} value={q} placeholder="Ask about code, a manufacturer, a claim, or an adjuster position…"
           onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") ask(q); }} />
-        <Btn onClick={() => ask(q)} disabled={!q.trim()}><Send size={15} /></Btn>
+        <Btn onClick={() => ask(q)} disabled={!q.trim() || busy}><Send size={15} /></Btn>
       </div>
     </div>
   );
@@ -20873,18 +21120,18 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
 ------------------------------------------------------------------- */
 const SETUP_ITEMS = [
   {
-    id: "anthropic", label: "AI assistant (Anthropic)", secret: true,
-    unlocks: "Knowledge assistant, email and text drafting, document search.",
-    where: "Vercel → Settings → Environment Variables",
+    id: "anthropic", label: "Roofing assistant (Anthropic)", secret: true,
+    unlocks: "Written answers on top of the cited sources. The assistant already works without this — it returns the matching library entries. Adding a key lets it explain them in plain English and answer for the specific roof you have open.",
+    where: "Supabase → Edge Functions → Secrets",
     keyName: "ANTHROPIC_API_KEY",
     steps: [
       "Go to console.anthropic.com and sign in.",
       "API keys → Create key. Copy it once — it is never shown again.",
-      "Vercel → project 'ridgeline' → Settings → Environment Variables.",
-      "Add ANTHROPIC_API_KEY, paste the value, scope Production, Save.",
-      "Deployments → latest → Redeploy so the new variable is picked up.",
+      "Supabase → your project → Edge Functions → Secrets.",
+      "Add ANTHROPIC_API_KEY with that value and save.",
+      "Deploy the function: supabase functions deploy ai-assistant",
     ],
-    note: "Never add this with a VITE_ prefix. VITE_ variables are compiled into the browser bundle and would be public.",
+    note: "Never add this with a VITE_ prefix, and never put it in Vercel. VITE_ variables are compiled into the browser bundle and would be public. The key belongs only in the Edge Function, which is why the assistant calls a server function instead of the API directly.",
   },
   {
     id: "twilio", label: "Texting (Twilio)", secret: true,
@@ -21947,8 +22194,8 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       admin && ["crewpay", HardHat, "Crew payouts", "What each crew is owed and has been paid"],
     ]],
     ["Insurance & resources", [
+      ["insurance:ask", MessageCircle, "Roofing assistant", "Code, manufacturers, NRCA, claims — cited answers"],
       ["insurance", Shield, "Insurance & claims", "Clients, claims, supplements & depreciation"],
-      ["insurance:ask", MessageCircle, "Claim assistant", "Ask a claim, code or adjuster question — cited answers"],
       ["insurance:codes", ScrollText, "Code lookup", "Adopted code & building department by zip"],
       ["insurance:resources", BookOpen, "Roofing resources", "Manufacturer specs, policy provisions, letters, playbook"],
     ]],

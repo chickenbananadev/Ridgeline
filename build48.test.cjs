@@ -99,6 +99,50 @@ ok(/const STAGE_RECIPES = \[/.test(src), "automation ships as a recipe menu, not
 ok(/Applied to \$\{n\} \$\{n === 1 \? "stage" : "stages"\}/.test(src), "recipes show how widely they are already used");
 ok(/setStages\(local\); setStageRules\(rules\);/.test(src), "the editor saves stages and rules together");
 
+/* ---------- Part 3: the sandboxed assistant ---------- */
+const fnPath = "./supabase/functions/ai-assistant/index.ts";
+ok(fs.existsSync(fnPath), "ai-assistant Edge Function exists");
+const fn = fs.existsSync(fnPath) ? fs.readFileSync(fnPath, "utf8") : "";
+ok(/Deno\.env\.get\("ANTHROPIC_API_KEY"\)/.test(fn), "the function reads the key server-side");
+/* The only VITE_ mentions allowed here are the comments explaining why the
+   prefix must never be used — never an actual env read. */
+ok(!/Deno\.env\.get\("VITE_/.test(fn) && !/process\.env\.VITE_/.test(fn),
+  "the key is never read from a VITE_ variable (that would ship it to the browser)");
+ok(/if \(!key\) return json\(\{ ok: false, reason: "unconfigured" \}\);/.test(fn),
+  "no key deployed is a soft failure, not an error");
+ok(/const \{ data: \{ user \} \} = await caller\.auth\.getUser\(\);/.test(fn) && /if \(!user\) return json/.test(fn),
+  "only signed-in seats can reach the provider");
+ok(/return json\(\{ ok: false, reason: "no-context" \}\);/.test(fn),
+  "with nothing retrieved it refuses rather than answering from memory");
+ok(/Do not fill the gap from memory/.test(fn), "the system prompt forbids ungrounded code cites");
+ok(/not a lawyer and this is not legal advice/.test(fn), "the system prompt refuses legal advice");
+const mainJs = fs.readFileSync("./src/main.jsx", "utf8");
+ok(/async askAssistant\(\{ question, records, job \}\)/.test(mainJs), "auth.askAssistant is wired");
+ok(/if \(error \|\| !data \|\| !data\.ok \|\| !data\.answer\) return null;/.test(mainJs),
+  "askAssistant never throws — every failure falls back to local retrieval");
+ok(!/VITE_ANTHROPIC/.test(mainJs) && !/ANTHROPIC_API_KEY/.test(fs.readFileSync("./ridgeline.jsx", "utf8").replace(/keyName: "ANTHROPIC_API_KEY"|Add ANTHROPIC_API_KEY|ANTHROPIC_API_KEY with that value/g, "")),
+  "the API key never appears in client code except as setup instructions");
+ok(/function claimCorpus\(\)/.test(src) && /_claimCorpus = buildClaimCorpus\(\)/.test(src),
+  "the corpus builds lazily — it now reaches constants declared later in the file");
+ok(/const INSTALL_SPECS = \[/.test(src) && /const NRCA_PRACTICE = \[/.test(src) && /const IRC_DEEP = \[/.test(src),
+  "manufacturer install specs, NRCA practice and deeper IRC provisions were authored");
+ok(/source: "NRCA best practice"/.test(src) && /source: "Manufacturer install spec"/.test(src),
+  "the new knowledge is wired into the corpus");
+ok(/HELP_ARTICLES : \[\]\)\.forEach/.test(src), "the app's own help articles are answerable too");
+ok(/function assistantJobContext\(job\)/.test(src), "the assistant can answer for the open roof");
+const ctx = src.slice(src.indexOf("function assistantJobContext"), src.indexOf("function ClaimAssistant"));
+ok(!/job\.name|job\.address|job\.phone|job\.email/.test(ctx),
+  "the job context carries the roof, not the customer's file");
+ok(/function ClaimAssistant\(\{ job = null \}\)/.test(src), "ClaimAssistant takes the open job (it took no props at all)");
+ok(/case "assistant": return <ClaimAssistant job=\{job\} \/>;/.test(src), "the assistant is reachable from inside a job");
+/* A job section only renders if its id is in JOB_TABS too — the render
+   filter derives the allowed set from there, so adding it to JOB_SECTIONS
+   alone silently shows nothing. */
+ok(/\["assistant", "Ask the assistant"\]/.test(src), "the assistant is in JOB_TABS, so the section actually renders");
+ok(/\["Build", \["workorder", "tasks", "files", "assistant"\]\]/.test(src), "it sits in the Build group");
+ok(/"insurance:ask", MessageCircle, "Roofing assistant"/.test(src), "it is also reachable globally, not only from a claim");
+ok(/score \+= covered \* covered \* 2;/.test(src), "retrieval ranks by how much of the question a record covers");
+
 /* ---------- live render: the rebuilt home must not crash ---------- */
 const { JSDOM } = require("jsdom");
 const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>",
