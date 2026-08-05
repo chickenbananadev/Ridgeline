@@ -3142,6 +3142,7 @@ var fmtStamp = (iso) => {
   }
 };
 var money = (n) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+var money0 = (n) => (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
 var pct1 = (n) => `${n.toFixed(2)}%`;
 function fmtPhone(v) {
   const d = String(v || "").replace(/\D/g, "");
@@ -9085,7 +9086,8 @@ function JobDetail({
                   setEstimateTemplates,
                   priceList,
                   docTemplates,
-                  setDocTemplates
+                  setDocTemplates,
+                  users
                 }
               );
             case "contract":
@@ -9829,8 +9831,8 @@ function docShell(title, brand2, bodyHtml) {
   .siglbl { font-size: 10.5px; color: #6B7280; margin-top: 5px; }
   .foot { margin-top: 26px; padding-top: 12px; border-top: 1px solid #E5E7EB;
           font-size: 10.5px; color: #9CA3AF; text-align: center; }
-  .cover { text-align: center; padding: 40px 0 30px; page-break-after: always; }
-  .cover img.hero { width: 100%; height: 4.8in; object-fit: cover; border-radius: 12px; margin-bottom: 26px; }
+  /* The cover belongs to the proposal, and proposalCss owns it \u2014 these used
+     to live here too and the two rulesets disagreed about the hero height. */
   @media print { .noprint { display: none !important; } body { padding: 0; } }
   .bar { position: sticky; top: 0; background: #111827; color: #fff; padding: 11px 14px;
          display: flex; gap: 10px; align-items: center; margin: -22px -22px 20px; }
@@ -9926,6 +9928,18 @@ function lineTable(items, opts = {}) {
     ${opts.hidePrice ? "" : '<th class="r">Unit</th><th class="r">Amount</th>'}
   </tr></thead><tbody>${rows}</tbody></table>`;
 }
+var PROPOSAL_DEFAULT_SECTIONS = ["cover", "why", "findings", "options", "items", "warranty", "process", "notes", "terms"];
+var PROPOSAL_SECTION_LABELS = {
+  cover: ["Cover page", "Photo, title, and who it's for"],
+  why: ["Why us", "Licence, insurance, crews, your contact"],
+  findings: ["What we found", "Measurements and the photos you shared"],
+  options: ["Options", "Good/Better/Best side by side, plus upgrades"],
+  items: ["Scope / what's included", "The line items"],
+  warranty: ["Warranty", "Manufacturer and workmanship"],
+  process: ["What happens next", "The five steps after they sign"],
+  notes: ["Special notes", "Anything specific to this job"],
+  terms: ["Terms & conditions", "Payment terms and the fine print"]
+};
 var PROPOSAL_STYLES = [
   { id: "classic", name: "Classic", blurb: "Clean, photo above a title" },
   { id: "bold", name: "Bold", blurb: "Full color banner" },
@@ -9937,7 +9951,7 @@ function normalizeProposalDoc(doc) {
   return {
     style: d.style || "classic",
     title: d.title || "Roofing Proposal",
-    sections: Array.isArray(d.sections) && d.sections.length ? d.sections : ["cover", "items", "notes", "terms"],
+    sections: Array.isArray(d.sections) && d.sections.length ? d.sections : PROPOSAL_DEFAULT_SECTIONS,
     blocks: d.blocks || {},
     coverImage: d.coverImage || null,
     notes: d.notes || "",
@@ -9947,64 +9961,328 @@ function normalizeProposalDoc(doc) {
 function concealedTableHtml(est) {
   const rows = (est && est.concealed || []).filter((c) => c.on !== false && String(c.desc || "").trim());
   if (!rows.length) return "";
-  return `<h2>Concealed conditions \u2014 unit pricing</h2><div class="muted" style="margin-bottom:8px">Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented.</div><table><thead><tr><th>Condition</th><th>Unit</th><th class="r">Price</th></tr></thead><tbody>` + rows.map((c) => `<tr><td>${esc(c.desc)}</td><td>${esc(c.unit || "")}</td><td class="r">${num(c.price) ? money(num(c.price)) : "\u2014"}</td></tr>`).join("") + `</tbody></table>`;
+  return `<section><h2>Concealed conditions \u2014 unit pricing</h2><div class="muted" style="margin-bottom:8px">Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented.</div><table><thead><tr><th>Condition</th><th>Unit</th><th class="r">Price</th></tr></thead><tbody>` + rows.map((c) => `<tr><td>${esc(c.desc)}</td><td>${esc(c.unit || "")}</td><td class="r">${num(c.price) ? money(num(c.price)) : "\u2014"}</td></tr>`).join("") + `</tbody></table></section>`;
 }
-function estimateDocHtml(job, brand2) {
+function tierCardsHtml(est, brand2) {
+  const tiers = (est.tiers || []).filter((t) => (t.items || []).length);
+  if (tiers.length < 2) return "";
+  const chosen = est.selectedTier || (tiers[tiers.length > 2 ? 1 : 0] || {}).id;
+  const totalOf = (t) => (t.items || []).reduce((a, it) => a + num(it.qty) * num(it.price), 0);
+  const common = /* @__PURE__ */ new Set();
+  const descOf = (it) => String(it.desc || "").trim().toLowerCase();
+  tiers[0] && (tiers[0].items || []).forEach((it) => {
+    if (tiers.every((t) => (t.items || []).some((x) => descOf(x) === descOf(it)))) common.add(descOf(it));
+  });
+  const SHOW = 7;
+  const cards = tiers.map((t) => {
+    const on = t.id === chosen;
+    const items = (t.items || []).filter((it) => String(it.desc || "").trim());
+    const unique = items.filter((it) => !common.has(descOf(it)));
+    const shared = items.filter((it) => common.has(descOf(it)));
+    const inc = [...unique, ...shared].slice(0, SHOW);
+    const rest = items.length - inc.length;
+    return `<div class="tier${on ? " on" : ""}">
+      ${on ? `<div class="tierflag">Recommended</div>` : ""}
+      <div class="tiername">${esc(t.name || "Option")}</div>
+      <div class="tierprice">${money0(totalOf(t))}</div>
+      <ul class="tierlist">
+        ${inc.map((it, i) => `<li${i < unique.length ? ' class="key"' : ""}>${esc(it.desc)}</li>`).join("")}
+        ${rest > 0 ? `<li class="more">+ ${rest} more included</li>` : ""}
+      </ul>
+      <div class="tierpick">${on ? "\u2713 Recommended for your roof" : "Select this option"}</div>
+    </div>`;
+  }).join("");
+  return `<section class="page"><h2>Choose your roof</h2>
+    <div class="lede">Three ways to do this job properly. Every option is a complete, code-compliant
+    installation by our own crews \u2014 they differ in the shingle, the warranty, and how long you can
+    forget about your roof afterwards.</div>
+    <div class="tiers">${cards}</div>
+    ${upgradesHtml(est)}
+  </section>`;
+}
+function upgradesHtml(est) {
+  const ups = (est.upgrades || []).filter((u) => String(u.desc || "").trim());
+  if (!ups.length) return "";
+  return `<h3 class="subh">Optional upgrades</h3>
+    <div class="lede">Add any of these to the option you choose. Tick the box and we'll include it.</div>
+    <table class="ups"><tbody>
+    ${ups.map((u) => `<tr>
+      <td class="box">\u2610</td>
+      <td>${esc(u.desc)}</td>
+      <td class="r">${money0(num(u.price))}</td>
+    </tr>`).join("")}
+    </tbody></table>`;
+}
+function findingsHtml(job) {
+  const shots = (job.photos || []).filter((p) => p.shared && (p.url || p.dataUrl)).slice(0, 6);
+  const m = job.measurements || {};
+  const facts = [
+    m.squares ? [`${m.squares}`, "squares"] : null,
+    m.pitch ? [`${esc(m.pitch)}`, "pitch"] : null,
+    (job.intake || {}).layers ? [`${esc(job.intake.layers)}`, "existing layers"] : null,
+    (job.checklist || {}).roofAge ? [`${esc(job.checklist.roofAge)}`, "years old"] : null
+  ].filter(Boolean);
+  if (!shots.length && !facts.length) return "";
+  return `<section class="page"><h2>What we found on your roof</h2>
+    ${facts.length ? `<div class="facts">${facts.map(([v, l]) => `<div class="fact"><div class="factv">${v}</div><div class="factl">${l}</div></div>`).join("")}</div>` : ""}
+    ${shots.length ? `<div class="shots">${shots.map((p) => `<figure><img src="${p.url || p.dataUrl}" alt=""><figcaption>${esc(p.label || "")}</figcaption></figure>`).join("")}</div>` : ""}
+  </section>`;
+}
+function credentialsHtml(brand2, contact) {
+  const bullets = [
+    brand2.license ? `Licensed \u2014 ${esc(brand2.license)}` : null,
+    "Fully insured. Certificates of liability and workers' compensation available on request.",
+    "Our own crews. We do not sell your job to the lowest bidder.",
+    "Every roof is inspected by a company representative before we call it finished."
+  ].filter(Boolean);
+  const rep = contact && (contact.name || contact.phone || contact.email) ? `
+    <div class="repcard">
+      <div class="repl">Your project contact</div>
+      <div class="repn">${esc(contact.name || "")}</div>
+      ${contact.title ? `<div class="rept">${esc(contact.title)}</div>` : ""}
+      <div class="repc">${[esc(contact.phone || ""), esc(contact.email || "")].filter(Boolean).join(" \xB7 ")}</div>
+    </div>` : "";
+  return `<section class="page"><h2>Why ${esc(brand2.company)}</h2>
+    <ul class="checks">${bullets.map((b) => `<li>${b}</li>`).join("")}</ul>
+    ${rep}
+  </section>`;
+}
+function warrantyHtml(job, brand2) {
+  const w = job.warranty || {};
+  const mfr = w.mfr || "";
+  const labor = num(w.laborYears) ? `${w.laborYears}-year workmanship guarantee` : "";
+  if (!mfr && !labor) return "";
+  return `<section><h2>Your warranty</h2>
+    <div class="two">
+      ${mfr ? `<div class="wbox"><div class="wl">Manufacturer</div><div class="wv">${esc(mfr)}</div>
+        <div class="muted">Covers the materials themselves, registered in your name after installation.</div></div>` : ""}
+      ${labor ? `<div class="wbox"><div class="wl">Workmanship</div><div class="wv">${esc(labor)}</div>
+        <div class="muted">Our own guarantee on the installation. One phone call, no argument about whose fault it is.</div></div>` : ""}
+    </div>
+  </section>`;
+}
+var PROPOSAL_STEPS = [
+  ["Accept", "Sign below or in your online portal. We'll confirm the same day."],
+  ["Schedule", "We book your install date and order materials to the roof."],
+  ["Install", "Our crew tears off, dries in and finishes \u2014 most roofs in a single day."],
+  ["Inspect", "A company representative walks the roof and the property with you."],
+  ["Warranty", "We register your manufacturer warranty and send you the paperwork."]
+];
+function processHtml() {
+  return `<section><h2>What happens next</h2>
+    <ol class="steps">${PROPOSAL_STEPS.map(([t, d]) => `<li><span class="stept">${esc(t)}</span><span class="stepd">${esc(d)}</span></li>`).join("")}</ol>
+  </section>`;
+}
+function estimateDocHtml(job, brand2, users = []) {
   const est = job.estimate;
   const doc = est.doc || {};
   const total = estimateTotal(est);
-  const secs = doc.sections || ["cover", "items", "notes", "terms"];
+  const secs = doc.sections || PROPOSAL_DEFAULT_SECTIONS;
   const blocks = doc.blocks || {};
   const style = doc.style || "classic";
   const title = esc(doc.title || "Roofing Proposal");
+  const contact = repContactFor(users, job);
+  const hasTiers = (est.tiers || []).filter((t) => (t.items || []).length).length >= 2;
+  const itemOpts = hasTiers ? { honorLine: true, hidePrice: true } : { honorLine: true };
   let out = "";
   for (const sec of secs) {
     if (sec === "cover") {
-      if (style === "photo" && doc.coverImage) {
-        out += `<div class="cover" style="position:relative;border-radius:14px;overflow:hidden;min-height:420px;background:#111 url('${doc.coverImage}') center/cover no-repeat">
-          <div style="position:absolute;left:0;right:0;bottom:0;padding:26px;background:linear-gradient(transparent,rgba(0,0,0,.78));color:#fff">
-            <div style="font-size:30px;font-weight:800">${title}</div>
-            <div style="margin-top:14px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
-            <div style="font-size:13px;color:rgba(255,255,255,.85)">${esc(job.address)}</div>
-            <div style="margin-top:12px;color:rgba(255,255,255,.85)">${esc(est.number || "")} \xB7 ${esc(est.date || "")}</div>
+      const img = doc.coverImage || job.propertyPhoto && job.propertyPhoto.url || null;
+      const meta = `<div class="cmeta">
+          <div><span class="cml">Prepared for</span><span class="cmv">${esc(job.name)}</span></div>
+          <div><span class="cml">Property</span><span class="cmv">${esc(job.address)}</span></div>
+          <div><span class="cml">Proposal</span><span class="cmv">${esc(est.number || "\u2014")}</span></div>
+          <div><span class="cml">Date</span><span class="cmv">${esc(est.date || "")}</span></div>
+          ${contact.name ? `<div><span class="cml">Your contact</span><span class="cmv">${esc(contact.name)}${contact.phone ? " \xB7 " + esc(contact.phone) : ""}</span></div>` : ""}
+        </div>`;
+      if (style === "photo" && img) {
+        out += `<section class="cover photo" style="background-image:url('${img}')">
+          <div class="covershade">
+            <div class="cotitle">${title}</div>
+            <div class="coco">${esc(brand2.company)}</div>
+            ${meta}
           </div>
-        </div>`;
+        </section>`;
       } else {
-        const coverStyle = style === "bold" ? `background:${brand2.primary};color:#fff;padding:26px;border-radius:14px` : style === "minimal" ? "padding:8px 0" : "";
-        const coverInk = style === "bold" ? "#fff" : brand2.primary;
-        out += `<div class="cover" style="${coverStyle}">
-          ${doc.coverImage ? `<img class="hero" src="${doc.coverImage}" alt="">` : ""}
-          <div style="font-size:${style === "bold" ? 30 : 26}px;font-weight:800;color:${coverInk}">${title}</div>
-          <div style="margin-top:18px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
-          <div class="muted" style="font-size:13px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(job.address)}</div>
-          <div class="muted" style="margin-top:14px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(est.number || "")} \xB7 ${esc(est.date || "")}</div>
-        </div>`;
+        const bold = style === "bold";
+        out += `<section class="cover ${bold ? "boldcover" : "plaincover"}">
+          ${img ? `<img class="hero" src="${img}" alt="">` : ""}
+          <div class="cotitle">${title}</div>
+          <div class="coco">${esc(brand2.company)}${brand2.slogan ? ` \xB7 ${esc(brand2.slogan)}` : ""}</div>
+          ${meta}
+        </section>`;
       }
+      continue;
+    }
+    if (sec === "findings") {
+      out += findingsHtml(job);
+      continue;
+    }
+    if (sec === "why") {
+      out += credentialsHtml(brand2, contact);
+      continue;
+    }
+    if (sec === "options") {
+      out += tierCardsHtml(est, brand2);
+      continue;
+    }
+    if (sec === "warranty") {
+      out += warrantyHtml(job, brand2);
+      continue;
+    }
+    if (sec === "process") {
+      out += processHtml();
+      continue;
     }
     if (sec === "items") {
-      out += `<h2>Scope of work</h2>`;
-      if (est.scope) out += `<div class="muted">${esc(est.scope)}</div>`;
-      out += lineTable(est.items || [], { honorLine: true });
-      out += `<div class="tot grand"><span>Total</span><span>${money(total)}</span></div>`;
-      if (est.validThrough) out += `<div class="muted" style="margin-top:10px">Valid through ${esc(est.validThrough)}</div>`;
+      out += `<section><h2>${hasTiers ? "What's included" : "Scope of work"}</h2>`;
+      if (est.scope) out += `<div class="lede">${esc(est.scope)}</div>`;
+      out += lineTable(est.items || [], itemOpts);
+      if (!hasTiers) {
+        out += `<div class="grandbox"><span class="grandl">Your investment</span><span class="grandv">${money0(total)}</span></div>`;
+      }
+      if (est.validThrough) out += `<div class="muted" style="margin-top:10px">This proposal is held through ${esc(est.validThrough)}.</div>`;
+      out += `</section>`;
+      continue;
     }
-    if (sec === "notes" && doc.notes) out += `<h2>Special notes</h2><div class="muted">${esc(doc.notes)}</div>`;
-    if (sec === "terms" && doc.terms) out += `<h2>Terms &amp; conditions</h2><div class="muted">${esc(doc.terms)}</div>`;
+    if (sec === "notes" && doc.notes) {
+      out += `<section><h2>Special notes</h2><div class="body">${esc(doc.notes)}</div></section>`;
+      continue;
+    }
+    if (sec === "terms" && doc.terms) {
+      out += `<section><h2>Terms &amp; conditions</h2><div class="body small">${esc(doc.terms)}</div></section>`;
+      continue;
+    }
     const b = blocks[sec];
     if (b && b.type === "text" && (b.title || b.body)) {
-      out += `<h2>${esc(b.title || "")}</h2><div class="muted">${esc(b.body || "")}</div>`;
+      out += `<section><h2>${esc(b.title || "")}</h2><div class="body">${esc(b.body || "")}</div></section>`;
     }
     if (b && b.type === "pdf" && b.dataUrl) {
-      out += `<h2>${esc(b.name || "Attachment")}</h2>`;
-      out += `<iframe src="${b.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe>`;
+      out += `<section class="page"><h2>${esc(b.name || "Attachment")}</h2>`;
+      out += `<iframe src="${b.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe></section>`;
     }
   }
   out += concealedTableHtml(est);
-  out += `<div class="sig">
-    <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
-    <div><div class="sigline"></div><div class="siglbl">${esc(brand2.company)} representative</div></div>
-  </div>`;
-  return out;
+  out += `<section class="accept">
+    <h2 class="acceptt">Ready to go ahead?</h2>
+    <div class="lede">Sign below and return this, or accept it in your online portal \u2014 whichever is easier.
+    ${est.validThrough ? `This pricing is held through ${esc(est.validThrough)}.` : ""}</div>
+    ${hasTiers ? `<div class="acceptpick"><b>Option chosen:</b> ______________________________
+      &nbsp;&nbsp;<b>Upgrades:</b> ______________________________</div>` : ""}
+    <div class="sig">
+      <div><div class="sigline"></div><div class="siglbl">${esc(job.name)} \u2014 signature / date</div></div>
+      <div><div class="sigline"></div><div class="siglbl">${esc(brand2.company)} representative</div></div>
+    </div>
+  </section>`;
+  return out + proposalCss(brand2);
+}
+function proposalCss(brand2) {
+  const p = brand2.primary || "#20242A";
+  const a = brand2.accent || "#0A9E98";
+  return `<style>
+  /* Sections get real page structure. The old proposal was one continuous
+     flow, so tables split across pages wherever they happened to land. */
+  section { margin-top: 30px; }
+  section.page { page-break-before: always; }
+  section, .tier, figure, .wbox, .steps li { page-break-inside: avoid; }
+  h2 { font-size: 19px; font-weight: 800; letter-spacing: -0.01em; text-transform: none;
+       color: ${p}; margin: 0 0 4px; padding-bottom: 9px; border-bottom: 2px solid ${p}; }
+  h3.subh { font-size: 14px; font-weight: 800; color: ${p}; margin: 24px 0 4px; }
+  .lede { font-size: 13.5px; line-height: 1.65; color: #4B5563; margin: 12px 0 16px; max-width: 62ch; }
+  .body { font-size: 13.5px; line-height: 1.7; color: #374151; white-space: pre-wrap; max-width: 68ch; }
+  .body.small { font-size: 12px; line-height: 1.65; color: #4B5563; max-width: none; }
+
+  /* Cover. A real one \u2014 it owns the first page and nothing else is on it. */
+  .cover { page-break-after: always; padding: 0; text-align: left; }
+  .cover .hero { width: 100%; height: 4.4in; object-fit: cover; border-radius: 14px; margin-bottom: 34px; display: block; }
+  .cotitle { font-size: 40px; font-weight: 800; line-height: 1.08; letter-spacing: -0.02em; color: ${p}; }
+  .coco { font-size: 14px; color: #6B7280; margin-top: 10px; }
+  .cmeta { margin-top: 34px; border-top: 2px solid ${p}; padding-top: 18px; }
+  .cmeta > div { display: flex; gap: 14px; padding: 7px 0; border-bottom: 1px solid #EEF1F4; font-size: 13.5px; }
+  .cml { min-width: 132px; color: #6B7280; }
+  .cmv { color: #111827; font-weight: 600; }
+  .boldcover .cotitle { background: ${p}; color: #fff; padding: 26px 24px; border-radius: 14px; }
+  .boldcover .coco { padding-left: 2px; }
+  .cover.photo { min-height: 9in; background-size: cover; background-position: center;
+                 border-radius: 14px; overflow: hidden; display: flex; align-items: flex-end; }
+  .cover.photo .covershade { width: 100%; padding: 34px 30px;
+      background: linear-gradient(transparent, rgba(0,0,0,.82)); color: #fff; }
+  .cover.photo .cotitle, .cover.photo .coco, .cover.photo .cmv { color: #fff; }
+  .cover.photo .cmeta { border-top-color: rgba(255,255,255,.5); }
+  .cover.photo .cmeta > div { border-bottom-color: rgba(255,255,255,.18); }
+  .cover.photo .cml { color: rgba(255,255,255,.75); }
+
+  /* Options. The page the homeowner actually decides on. */
+  .tiers { display: flex; gap: 14px; align-items: stretch; margin-top: 18px; }
+  .tier { flex: 1; border: 1.5px solid #E3E7EC; border-radius: 14px; padding: 18px 16px 16px;
+          position: relative; display: flex; flex-direction: column; }
+  .tier.on { border-color: ${a}; border-width: 2.5px; box-shadow: 0 6px 22px rgba(0,0,0,.07); }
+  .tierflag { position: absolute; top: -11px; left: 16px; background: ${a}; color: #fff;
+              font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+              padding: 4px 10px; border-radius: 999px; }
+  .tiername { font-size: 15px; font-weight: 800; color: ${p}; }
+  .tierprice { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; color: ${p}; margin: 6px 0 12px; }
+  .tierlist { list-style: none; margin: 0; padding: 0; flex: 1; }
+  .tierlist li { font-size: 12px; line-height: 1.5; color: #374151; padding: 5px 0 5px 17px;
+                 position: relative; border-top: 1px solid #F1F3F6; }
+  .tierlist li:before { content: "\u2713"; position: absolute; left: 0; color: ${a}; font-weight: 800; }
+  .tierlist li.key { font-weight: 700; color: #111827; }
+  .tierlist li.more { color: #6B7280; font-style: italic; }
+  .tierlist li.more:before { content: ""; }
+  .tierpick { margin-top: 14px; text-align: center; font-size: 11.5px; font-weight: 700;
+              color: #6B7280; border-top: 1px solid #EEF1F4; padding-top: 11px; }
+  .tier.on .tierpick { color: ${a}; }
+  table.ups { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  table.ups td { padding: 9px 6px; border-bottom: 1px solid #F1F3F6; font-size: 13px; }
+  table.ups td.box { width: 26px; font-size: 16px; color: #9CA3AF; }
+  table.ups td.r { text-align: right; white-space: nowrap; font-weight: 700; }
+
+  /* Findings \u2014 their own roof, in numbers and photographs. */
+  .facts { display: flex; gap: 12px; margin: 16px 0 20px; }
+  .fact { flex: 1; border: 1px solid #E3E7EC; border-radius: 12px; padding: 13px 10px; text-align: center; }
+  .factv { font-size: 24px; font-weight: 800; color: ${p}; letter-spacing: -0.02em; }
+  .factl { font-size: 11px; color: #6B7280; margin-top: 2px; }
+  .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .shots figure { margin: 0; }
+  .shots img { width: 100%; height: 2.1in; object-fit: cover; border-radius: 10px; display: block; }
+  .shots figcaption { font-size: 11px; color: #6B7280; margin-top: 5px; }
+
+  /* Trust. */
+  ul.checks { list-style: none; margin: 16px 0 0; padding: 0; max-width: 66ch; }
+  ul.checks li { font-size: 13.5px; line-height: 1.6; color: #374151; padding: 8px 0 8px 26px;
+                 position: relative; border-bottom: 1px solid #F1F3F6; }
+  ul.checks li:before { content: "\u2713"; position: absolute; left: 2px; color: ${a}; font-weight: 800; }
+  .repcard { margin-top: 20px; border: 1.5px solid #E3E7EC; border-left: 4px solid ${a};
+             border-radius: 12px; padding: 15px 17px; max-width: 380px; }
+  .repl { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #6B7280; }
+  .repn { font-size: 17px; font-weight: 800; color: ${p}; margin-top: 4px; }
+  .rept { font-size: 12.5px; color: #6B7280; }
+  .repc { font-size: 13px; color: #374151; margin-top: 6px; }
+
+  /* Warranty + process. */
+  .two { display: flex; gap: 14px; margin-top: 16px; }
+  .wbox { flex: 1; border: 1px solid #E3E7EC; border-radius: 12px; padding: 15px 16px; }
+  .wl { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #6B7280; }
+  .wv { font-size: 16px; font-weight: 800; color: ${p}; margin: 4px 0 7px; }
+  ol.steps { list-style: none; counter-reset: s; margin: 16px 0 0; padding: 0; }
+  ol.steps li { counter-increment: s; position: relative; padding: 11px 0 11px 44px; border-bottom: 1px solid #F1F3F6; }
+  ol.steps li:before { content: counter(s); position: absolute; left: 0; top: 10px; width: 27px; height: 27px;
+      border-radius: 999px; background: ${p}; color: #fff; font-size: 12.5px; font-weight: 800;
+      display: grid; place-items: center; }
+  .stept { display: block; font-size: 13.5px; font-weight: 800; color: ${p}; }
+  .stepd { display: block; font-size: 12.5px; color: #4B5563; margin-top: 1px; line-height: 1.55; }
+
+  /* The number, when there is only one. */
+  .grandbox { display: flex; justify-content: space-between; align-items: baseline;
+      margin-top: 16px; padding: 16px 18px; border-radius: 12px; background: ${p}; color: #fff; }
+  .grandl { font-size: 13px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; opacity: .85; }
+  .grandv { font-size: 27px; font-weight: 800; letter-spacing: -0.02em; }
+
+  /* The close. */
+  .accept { margin-top: 34px; border-top: 2px solid ${p}; padding-top: 20px; page-break-inside: avoid; }
+  .accept .acceptt { border: 0; padding-bottom: 0; }
+  .acceptpick { font-size: 13px; color: #374151; margin: 14px 0 4px; }
+  </style>`;
 }
 function invoiceDocHtml(job, brand2) {
   const pay = paymentsSummary(job);
@@ -15706,7 +15984,7 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
   ] });
 }
 function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast, total, onClose, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
-} }) {
+}, users = [] }) {
   const doc = normalizeProposalDoc(est.doc);
   const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
   const setDocTpl = (kind) => (list) => setDocTemplates({ ...docTemplates, [kind]: list });
@@ -15716,7 +15994,7 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast, total
   const [addOpen, setAddOpen] = (0, import_react.useState)(false);
   const coverRef = (0, import_react.useRef)(null);
   const pdfRef = (0, import_react.useRef)(null);
-  const BUILTIN = { cover: "Cover page", items: "Line items & pricing", notes: "Special notes", terms: "Terms & conditions" };
+  const BUILTIN = Object.fromEntries(Object.entries(PROPOSAL_SECTION_LABELS).map(([k, v]) => [k, v[0]]));
   const has = (key) => doc.sections.includes(key);
   const labelFor = (sec) => BUILTIN[sec] || (blocks[sec] ? blocks[sec].type === "pdf" ? `PDF \xB7 ${blocks[sec].name || "Attachment"}` : blocks[sec].title || "Custom section" : sec);
   const move = (idx, dir) => {
@@ -15793,7 +16071,7 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast, total
           est.number || "Draft"
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => openDoc(`Estimate \u2014 ${job.name}`, brand2, estimateDocHtml(job, brand2), toast), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => openDoc(`Estimate \u2014 ${job.name}`, brand2, estimateDocHtml(job, brand2, users), toast), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 14 }),
         " PDF"
       ] })
@@ -15938,16 +16216,25 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast, total
           blocks[sec] && blocks[sec].type === "pdf" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 6, paddingLeft: 24, fontSize: 12.5, color: S.sub }, children: "Attached PDF \u2014 shown as its own page in the proposal." })
         ] }, sec)),
         addOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }, children: [
-          !has("cover") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: chip(false), onClick: () => addBuiltin("cover"), children: "+ Cover" }),
-          !has("items") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: chip(false), onClick: () => addBuiltin("items"), children: "+ Line items" }),
-          !has("notes") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: chip(false), onClick: () => addBuiltin("notes"), children: "+ Notes" }),
-          !has("terms") && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: chip(false), onClick: () => addBuiltin("terms"), children: "+ Terms" }),
+          Object.keys(PROPOSAL_SECTION_LABELS).filter((k) => !has(k)).map((k) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            "button",
+            {
+              style: chip(false),
+              title: PROPOSAL_SECTION_LABELS[k][1],
+              onClick: () => addBuiltin(k),
+              children: [
+                "+ ",
+                PROPOSAL_SECTION_LABELS[k][0]
+              ]
+            },
+            k
+          )),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: chip(false), onClick: addText, children: "+ Custom text" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: chip(false), onClick: () => pdfRef.current && pdfRef.current.click(), children: "+ Attach PDF" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: { ...chip(false), color: S.sub }, onClick: () => setAddOpen(false), children: "Cancel" })
         ] })
       ] })
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProposalPreview, { job, brand: brand2, est, doc, total }) })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProposalPreview, { job, brand: brand2, est, doc, total, users }) })
   ] });
 }
 function CoverThumb({ style, accent, primary }) {
@@ -15983,77 +16270,23 @@ function CoverThumb({ style, accent, primary }) {
     ] })
   ] });
 }
-function ProposalPreview({ job, brand: brand2, est, doc, total }) {
-  const blocks = doc.blocks || {};
-  const style = doc.style || "classic";
-  const title = doc.title || "Roofing Proposal";
-  const photoHero = style === "photo" && doc.coverImage;
-  const coverWrap = style === "bold" ? { background: T.primary, color: "#fff", padding: 22, borderRadius: 14 } : style === "minimal" ? { padding: "6px 2px" } : { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" };
-  const onDark = style === "bold";
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }, children: doc.sections.map((sec) => {
-    if (sec === "cover" && photoHero) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginBottom: 16, position: "relative", borderRadius: 14, overflow: "hidden", minHeight: 300, background: `#111 url(${JSON.stringify(doc.coverImage)}) center/cover no-repeat` }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "absolute", left: 0, right: 0, bottom: 0, padding: 18, background: "linear-gradient(transparent, rgba(0,0,0,.78))", color: "#fff" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800 }, children: title }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 10, fontSize: 13.5 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontWeight: 700 }, children: [
-          "Prepared for ",
-          job.name
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { opacity: 0.85 }, children: job.address }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { opacity: 0.85, marginTop: 4 }, children: [
-          est.number,
-          " \xB7 ",
-          est.date
-        ] })
-      ] })
-    ] }) }, sec);
-    if (sec === "cover") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16, ...coverWrap }, children: [
-      doc.coverImage && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: doc.coverImage, alt: "", style: { width: "100%", height: 400, objectFit: "cover", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 } }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: style === "bold" ? 0 : style === "minimal" ? "10px 0" : 16 }, children: [
-        brand2.logo && !onDark ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "", style: { height: 34, objectFit: "contain", marginBottom: 8, display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontWeight: 800, fontSize: 17, marginBottom: 4, color: onDark ? "#fff" : S.ink }, children: brand2.company }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800, color: onDark ? "#fff" : brand2.primary }, children: title }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12, fontSize: 13.5, color: onDark ? "rgba(255,255,255,.9)" : S.ink }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontWeight: 700 }, children: [
-            "Prepared for ",
-            job.name
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { opacity: 0.85 }, children: job.address }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { opacity: 0.85, marginTop: 4 }, children: [
-            est.number,
-            " \xB7 ",
-            est.date
-          ] })
-        ] })
-      ] })
-    ] }, sec);
-    if (sec === "items") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }, children: "SCOPE & PRICING" }),
-      est.scope && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, lineHeight: 1.5, marginBottom: 8, whiteSpace: "pre-wrap" }, children: est.scope }),
-      (est.items || []).map((it) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PortalEstLine, { it }, it.id)),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 800, marginTop: 8, paddingTop: 8, borderTop: `2px solid ${S.line}` }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Total" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: money(total) })
-      ] })
-    ] }, sec);
-    if (sec === "notes" && doc.notes) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }, children: "SPECIAL NOTES" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }, children: doc.notes })
-    ] }, sec);
-    if (sec === "terms" && doc.terms) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }, children: "TERMS & CONDITIONS" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, lineHeight: 1.6, color: S.sub, whiteSpace: "pre-wrap" }, children: doc.terms })
-    ] }, sec);
-    const b = blocks[sec];
-    if (b && b.type === "text" && (b.title || b.body)) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }, children: (b.title || "").toUpperCase() }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }, children: b.body })
-    ] }, sec);
-    if (b && b.type === "pdf") return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16, display: "flex", alignItems: "center", gap: 10, border: `1px solid ${S.line}`, borderRadius: 10, padding: "12px 14px" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.FileText, { size: 20, color: T.accent }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700 }, children: b.name || "Attachment" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { marginLeft: "auto", fontSize: 12, color: S.sub }, children: "PDF page" })
-    ] }, sec);
-    return null;
-  }) });
+function ProposalPreview({ job, brand: brand2, est, doc, total, users = [] }) {
+  const html = (0, import_react.useMemo)(
+    () => docShell(doc.title || "Roofing Proposal", brand2, estimateDocHtml({ ...job, estimate: { ...est, doc } }, brand2, users)),
+    [job, brand2, est, doc, users]
+  );
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, padding: "9px 12px", borderBottom: `1px solid ${S.line}` }, children: "Exactly what the customer receives \u2014 same renderer as the PDF." }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "iframe",
+      {
+        title: "Proposal preview",
+        srcDoc: html,
+        sandbox: "",
+        style: { width: "100%", height: "70vh", border: 0, display: "block", background: "#fff" }
+      }
+    )
+  ] });
 }
 function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
   const [naming, setNaming] = (0, import_react.useState)(false);
@@ -16135,7 +16368,7 @@ function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
 }
 function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {
 }, priceList = [], docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
-} }) {
+}, users = [] }) {
   const est = { ...job.estimate, tiers: job.estimate.tiers || [], upgrades: job.estimate.upgrades || [] };
   const [sigOpen, setSigOpen] = (0, import_react.useState)(false);
   const locked = est.status === "Signed";
@@ -16502,7 +16735,7 @@ function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], s
       ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "Client signs on-screen at the kitchen table, or through the shared portal link." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => openDoc(`Estimate \u2014 ${job.name}`, brand2, estimateDocHtml(job, brand2), toast), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => openDoc(`Estimate \u2014 ${job.name}`, brand2, estimateDocHtml(job, brand2, users), toast), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
         " PDF"
       ] }),
@@ -16668,7 +16901,8 @@ function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], s
         total,
         onClose: () => setBuilderOpen(false),
         docTemplates,
-        setDocTemplates
+        setDocTemplates,
+        users
       }
     )
   ] });

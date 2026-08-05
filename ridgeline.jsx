@@ -2412,6 +2412,10 @@ const fmtStamp = (iso) => {
 
 const money = (n) =>
   (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/* Whole dollars, for the big customer-facing numbers. "$20,911" reads as a
+   price; "$20,911.00" reads as an invoice line. */
+const money0 = (n) =>
+  (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
 const pct1 = (n) => `${n.toFixed(2)}%`;
 
 /* Phone display, in the house format: 1(555)555-5555.
@@ -7671,7 +7675,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "materials": return <TabMaterials job={job} mut={mut} toast={toast} />;
               case "estimate": return <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
                 estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} priceList={priceList}
-                docTemplates={docTemplates} setDocTemplates={setDocTemplates} />;
+                docTemplates={docTemplates} setDocTemplates={setDocTemplates} users={users} />;
               case "contract": return (<>
                 <TabContract job={job} brand={brand} setBrand={setBrand} mut={mut} toast={toast}
                   docTemplates={docTemplates} setDocTemplates={setDocTemplates} currentUser={currentUser} integrations={integrations} />
@@ -8356,8 +8360,8 @@ function docShell(title, brand, bodyHtml) {
   .siglbl { font-size: 10.5px; color: #6B7280; margin-top: 5px; }
   .foot { margin-top: 26px; padding-top: 12px; border-top: 1px solid #E5E7EB;
           font-size: 10.5px; color: #9CA3AF; text-align: center; }
-  .cover { text-align: center; padding: 40px 0 30px; page-break-after: always; }
-  .cover img.hero { width: 100%; height: 4.8in; object-fit: cover; border-radius: 12px; margin-bottom: 26px; }
+  /* The cover belongs to the proposal, and proposalCss owns it — these used
+     to live here too and the two rulesets disagreed about the hero height. */
   @media print { .noprint { display: none !important; } body { padding: 0; } }
   .bar { position: sticky; top: 0; background: #111827; color: #fff; padding: 11px 14px;
          display: flex; gap: 10px; align-items: center; margin: -22px -22px 20px; }
@@ -8452,6 +8456,23 @@ function lineTable(items, opts = {}) {
 /* Proposal visual styles for the customer-facing document. Each style is a
    light treatment of the cover/heading; the body stays legible and printable.
    Additive — an estimate with no doc.style falls back to "classic". */
+/* The order a proposal sells in: who we are and what we found before any
+   number, options before the itemised sheet, then warranty, process, terms.
+   Each is opt-out in the builder, and each renders nothing when the job has
+   no data for it — a company that never fills in a warranty simply doesn't
+   get a warranty page rather than getting an empty one. */
+const PROPOSAL_DEFAULT_SECTIONS = ["cover", "why", "findings", "options", "items", "warranty", "process", "notes", "terms"];
+const PROPOSAL_SECTION_LABELS = {
+  cover: ["Cover page", "Photo, title, and who it's for"],
+  why: ["Why us", "Licence, insurance, crews, your contact"],
+  findings: ["What we found", "Measurements and the photos you shared"],
+  options: ["Options", "Good/Better/Best side by side, plus upgrades"],
+  items: ["Scope / what's included", "The line items"],
+  warranty: ["Warranty", "Manufacturer and workmanship"],
+  process: ["What happens next", "The five steps after they sign"],
+  notes: ["Special notes", "Anything specific to this job"],
+  terms: ["Terms & conditions", "Payment terms and the fine print"],
+};
 const PROPOSAL_STYLES = [
   { id: "classic", name: "Classic", blurb: "Clean, photo above a title" },
   { id: "bold", name: "Bold", blurb: "Full color banner" },
@@ -8468,7 +8489,7 @@ function normalizeProposalDoc(doc) {
   return {
     style: d.style || "classic",
     title: d.title || "Roofing Proposal",
-    sections: Array.isArray(d.sections) && d.sections.length ? d.sections : ["cover", "items", "notes", "terms"],
+    sections: Array.isArray(d.sections) && d.sections.length ? d.sections : PROPOSAL_DEFAULT_SECTIONS,
     blocks: d.blocks || {},
     coverImage: d.coverImage || null,
     notes: d.notes || "",
@@ -8481,74 +8502,377 @@ function normalizeProposalDoc(doc) {
 function concealedTableHtml(est) {
   const rows = ((est && est.concealed) || []).filter((c) => c.on !== false && String(c.desc || "").trim());
   if (!rows.length) return "";
-  return `<h2>Concealed conditions — unit pricing</h2>` +
+  return `<section><h2>Concealed conditions — unit pricing</h2>` +
     `<div class="muted" style="margin-bottom:8px">Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented.</div>` +
     `<table><thead><tr><th>Condition</th><th>Unit</th><th class="r">Price</th></tr></thead><tbody>` +
     rows.map((c) => `<tr><td>${esc(c.desc)}</td><td>${esc(c.unit || "")}</td><td class="r">${num(c.price) ? money(num(c.price)) : "—"}</td></tr>`).join("") +
-    `</tbody></table>`;
+    `</tbody></table></section>`;
 }
 
-function estimateDocHtml(job, brand) {
+/* ==================================================================
+   THE PROPOSAL
+
+   This is the only document most homeowners ever judge the company by,
+   and it used to read as an invoice: a centred title, then straight into
+   a wall of line items with unit prices, then a bare total. That layout
+   actively loses work. It invites a homeowner to shop the sheet line by
+   line ("$3.40 a foot for drip edge? Home Depot sells that"), gives them
+   one price to say yes or no to, and offers nothing that justifies
+   twenty thousand dollars.
+
+   What the category does instead — SumoQuote, Roofr — is sell before it
+   prices: a real cover page, who you are and why you're trustworthy,
+   what we found on YOUR roof, then options side by side, then what's
+   included, warranty, and what happens after you sign. Options are the
+   single biggest lever; the sheet stops being yes/no and becomes which.
+
+   Good/Better/Best already existed here — in the builder, in the data,
+   and in the portal — but the printed proposal ignored it entirely and
+   printed the flattened single price. That was the biggest gap.
+
+   Every section below is opt-out via the doc's `sections` list, and
+   every one of them is built from data the app already holds.
+================================================================== */
+
+/* The tier cards, side by side, with the recommended one lifted. This is
+   the page a homeowner actually decides on. */
+function tierCardsHtml(est, brand) {
+  const tiers = (est.tiers || []).filter((t) => (t.items || []).length);
+  if (tiers.length < 2) return "";
+  const chosen = est.selectedTier || (tiers[tiers.length > 2 ? 1 : 0] || {}).id;
+  const totalOf = (t) => (t.items || []).reduce((a, it) => a + num(it.qty) * num(it.price), 0);
+  /* Tiers share most of their scope — tear-off, underlayment, flashing are
+     the same whichever shingle you pick. Listing items in their natural order
+     therefore fills all three cards with identical bullets and pushes the one
+     line that actually differs into "+2 more". Three identical lists at three
+     different prices makes the expensive options look like a markup on
+     nothing. So lead each card with what is unique to it. */
+  const common = new Set();
+  const descOf = (it) => String(it.desc || "").trim().toLowerCase();
+  tiers[0] && (tiers[0].items || []).forEach((it) => {
+    if (tiers.every((t) => (t.items || []).some((x) => descOf(x) === descOf(it)))) common.add(descOf(it));
+  });
+  const SHOW = 7;
+  const cards = tiers.map((t) => {
+    const on = t.id === chosen;
+    const items = (t.items || []).filter((it) => String(it.desc || "").trim());
+    const unique = items.filter((it) => !common.has(descOf(it)));
+    const shared = items.filter((it) => common.has(descOf(it)));
+    const inc = [...unique, ...shared].slice(0, SHOW);
+    const rest = items.length - inc.length;
+    return `<div class="tier${on ? " on" : ""}">
+      ${on ? `<div class="tierflag">Recommended</div>` : ""}
+      <div class="tiername">${esc(t.name || "Option")}</div>
+      <div class="tierprice">${money0(totalOf(t))}</div>
+      <ul class="tierlist">
+        ${inc.map((it, i) => `<li${i < unique.length ? ' class="key"' : ""}>${esc(it.desc)}</li>`).join("")}
+        ${rest > 0 ? `<li class="more">+ ${rest} more included</li>` : ""}
+      </ul>
+      <div class="tierpick">${on ? "✓ Recommended for your roof" : "Select this option"}</div>
+    </div>`;
+  }).join("");
+  return `<section class="page"><h2>Choose your roof</h2>
+    <div class="lede">Three ways to do this job properly. Every option is a complete, code-compliant
+    installation by our own crews — they differ in the shingle, the warranty, and how long you can
+    forget about your roof afterwards.</div>
+    <div class="tiers">${cards}</div>
+    ${upgradesHtml(est)}
+  </section>`;
+}
+
+function upgradesHtml(est) {
+  const ups = (est.upgrades || []).filter((u) => String(u.desc || "").trim());
+  if (!ups.length) return "";
+  return `<h3 class="subh">Optional upgrades</h3>
+    <div class="lede">Add any of these to the option you choose. Tick the box and we'll include it.</div>
+    <table class="ups"><tbody>
+    ${ups.map((u) => `<tr>
+      <td class="box">☐</td>
+      <td>${esc(u.desc)}</td>
+      <td class="r">${money0(num(u.price))}</td>
+    </tr>`).join("")}
+    </tbody></table>`;
+}
+
+/* Photos the rep marked customer-visible, as evidence of what we found.
+   A homeowner who has seen their own damaged flashing argues about price
+   far less than one who has only seen a number. */
+function findingsHtml(job) {
+  const shots = (job.photos || []).filter((p) => p.shared && (p.url || p.dataUrl)).slice(0, 6);
+  const m = job.measurements || {};
+  const facts = [
+    m.squares ? [`${m.squares}`, "squares"] : null,
+    m.pitch ? [`${esc(m.pitch)}`, "pitch"] : null,
+    (job.intake || {}).layers ? [`${esc(job.intake.layers)}`, "existing layers"] : null,
+    (job.checklist || {}).roofAge ? [`${esc(job.checklist.roofAge)}`, "years old"] : null,
+  ].filter(Boolean);
+  if (!shots.length && !facts.length) return "";
+  return `<section class="page"><h2>What we found on your roof</h2>
+    ${facts.length ? `<div class="facts">${facts.map(([v, l]) =>
+      `<div class="fact"><div class="factv">${v}</div><div class="factl">${l}</div></div>`).join("")}</div>` : ""}
+    ${shots.length ? `<div class="shots">${shots.map((p) =>
+      `<figure><img src="${p.url || p.dataUrl}" alt=""><figcaption>${esc(p.label || "")}</figcaption></figure>`).join("")}</div>` : ""}
+  </section>`;
+}
+
+/* Credentials, in the homeowner's terms. Only renders what the company has
+   actually filled in — an empty trust section is worse than none. */
+function credentialsHtml(brand, contact) {
+  const bullets = [
+    brand.license ? `Licensed — ${esc(brand.license)}` : null,
+    "Fully insured. Certificates of liability and workers' compensation available on request.",
+    "Our own crews. We do not sell your job to the lowest bidder.",
+    "Every roof is inspected by a company representative before we call it finished.",
+  ].filter(Boolean);
+  const rep = contact && (contact.name || contact.phone || contact.email) ? `
+    <div class="repcard">
+      <div class="repl">Your project contact</div>
+      <div class="repn">${esc(contact.name || "")}</div>
+      ${contact.title ? `<div class="rept">${esc(contact.title)}</div>` : ""}
+      <div class="repc">${[esc(contact.phone || ""), esc(contact.email || "")].filter(Boolean).join(" · ")}</div>
+    </div>` : "";
+  return `<section class="page"><h2>Why ${esc(brand.company)}</h2>
+    <ul class="checks">${bullets.map((b) => `<li>${b}</li>`).join("")}</ul>
+    ${rep}
+  </section>`;
+}
+
+/* Manufacturer + workmanship warranty, side by side. Reads the job's own
+   warranty record — the same one the Warranties screen writes — so a company
+   that fills that in once gets it on every proposal, and one that doesn't
+   simply has no warranty page rather than an empty one. */
+function warrantyHtml(job, brand) {
+  const w = job.warranty || {};
+  const mfr = w.mfr || "";
+  const labor = num(w.laborYears) ? `${w.laborYears}-year workmanship guarantee` : "";
+  if (!mfr && !labor) return "";
+  return `<section><h2>Your warranty</h2>
+    <div class="two">
+      ${mfr ? `<div class="wbox"><div class="wl">Manufacturer</div><div class="wv">${esc(mfr)}</div>
+        <div class="muted">Covers the materials themselves, registered in your name after installation.</div></div>` : ""}
+      ${labor ? `<div class="wbox"><div class="wl">Workmanship</div><div class="wv">${esc(labor)}</div>
+        <div class="muted">Our own guarantee on the installation. One phone call, no argument about whose fault it is.</div></div>` : ""}
+    </div>
+  </section>`;
+}
+
+/* What happens after they sign. Removes the single biggest unspoken
+   objection on a large job, which is "and then what?". */
+const PROPOSAL_STEPS = [
+  ["Accept", "Sign below or in your online portal. We'll confirm the same day."],
+  ["Schedule", "We book your install date and order materials to the roof."],
+  ["Install", "Our crew tears off, dries in and finishes — most roofs in a single day."],
+  ["Inspect", "A company representative walks the roof and the property with you."],
+  ["Warranty", "We register your manufacturer warranty and send you the paperwork."],
+];
+function processHtml() {
+  return `<section><h2>What happens next</h2>
+    <ol class="steps">${PROPOSAL_STEPS.map(([t, d]) =>
+      `<li><span class="stept">${esc(t)}</span><span class="stepd">${esc(d)}</span></li>`).join("")}</ol>
+  </section>`;
+}
+
+function estimateDocHtml(job, brand, users = []) {
   const est = job.estimate;
   const doc = est.doc || {};
   const total = estimateTotal(est);
-  const secs = doc.sections || ["cover", "items", "notes", "terms"];
+  const secs = doc.sections || PROPOSAL_DEFAULT_SECTIONS;
   const blocks = doc.blocks || {};
   const style = doc.style || "classic";
   const title = esc((doc.title || "Roofing Proposal"));
+  const contact = repContactFor(users, job);
+  const hasTiers = (est.tiers || []).filter((t) => (t.items || []).length).length >= 2;
+  /* With options on the table the itemised sheet is an inclusions list, not
+     a price list — the option price is the price. Showing both invites
+     arithmetic that never ends in a signature. */
+  const itemOpts = hasTiers ? { honorLine: true, hidePrice: true } : { honorLine: true };
   let out = "";
+
   for (const sec of secs) {
     if (sec === "cover") {
-      if (style === "photo" && doc.coverImage) {
-        /* Photo hero: the house photo fills the page with the title and
-           customer info laid over a dark gradient at the bottom. */
-        out += `<div class="cover" style="position:relative;border-radius:14px;overflow:hidden;min-height:420px;background:#111 url('${doc.coverImage}') center/cover no-repeat">
-          <div style="position:absolute;left:0;right:0;bottom:0;padding:26px;background:linear-gradient(transparent,rgba(0,0,0,.78));color:#fff">
-            <div style="font-size:30px;font-weight:800">${title}</div>
-            <div style="margin-top:14px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
-            <div style="font-size:13px;color:rgba(255,255,255,.85)">${esc(job.address)}</div>
-            <div style="margin-top:12px;color:rgba(255,255,255,.85)">${esc(est.number || "")} · ${esc(est.date || "")}</div>
+      const img = doc.coverImage || (job.propertyPhoto && job.propertyPhoto.url) || null;
+      const meta = `<div class="cmeta">
+          <div><span class="cml">Prepared for</span><span class="cmv">${esc(job.name)}</span></div>
+          <div><span class="cml">Property</span><span class="cmv">${esc(job.address)}</span></div>
+          <div><span class="cml">Proposal</span><span class="cmv">${esc(est.number || "—")}</span></div>
+          <div><span class="cml">Date</span><span class="cmv">${esc(est.date || "")}</span></div>
+          ${contact.name ? `<div><span class="cml">Your contact</span><span class="cmv">${esc(contact.name)}${contact.phone ? " · " + esc(contact.phone) : ""}</span></div>` : ""}
+        </div>`;
+      if (style === "photo" && img) {
+        out += `<section class="cover photo" style="background-image:url('${img}')">
+          <div class="covershade">
+            <div class="cotitle">${title}</div>
+            <div class="coco">${esc(brand.company)}</div>
+            ${meta}
           </div>
-        </div>`;
+        </section>`;
       } else {
-        const coverStyle = style === "bold"
-          ? `background:${brand.primary};color:#fff;padding:26px;border-radius:14px`
-          : style === "minimal" ? "padding:8px 0" : "";
-        const coverInk = style === "bold" ? "#fff" : brand.primary;
-        out += `<div class="cover" style="${coverStyle}">
-          ${doc.coverImage ? `<img class="hero" src="${doc.coverImage}" alt="">` : ""}
-          <div style="font-size:${style === "bold" ? 30 : 26}px;font-weight:800;color:${coverInk}">${title}</div>
-          <div style="margin-top:18px;font-size:15px"><b>Prepared for ${esc(job.name)}</b></div>
-          <div class="muted" style="font-size:13px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(job.address)}</div>
-          <div class="muted" style="margin-top:14px${style === "bold" ? ";color:rgba(255,255,255,.85)" : ""}">${esc(est.number || "")} · ${esc(est.date || "")}</div>
-        </div>`;
+        const bold = style === "bold";
+        out += `<section class="cover ${bold ? "boldcover" : "plaincover"}">
+          ${img ? `<img class="hero" src="${img}" alt="">` : ""}
+          <div class="cotitle">${title}</div>
+          <div class="coco">${esc(brand.company)}${brand.slogan ? ` · ${esc(brand.slogan)}` : ""}</div>
+          ${meta}
+        </section>`;
       }
+      continue;
     }
+    if (sec === "findings") { out += findingsHtml(job); continue; }
+    if (sec === "why") { out += credentialsHtml(brand, contact); continue; }
+    if (sec === "options") { out += tierCardsHtml(est, brand); continue; }
+    if (sec === "warranty") { out += warrantyHtml(job, brand); continue; }
+    if (sec === "process") { out += processHtml(); continue; }
     if (sec === "items") {
-      out += `<h2>Scope of work</h2>`;
-      if (est.scope) out += `<div class="muted">${esc(est.scope)}</div>`;
-      out += lineTable(est.items || [], { honorLine: true });
-      out += `<div class="tot grand"><span>Total</span><span>${money(total)}</span></div>`;
-      if (est.validThrough) out += `<div class="muted" style="margin-top:10px">Valid through ${esc(est.validThrough)}</div>`;
+      out += `<section><h2>${hasTiers ? "What's included" : "Scope of work"}</h2>`;
+      if (est.scope) out += `<div class="lede">${esc(est.scope)}</div>`;
+      out += lineTable(est.items || [], itemOpts);
+      if (!hasTiers) {
+        out += `<div class="grandbox"><span class="grandl">Your investment</span><span class="grandv">${money0(total)}</span></div>`;
+      }
+      if (est.validThrough) out += `<div class="muted" style="margin-top:10px">This proposal is held through ${esc(est.validThrough)}.</div>`;
+      out += `</section>`;
+      continue;
     }
-    if (sec === "notes" && doc.notes) out += `<h2>Special notes</h2><div class="muted">${esc(doc.notes)}</div>`;
-    if (sec === "terms" && doc.terms) out += `<h2>Terms &amp; conditions</h2><div class="muted">${esc(doc.terms)}</div>`;
+    if (sec === "notes" && doc.notes) { out += `<section><h2>Special notes</h2><div class="body">${esc(doc.notes)}</div></section>`; continue; }
+    if (sec === "terms" && doc.terms) { out += `<section><h2>Terms &amp; conditions</h2><div class="body small">${esc(doc.terms)}</div></section>`; continue; }
     /* Custom sections added in the proposal builder. */
     const b = blocks[sec];
     if (b && b.type === "text" && (b.title || b.body)) {
-      out += `<h2>${esc(b.title || "")}</h2><div class="muted">${esc(b.body || "")}</div>`;
+      out += `<section><h2>${esc(b.title || "")}</h2><div class="body">${esc(b.body || "")}</div></section>`;
     }
     if (b && b.type === "pdf" && b.dataUrl) {
-      out += `<h2>${esc(b.name || "Attachment")}</h2>`;
-      out += `<iframe src="${b.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe>`;
+      out += `<section class="page"><h2>${esc(b.name || "Attachment")}</h2>`;
+      out += `<iframe src="${b.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe></section>`;
     }
   }
   out += concealedTableHtml(est);
-  out += `<div class="sig">
-    <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
-    <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative</div></div>
-  </div>`;
-  return out;
+
+  /* The close. A signature line at the bottom of a wall of text is not a
+     call to action — this states the number, what it buys, and asks. */
+  out += `<section class="accept">
+    <h2 class="acceptt">Ready to go ahead?</h2>
+    <div class="lede">Sign below and return this, or accept it in your online portal — whichever is easier.
+    ${est.validThrough ? `This pricing is held through ${esc(est.validThrough)}.` : ""}</div>
+    ${hasTiers ? `<div class="acceptpick"><b>Option chosen:</b> ______________________________
+      &nbsp;&nbsp;<b>Upgrades:</b> ______________________________</div>` : ""}
+    <div class="sig">
+      <div><div class="sigline"></div><div class="siglbl">${esc(job.name)} — signature / date</div></div>
+      <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative</div></div>
+    </div>
+  </section>`;
+  return out + proposalCss(brand);
+}
+
+/* Proposal typography and layout. Kept with the document rather than in the
+   shell because these rules are specific to selling — the shell still styles
+   the plain business documents (invoice, work order, report) the old way. */
+function proposalCss(brand) {
+  const p = brand.primary || "#20242A";
+  const a = brand.accent || "#0A9E98";
+  return `<style>
+  /* Sections get real page structure. The old proposal was one continuous
+     flow, so tables split across pages wherever they happened to land. */
+  section { margin-top: 30px; }
+  section.page { page-break-before: always; }
+  section, .tier, figure, .wbox, .steps li { page-break-inside: avoid; }
+  h2 { font-size: 19px; font-weight: 800; letter-spacing: -0.01em; text-transform: none;
+       color: ${p}; margin: 0 0 4px; padding-bottom: 9px; border-bottom: 2px solid ${p}; }
+  h3.subh { font-size: 14px; font-weight: 800; color: ${p}; margin: 24px 0 4px; }
+  .lede { font-size: 13.5px; line-height: 1.65; color: #4B5563; margin: 12px 0 16px; max-width: 62ch; }
+  .body { font-size: 13.5px; line-height: 1.7; color: #374151; white-space: pre-wrap; max-width: 68ch; }
+  .body.small { font-size: 12px; line-height: 1.65; color: #4B5563; max-width: none; }
+
+  /* Cover. A real one — it owns the first page and nothing else is on it. */
+  .cover { page-break-after: always; padding: 0; text-align: left; }
+  .cover .hero { width: 100%; height: 4.4in; object-fit: cover; border-radius: 14px; margin-bottom: 34px; display: block; }
+  .cotitle { font-size: 40px; font-weight: 800; line-height: 1.08; letter-spacing: -0.02em; color: ${p}; }
+  .coco { font-size: 14px; color: #6B7280; margin-top: 10px; }
+  .cmeta { margin-top: 34px; border-top: 2px solid ${p}; padding-top: 18px; }
+  .cmeta > div { display: flex; gap: 14px; padding: 7px 0; border-bottom: 1px solid #EEF1F4; font-size: 13.5px; }
+  .cml { min-width: 132px; color: #6B7280; }
+  .cmv { color: #111827; font-weight: 600; }
+  .boldcover .cotitle { background: ${p}; color: #fff; padding: 26px 24px; border-radius: 14px; }
+  .boldcover .coco { padding-left: 2px; }
+  .cover.photo { min-height: 9in; background-size: cover; background-position: center;
+                 border-radius: 14px; overflow: hidden; display: flex; align-items: flex-end; }
+  .cover.photo .covershade { width: 100%; padding: 34px 30px;
+      background: linear-gradient(transparent, rgba(0,0,0,.82)); color: #fff; }
+  .cover.photo .cotitle, .cover.photo .coco, .cover.photo .cmv { color: #fff; }
+  .cover.photo .cmeta { border-top-color: rgba(255,255,255,.5); }
+  .cover.photo .cmeta > div { border-bottom-color: rgba(255,255,255,.18); }
+  .cover.photo .cml { color: rgba(255,255,255,.75); }
+
+  /* Options. The page the homeowner actually decides on. */
+  .tiers { display: flex; gap: 14px; align-items: stretch; margin-top: 18px; }
+  .tier { flex: 1; border: 1.5px solid #E3E7EC; border-radius: 14px; padding: 18px 16px 16px;
+          position: relative; display: flex; flex-direction: column; }
+  .tier.on { border-color: ${a}; border-width: 2.5px; box-shadow: 0 6px 22px rgba(0,0,0,.07); }
+  .tierflag { position: absolute; top: -11px; left: 16px; background: ${a}; color: #fff;
+              font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+              padding: 4px 10px; border-radius: 999px; }
+  .tiername { font-size: 15px; font-weight: 800; color: ${p}; }
+  .tierprice { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; color: ${p}; margin: 6px 0 12px; }
+  .tierlist { list-style: none; margin: 0; padding: 0; flex: 1; }
+  .tierlist li { font-size: 12px; line-height: 1.5; color: #374151; padding: 5px 0 5px 17px;
+                 position: relative; border-top: 1px solid #F1F3F6; }
+  .tierlist li:before { content: "✓"; position: absolute; left: 0; color: ${a}; font-weight: 800; }
+  .tierlist li.key { font-weight: 700; color: #111827; }
+  .tierlist li.more { color: #6B7280; font-style: italic; }
+  .tierlist li.more:before { content: ""; }
+  .tierpick { margin-top: 14px; text-align: center; font-size: 11.5px; font-weight: 700;
+              color: #6B7280; border-top: 1px solid #EEF1F4; padding-top: 11px; }
+  .tier.on .tierpick { color: ${a}; }
+  table.ups { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  table.ups td { padding: 9px 6px; border-bottom: 1px solid #F1F3F6; font-size: 13px; }
+  table.ups td.box { width: 26px; font-size: 16px; color: #9CA3AF; }
+  table.ups td.r { text-align: right; white-space: nowrap; font-weight: 700; }
+
+  /* Findings — their own roof, in numbers and photographs. */
+  .facts { display: flex; gap: 12px; margin: 16px 0 20px; }
+  .fact { flex: 1; border: 1px solid #E3E7EC; border-radius: 12px; padding: 13px 10px; text-align: center; }
+  .factv { font-size: 24px; font-weight: 800; color: ${p}; letter-spacing: -0.02em; }
+  .factl { font-size: 11px; color: #6B7280; margin-top: 2px; }
+  .shots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .shots figure { margin: 0; }
+  .shots img { width: 100%; height: 2.1in; object-fit: cover; border-radius: 10px; display: block; }
+  .shots figcaption { font-size: 11px; color: #6B7280; margin-top: 5px; }
+
+  /* Trust. */
+  ul.checks { list-style: none; margin: 16px 0 0; padding: 0; max-width: 66ch; }
+  ul.checks li { font-size: 13.5px; line-height: 1.6; color: #374151; padding: 8px 0 8px 26px;
+                 position: relative; border-bottom: 1px solid #F1F3F6; }
+  ul.checks li:before { content: "✓"; position: absolute; left: 2px; color: ${a}; font-weight: 800; }
+  .repcard { margin-top: 20px; border: 1.5px solid #E3E7EC; border-left: 4px solid ${a};
+             border-radius: 12px; padding: 15px 17px; max-width: 380px; }
+  .repl { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #6B7280; }
+  .repn { font-size: 17px; font-weight: 800; color: ${p}; margin-top: 4px; }
+  .rept { font-size: 12.5px; color: #6B7280; }
+  .repc { font-size: 13px; color: #374151; margin-top: 6px; }
+
+  /* Warranty + process. */
+  .two { display: flex; gap: 14px; margin-top: 16px; }
+  .wbox { flex: 1; border: 1px solid #E3E7EC; border-radius: 12px; padding: 15px 16px; }
+  .wl { font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #6B7280; }
+  .wv { font-size: 16px; font-weight: 800; color: ${p}; margin: 4px 0 7px; }
+  ol.steps { list-style: none; counter-reset: s; margin: 16px 0 0; padding: 0; }
+  ol.steps li { counter-increment: s; position: relative; padding: 11px 0 11px 44px; border-bottom: 1px solid #F1F3F6; }
+  ol.steps li:before { content: counter(s); position: absolute; left: 0; top: 10px; width: 27px; height: 27px;
+      border-radius: 999px; background: ${p}; color: #fff; font-size: 12.5px; font-weight: 800;
+      display: grid; place-items: center; }
+  .stept { display: block; font-size: 13.5px; font-weight: 800; color: ${p}; }
+  .stepd { display: block; font-size: 12.5px; color: #4B5563; margin-top: 1px; line-height: 1.55; }
+
+  /* The number, when there is only one. */
+  .grandbox { display: flex; justify-content: space-between; align-items: baseline;
+      margin-top: 16px; padding: 16px 18px; border-radius: 12px; background: ${p}; color: #fff; }
+  .grandl { font-size: 13px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; opacity: .85; }
+  .grandv { font-size: 27px; font-weight: 800; letter-spacing: -0.02em; }
+
+  /* The close. */
+  .accept { margin-top: 34px; border-top: 2px solid ${p}; padding-top: 20px; page-break-inside: avoid; }
+  .accept .acceptt { border: 0; padding-bottom: 0; }
+  .acceptpick { font-size: 13px; color: #374151; margin: 14px 0 4px; }
+  </style>`;
 }
 
 function invoiceDocHtml(job, brand) {
@@ -14232,7 +14556,7 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
    cleanly and nothing here breaks the flattened items every other reader
    depends on.
    ================================================================ */
-function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClose, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {} }) {
+function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClose, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {}, users = [] }) {
   const doc = normalizeProposalDoc(est.doc);
   const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
   /* Notes/terms template helpers, matching the estimate tab. */
@@ -14244,7 +14568,7 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
   const coverRef = useRef(null);
   const pdfRef = useRef(null);
 
-  const BUILTIN = { cover: "Cover page", items: "Line items & pricing", notes: "Special notes", terms: "Terms & conditions" };
+  const BUILTIN = Object.fromEntries(Object.entries(PROPOSAL_SECTION_LABELS).map(([k, v]) => [k, v[0]]));
   const has = (key) => doc.sections.includes(key);
   const labelFor = (sec) => BUILTIN[sec]
     || (blocks[sec] ? (blocks[sec].type === "pdf" ? `PDF · ${blocks[sec].name || "Attachment"}` : (blocks[sec].title || "Custom section")) : sec);
@@ -14306,7 +14630,7 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
           <div style={{ fontSize: 16, fontWeight: 800, color: S.ink }}>Proposal builder</div>
           <div style={{ fontSize: 12, color: S.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{job.name} · {est.number || "Draft"}</div>
         </div>
-        <Btn kind="ghost" small onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand), toast)}><Printer size={14} /> PDF</Btn>
+        <Btn kind="ghost" small onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand, users), toast)}><Printer size={14} /> PDF</Btn>
       </div>
       {/* Build / Preview toggle */}
       <div style={{ display: "flex", gap: 6, padding: "12px 16px 0" }}>
@@ -14410,10 +14734,10 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
               ))}
               {addOpen && (
                 <div style={{ marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {!has("cover") && <button style={chip(false)} onClick={() => addBuiltin("cover")}>+ Cover</button>}
-                  {!has("items") && <button style={chip(false)} onClick={() => addBuiltin("items")}>+ Line items</button>}
-                  {!has("notes") && <button style={chip(false)} onClick={() => addBuiltin("notes")}>+ Notes</button>}
-                  {!has("terms") && <button style={chip(false)} onClick={() => addBuiltin("terms")}>+ Terms</button>}
+                  {Object.keys(PROPOSAL_SECTION_LABELS).filter((k) => !has(k)).map((k) => (
+                    <button key={k} style={chip(false)} title={PROPOSAL_SECTION_LABELS[k][1]}
+                      onClick={() => addBuiltin(k)}>+ {PROPOSAL_SECTION_LABELS[k][0]}</button>
+                  ))}
                   <button style={chip(false)} onClick={addText}>+ Custom text</button>
                   <button style={chip(false)} onClick={() => pdfRef.current && pdfRef.current.click()}>+ Attach PDF</button>
                   <button style={{ ...chip(false), color: S.sub }} onClick={() => setAddOpen(false)}>Cancel</button>
@@ -14422,7 +14746,7 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
             </Card>
           </>
         ) : (
-          <ProposalPreview job={job} brand={brand} est={est} doc={doc} total={total} />
+          <ProposalPreview job={job} brand={brand} est={est} doc={doc} total={total} users={users} />
         )}
       </div>
     </div>
@@ -14480,84 +14804,23 @@ function CoverThumb({ style, accent, primary }) {
   );
 }
 
-function ProposalPreview({ job, brand, est, doc, total }) {
-  const blocks = doc.blocks || {};
-  const style = doc.style || "classic";
-  const title = doc.title || "Roofing Proposal";
-  const photoHero = style === "photo" && doc.coverImage;
-  const coverWrap = style === "bold"
-    ? { background: T.primary, color: "#fff", padding: 22, borderRadius: 14 }
-    : style === "minimal" ? { padding: "6px 2px" } : { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" };
-  const onDark = style === "bold";
+/* The preview IS the document. It used to be a second React re-creation of
+   the proposal layout, which meant the rep previewed one thing and the
+   customer received another the moment either drifted — and after the
+   rebuild they had drifted completely. Rendering the real HTML in a
+   sandboxed iframe makes divergence impossible: one renderer, one output. */
+function ProposalPreview({ job, brand, est, doc, total, users = [] }) {
+  const html = useMemo(
+    () => docShell(doc.title || "Roofing Proposal", brand, estimateDocHtml({ ...job, estimate: { ...est, doc } }, brand, users)),
+    [job, brand, est, doc, users],
+  );
   return (
-    <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: 16 }}>
-      {doc.sections.map((sec) => {
-        if (sec === "cover" && photoHero) return (
-          <div key={sec} style={{ marginBottom: 16, position: "relative", borderRadius: 14, overflow: "hidden", minHeight: 300, background: `#111 url(${JSON.stringify(doc.coverImage)}) center/cover no-repeat` }}>
-            <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: 18, background: "linear-gradient(transparent, rgba(0,0,0,.78))", color: "#fff" }}>
-              <div style={{ fontSize: 22, fontWeight: 800 }}>{title}</div>
-              <div style={{ marginTop: 10, fontSize: 13.5 }}>
-                <div style={{ fontWeight: 700 }}>Prepared for {job.name}</div>
-                <div style={{ opacity: 0.85 }}>{job.address}</div>
-                <div style={{ opacity: 0.85, marginTop: 4 }}>{est.number} · {est.date}</div>
-              </div>
-            </div>
-          </div>
-        );
-        if (sec === "cover") return (
-          <div key={sec} style={{ marginBottom: 16, ...coverWrap }}>
-            {doc.coverImage && <img src={doc.coverImage} alt="" style={{ width: "100%", height: 400, objectFit: "cover", display: "block", borderRadius: style === "bold" ? 10 : 0, marginBottom: style === "bold" ? 12 : 0 }} />}
-            <div style={{ padding: style === "bold" ? 0 : (style === "minimal" ? "10px 0" : 16) }}>
-              {brand.logo && !onDark
-                ? <img src={brand.logo} alt="" style={{ height: 34, objectFit: "contain", marginBottom: 8, display: "block" }} />
-                : <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 4, color: onDark ? "#fff" : S.ink }}>{brand.company}</div>}
-              <div style={{ fontSize: 22, fontWeight: 800, color: onDark ? "#fff" : brand.primary }}>{title}</div>
-              <div style={{ marginTop: 12, fontSize: 13.5, color: onDark ? "rgba(255,255,255,.9)" : S.ink }}>
-                <div style={{ fontWeight: 700 }}>Prepared for {job.name}</div>
-                <div style={{ opacity: 0.85 }}>{job.address}</div>
-                <div style={{ opacity: 0.85, marginTop: 4 }}>{est.number} · {est.date}</div>
-              </div>
-            </div>
-          </div>
-        );
-        if (sec === "items") return (
-          <div key={sec} style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>SCOPE & PRICING</div>
-            {est.scope && <div style={{ fontSize: 13, color: S.ink, lineHeight: 1.5, marginBottom: 8, whiteSpace: "pre-wrap" }}>{est.scope}</div>}
-            {(est.items || []).map((it) => <PortalEstLine key={it.id} it={it} />)}
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 800, marginTop: 8, paddingTop: 8, borderTop: `2px solid ${S.line}` }}>
-              <span>Total</span><span>{money(total)}</span>
-            </div>
-          </div>
-        );
-        if (sec === "notes" && doc.notes) return (
-          <div key={sec} style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>SPECIAL NOTES</div>
-            <div style={{ fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{doc.notes}</div>
-          </div>
-        );
-        if (sec === "terms" && doc.terms) return (
-          <div key={sec} style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>TERMS & CONDITIONS</div>
-            <div style={{ fontSize: 12.5, lineHeight: 1.6, color: S.sub, whiteSpace: "pre-wrap" }}>{doc.terms}</div>
-          </div>
-        );
-        const b = blocks[sec];
-        if (b && b.type === "text" && (b.title || b.body)) return (
-          <div key={sec} style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, marginBottom: 6 }}>{(b.title || "").toUpperCase()}</div>
-            <div style={{ fontSize: 13.5, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{b.body}</div>
-          </div>
-        );
-        if (b && b.type === "pdf") return (
-          <div key={sec} style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 10, border: `1px solid ${S.line}`, borderRadius: 10, padding: "12px 14px" }}>
-            <FileText size={20} color={T.accent} />
-            <div style={{ fontSize: 13.5, fontWeight: 700 }}>{b.name || "Attachment"}</div>
-            <span style={{ marginLeft: "auto", fontSize: 12, color: S.sub }}>PDF page</span>
-          </div>
-        );
-        return null;
-      })}
+    <div style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" }}>
+      <div style={{ fontSize: 11.5, color: S.sub, padding: "9px 12px", borderBottom: `1px solid ${S.line}` }}>
+        Exactly what the customer receives — same renderer as the PDF.
+      </div>
+      <iframe title="Proposal preview" srcDoc={html} sandbox=""
+        style={{ width: "100%", height: "70vh", border: 0, display: "block", background: "#fff" }} />
     </div>
   );
 }
@@ -14613,7 +14876,7 @@ function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
   );
 }
 
-function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {}, priceList = [], docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {} }) {
+function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {}, priceList = [], docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {}, users = [] }) {
   /* job.estimate for any REAL job created before tiers/upgrades
      existed has neither field at all (undefined, not []) — this
      JSONB blob is exactly what was last saved, and mkEstimate()'s
@@ -15003,7 +15266,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
       </Card>
 
       <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-        <Btn kind="ghost" onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand), toast)}><Printer size={15} /> PDF</Btn>
+        <Btn kind="ghost" onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand, users), toast)}><Printer size={15} /> PDF</Btn>
         {!locked && (
           <>
             <Btn kind="ghost" onClick={() => {
@@ -15105,7 +15368,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
       {builderOpen && (
         <ProposalBuilder job={job} brand={brand} est={est} setEst={setEst} locked={locked}
           toast={toast} total={total} onClose={() => setBuilderOpen(false)}
-          docTemplates={docTemplates} setDocTemplates={setDocTemplates} />
+          docTemplates={docTemplates} setDocTemplates={setDocTemplates} users={users} />
       )}
     </>
   );
