@@ -65,6 +65,19 @@
         --rl-amber-bg:#3A2A0A; --rl-amber-fg:#F5C36B;
         --rl-slate-bg:#2A2F37;
       }
+      /* App shell. The bottom nav used to be position:fixed over a normally
+         scrolling document, which is exactly the arrangement iOS Safari
+         mishandles: as its toolbar collapses and expands during a scroll
+         gesture, fixed elements are only re-laid-out at gesture end, so the
+         bar visibly detaches and drifts up the page mid-scroll.
+
+         Instead the shell is a fixed-height flex column and the screens
+         scroll inside their own pane, which makes the nav an ordinary flex
+         child that cannot move. dvh tracks the visible viewport as the
+         toolbar animates; the vh above it is the fallback for browsers
+         without dvh. */
+      .rl-shell { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+      .rl-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; }
       [data-theme="light"] {
         --rl-bg:#F7F8FA; --rl-card:#FFFFFF; --rl-soft:#F3F4F6;
         --rl-line:#E5E7EB; --rl-ink:#111827; --rl-sub:#6B7280;

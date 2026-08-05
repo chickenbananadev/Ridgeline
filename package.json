@@ -50,7 +50,8 @@
     "test:build41": "node build41.test.cjs",
     "test:build46": "node build46.test.cjs",
     "test:build47": "node build47.test.cjs",
-    "test:build48": "node build48.test.cjs"
+    "test:build48": "node build48.test.cjs",
+    "test:build49": "node build49.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

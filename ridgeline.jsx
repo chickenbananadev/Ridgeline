@@ -8,7 +8,7 @@ import {
   BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat, CloudRain,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
   Scale, Lightbulb, ExternalLink, Lock, Layers, Smile
-, Filter , Megaphone, Clock, Zap, Sun, Moon } from "lucide-react";
+, Filter , Megaphone, Clock, Zap, Sun, Moon, Navigation } from "lucide-react";
 
 /* ================================================================
    BRANDING — single source of company identity. Everything company-
@@ -4335,7 +4335,7 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
   const subsPay = jobs.filter((j) => j.subInvoice && ["confirmed", "submitted"].includes(j.subInvoice.status)).length;
 
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>
@@ -4741,7 +4741,10 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
       <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: S.sub, margin: "22px 4px 10px" }}>
         {isRep && scope === "mine" ? "Your numbers" : "Business at a glance"}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+      {/* Three fixed columns clipped six-figure numbers on a phone — a
+          $60,317.16 pipeline needs more than a third of a 390px screen.
+          auto-fit gives two columns on a handset and three on a tablet. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
         {[
           ["Sold", money(signedValue), `${wonCount} won`, T.accent],
           ["Avg sale", money(avgSale), "per won job", S.ink],
@@ -4986,7 +4989,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
   };
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Financials & performance" onBack={onBack} />
 
       <Card style={{ marginTop: 14 }}>
@@ -5617,7 +5620,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   const jobOf = (id) => jobs.find((j) => j.id === id);
 
   return (
-    <div style={embedded ? { padding: 0 } : { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={embedded ? { padding: 0 } : { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       {embedded ? (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: S.ink }}>Calendar</div>
@@ -6118,7 +6121,7 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject, currentUser, onDelete
     [contact.name, contact.phone, contact.email, ...contact.jobs.flatMap((j) => [j.address, j.intake?.reasonForCalling, ...(j.intake?.workRequested || [])])]
       .filter(Boolean).join(" ").toLowerCase().includes(needle));
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Contacts" onBack={onBack} />
       <div style={{ marginTop: 14 }}>
         <input style={inputStyle} placeholder="Search name, address, phone, email" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -7074,6 +7077,13 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
         borderLeft: age.late ? "3px solid var(--rl-red-fg)" : `1px solid ${S.line}`,
         padding: 14, marginBottom: 10, cursor: "pointer",
       }}>
+      {/* The house, when there is one. In a subdivision of near-identical
+          addresses a rep recognises the roof faster than the number. */}
+      {job.propertyPhoto && job.propertyPhoto.url && (
+        <img src={job.propertyPhoto.url} alt=""
+          style={{ width: "calc(100% + 28px)", height: 104, objectFit: "cover", display: "block",
+            margin: "-14px -14px 11px", borderRadius: "11px 11px 0 0" }} />
+      )}
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{job.name}</div>
         {job.value > 0 && <div style={{ fontSize: 14, fontWeight: 700, color: S.ink, whiteSpace: "nowrap" }}>{money(job.value)}</div>}
@@ -7397,7 +7407,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
   const stage = stages.find((s) => s.id === job.stageId);
   const juris = jurisdictionForZip(job.zip);
   return (
-    <div style={{ background: S.bg, minHeight: "100vh", paddingBottom: 110 }}>
+    <div style={{ background: S.bg, minHeight: "100%", paddingBottom: 28 }}>
       <div style={{ background: S.card, borderBottom: `1px solid ${S.line}` }}>
         <div style={{ padding: "16px 16px 0" }}>
           <SubHeader title={job.name} onBack={onBack}
@@ -7995,6 +8005,7 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="slate">{job.zip}</Chip>}>Site location</CardTitle>
+        <PropertyPhoto job={job} mut={mut} toast={toast} />
         <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.5 }}>{job.address}</div>
         <div style={{ marginTop: 8 }}><WeatherNow lat={job.lat ?? job.property?.lat} lng={job.lng ?? job.property?.lng} zip={job.zip} /></div>
         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -8006,6 +8017,11 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
           </a>
         </div>
       </Card>
+
+      <EnRouteCard job={job} mut={mut} toast={toast} currentUser={currentUser} />
+
+      <ForecastStrip lat={job.lat ?? job.property?.lat} lng={job.lng ?? job.property?.lng}
+        zip={job.zip} schedDate={job.schedDate} />
 
       <PropertyRecordCard job={job} mut={mut} toast={toast} />
 
@@ -8158,7 +8174,7 @@ function AnnouncementManager({ announcements, setAnnouncements, currentUser, onB
     setDraft(""); toast("Announcement posted to everyone's home screen");
   };
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Company announcements" onBack={onBack} />
       <Card style={{ marginTop: 14 }}>
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
@@ -9016,6 +9032,15 @@ function buildPortalSnapshot(job, brand, token) {
         editable: portal.allowContactEdit !== false,
       },
       progress: portalProgressFor(job), steps: PORTAL_STEPS,
+      /* Live arrival window. Only travels while a rep is actually driving and
+         has chosen to share it — an ETA the homeowner can see but nobody
+         meant to send is worse than no ETA. Carries the promise and when it
+         was made, never the rep's coordinates: the customer needs to know
+         when someone is arriving, not where that person is right now. */
+      enroute: (job.enroute && job.enroute.active && job.enroute.sharedAt) ? {
+        by: job.enroute.by || "", etaMin: job.enroute.etaMin,
+        updatedAt: job.enroute.updatedAt, miles: job.enroute.miles,
+      } : null,
       portal,
       notes: (job.notes || []).filter((n) => n.customerVisible).map((n) => ({ at: n.at, text: n.text })),
       photos: portal.photos ? (job.photos || []).filter((ph) => ph.shared).map((ph) => ({ url: ph.url || ph.dataUrl, label: ph.label || "" })) : [],
@@ -9725,6 +9750,46 @@ function PortalProposal({ estimate, accent, onSelect = () => {} }) {
   );
 }
 
+/* The homeowner's view of an en-route rep. Counts down from the promise the
+   app made rather than re-fetching, and stops rendering once the window has
+   run out — a banner still cheerfully claiming "3 minutes away" forty minutes
+   later is worse than no banner. */
+function PortalEnRoute({ er, accent }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!er) return undefined;
+    const t = setInterval(() => tick((n) => n + 1), 30000);
+    return () => clearInterval(t);
+  }, [er]);
+  if (!er || !er.updatedAt) return null;
+  const elapsed = (Date.now() - new Date(er.updatedAt).getTime()) / 60000;
+  const left = Math.round(num(er.etaMin) - elapsed);
+  /* Two hours past the promise, something went wrong that this banner can't
+     explain. Better to say nothing than to be confidently stale. */
+  if (left < -120) return null;
+  const arriving = left <= 0;
+  return (
+    <div style={{
+      background: accent, color: "#fff", borderRadius: 14, padding: "16px 18px", marginBottom: 12,
+      display: "flex", alignItems: "center", gap: 14,
+    }}>
+      <Navigation size={26} style={{ flexShrink: 0 }} />
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 16, fontWeight: 800, lineHeight: 1.3 }}>
+          {arriving
+            ? `${er.by || "Your crew"} should be arriving now`
+            : `${er.by || "Your crew"} is on the way`}
+        </div>
+        <div style={{ fontSize: 13.5, opacity: 0.9, marginTop: 3 }}>
+          {arriving
+            ? "They're at or near your address."
+            : `About ${left} ${left === 1 ? "minute" : "minutes"} out${er.miles ? ` · ${er.miles} mi` : ""}.`}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PublicPortal({ token }) {
   const [state, setState] = useState({ loading: true, data: null, err: "" });
   const [estSel, setEstSel] = useState(null);
@@ -9771,6 +9836,11 @@ function PublicPortal({ token }) {
         <div style={{ fontSize: 13.5, opacity: 0.85, marginTop: 3 }}>{d.address}</div>
       </div>
       <div style={{ padding: "16px 16px 60px" }}>
+        {/* Someone is driving here right now. This outranks every other
+            section — it is the one thing on this page that is about the
+            next twenty minutes. Sits above the ordered sections rather
+            than inside them, and disappears the moment they arrive. */}
+        <PortalEnRoute er={d.enroute} accent={prim} />
         {(d.order && d.order.length ? d.order : PORTAL_ORDER_DEFAULT).map((sid, idx) => {
           const first = idx === 0;
           const wrap = (node) => node ? <div key={sid} style={first ? undefined : { marginTop: 12 }}>{node}</div> : null;
@@ -10139,7 +10209,7 @@ function SystemCheck({ currentUser, onBack }) {
   useEffect(() => { run(); }, []);
   const failing = rows.filter((r) => !r.ok);
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="System check" onBack={onBack}
         right={<Btn small kind="ghost" onClick={run} disabled={running}>{running ? "Checking…" : "Re-run"}</Btn>} />
       <Card style={{ marginTop: 14 }}>
@@ -10242,7 +10312,7 @@ function WarrantyCenter({ jobs, onOpenJob, onBack }) {
     .sort((a, b) => String(a.laborEnd || "9999").localeCompare(String(b.laborEnd || "9999")));
   const mfrs = ["All", ...new Set(jobs.map((j) => j.warranty && j.warranty.mfr).filter(Boolean))];
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Warranties" onBack={onBack} />
       <div style={{ fontSize: 13, color: S.sub, margin: "10px 0 12px", lineHeight: 1.5 }}>
         Every roof with a warranty on record. Set them on the job's Overview tab once the install is done.
@@ -10405,6 +10475,68 @@ async function fetchCurrentWeatherFor(lat, lng) {
   } catch (e) { return null; }
 }
 
+/* Five-day forecast for a job site. Same keyless Open-Meteo source as the
+   current conditions, one call, cached an hour per rounded location.
+
+   Roofers don't want a weather widget, they want to know which of the next
+   five days they can actually tear a roof off. So this carries wind and low
+   temperature alongside rain: shingles won't seal below about 40°F, and
+   nobody is putting a crew on a steep slope in a 25 mph wind. */
+const FORECAST_CACHE = new Map();
+const FORECAST_MS = 60 * 60 * 1000;
+async function fetchForecastFor(lat, lng, days = 5) {
+  const key = `${weatherKey(lat, lng)}:${days}`;
+  const c = FORECAST_CACHE.get(key);
+  if (c && Date.now() - c.at < FORECAST_MS) return c.list;
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
+      `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max` +
+      `&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=auto&forecast_days=${days}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("forecast");
+    const d = await res.json();
+    const dy = d.daily || {};
+    const list = (dy.time || []).map((date, i) => ({
+      date,
+      code: dy.weather_code?.[i] ?? null,
+      hi: dy.temperature_2m_max?.[i] == null ? null : Math.round(dy.temperature_2m_max[i]),
+      lo: dy.temperature_2m_min?.[i] == null ? null : Math.round(dy.temperature_2m_min[i]),
+      pop: dy.precipitation_probability_max?.[i] ?? null,
+      inches: dy.precipitation_sum?.[i] ?? null,
+      windMph: dy.wind_speed_10m_max?.[i] == null ? null : Math.round(dy.wind_speed_10m_max[i]),
+    }));
+    FORECAST_CACHE.set(key, { at: Date.now(), list });
+    return list;
+  } catch (e) { return null; }
+}
+/* Is this a day you could actually roof? Returns the reason it isn't, which
+   is the only part a crew lead cares about. */
+function roofDayVerdict(day) {
+  if (!day) return null;
+  if (num(day.pop) >= 60 || num(day.inches) >= 0.1) return { ok: false, tone: "red", why: "Rain" };
+  if (num(day.windMph) >= 25) return { ok: false, tone: "red", why: "Wind" };
+  if (day.lo != null && day.lo < 40) return { ok: false, tone: "amber", why: "Too cold to seal" };
+  if (num(day.pop) >= 35) return { ok: false, tone: "amber", why: "Rain risk" };
+  return { ok: true, tone: "green", why: "Good" };
+}
+
+function useForecast({ lat, lng, zip, days = 5 }) {
+  const [list, setList] = useState(null);
+  const key = `${lat ?? ""}:${lng ?? ""}:${zip ?? ""}:${days}`;
+  useEffect(() => {
+    let dead = false;
+    (async () => {
+      let la = lat, ln = lng;
+      if (la == null || ln == null) { const g = await geocodeZip(zip); if (g) { la = g.lat; ln = g.lng; } }
+      if (la == null || ln == null) { setList(null); return; }
+      const out = await fetchForecastFor(la, ln, days);
+      if (!dead) setList(out);
+    })();
+    return () => { dead = true; };
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  return list;
+}
+
 /* ZIP -> coords via Zippopotam.us (keyless, CORS-open) so weather works even
    when a job was created without map coordinates. Cached for the session. */
 const ZIP_GEO_CACHE = new Map();
@@ -10468,6 +10600,332 @@ function WeatherNow({ lat, lng, zip, style }) {
       <span style={{ fontSize: 14 }}>{l.e}</span>
       <b style={{ color: S.ink }}>{wx.tempF}°</b>{l.t ? ` ${l.t}` : ""}{wx.windMph >= 15 ? ` · ${wx.windMph} mph wind` : ""}
     </span>
+  );
+}
+
+/* ==================================================================
+   ON MY WAY — drive time to the property, shared with the homeowner
+
+   The single most common complaint about a roofing crew is not price or
+   workmanship, it's "nobody told me when they were coming." Every
+   dispatch product sells this feature; none of the roofing CRMs ship it.
+
+   Routing runs on OSRM's public demo server — genuinely free, no key, no
+   account, CORS-open — and falls back to straight-line distance at
+   35 mph when it's unreachable, so the feature degrades to a rough
+   number rather than to nothing. Neither path needs a paid maps plan.
+================================================================== */
+function haversineMi(aLat, aLng, bLat, bLng) {
+  const R = 3958.8, rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(bLat - aLat), dLng = rad(bLng - aLng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+async function driveEta(fromLat, fromLng, toLat, toLng) {
+  const miles = haversineMi(fromLat, fromLng, toLat, toLng);
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=false`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const d = await res.json();
+      const r = (d.routes || [])[0];
+      if (r && r.duration != null) {
+        return { minutes: Math.max(1, Math.round(r.duration / 60)), miles: +(r.distance / 1609.34).toFixed(1), routed: true };
+      }
+    }
+  } catch (e) { /* fall through to the estimate */ }
+  /* 35 mph averages town streets and a highway leg well enough for a
+     homeowner-facing number, and it is honestly labelled as an estimate. */
+  return { minutes: Math.max(1, Math.round((miles / 35) * 60)), miles: +miles.toFixed(1), routed: false };
+}
+/* Resolve the job's coordinates however we can — a stamped photo fix, the
+   property record, or the zip centroid. */
+async function jobCoords(job) {
+  if (job.lat != null && job.lng != null) return { lat: job.lat, lng: job.lng };
+  const p = job.property || {};
+  if (p.lat != null && p.lng != null) return { lat: p.lat, lng: p.lng };
+  const shot = (job.photos || []).find((x) => x.lat != null && x.lng != null);
+  if (shot) return { lat: shot.lat, lng: shot.lng };
+  return await geocodeZip(job.zip);
+}
+/* Wall-clock arrival from a start time plus a drive, for customer-facing copy. */
+function etaClock(startedAt, minutes) {
+  const base = startedAt ? new Date(startedAt) : new Date();
+  const t = new Date(base.getTime() + num(minutes) * 60000);
+  return t.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+/* Minutes left against the original promise — what the homeowner is
+   actually watching once the rep has been driving for a while. */
+function etaRemaining(er) {
+  if (!er || !er.updatedAt) return null;
+  const elapsed = (Date.now() - new Date(er.updatedAt).getTime()) / 60000;
+  return Math.max(0, Math.round(num(er.etaMin) - elapsed));
+}
+
+function EnRouteCard({ job, mut, toast, currentUser, integrations = {} }) {
+  const er = job.enroute || null;
+  const [busy, setBusy] = useState(false);
+  const [, tick] = useState(0);
+  /* Re-render once a minute so the countdown on screen matches reality
+     without re-polling GPS or re-routing. */
+  useEffect(() => {
+    if (!er || !er.active) return undefined;
+    const t = setInterval(() => tick((n) => n + 1), 60000);
+    return () => clearInterval(t);
+  }, [er && er.active]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const ping = async (announce) => {
+    setBusy(true);
+    const fix = await captureLocation();
+    if (!fix.ok) { setBusy(false); toast && toast(fix.reason); return null; }
+    const dest = await jobCoords(job);
+    if (!dest) {
+      setBusy(false);
+      toast && toast("No coordinates for this address yet — add the zip or stamp a photo on site.");
+      return null;
+    }
+    const eta = await driveEta(fix.lat, fix.lng, dest.lat, dest.lng);
+    const next = {
+      active: true,
+      by: (currentUser || {}).name || "",
+      startedAt: (er && er.startedAt) || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      etaMin: eta.minutes, miles: eta.miles, routed: eta.routed,
+      lat: fix.lat, lng: fix.lng,
+      sharedAt: er ? er.sharedAt || null : null,
+    };
+    mut((j) => ({ ...j, enroute: next }));
+    setBusy(false);
+    if (announce) toast && toast(`On your way — about ${eta.minutes} min out`);
+    return next;
+  };
+
+  const share = async (state) => {
+    const s = state || er;
+    if (!s) return;
+    const mins = etaRemaining(s) ?? s.etaMin;
+    const first = String(job.name || "").split(" ")[0];
+    const body = `Hi ${first}, ${s.by || "your crew"} is on the way to ${job.address} — about ${mins} minutes out, arriving around ${etaClock(new Date().toISOString(), mins)}.`;
+    mut((j) => ({
+      ...j,
+      enroute: { ...(j.enroute || s), sharedAt: new Date().toISOString() },
+      messages: [...(j.messages || []), {
+        id: uid("m"), kind: j.consent?.sms?.granted ? "sms" : "email", audience: "Customer",
+        to: j.consent?.sms?.granted ? (j.phone || j.name) : (j.email || j.name),
+        subject: j.consent?.sms?.granted ? "" : "On our way",
+        body, status: "Queued", at: new Date().toISOString().slice(0, 16).replace("T", " "),
+      }],
+    }));
+    toast && toast("ETA sent to the customer — it's live in their portal too");
+  };
+
+  const arrive = () => {
+    mut((j) => ({ ...j, enroute: { ...(j.enroute || {}), active: false, arrivedAt: new Date().toISOString() } }));
+    toast && toast("Marked arrived");
+  };
+
+  if (!er || !er.active) {
+    return (
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={er && er.arrivedAt ? <Chip tone="green">Arrived</Chip> : null}>On my way</CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Starts a live drive time to this address and gives the homeowner an arrival window —
+          in their portal, and by text or email if you send it.
+        </div>
+        <Btn style={{ width: "100%" }} disabled={busy} onClick={async () => { const s = await ping(true); if (s) share(s); }}>
+          <Navigation size={15} /> {busy ? "Getting your location…" : "I'm on my way"}
+        </Btn>
+      </Card>
+    );
+  }
+
+  const left = etaRemaining(er);
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle right={<Chip tone="green">En route</Chip>}>On my way</CardTitle>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <div style={{ fontSize: 30, fontWeight: 800, color: S.ink, fontVariantNumeric: "tabular-nums" }}>{left}</div>
+        <div style={{ fontSize: 14, color: S.sub }}>min out · arriving about {etaClock(new Date().toISOString(), left)}</div>
+      </div>
+      <div style={{ fontSize: 12, color: S.sub, marginTop: 4 }}>
+        {er.miles} mi{er.routed ? " by road" : " straight line — road distance unavailable, this is an estimate"}
+        {er.sharedAt ? " · customer notified" : " · not sent to the customer yet"}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+        <Btn kind="ghost" small style={{ flex: 1 }} disabled={busy} onClick={() => ping(false)}>
+          <RefreshCw size={13} /> Update
+        </Btn>
+        <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => share(null)}><Send size={13} /> Send ETA</Btn>
+        <Btn small style={{ flex: 1 }} onClick={arrive}><Check size={13} /> Arrived</Btn>
+      </div>
+    </Card>
+  );
+}
+
+/* A phone photo is 3–8 MB, and the job record is a JSONB blob that syncs on
+   every edit — storing one raw would push megabytes over the wire each time
+   someone renames a task. Downscale to a card-sized JPEG first: a 1000px
+   wide, quality-0.72 shot lands around 80 KB and still looks sharp on a
+   Retina card. Falls back to the raw data URL if canvas isn't available. */
+function imageToDataUrl(file, maxW = 1000, quality = 0.72) {
+  return new Promise((resolve) => {
+    const r = new FileReader();
+    r.onerror = () => resolve(null);
+    r.onload = () => {
+      const raw = String(r.result);
+      try {
+        const img = new Image();
+        img.onerror = () => resolve(raw);
+        img.onload = () => {
+          try {
+            const scale = Math.min(1, maxW / (img.width || maxW));
+            const c = document.createElement("canvas");
+            c.width = Math.round((img.width || maxW) * scale);
+            c.height = Math.round((img.height || maxW) * scale);
+            const ctx = c.getContext("2d");
+            ctx.drawImage(img, 0, 0, c.width, c.height);
+            resolve(c.toDataURL("image/jpeg", quality));
+          } catch (e) { resolve(raw); }
+        };
+        img.src = raw;
+      } catch (e) { resolve(raw); }
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+/* A picture of the house, on the job and on its board card.
+
+   Sounds cosmetic; it isn't. A rep with fourteen jobs in a subdivision of
+   near-identical addresses recognises the roof long before they recognise
+   "412 vs 421 Maple". JobTread put it on the card for exactly that reason. */
+function PropertyPhoto({ job, mut, toast }) {
+  const fileRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const photo = job.propertyPhoto || null;
+  /* Photos already shot on this job are the fastest source — usually the
+     front elevation is the first thing on the roll. */
+  const jobShots = (job.photos || []).filter((p) => p.url || p.dataUrl).slice(-12).reverse();
+
+  const onFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setBusy(true);
+    const dataUrl = await imageToDataUrl(file);
+    setBusy(false);
+    if (!dataUrl) { toast && toast("Couldn't read that image"); return; }
+    mut((j) => ({ ...j, propertyPhoto: { url: dataUrl, at: nowStamp() } }));
+    toast && toast("Property photo saved");
+  };
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onFile} style={{ display: "none" }} />
+      {photo ? (
+        <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: S.soft }}>
+          <img src={photo.url} alt={`${job.address}`} style={{ width: "100%", height: 168, objectFit: "cover", display: "block" }} />
+          <div style={{ position: "absolute", right: 8, bottom: 8, display: "flex", gap: 6 }}>
+            <button onClick={() => fileRef.current && fileRef.current.click()} style={photoChipBtn}>Replace</button>
+            <button onClick={() => mut((j) => ({ ...j, propertyPhoto: null }))} style={photoChipBtn}>Remove</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <button onClick={() => fileRef.current && fileRef.current.click()} disabled={busy} style={{
+            width: "100%", height: 96, border: `1.5px dashed ${S.line}`, borderRadius: 12,
+            background: S.soft, color: S.sub, cursor: busy ? "default" : "pointer", fontFamily: "inherit",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
+            fontSize: 13, fontWeight: 600,
+          }}>
+            <Camera size={20} /> {busy ? "Saving…" : "Add a photo of the property"}
+          </button>
+          {jobShots.length > 0 && (
+            <button onClick={() => setPicking(!picking)} style={{
+              ...linkBtn, display: "block", width: "100%", textAlign: "center", padding: "8px 0 0", fontSize: 12.5,
+            }}>{picking ? "Never mind" : "Or use one you've already shot"}</button>
+          )}
+          {picking && (
+            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingTop: 8 }}>
+              {jobShots.map((p) => (
+                <button key={p.id} onClick={() => {
+                  mut((j) => ({ ...j, propertyPhoto: { url: p.url || p.dataUrl, at: nowStamp(), fromPhotoId: p.id } }));
+                  setPicking(false);
+                  toast && toast("Property photo set");
+                }} style={{ border: "none", background: "none", padding: 0, cursor: "pointer", flexShrink: 0 }}>
+                  <img src={p.url || p.dataUrl} alt={p.label || ""} style={{ width: 84, height: 62, objectFit: "cover", borderRadius: 8, display: "block" }} />
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+const photoChipBtn = {
+  border: "none", background: "rgba(17,24,39,.72)", color: "#fff", borderRadius: 999,
+  padding: "5px 11px", fontSize: 11.5, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+};
+
+/* Five days at the job site, read as roofing days rather than as weather.
+   Renders nothing until it resolves and nothing if it can't — a job with no
+   coordinates and no zip shouldn't show an empty box. */
+function ForecastStrip({ lat, lng, zip, schedDate = null }) {
+  const days = useForecast({ lat, lng, zip, days: 5 });
+  if (!days || !days.length) return null;
+  const today = todayIso();
+  const bad = days.filter((d) => !roofDayVerdict(d).ok).length;
+  const sched = schedDate ? days.find((d) => d.date === schedDate) : null;
+  const schedVerdict = sched ? roofDayVerdict(sched) : null;
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle right={
+        <Chip tone={bad === 0 ? "green" : bad >= 4 ? "red" : "amber"}>
+          {bad === 0 ? "All 5 workable" : `${5 - bad} of 5 workable`}
+        </Chip>
+      }>Next 5 days at the site</CardTitle>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+        {days.map((d) => {
+          const v = roofDayVerdict(d);
+          const l = wmoLabel(d.code);
+          const isToday = d.date === today;
+          const isSched = schedDate && d.date === schedDate;
+          return (
+            <div key={d.date} style={{
+              textAlign: "center", padding: "9px 2px", borderRadius: 10,
+              background: isSched ? T.accentSoft : S.soft,
+              border: isSched ? `1px solid ${T.accent}` : "1px solid transparent",
+            }}>
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: S.sub, letterSpacing: ".02em" }}>
+                {isToday ? "TODAY" : new Date(d.date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short" }).toUpperCase()}
+              </div>
+              <div style={{ fontSize: 19, margin: "3px 0 1px" }}>{l.e}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: S.ink, fontVariantNumeric: "tabular-nums" }}>{d.hi}°</div>
+              <div style={{ fontSize: 11, color: S.sub, fontVariantNumeric: "tabular-nums" }}>{d.lo}°</div>
+              <div style={{
+                fontSize: 9.5, fontWeight: 800, marginTop: 5, lineHeight: 1.25,
+                color: v.tone === "green" ? "var(--rl-green-fg)" : v.tone === "red" ? "var(--rl-red-fg)" : "var(--rl-amber-fg)",
+              }}>{v.why}</div>
+            </div>
+          );
+        })}
+      </div>
+      {schedVerdict && !schedVerdict.ok && (
+        <Callout label="Install day" tone={schedVerdict.tone === "red" ? "red" : "amber"}>
+          This roof is scheduled for {sched.date} and that day reads
+          {" "}{schedVerdict.why.toLowerCase()}
+          {sched.pop != null ? ` — ${sched.pop}% rain` : ""}
+          {sched.windMph != null ? `, wind to ${sched.windMph} mph` : ""}
+          {sched.lo != null ? `, low ${sched.lo}°` : ""}. Call the crew before they load.
+        </Callout>
+      )}
+      <div style={{ fontSize: 11, color: S.sub, marginTop: 9, lineHeight: 1.45 }}>
+        A day is flagged on rain over 35%, wind at 25 mph, or a low under 40° — shingles
+        won't seal below that.
+      </div>
+    </Card>
   );
 }
 
@@ -10666,7 +11124,7 @@ function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded
   );
 
   return (
-    <div style={embedded ? { padding: 0 } : { padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={embedded ? { padding: 0 } : { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       {embedded ? Header : <SubHeader title="Dispatch" onBack={onBack} right={
         <Btn small kind={day === today ? "ghost" : "soft"} onClick={() => setDay(today)}>Today</Btn>} />}
 
@@ -10929,7 +11387,7 @@ function PurchaseOrders({ jobs, mutJob, vendors, onOpenJob, onBack, toast, curre
   const eJob = e ? jobs.find((j) => j.id === e.jobId) : null;
   const setPo = (patch) => setEditing({ ...e, po: { ...e.po, ...patch } });
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Purchase orders" onBack={onBack}
         right={<Btn small onClick={() => setPickJob(true)}><Plus size={14} /> New PO</Btn>} />
       <div style={{ display: "flex", gap: 6, margin: "12px 0", flexWrap: "wrap" }}>
@@ -11050,7 +11508,7 @@ function CallLog({ jobs, leadSources, calls, setCalls, onOpenJob, onBack, curren
       value: won.reduce((a, j) => a + ((j.contract && j.contract.price) || j.value || 0), 0) };
   }).filter((r) => r.leads > 0).sort((a, b) => b.value - a.value);
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Calls & attribution" onBack={onBack} />
       <Card style={{ marginTop: 14 }}>
         <CardTitle>Log an incoming call</CardTitle>
@@ -17358,7 +17816,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
     return out;
   })();
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Insurance" onBack={onBack} />
       <div style={{ display: "flex", gap: 6, marginTop: 14, overflowX: "auto" }}>
         {tabs.map(([id, label]) => (
@@ -18176,7 +18634,7 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
   const posted = jobs.filter((j) => j.review.posted);
   const set = (k) => (v) => setSettings({ ...settings, [k]: v });
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Review automation" onBack={onBack} />
       <Card style={{ marginTop: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -18479,7 +18937,7 @@ function ActivityFeed({ activity, currentUser, onOpenJob, onBack }) {
   const list = mine.filter((a) => kind === "All" || a.kind === kind);
   const initials = (n) => n.split(" ").map((x) => x[0]).join("").slice(0, 2).toUpperCase();
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Activity feed" onBack={onBack} />
       <div style={{ fontSize: 13, color: S.sub, margin: "10px 0 12px" }}>
         {isMgr ? "Everything anyone has done, newest first." : "Your activity, newest first. Admins and managers see the whole team's."}
@@ -18959,7 +19417,7 @@ function VendorManager({ vendors, setVendors, currentUser, onBack, toast }) {
     setEditing(null); toast("Vendor saved");
   };
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Vendors & suppliers" onBack={onBack}
         right={canEdit && <Btn small onClick={() => open(null)}><Plus size={14} /> Add vendor</Btn>} />
       {vendors.map((v) => (
@@ -19013,7 +19471,7 @@ function LeadSourceManager({ sources, setSources, jobs, onBack, toast }) {
     setSources([...sources, v]); setDraft(""); toast("Source added");
   };
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Lead sources" onBack={onBack} />
       <Card style={{ marginTop: 14 }}>
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 12, lineHeight: 1.5 }}>
@@ -19103,7 +19561,7 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
   const rmLoc = (i) => setBrand({ ...brand, locations: locations.filter((_, x) => x !== i) });
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <input ref={logoRef} type="file" accept="image/*" onChange={onLogo} style={{ display: "none" }} />
       <SubHeader title="Company branding" onBack={onBack} />
       {brandErr && (
@@ -19259,7 +19717,7 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   };
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <input ref={fileRef} type="file" onChange={onFile} style={{ display: "none" }} />
       <SubHeader title="Documents" onBack={onBack}
         right={canEdit && <Btn small onClick={() => fileRef.current && fileRef.current.click()}><Upload size={14} /> Upload</Btn>} />
@@ -19440,7 +19898,7 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
   };
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onFile} style={{ display: "none" }} />
       <SubHeader title="Price list" onBack={onBack}
         right={canEdit && <Btn small onClick={() => fileRef.current && fileRef.current.click()}><Upload size={14} /> Import CSV</Btn>} />
@@ -19617,7 +20075,7 @@ function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, 
   };
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <input ref={fileRef} type="file" accept=".txt,.md,.html,text/plain" onChange={onFile} style={{ display: "none" }} />
       <SubHeader title="Message templates" onBack={onBack}
         right={canEdit && <Btn small onClick={() => open(null)}><Plus size={14} /> New</Btn>} />
@@ -19812,7 +20270,7 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
     setEditing(null); toast("Crew saved");
   };
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Crews" onBack={onBack}
         right={canEdit && <Btn small onClick={() => open(null)}><Plus size={14} /> Add crew</Btn>} />
       {canEdit && (
@@ -20314,7 +20772,7 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
     setIntegrations({ ...integrations, gmailByUser: { ...byUser, [currentUser.id]: val } });
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Integrations" onBack={onBack} />
 
       <Card style={{ marginTop: 14 }}>
@@ -20745,7 +21203,7 @@ function JobImport({ jobs, setJobs, stages, users, onBack, toast, currentUser })
   };
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onFile} style={{ display: "none" }} />
       <SubHeader title="Import jobs" onBack={onBack} />
       <Card style={{ marginTop: 14 }}>
@@ -20929,7 +21387,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
 
   if (!isAdmin) {
     return (
-      <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
         <SubHeader title="Team" onBack={onBack} />
         <Card style={{ marginTop: 14 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
@@ -20958,7 +21416,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
   }
 
   return (
-    <div style={{ padding: "16px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Team & seats" onBack={onBack}
         right={<Btn small onClick={() => open(null)}><Plus size={14} /> Add seat</Btn>} />
       <Card style={{ marginTop: 14 }}>
@@ -21270,7 +21728,7 @@ function ClaimsDashboard({ jobs, onBack, onOpenJob, embedded = false }) {
   const unwaived = rows.filter((r) => r.m.deductible - r.m.deductibleCollected > 0).length;
 
   return (
-    <div style={{ padding: embedded ? 0 : "20px 16px 110px", background: embedded ? "transparent" : S.bg, minHeight: embedded ? undefined : "100vh" }}>
+    <div style={{ padding: embedded ? 0 : "20px 16px 28px", background: embedded ? "transparent" : S.bg, minHeight: embedded ? undefined : "100%" }}>
       {!embedded && <SubHeader title="Claims" onBack={onBack} />}
 
       <Card style={{ marginTop: 14, borderLeft: `4px solid ${owed > 0 ? "#E8B931" : S.line}` }}>
@@ -21375,7 +21833,7 @@ function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
   const [crewId, setCrewId] = useState("all");
   if (!isAdmin) {
     return (
-      <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
         <SubHeader title="Crew payouts" onBack={onBack} />
         <Card style={{ marginTop: 16 }}>
           <div style={{ fontSize: 14, color: S.sub }}>This screen is restricted to admins.</div>
@@ -21414,7 +21872,7 @@ function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
   const payTotal = payQueue.reduce((a, r) => a + r.amt, 0);
 
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Crew payouts" onBack={onBack} />
       <Card style={{ marginTop: 14 }}>
         <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }}>OWED TO CREWS</div>
@@ -21493,7 +21951,7 @@ function AdminControls({ features, setFeatures, activity, users, currentUser, on
   const [q, setQ] = useState("");
   if (!admin) {
     return (
-      <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
         <SubHeader title="Admin controls" onBack={onBack} />
         <Card style={{ marginTop: 16 }}>
           <div style={{ fontSize: 14, color: S.sub }}>This screen is restricted to admins.</div>
@@ -21509,7 +21967,7 @@ function AdminControls({ features, setFeatures, activity, users, currentUser, on
     || String(a.by || "").toLowerCase().includes(needle));
 
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Admin controls" onBack={onBack} />
       <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
         {[["features", "Features"], ["security", "Security"], ["log", "Audit log"]].map(([id, label]) => (
@@ -21619,7 +22077,7 @@ function SetupKeys({ apiSetup, setApiSetup, currentUser, onBack, toast }) {
   const [openId, setOpenId] = useState(null);
   if (!admin) {
     return (
-      <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
         <SubHeader title="Setup & keys" onBack={onBack} />
         <Card style={{ marginTop: 16 }}>
           <div style={{ fontSize: 14, color: S.sub }}>
@@ -21636,7 +22094,7 @@ function SetupKeys({ apiSetup, setApiSetup, currentUser, onBack, toast }) {
   const remaining = SETUP_ITEMS.filter((it) => statusOf(it) !== "done").length;
 
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Setup & keys" onBack={onBack} />
       <Card style={{ marginTop: 16 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>
@@ -22086,7 +22544,7 @@ function HelpDesk({ onBack, brand }) {
 
   if (art) {
     return (
-      <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+      <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
         <button onClick={() => setOpen(null)} style={{
           border: "none", background: "none", color: T.accent, fontWeight: 600,
           fontSize: 14, cursor: "pointer", padding: 0, marginBottom: 14,
@@ -22105,7 +22563,7 @@ function HelpDesk({ onBack, brand }) {
   }
 
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <button onClick={onBack} style={{
         border: "none", background: "none", color: T.accent, fontWeight: 600,
         fontSize: 14, cursor: "pointer", padding: 0, marginBottom: 14,
@@ -22228,7 +22686,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
         .filter(([, , label, sub]) => (label + " " + (sub || "")).toLowerCase().includes(needle)))
     : null;
   return (
-    <div style={{ padding: "20px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <div style={{ fontSize: 24, fontWeight: 800, color: S.ink, marginBottom: 4 }}>More</div>
       <div style={{ fontSize: 13, color: S.sub, marginBottom: 4 }}>{brand.company}</div>
       {currentUser && (
@@ -22334,7 +22792,7 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
     return true;
   });
   return (
-    <div style={{ padding: "18px 16px 110px", background: S.bg, minHeight: "100vh" }}>
+    <div style={{ padding: "18px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div style={{ fontSize: 24, fontWeight: 800, color: S.ink }}>Inbox</div>
         {pane === "customers" && <Btn small onClick={onCompose}><Plus size={14} /> New message</Btn>}
@@ -22968,6 +23426,7 @@ export default function SupremeCRM() {
   const [jobs, setJobs] = useState(() => (liveDb() ? [] : seedJobs));
   const [nav, setNav] = useState("home");        // home | jobs | inbox | more | sub-screens
   const [openJobId, setOpenJobId] = useState(null);
+  useEffect(() => { if (scrollPane.current) scrollPane.current.scrollTop = 0; }, [nav, openJobId]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [codeSeed, setCodeSeed] = useState(null);
@@ -23000,6 +23459,11 @@ export default function SupremeCRM() {
      whatever the OS happened to be on day one and permanently overriding the
      index.html `@media (prefers-color-scheme: dark)` rule — so the app would
      stop following the OS the moment it changed, contrary to the design. */
+  /* The scrolling pane inside the shell. Screens scroll here rather than in
+     the document, so opening a job or switching tabs has to put the new
+     screen at the top — otherwise you land halfway down a job because that's
+     where you happened to be on the board. */
+  const scrollPane = useRef(null);
   const themeExplicit = useRef(false);
   const [theme, setThemeState] = useState(() => {
     try {
@@ -23517,7 +23981,12 @@ export default function SupremeCRM() {
   const openCodeLookup = (zip) => { setCodeSeed({ zip: zip || "" }); setOpenJobId(null); setNav("insurance"); };
 
   return (
-    <div style={{ fontFamily: "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif", background: S.bg, minHeight: "100vh" }}>
+    <div className="rl-shell" style={{ fontFamily: "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif", background: S.bg }}>
+      {/* Everything above the nav scrolls in here rather than in the document.
+          See .rl-shell in index.html for why. Sheets, toasts and the banners
+          stay position:fixed — overflow doesn't create a containing block for
+          them, so they still cover the whole viewport including the nav. */}
+      <div className="rl-scroll" ref={scrollPane}>
       {openJob ? (
         <JobDetail job={openJob} stages={stages} brand={brand} onBack={backToBoard}
           onMoveStage={moveStage} mut={mutJob(openJob.id)} toast={toast} reviewSettings={reviewSettings}
@@ -23684,6 +24153,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "branding" ? (
         <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} brandErr={brandErr} />
       ) : null}
+      </div>
 
       {!liveDb() && (
         <div style={{
@@ -23715,7 +24185,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
          its own thing: "Add" is just a fifth tab with a filled accent
          icon, flush with the other four. */}
       <div style={{
-        position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50,
+        flexShrink: 0, zIndex: 50,
         background: S.card, borderTop: `1px solid ${S.line}`,
         display: "flex", alignItems: "stretch", paddingBottom: "env(safe-area-inset-bottom)",
       }}>
