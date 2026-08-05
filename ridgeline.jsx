@@ -8320,7 +8320,13 @@ function AnnouncementManager({ announcements, setAnnouncements, currentUser, onB
    "Save as PDF", which is a genuine PDF — no library, no server, and
    it works on iOS Safari and Android Chrome alike.
 ================================================================ */
-function docShell(title, brand, bodyHtml) {
+/* opts.bare drops the letterhead and the closing footer. The proposal uses it
+   because those two blocks were what stopped its cover from being a cover: the
+   shell printed the logo, the address and the document title across the top of
+   page one, and then the proposal printed its own title underneath. The same
+   title, twice, above a photo that was supposed to own the page. Every other
+   document still wants the letterhead, so this is opt-in. */
+function docShell(title, brand, bodyHtml, opts = {}) {
   const esc = (x) => String(x == null ? "" : x)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const logo = brand.logo
@@ -8373,21 +8379,21 @@ function docShell(title, brand, bodyHtml) {
   <button onclick="window.print()">Save as PDF / Print</button>
   <span>Choose "Save to Files" or "Save as PDF" in the print dialog.</span>
 </div>
-<div class="head">
+${opts.bare ? "" : `<div class="head">
   <div>${logo}<div class="co">${[
       brand.showAddress !== false ? esc(brand.address) : "",
       [brand.showPhone !== false ? esc(brand.phone) : "", brand.showEmail !== false ? esc(brand.email) : ""].filter(Boolean).join("   "),
       brand.showLicense !== false && brand.license ? esc(brand.license) : "",
     ].filter(Boolean).join("\n")}</div></div>
   <div><div class="title">${esc(title)}</div></div>
-</div>
+</div>`}
 ${bodyHtml}
-<div class="foot">${esc(brand.company)}${brand.showSlogan !== false ? " · " + esc(brand.slogan) : ""}</div>
+${opts.bare ? "" : `<div class="foot">${esc(brand.company)}${brand.showSlogan !== false ? " · " + esc(brand.slogan) : ""}</div>`}
 </body></html>`;
 }
 
-function openDoc(title, brand, bodyHtml, toast) {
-  const html = docShell(title, brand, bodyHtml);
+function openDoc(title, brand, bodyHtml, toast, opts = {}) {
+  const html = docShell(title, brand, bodyHtml, opts);
   /* 1) A new tab is best when the browser allows it. */
   try {
     const w = window.open("", "_blank");
@@ -8432,6 +8438,213 @@ function openDoc(title, brand, bodyHtml, toast) {
 const esc = (x) => String(x == null ? "" : x)
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+/* ==================================================================
+   QR CODES — generated here, on purpose
+
+   A printed proposal carries a link to the customer portal so a
+   homeowner can accept and sign on their phone instead of printing,
+   signing and scanning. A QR is what makes that actually happen.
+
+   Every "just call a QR image API" option would put the portal token
+   in a URL sent to a third-party host — and that token is a live,
+   unauthenticated key to one customer's whole file. So this encodes
+   locally: byte mode, error correction level M, smallest version that
+   fits, emitted as inline SVG with no network access and no dependency.
+
+   Standard: ISO/IEC 18004. The tables below are from the spec.
+================================================================== */
+const QR_ECC_M = 0;                                     // level M -> format bits 00
+/* Data codeword capacity at level M, versions 1-10. */
+const QR_M_DATA = [16, 28, 44, 64, 86, 108, 124, 154, 182, 216];
+/* EC codewords per block, and block counts, at level M, versions 1-10. */
+const QR_M_ECC = [10, 16, 26, 18, 24, 16, 18, 22, 22, 26];
+const QR_M_BLOCKS = [1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
+const QR_ALIGN = [[], [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34],
+  [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]];
+
+/* GF(256) with the QR primitive polynomial 0x11D. */
+const QR_EXP = new Uint8Array(512);
+const QR_LOG = new Uint8Array(256);
+(() => {
+  let x = 1;
+  for (let i = 0; i < 255; i++) {
+    QR_EXP[i] = x; QR_LOG[x] = i;
+    x <<= 1; if (x & 0x100) x ^= 0x11d;
+  }
+  for (let i = 255; i < 512; i++) QR_EXP[i] = QR_EXP[i - 255];
+})();
+const qrMul = (a, b) => (a === 0 || b === 0) ? 0 : QR_EXP[QR_LOG[a] + QR_LOG[b]];
+
+/* Generator polynomial for `degree` error-correction codewords. */
+function qrGenPoly(degree) {
+  let poly = [1];
+  for (let i = 0; i < degree; i++) {
+    const next = new Array(poly.length + 1).fill(0);
+    for (let j = 0; j < poly.length; j++) {
+      next[j] ^= qrMul(poly[j], 1);
+      next[j + 1] ^= qrMul(poly[j], QR_EXP[i]);
+    }
+    poly = next;
+  }
+  return poly;
+}
+function qrEccFor(data, count) {
+  const gen = qrGenPoly(count);
+  const rem = new Array(count).fill(0);
+  for (const byte of data) {
+    const factor = byte ^ rem.shift();
+    rem.push(0);
+    for (let i = 0; i < count; i++) rem[i] ^= qrMul(gen[i + 1], factor);
+  }
+  return rem;
+}
+
+/* Build the module matrix for `text`. Returns null when the text is empty or
+   too long for version 10 — callers render nothing rather than a broken code. */
+function qrMatrix(text) {
+  const bytes = Array.from(new TextEncoder().encode(String(text || "")));
+  if (!bytes.length) return null;
+
+  let version = 0;
+  for (let v = 1; v <= 10; v++) {
+    const lenBits = v < 10 ? 8 : 16;
+    if (4 + lenBits + bytes.length * 8 <= QR_M_DATA[v - 1] * 8) { version = v; break; }
+  }
+  if (!version) return null;
+
+  const size = version * 4 + 17;
+  const totalData = QR_M_DATA[version - 1];
+
+  /* --- bitstream: mode 0100, length, payload, terminator, pad --- */
+  const bits = [];
+  const push = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >> i) & 1); };
+  push(0b0100, 4);
+  push(bytes.length, version < 10 ? 8 : 16);
+  bytes.forEach((b) => push(b, 8));
+  for (let i = 0; i < 4 && bits.length < totalData * 8; i++) bits.push(0);
+  while (bits.length % 8) bits.push(0);
+  const dataCw = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    dataCw.push(bits.slice(i, i + 8).reduce((a, b) => (a << 1) | b, 0));
+  }
+  const PADS = [0xec, 0x11];
+  for (let i = 0; dataCw.length < totalData; i++) dataCw.push(PADS[i % 2]);
+
+  /* --- split into blocks, compute EC, interleave --- */
+  const nBlocks = QR_M_BLOCKS[version - 1];
+  const eccLen = QR_M_ECC[version - 1];
+  const shortLen = Math.floor(totalData / nBlocks);
+  const nLong = totalData % nBlocks;
+  const dBlocks = [], eBlocks = [];
+  let off = 0;
+  for (let b = 0; b < nBlocks; b++) {
+    const len = shortLen + (b >= nBlocks - nLong ? 1 : 0);
+    const chunk = dataCw.slice(off, off + len);
+    off += len;
+    dBlocks.push(chunk);
+    eBlocks.push(qrEccFor(chunk, eccLen));
+  }
+  const final = [];
+  for (let i = 0; i < shortLen + 1; i++) {
+    dBlocks.forEach((blk) => { if (i < blk.length) final.push(blk[i]); });
+  }
+  for (let i = 0; i < eccLen; i++) eBlocks.forEach((blk) => final.push(blk[i]));
+
+  /* --- lay out the matrix --- */
+  const m = Array.from({ length: size }, () => new Array(size).fill(null));
+  const set = (r, c, v) => { if (r >= 0 && r < size && c >= 0 && c < size) m[r][c] = v; };
+  const finder = (r, c) => {
+    for (let dr = -1; dr <= 7; dr++) {
+      for (let dc = -1; dc <= 7; dc++) {
+        const inner = dr >= 0 && dr <= 6 && dc >= 0 && dc <= 6;
+        const on = inner && (dr === 0 || dr === 6 || dc === 0 || dc === 6
+          || (dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4));
+        set(r + dr, c + dc, on ? 1 : 0);
+      }
+    }
+  };
+  finder(0, 0); finder(0, size - 7); finder(size - 7, 0);
+  for (let i = 8; i < size - 8; i++) {
+    m[6][i] = i % 2 === 0 ? 1 : 0;
+    m[i][6] = i % 2 === 0 ? 1 : 0;
+  }
+  const aligns = QR_ALIGN[version];
+  aligns.forEach((r) => aligns.forEach((c) => {
+    if (m[r][c] !== null) return;                        // skip finder overlaps
+    for (let dr = -2; dr <= 2; dr++) {
+      for (let dc = -2; dc <= 2; dc++) {
+        const on = Math.max(Math.abs(dr), Math.abs(dc)) !== 1;
+        set(r + dr, c + dc, on ? 1 : 0);
+      }
+    }
+  }));
+  m[size - 8][8] = 1;                                    // dark module
+
+  /* Reserve format areas so data placement skips them. */
+  const reserve = (r, c) => { if (m[r][c] === null) m[r][c] = 0; };
+  for (let i = 0; i < 9; i++) { reserve(8, i); reserve(i, 8); }
+  for (let i = 0; i < 8; i++) { reserve(8, size - 1 - i); reserve(size - 1 - i, 8); }
+
+  /* Data, upward/downward in two-column strips, skipping the timing column. */
+  const bitStream = [];
+  final.forEach((cw) => { for (let i = 7; i >= 0; i--) bitStream.push((cw >> i) & 1); });
+  let bi = 0, up = true;
+  for (let right = size - 1; right > 0; right -= 2) {
+    if (right === 6) right = 5;
+    for (let step = 0; step < size; step++) {
+      const row = up ? size - 1 - step : step;
+      for (const col of [right, right - 1]) {
+        if (m[row][col] !== null) continue;
+        /* Mask 0: (row + col) % 2 === 0 inverts. Chosen fixed rather than
+           evaluating all eight — a URL of this length produces no problematic
+           pattern, and a deterministic mask keeps this testable. */
+        const bit = bi < bitStream.length ? bitStream[bi++] : 0;
+        m[row][col] = ((row + col) % 2 === 0) ? bit ^ 1 : bit;
+      }
+    }
+    up = !up;
+  }
+
+  /* Format information: ECC level M + mask 0, BCH(15,5) with the spec mask. */
+  const fmtData = (QR_ECC_M << 3) | 0;
+  let rem = fmtData;
+  for (let i = 0; i < 10; i++) rem = (rem << 1) ^ (((rem >> 9) & 1) * 0x537);
+  const fmt = ((fmtData << 10) | rem) ^ 0x5412;
+  /* Format bits go down most-significant first — bit 14 lands at (8,0), not
+     bit 0. Getting this backwards produces a symbol that passes every
+     structural check (finders, timing, dark module all correct) and that no
+     reader on earth will decode, because the 15-bit word comes out reversed. */
+  const fbit = (i) => (fmt >> (14 - i)) & 1;
+  for (let i = 0; i <= 5; i++) m[8][i] = fbit(i);
+  m[8][7] = fbit(6); m[8][8] = fbit(7); m[7][8] = fbit(8);
+  for (let i = 9; i <= 14; i++) m[14 - i][8] = fbit(i);
+  /* The second copy is 7 modules up the left of the bottom-left finder and 8
+     across from the top-right one. Getting these lengths the wrong way round
+     silently overwrites the dark module at (size-8, 8), which no reader will
+     accept — worth stating, because the symbol still looks correct. */
+  for (let i = 0; i <= 6; i++) m[size - 1 - i][8] = fbit(i);
+  for (let i = 7; i <= 14; i++) m[8][size - 15 + i] = fbit(i);
+
+  return m;
+}
+
+/* The matrix as an inline SVG, sized in CSS pixels. Returns "" when the text
+   can't be encoded, so a caller can concatenate it unconditionally. */
+function qrSvg(text, px = 120) {
+  const m = qrMatrix(text);
+  if (!m) return "";
+  const n = m.length, quiet = 4, total = n + quiet * 2;
+  let rects = "";
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (m[r][c]) rects += `<rect x="${c + quiet}" y="${r + quiet}" width="1" height="1"/>`;
+    }
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${total} ${total}" `
+    + `width="${px}" height="${px}" shape-rendering="crispEdges" role="img" aria-label="Scan to accept online">`
+    + `<rect width="${total}" height="${total}" fill="#fff"/><g fill="#111827">${rects}</g></svg>`;
+}
+
 function lineTable(items, opts = {}) {
   /* opts.honorLine → respect each line's customer-visibility toggles
      (showQty / showUnitPrice) set in the estimate editor, so the printed
@@ -8461,13 +8674,14 @@ function lineTable(items, opts = {}) {
    Each is opt-out in the builder, and each renders nothing when the job has
    no data for it — a company that never fills in a warranty simply doesn't
    get a warranty page rather than getting an empty one. */
-const PROPOSAL_DEFAULT_SECTIONS = ["cover", "why", "findings", "options", "items", "warranty", "process", "notes", "terms"];
+const PROPOSAL_DEFAULT_SECTIONS = ["cover", "why", "findings", "options", "items", "concealed", "warranty", "process", "notes", "terms"];
 const PROPOSAL_SECTION_LABELS = {
   cover: ["Cover page", "Photo, title, and who it's for"],
   why: ["Why us", "Licence, insurance, crews, your contact"],
   findings: ["What we found", "Measurements and the photos you shared"],
   options: ["Options", "Good/Better/Best side by side, plus upgrades"],
   items: ["Scope / what's included", "The line items"],
+  concealed: ["Concealed conditions", "Pre-agreed unit pricing for what's found after tear-off"],
   warranty: ["Warranty", "Manufacturer and workmanship"],
   process: ["What happens next", "The five steps after they sign"],
   notes: ["Special notes", "Anything specific to this job"],
@@ -8494,6 +8708,11 @@ function normalizeProposalDoc(doc) {
     coverImage: d.coverImage || null,
     notes: d.notes || "",
     terms: d.terms || "",
+    /* Left undefined on purpose when unset — estimateDocHtml reads undefined
+       as "follow whether this proposal has options", which is what estimates
+       saved before the toggle existed should keep doing. */
+    showLinePrices: d.showLinePrices,
+    compare: d.compare || {},
   };
 }
 
@@ -8536,7 +8755,7 @@ function concealedTableHtml(est) {
 
 /* The tier cards, side by side, with the recommended one lifted. This is
    the page a homeowner actually decides on. */
-function tierCardsHtml(est, brand) {
+function tierCardsHtml(est, brand, doc = {}) {
   const tiers = (est.tiers || []).filter((t) => (t.items || []).length);
   if (tiers.length < 2) return "";
   const chosen = est.selectedTier || (tiers[tiers.length > 2 ? 1 : 0] || {}).id;
@@ -8576,6 +8795,7 @@ function tierCardsHtml(est, brand) {
     installation by our own crews — they differ in the shingle, the warranty, and how long you can
     forget about your roof afterwards.</div>
     <div class="tiers">${cards}</div>
+    ${tierCompareHtml(est, doc)}
     ${upgradesHtml(est)}
   </section>`;
 }
@@ -8656,6 +8876,118 @@ function warrantyHtml(job, brand) {
   </section>`;
 }
 
+/* Terms written as separate paragraphs become numbered clauses, which is how
+   people actually read and refer to them ("clause 4 says…"). Terms written as
+   one block stay one block — nobody's existing wording gets chopped up on a
+   guess about where the sentences divide. */
+function termsHtml(text) {
+  const parts = String(text || "").split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2) return `<div class="body small">${esc(text)}</div>`;
+  return `<ol class="clauses">${parts.map((p) => `<li>${esc(p)}</li>`).join("")}</ol>`;
+}
+
+/* What the homeowner actually pays and when — the first question on a job
+   this size, and until now it was a clause inside a paragraph of terms.
+   Reads the deposit terms already set on the contract. */
+function paymentScheduleHtml(job, amount) {
+  const con = job.contract || {};
+  const total = num(amount);
+  if (!total) return "";
+  const mode = con.depositMode || "pct";
+  const deposit = mode === "fixed" ? num(con.depositFixed) : total * (num(con.depositPct) / 100);
+  if (!deposit) return "";
+  const label = mode === "fixed" ? "Due at signing" : `Due at signing (${num(con.depositPct)}%)`;
+  return `<h3 class="subh">Payment schedule</h3>
+    <table class="pay"><tbody>
+      <tr><td>${label}</td><td class="r">${money0(deposit)}</td></tr>
+      <tr><td>Due on substantial completion</td><td class="r">${money0(total - deposit)}</td></tr>
+      <tr class="paytot"><td><b>Total</b></td><td class="r"><b>${money0(total)}</b></td></tr>
+    </tbody></table>`;
+}
+
+/* Scan a tier's line items for a shingle we recognise, then pull that
+   manufacturer's published specs. The whole library is already in the app —
+   SHINGLE_DB knows the product lines, MFR_SPECS knows what each maker
+   publishes for wind, algae and warranty — so a comparison table can build
+   itself from the estimate the rep already wrote. */
+/* Whole-name matching. Plain substring search reads "Camelot I" inside
+   "Camelot II" and confidently attributes the wrong product's specs to the
+   roof — a wrong row on a comparison table is worse than a blank one, because
+   nobody checks it. */
+function nameInText(name, text) {
+  const n = String(name || "").trim().toLowerCase();
+  if (n.length < 3) return false;
+  const i = text.indexOf(n);
+  if (i < 0) return false;
+  const before = i === 0 ? " " : text[i - 1];
+  const after = i + n.length >= text.length ? " " : text[i + n.length];
+  return !/[a-z0-9]/.test(before) && !/[a-z0-9]/.test(after);
+}
+function tierSpecFor(tier, override) {
+  const o = override || {};
+  const text = (tier.items || []).map((it) => `${it.desc || ""} ${it.description || ""}`).join(" ").toLowerCase();
+  const specs = typeof MFR_SPECS !== "undefined" ? MFR_SPECS : [];
+  /* Candidate product names: everything in the shingle catalogue, plus the
+     impact-rated lines each manufacturer publishes — those are exactly the
+     upgrade products a Better/Best tier names, and several aren't in the
+     catalogue at all. */
+  const cands = [];
+  (typeof SHINGLE_DB !== "undefined" ? SHINGLE_DB : []).forEach((s) => cands.push({ name: s.line, mfr: s.mfr }));
+  specs.forEach((m) => String(m.class4 || "").split(/[·,]/).forEach((raw) => {
+    const nm = raw.replace(/\(.*?\)/g, "").trim();
+    if (nm) cands.push({ name: nm, mfr: m.mfr, ir: true });
+  }));
+  /* Longest first, so "Timberline HDZ" wins over "Timberline". */
+  const hit = cands.sort((a, b) => b.name.length - a.name.length).find((c) => nameInText(c.name, text));
+  /* No catalogued product? A maker's wind, algae and warranty terms are
+     largely product-independent, so naming the manufacturer alone still fills
+     most of the table honestly, and the shingle row is left for the rep. */
+  const mfr = hit ? hit.mfr : (specs.find((m) => nameInText(m.mfr, text)) || {}).mfr;
+  const spec = mfr ? specs.find((m) => m.mfr === mfr) : null;
+  const impact = !hit ? ""
+    : hit.ir ? "Yes — Class 4"
+    : (spec && spec.class4 && nameInText(hit.name, spec.class4.toLowerCase())) ? "Yes — Class 4" : "No";
+  /* A tier that pays for an enhanced system warranty says so in its line
+     items, and that — System Plus versus Golden Pledge — is usually the real
+     difference between Better and Best. It beats the manufacturer's generic
+     shingle warranty, which is identical across their whole range. */
+  const system = (typeof MFR_WARRANTIES !== "undefined" ? MFR_WARRANTIES : [])
+    .filter((w) => !/^standard|^other/i.test(w))
+    .sort((a, b) => b.length - a.length)
+    .find((w) => nameInText(w, text));
+  return {
+    shingle: o.shingle || (hit ? `${hit.mfr} ${hit.name}` : (mfr || "")),
+    wind: o.wind || (spec ? spec.wind : ""),
+    algae: o.algae || (spec ? spec.algae : ""),
+    warranty: o.warranty || system || (spec ? spec.warranty : ""),
+    impact: o.impact || impact,
+  };
+}
+const TIER_COMPARE_ROWS = [
+  ["shingle", "Shingle"], ["wind", "Wind rating"], ["algae", "Algae warranty"],
+  ["warranty", "Manufacturer warranty"], ["impact", "Impact rated"],
+];
+function tierCompareHtml(est, doc) {
+  const tiers = (est.tiers || []).filter((t) => (t.items || []).length);
+  if (tiers.length < 2) return "";
+  const specs = tiers.map((t) => tierSpecFor(t, (doc.compare || {})[t.id]));
+  /* A row every option answers identically argues against the upgrade, and a
+     row nobody answers is an empty column. Keep only rows that are filled in
+     somewhere AND differ somewhere. */
+  const rows = TIER_COMPARE_ROWS.filter(([k]) => {
+    const vals = specs.map((s) => String(s[k] || "").trim());
+    return vals.some(Boolean) && new Set(vals).size > 1;
+  });
+  if (!rows.length) return "";
+  return `<h3 class="subh">Side by side</h3>
+    <table class="cmp"><thead><tr><th></th>
+      ${tiers.map((t) => `<th>${esc(t.name || "Option")}</th>`).join("")}
+    </tr></thead><tbody>
+      ${rows.map(([k, label]) => `<tr><th class="rowh">${esc(label)}</th>
+        ${specs.map((s) => `<td>${esc(s[k] || "—")}</td>`).join("")}</tr>`).join("")}
+    </tbody></table>`;
+}
+
 /* What happens after they sign. Removes the single biggest unspoken
    objection on a large job, which is "and then what?". */
 const PROPOSAL_STEPS = [
@@ -8681,11 +9013,24 @@ function estimateDocHtml(job, brand, users = []) {
   const style = doc.style || "classic";
   const title = esc((doc.title || "Roofing Proposal"));
   const contact = repContactFor(users, job);
-  const hasTiers = (est.tiers || []).filter((t) => (t.items || []).length).length >= 2;
-  /* With options on the table the itemised sheet is an inclusions list, not
-     a price list — the option price is the price. Showing both invites
-     arithmetic that never ends in a signature. */
-  const itemOpts = hasTiers ? { honorLine: true, hidePrice: true } : { honorLine: true };
+  const tiers = (est.tiers || []).filter((t) => (t.items || []).length);
+  const hasTiers = tiers.length >= 2;
+  /* Whether the itemised sheet carries prices is a per-proposal call, because
+     it depends on who is reading it. With options on the table a retail
+     homeowner should see the option price and nothing else — two sets of
+     numbers invite arithmetic that never ends in a signature. An insurance
+     homeowner needs the opposite: their carrier's scope is itemised and they
+     have to reconcile ours against it line by line. So the default follows
+     whether there are options, and the rep can override it. */
+  const showLine = doc.showLinePrices === undefined ? !hasTiers : !!doc.showLinePrices;
+  const itemOpts = showLine ? { honorLine: true } : { honorLine: true, hidePrice: true };
+  /* The amount the payment schedule is written against. */
+  const chosenTier = hasTiers
+    ? (tiers.find((t) => t.id === est.selectedTier) || tiers[tiers.length > 2 ? 1 : 0])
+    : null;
+  const dueTotal = chosenTier
+    ? (chosenTier.items || []).reduce((a, it) => a + num(it.qty) * num(it.price), 0)
+    : total;
   let out = "";
 
   for (const sec of secs) {
@@ -8698,28 +9043,41 @@ function estimateDocHtml(job, brand, users = []) {
           <div><span class="cml">Date</span><span class="cmv">${esc(est.date || "")}</span></div>
           ${contact.name ? `<div><span class="cml">Your contact</span><span class="cmv">${esc(contact.name)}${contact.phone ? " · " + esc(contact.phone) : ""}</span></div>` : ""}
         </div>`;
+      /* The cover carries the letterhead itself. The shell's version is
+         suppressed (opts.bare) because it printed the company block AND the
+         document title above this, so the title appeared twice on page one
+         and the cover never owned its page. */
+      const mark = brand.logo
+        ? `<img class="colgo" src="${brand.logo}" alt="${esc(brand.company)}">`
+        : `<div class="coname">${esc(brand.company)}</div>`;
+      const contactLine = [brand.phone, brand.email, brand.website].filter(Boolean).map(esc).join("  ·  ");
       if (style === "photo" && img) {
         out += `<section class="cover photo" style="background-image:url('${img}')">
           <div class="covershade">
+            ${mark}
             <div class="cotitle">${title}</div>
-            <div class="coco">${esc(brand.company)}</div>
+            <div class="coco">${esc(brand.slogan || "")}</div>
             ${meta}
+            ${contactLine ? `<div class="cocontact">${contactLine}</div>` : ""}
           </div>
         </section>`;
       } else {
         const bold = style === "bold";
         out += `<section class="cover ${bold ? "boldcover" : "plaincover"}">
+          <div class="colead">${mark}${brand.license ? `<div class="colic">${esc(brand.license)}</div>` : ""}</div>
           ${img ? `<img class="hero" src="${img}" alt="">` : ""}
           <div class="cotitle">${title}</div>
-          <div class="coco">${esc(brand.company)}${brand.slogan ? ` · ${esc(brand.slogan)}` : ""}</div>
+          <div class="coco">${esc(brand.slogan || "")}</div>
           ${meta}
+          ${contactLine ? `<div class="cocontact">${contactLine}</div>` : ""}
         </section>`;
       }
       continue;
     }
     if (sec === "findings") { out += findingsHtml(job); continue; }
     if (sec === "why") { out += credentialsHtml(brand, contact); continue; }
-    if (sec === "options") { out += tierCardsHtml(est, brand); continue; }
+    if (sec === "options") { out += tierCardsHtml(est, brand, doc); continue; }
+    if (sec === "concealed") { out += concealedTableHtml(est); continue; }
     if (sec === "warranty") { out += warrantyHtml(job, brand); continue; }
     if (sec === "process") { out += processHtml(); continue; }
     if (sec === "items") {
@@ -8734,7 +9092,7 @@ function estimateDocHtml(job, brand, users = []) {
       continue;
     }
     if (sec === "notes" && doc.notes) { out += `<section><h2>Special notes</h2><div class="body">${esc(doc.notes)}</div></section>`; continue; }
-    if (sec === "terms" && doc.terms) { out += `<section><h2>Terms &amp; conditions</h2><div class="body small">${esc(doc.terms)}</div></section>`; continue; }
+    if (sec === "terms" && doc.terms) { out += `<section><h2>Terms &amp; conditions</h2>${termsHtml(doc.terms)}</section>`; continue; }
     /* Custom sections added in the proposal builder. */
     const b = blocks[sec];
     if (b && b.type === "text" && (b.title || b.body)) {
@@ -8745,21 +9103,39 @@ function estimateDocHtml(job, brand, users = []) {
       out += `<iframe src="${b.dataUrl}" style="width:100%;height:800px;border:1px solid #ddd;border-radius:8px"></iframe></section>`;
     }
   }
-  out += concealedTableHtml(est);
+  /* Concealed conditions is a section now, so it only appends here for
+     estimates saved before it was one — otherwise it prints twice. */
+  if (!secs.includes("concealed")) out += concealedTableHtml(est);
 
-  /* The close. A signature line at the bottom of a wall of text is not a
-     call to action — this states the number, what it buys, and asks. */
+  /* The close. A signature line at the bottom of a wall of text is not a call
+     to action. This states what they pay and when, offers the one-tap route
+     that the portal already supports, and only then asks for a signature. */
+  const portalUrl = job.portalToken && typeof window !== "undefined"
+    ? `${window.location.origin}/?portal=${job.portalToken}` : "";
+  const qr = portalUrl ? qrSvg(portalUrl, 116) : "";
   out += `<section class="accept">
     <h2 class="acceptt">Ready to go ahead?</h2>
-    <div class="lede">Sign below and return this, or accept it in your online portal — whichever is easier.
+    <div class="lede">${portalUrl
+      ? "Accept online in under a minute — scan the code or open the link, choose your option and sign on your phone. Or sign below and send this back."
+      : "Sign below and send this back to us."}
     ${est.validThrough ? `This pricing is held through ${esc(est.validThrough)}.` : ""}</div>
+    ${paymentScheduleHtml(job, dueTotal)}
+    ${portalUrl ? `<div class="accepton">
+      ${qr ? `<div class="qr">${qr}</div>` : ""}
+      <div class="qrtext">
+        <div class="qrh">Accept and sign online</div>
+        <div class="qru">${esc(portalUrl)}</div>
+        <div class="qrn">Opens your private project page — no login or account needed.</div>
+      </div>
+    </div>` : ""}
     ${hasTiers ? `<div class="acceptpick"><b>Option chosen:</b> ______________________________
       &nbsp;&nbsp;<b>Upgrades:</b> ______________________________</div>` : ""}
     <div class="sig">
       <div><div class="sigline"></div><div class="siglbl">${esc(job.name)} — signature / date</div></div>
       <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative</div></div>
     </div>
-  </section>`;
+  </section>
+  <div class="runfoot">${esc(brand.company)}${est.number ? ` · ${esc(est.number)}` : ""} · Prepared for ${esc(job.name)}</div>`;
   return out + proposalCss(brand);
 }
 
@@ -8868,10 +9244,60 @@ function proposalCss(brand) {
   .grandl { font-size: 13px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; opacity: .85; }
   .grandv { font-size: 27px; font-weight: 800; letter-spacing: -0.02em; }
 
+  /* The cover carries its own letterhead now that the shell's is suppressed. */
+  .colead { display: flex; justify-content: space-between; align-items: flex-end;
+            gap: 16px; margin-bottom: 22px; }
+  .colgo, .cover.photo .colgo { height: 48px; max-width: 240px; object-fit: contain; display: block; }
+  .coname { font: 800 21px Georgia, serif; color: ${p}; }
+  .colic { font-size: 10.5px; color: #6B7280; }
+  .cocontact { margin-top: 16px; font-size: 11.5px; color: #6B7280; }
+  .cover.photo .coname, .cover.photo .cocontact { color: rgba(255,255,255,.9); }
+  .cover.photo .colgo { margin-bottom: 16px; }
+
+  /* Side-by-side comparison — what justifies the jump between options. */
+  table.cmp { width: 100%; border-collapse: collapse; margin-top: 8px; table-layout: fixed; }
+  table.cmp th, table.cmp td { padding: 9px 10px; font-size: 12px; line-height: 1.45;
+      border: 1px solid #E9EDF1; vertical-align: top; overflow-wrap: break-word; }
+  table.cmp thead th { background: ${p}; color: #fff; font-weight: 800; text-align: left;
+      text-transform: none; letter-spacing: 0; }
+  table.cmp thead th:first-child { background: transparent; border-color: transparent; }
+  table.cmp th.rowh { background: #F7F9FB; color: #4B5563; font-weight: 700; text-align: left;
+      width: 24%; text-transform: none; letter-spacing: 0; }
+
+  /* Payment schedule. */
+  table.pay { width: 100%; max-width: 420px; border-collapse: collapse; margin-top: 8px; }
+  table.pay td { padding: 9px 4px; font-size: 13.5px; border-bottom: 1px solid #F1F3F6; }
+  table.pay td.r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  table.pay tr.paytot td { border-bottom: 0; border-top: 2px solid ${p}; font-size: 15px; }
+
+  /* Terms as numbered clauses. */
+  ol.clauses { margin: 12px 0 0; padding-left: 20px; max-width: 72ch; }
+  ol.clauses li { font-size: 12px; line-height: 1.65; color: #4B5563; padding: 4px 0 4px 4px; }
+
   /* The close. */
   .accept { margin-top: 34px; border-top: 2px solid ${p}; padding-top: 20px; page-break-inside: avoid; }
   .accept .acceptt { border: 0; padding-bottom: 0; }
-  .acceptpick { font-size: 13px; color: #374151; margin: 14px 0 4px; }
+  .acceptpick { font-size: 13px; color: #374151; margin: 18px 0 4px; }
+  .accepton { display: flex; gap: 16px; align-items: center; margin-top: 18px;
+      border: 1.5px solid ${a}; border-radius: 12px; padding: 14px 16px; }
+  .accepton .qr { flex-shrink: 0; line-height: 0; }
+  .qrh { font-size: 14px; font-weight: 800; color: ${p}; }
+  .qru { font-size: 11px; color: ${a}; word-break: break-all; margin-top: 3px; }
+  .qrn { font-size: 11.5px; color: #6B7280; margin-top: 5px; line-height: 1.45; }
+
+  /* A fixed element repeats on every printed page in Chrome and Safari, which
+     is how each page gets an identity once the stack is separated.
+
+     A literal "Page 3 of 7" is deliberately absent: Chrome does not implement
+     CSS Paged Media margin boxes, and the page count isn't knowable before
+     the browser paginates, so any number printed here would be a guess.
+     Chrome's own print dialog can add numbering under Headers & footers. */
+  .runfoot { position: fixed; bottom: 0; left: 0; right: 0; text-align: center;
+      font-size: 9px; color: #9CA3AF; padding-bottom: 2px; }
+  @media screen { .runfoot { display: none; } }
+  /* A fixed footer sits over the flow, so the flow has to stop short of it —
+     otherwise it prints straight through the signature lines. */
+  @media print { body { padding-bottom: 24px; } }
   </style>`;
 }
 
@@ -14630,7 +15056,7 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
           <div style={{ fontSize: 16, fontWeight: 800, color: S.ink }}>Proposal builder</div>
           <div style={{ fontSize: 12, color: S.sub, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{job.name} · {est.number || "Draft"}</div>
         </div>
-        <Btn kind="ghost" small onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand, users), toast)}><Printer size={14} /> PDF</Btn>
+        <Btn kind="ghost" small onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand, users), toast, { bare: true })}><Printer size={14} /> PDF</Btn>
       </div>
       {/* Build / Preview toggle */}
       <div style={{ display: "flex", gap: 6, padding: "12px 16px 0" }}>
@@ -14703,6 +15129,57 @@ function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClos
                       )}
                     </div>
                   )}
+                  {sec === "items" && (() => {
+                    const tiers = (est.tiers || []).filter((t) => (t.items || []).length);
+                    const withTiers = tiers.length >= 2;
+                    const on = doc.showLinePrices === undefined ? !withTiers : !!doc.showLinePrices;
+                    return (
+                      <div style={{ marginTop: 8, paddingLeft: 24 }}>
+                        <label style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 13, cursor: locked ? "default" : "pointer" }}>
+                          <input type="checkbox" checked={on} disabled={locked}
+                            onChange={(e) => setDoc({ showLinePrices: e.target.checked })}
+                            style={{ width: 17, height: 17, accentColor: T.accent, marginTop: 1 }} />
+                          <span>Show unit and line prices on the itemised list</span>
+                        </label>
+                        <div style={{ fontSize: 11.5, color: S.sub, marginTop: 6, lineHeight: 1.5 }}>
+                          {withTiers
+                            ? "Off by default when you're offering options — the option price is the price, and two sets of numbers invite line-by-line haggling. Turn it on for insurance jobs: the carrier's scope is itemised and the homeowner has to reconcile yours against it."
+                            : "On by default when there's a single price, since a proposal with no numbers on it is no use to anyone."}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {sec === "options" && (() => {
+                    const tiers = (est.tiers || []).filter((t) => (t.items || []).length);
+                    if (tiers.length < 2) {
+                      return <div style={{ marginTop: 8, paddingLeft: 24, fontSize: 12.5, color: S.sub }}>
+                        Add a second option tier on the Estimate tab and this becomes a Good/Better/Best page.
+                      </div>;
+                    }
+                    return (
+                      <div style={{ marginTop: 8, paddingLeft: 24 }}>
+                        <div style={{ fontSize: 11.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
+                          The side-by-side table fills itself in from the shingles named in each option.
+                          Override anything it gets wrong or can't find. Rows that come out the same on
+                          every option are left off — they'd argue against the upgrade.
+                        </div>
+                        {tiers.map((t) => {
+                          const auto = tierSpecFor(t, {});
+                          const ov = (doc.compare || {})[t.id] || {};
+                          return (
+                            <div key={t.id} style={{ marginBottom: 10 }}>
+                              <div style={{ fontSize: 12.5, fontWeight: 700, color: S.ink, marginBottom: 4 }}>{t.name || "Option"}</div>
+                              {TIER_COMPARE_ROWS.map(([k, label]) => (
+                                <input key={k} style={{ ...inputStyle, padding: "7px 10px", marginBottom: 5, fontSize: 12.5 }}
+                                  disabled={locked} value={ov[k] || ""} placeholder={auto[k] || label}
+                                  onChange={(e) => setDoc({ compare: { ...(doc.compare || {}), [t.id]: { ...ov, [k]: e.target.value } } })} />
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                   {sec === "notes" && (
                     <div style={{ marginTop: 8 }}>
                       <TemplateBar label="Notes" list={docTemplates.notes} setList={setDocTpl("notes")} value={doc.notes} locked={locked}
@@ -14811,7 +15288,7 @@ function CoverThumb({ style, accent, primary }) {
    sandboxed iframe makes divergence impossible: one renderer, one output. */
 function ProposalPreview({ job, brand, est, doc, total, users = [] }) {
   const html = useMemo(
-    () => docShell(doc.title || "Roofing Proposal", brand, estimateDocHtml({ ...job, estimate: { ...est, doc } }, brand, users)),
+    () => docShell(doc.title || "Roofing Proposal", brand, estimateDocHtml({ ...job, estimate: { ...est, doc } }, brand, users), { bare: true }),
     [job, brand, est, doc, users],
   );
   return (
@@ -15266,7 +15743,7 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
       </Card>
 
       <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-        <Btn kind="ghost" onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand, users), toast)}><Printer size={15} /> PDF</Btn>
+        <Btn kind="ghost" onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand, users), toast, { bare: true })}><Printer size={15} /> PDF</Btn>
         {!locked && (
           <>
             <Btn kind="ghost" onClick={() => {
