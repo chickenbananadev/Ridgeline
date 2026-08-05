@@ -1094,6 +1094,134 @@ function renderLetter(tpl, state) {
   return { body, used, blocking, ready: blocking.length === 0 };
 }
 
+/* ==================================================================
+   LEGAL PACKS — what a contract has to say, per state.
+
+   The construction agreement recited "the State of Ohio and Kentucky"
+   on every tenant's contract, baked a 3-day rescission window, a
+   5-year workmanship warranty and 1.5%/month into `mkContract` for
+   every new tenant on day one, and defaulted the deposit to 50% — a
+   per-se violation in states that cap it at a third. None of that was
+   keyed to where the roof is.
+
+   Every state gets a row for every field. What a field does NOT do is
+   guess: outbound research here returns lead-generation aggregators
+   that contradict each other, so a field with nothing checked behind
+   it reads "not established" and carries the body that can settle it
+   plus a direct link. Naming the right door beats guessing what is
+   behind it — the same choice `regulatorFor` already makes.
+
+   `verified` is the only tier that prints into a binding document,
+   and only a human standing behind it on a date can set that. So even
+   Ohio's seeded values start at `derived` and the owner confirms them
+   once on the Coverage screen. That is deliberate: a seeded value
+   auto-promoted to verified is exactly the bug the ladder exists to
+   stop, and it has already shipped twice.
+================================================================== */
+/* National directories. Each is the canonical index for its field —
+   not a per-state URL invented to look precise. */
+const NAAG_DIRECTORY = "https://www.naag.org/find-my-ag/";
+const NASCLA_DIRECTORY = "https://www.nascla.org/page/licensing_boards";
+const LEGAL_AUTHORITIES = {
+  ag: { name: "State attorney general — consumer protection division", url: NAAG_DIRECTORY },
+  doi: { name: "State department of insurance", url: NAIC_DIRECTORY },
+  lic: { name: "State contractor licensing board", url: NASCLA_DIRECTORY },
+};
+/* `binding: true` means the field fills a slot in a document somebody
+   signs. Those gate signing. The rest inform the rep and appear on
+   Coverage, but an unconfirmed one does not stop a contract going out,
+   because it does not appear in the contract. */
+const LEGAL_FIELDS = [
+  { key: "choiceOfLaw", label: "Governing law", authority: "ag", binding: true,
+    help: "Which state's law the agreement is written under. Reciting the wrong one is the defect that started this." },
+  { key: "rescission", label: "Right to cancel", authority: "ag", binding: true,
+    help: "How long the owner has to cancel, and whether the clock runs in business or calendar days." },
+  { key: "noticeOfCancellation", label: "Notice of Cancellation", authority: "ag", binding: true,
+    help: "Whether a separate cancellation notice must be handed over, in how many copies, and at what type size." },
+  { key: "insuranceRescission", label: "Insurance-restoration cancellation", authority: "doi", binding: true,
+    help: "Several states give a separate right to cancel once the carrier denies the claim. Where one exists it must be in the contract." },
+  { key: "deductibleNotice", label: "Deductible-rebate notice", authority: "doi", binding: true,
+    help: "The statutory notice that the insured is responsible for the deductible and it cannot be waived or absorbed." },
+  { key: "financeCharge", label: "Finance-charge ceiling", authority: "ag", binding: true,
+    help: "The maximum late charge on an unpaid balance. The supplied terms assert 1.5% per month, which exceeds the cap in some states." },
+  { key: "downPayment", label: "Down-payment cap", authority: "ag", binding: true,
+    help: "The most that may be collected before work starts. The supplied terms say half down." },
+  { key: "cancellationFee", label: "Cancellation-fee limit", authority: "ag", binding: true,
+    help: "Whether a liquidated-damages fee on late cancellation is enforceable, and at what ceiling. The supplied terms assert 15% of the insurance proceeds." },
+  { key: "warrantyFloor", label: "Workmanship warranty floor", authority: "ag", binding: true,
+    help: "Any statutory minimum the written warranty has to meet." },
+  { key: "licenceOnContract", label: "Licence number on the contract", authority: "lic", binding: true,
+    help: "Where a licence number must be printed on the agreement, omitting it can void the contract or bar a lien." },
+  { key: "licensing", label: "Licence or registration required", authority: "lic", binding: false,
+    help: "Whether roofing work needs a state licence, a registration, or neither — and who issues it." },
+  { key: "consumerIndemnity", label: "Consumer indemnity permissible", authority: "ag", binding: false,
+    help: "The supplied terms have the homeowner indemnify the company. Several states will not enforce that against a consumer." },
+  { key: "aob", label: "Assignment of benefits", authority: "doi", binding: false,
+    help: "Whether an AOB is permitted, restricted, or prohibited for residential property claims." },
+];
+const LEGAL_FIELD_KEYS = LEGAL_FIELDS.map((f) => f.key);
+const BINDING_LEGAL_FIELDS = LEGAL_FIELDS.filter((f) => f.binding).map((f) => f.key);
+/* The only curated rows. Ohio's are the assertions the app already
+   makes elsewhere, moved here so there is one place to confirm them;
+   Kentucky asserts nothing today and so seeds nothing. Both sit at
+   `derived` until somebody opens the source and initials it. */
+const LEGAL_PACK_SEED = {
+  OH: {
+    choiceOfLaw: { value: "Ohio", note: "The property is in Ohio, so Ohio law governs the agreement.", srcId: "ORC1345" },
+    rescission: { value: "Three (3) business days from the date of the transaction",
+      note: "Ohio's Home Solicitation Sales Act. Confirm the current text and whether this sale is within its scope before relying on it.",
+      srcId: "ORC1345" },
+  },
+};
+/* A pack is never borrowed from another state. `citeFor` learned this
+   lesson first: an unknown topic returns nothing rather than Ohio's
+   answer, and the same rule has to hold for contract law. */
+function legalPackFor(state, overrides = {}) {
+  const st = String(state || "").toUpperCase();
+  const seed = LEGAL_PACK_SEED[st] || {};
+  const conf = (overrides && overrides[st]) || {};
+  const pack = {};
+  LEGAL_FIELDS.forEach((f) => {
+    const auth = LEGAL_AUTHORITIES[f.authority];
+    /* A confirmation from the Coverage screen is the only thing that
+       reaches `verified`, and it carries who and when. */
+    const c = conf[f.key];
+    if (c && c.value) {
+      pack[f.key] = fact(c.value, {
+        note: c.note || "", sourceUrl: c.sourceUrl || auth.url, sourceName: c.sourceName || auth.name,
+        asOf: c.at || null, verifiedBy: c.by || null, confidence: "verified",
+      });
+      return;
+    }
+    const s = seed[f.key];
+    if (s) {
+      const src = s.srcId ? SOURCES[s.srcId] : null;
+      pack[f.key] = fact(s.value, {
+        note: s.note || "", srcId: s.srcId || "",
+        sourceUrl: (src && src.url) || auth.url, sourceName: (src && src.name) || auth.name,
+        confidence: "derived",
+      });
+      return;
+    }
+    pack[f.key] = fact("", {
+      note: st
+        ? `Not established for ${st}. ${auth.name} is the body that settles this — check it and confirm here.`
+        : "Pick the property's state.",
+      sourceUrl: auth.url, sourceName: auth.name, confidence: "unknown",
+    });
+  });
+  return pack;
+}
+/* What is stopping this state's contracts from being signed. Empty
+   means every binding slot resolves to something a human stood behind. */
+function legalPackGaps(state, overrides = {}) {
+  const pack = legalPackFor(state, overrides);
+  return LEGAL_FIELDS.filter((f) => f.binding && !printable(pack[f.key]));
+}
+function legalPackReady(state, overrides = {}) {
+  return !!String(state || "").trim() && legalPackGaps(state, overrides).length === 0;
+}
+
 function regulatorFor(state) {
   const r = STATE_REGULATORS[state];
   if (r) {
@@ -1943,6 +2071,13 @@ const US_STATES = [
   ["RI", "Rhode Island"], ["SC", "South Carolina"], ["SD", "South Dakota"], ["TN", "Tennessee"], ["TX", "Texas"],
   ["UT", "Utah"], ["VT", "Vermont"], ["VA", "Virginia"], ["WA", "Washington"], ["WV", "West Virginia"], ["WI", "Wisconsin"], ["WY", "Wyoming"],
 ];
+/* "OH" reads as jargon in a sentence a rep is meant to act on. Returns
+   "" for an unknown or empty code so the caller can say something
+   sensible rather than printing "undefined". */
+function stateName(ab) {
+  const hit = US_STATES.find(([a]) => a === String(ab || "").toUpperCase());
+  return hit ? hit[1] : "";
+}
 /* Adopted residential code family per state. Statewide IRC adoptions are the
    norm; the notable exceptions (state-specific codes, home-rule/local
    adoption) are called out. Editions and local amendments always need local
@@ -2295,6 +2430,18 @@ function stateForZip(zip) {
    from company settings on load. */
 let JURIS_OVERRIDES = {};
 function setJurisOverrides(map) { JURIS_OVERRIDES = map || {}; }
+
+/* Confirmed per-state contract law, saved from the Coverage screen.
+   Module scope for the same reason as JURIS_OVERRIDES: the document
+   builders are plain functions called from a dozen places and cannot
+   be handed React state, and a contract that silently rendered the
+   unconfirmed pack because the state did not reach it would defeat
+   the entire gate. */
+let LEGAL_OVERRIDES = {};
+function setLegalOverrides(map) { LEGAL_OVERRIDES = map || {}; }
+function legalPack(state) { return legalPackFor(state, LEGAL_OVERRIDES); }
+function legalGaps(state) { return legalPackGaps(state, LEGAL_OVERRIDES); }
+function legalReady(state) { return legalPackReady(state, LEGAL_OVERRIDES); }
 
 /* ZIPs looked up on demand and saved, so the database grows with use
    rather than needing every ZIP in the country shipped up front. */
@@ -9905,14 +10052,22 @@ const AGREEMENT_HOA_LINE = "Property Owner to obtain required authorization from
 const AGREEMENT_DECK_POLICY = "State building codes require that any damaged or deteriorated roof decking discovered during the tear off process be replaced to ensure a nail fastened surface. Most insurance carriers consider deck replacement a maintenance item and may not include it in your claim. The Property Owner agrees to a rate of $%RATE% per sheet for all necessary labor and materials.";
 const AGREEMENT_TERMS_PARA = "By signing this Agreement the Property Owner authorizes {company} to pursue the Property Owner’s best interest for a project replacement or repair at a “price agreeable” to the insurance company and {company} with no additional cost to the Property Owner except the deductible. When “price agreeable” is determined it shall become the final contract price and Property Owner authorizes {company} to obtain labor and material in accordance with the “price agreeable” and the specification set out herein and on the reverse side hereof.";
 const AGREEMENT_READ_PARA = "Property Owner(s) acknowledges that they have read the front and reverse of this Agreement, understands its terms, has received a completed, signed, and dated copy, and was orally advised of the right to cancel this transaction.";
-const AGREEMENT_CANCEL_PARA = "You, the Property Owner, may cancel this transaction at any time prior to midnight of the third business day after the date of this transaction.";
+/* Page one's RIGHT TO CANCEL box. Same state-law slot as clause 21 on
+   the reverse, and the two have to agree — a contract that gives one
+   window in a box and another in the terms is worse than either. */
+const AGREEMENT_CANCEL_PARA = "You, the Property Owner, may cancel this transaction at any time prior to midnight of {rescission} after the date of this transaction.";
 
 /* Reverse-side terms. Shipped as the default template; a tenant edits their
    own copy in Branding, which is stored on brand.agreementTerms and wins.
    Transcribed exactly as printed — including the typos ("DDED", "th reverse
    side"), because silently correcting the wording of a legal document is not
    this app's call to make. */
-const AGREEMENT_TERMS_INTRO = "This contract and any agreement made pursuant thereto (the “Agreement”) is between {company} (the “Company”) and the customer(s) named herein on th reverse side. This Agreement is subject to all appropriate law, regulations and ordinances in the State of Ohio and Kentucky and these terms and conditions.";
+/* {state} resolves to the property's governing law. It read "the State
+   of Ohio and Kentucky" — on every tenant's contract, for every roof in
+   the country. The rest of the sentence is the supplied text, down to
+   the "th reverse side" typo, because it is the owner's agreement and
+   not ours to rewrite. */
+const AGREEMENT_TERMS_INTRO = "This contract and any agreement made pursuant thereto (the “Agreement”) is between {company} (the “Company”) and the customer(s) named herein on th reverse side. This Agreement is subject to all appropriate law, regulations and ordinances in {state} and these terms and conditions.";
 const AGREEMENT_TERMS = [
   "This Agreement is composed of this page, the reverse (or front page) side of this page, the Pre-Start Checklist, the Scope of work Attachment if applicable, and all other documents referenced in or incorporated into this Agreement.",
   "Each Agreement is subject to approval of our credit department and office without exception. This Agreement and all applicable warranties shall not be assigned except by or with the written permission of the Company.",
@@ -9934,7 +10089,13 @@ const AGREEMENT_TERMS = [
   "Pay per Trade Policy: Customer agrees to pay in full at the completion of each trade on the project. The company reserves the right to collect payment in full per trade prior to beginning on the next trade.",
   "Company Retainage Policy: Customer agrees to pay in full at the completion of each trade on the project. The company reserves the right to collect payment in full per trade prior to beginning the next trade.",
   "The Company’s failure to enforce any right under this Agreement shall not be construed as a waiver of any subsequent right to enforce the same or any other right, term or condition.",
-  "You, the consumer, may cancel this transaction at any time prior to midnight of the 3rd business day after the date of this transaction.",
+  /* The cancellation window is state law, not a company term — three
+     business days is Ohio's, and stating it on a contract in a state
+     with a different window misstates the owner's rights on the one
+     clause that exists to protect them. {rescission} resolves through
+     the state's legal pack, and the agreement will not go out for
+     signature until somebody has confirmed what it resolves to. */
+  "You, the consumer, may cancel this transaction at any time prior to midnight of {rescission} after the date of this transaction.",
 ];
 
 /* The numbered roof diagram on the right of page one. Ships as a bundled
@@ -9949,8 +10110,57 @@ function agreementTermsFor(brand) {
     ? brand.agreementTerms : AGREEMENT_TERMS;
   return custom;
 }
-function agreementFill(text, brand) {
-  return String(text || "").replace(/\{company\}/g, (brand && brand.company) || "the Company");
+/* The legal-pack tokens a contract body may carry, and which field
+   each resolves against. Anything not in this map is left alone —
+   {company} is filled separately and is not state law. */
+const LEGAL_TOKENS = { state: "choiceOfLaw", rescission: "rescission" };
+/* Fills {company} plus every state-keyed slot, and reports which slots
+   did not resolve. A slot below `verified` renders as a visible
+   placeholder rather than quietly disappearing or, worse, resolving to
+   the home market's answer — a homeowner reading a blank where their
+   cancellation right should be will ask, which is the point. */
+function agreementFillLegal(text, brand, state) {
+  const pack = legalPack(state);
+  const unresolved = [];
+  let out = String(text || "").replace(/\{company\}/g, (brand && brand.company) || "the Company");
+  out = out.replace(/\{(\w+)\}/g, (m, key) => {
+    const field = LEGAL_TOKENS[key];
+    if (!field) return m;
+    const f = pack[field];
+    if (printable(f)) return f.value;
+    const spec = LEGAL_FIELDS.find((x) => x.key === field);
+    unresolved.push({ token: key, field, label: (spec && spec.label) || field, fact: f });
+    return `[${(spec && spec.label) || field} for ${state || "this state"} — not confirmed]`;
+  });
+  return { text: out, unresolved };
+}
+function agreementFill(text, brand, state) {
+  return agreementFillLegal(text, brand, state).text;
+}
+/* Bumped whenever the shape of a pack changes in a way that would make
+   an older snapshot read differently. Stored with every signature so a
+   past signature can always be interpreted under the rules in force
+   when it was given. */
+const LEGAL_PACK_VERSION = 1;
+/* The state-keyed clauses as they render for this job, in order. This
+   is what a signature binds to — a reference to "the OH pack" would
+   silently change meaning the next time somebody edits it. */
+function renderedLegalText(job) {
+  const st = (job && job.state) || "";
+  const pack = legalPack(st);
+  return LEGAL_FIELDS
+    .filter((f) => f.binding)
+    .map((f) => `${f.label}: ${printable(pack[f.key]) ? pack[f.key].value : "[not confirmed]"}`)
+    .join("\n");
+}
+/* Everything blocking this job's agreement from being signed: the
+   binding fields nobody has confirmed for the property's state. An
+   agreement with no state at all is blocked too — that is not a
+   national contract, it is a contract nobody checked. */
+function agreementBlockers(job) {
+  const st = (job && job.state) || "";
+  if (!st) return [{ key: "state", label: "Property state", note: "The job has no state, so no legal pack applies." }];
+  return legalGaps(st);
 }
 
 /* Everything the job file already knows. Not written to the job until the
@@ -10048,6 +10258,10 @@ function agFieldHtml(f, a) {
 function agreementDocHtml(job, brand) {
   const a = agreementFor(job, brand);
   const con = job.contract || {};
+  /* Every state-keyed clause resolves against the property's state, not
+     against the home market. An unconfirmed slot prints as a labelled
+     placeholder and the signing affordances upstream are disabled. */
+  const st = job.state || "";
   const left = AGREEMENT_SPEC.filter((s) => s.col === "L");
   const right = AGREEMENT_SPEC.filter((s) => s.col === "R");
   const mark = brand.logo
@@ -10109,7 +10323,7 @@ function agreementDocHtml(job, brand) {
 
   <div class="agterm">
     <p><b>Defective Decking and Plywood Policy</b>&nbsp; ${AGREEMENT_DECK_POLICY.split("%RATE%").map(esc).join(agBlank(a.deckRate, 70))}</p>
-    <p><b>Terms</b>&nbsp; ${esc(agreementFill(AGREEMENT_TERMS_PARA, brand))}</p>
+    <p><b>Terms</b>&nbsp; ${esc(agreementFill(AGREEMENT_TERMS_PARA, brand, st))}</p>
     <p>${esc(AGREEMENT_READ_PARA)}</p>
   </div>
 
@@ -10123,7 +10337,7 @@ function agreementDocHtml(job, brand) {
     </div>
     <div class="agbox tint agcancel">
       <div class="agboxt">RIGHT TO CANCEL</div>
-      <div class="agcanp">${esc(AGREEMENT_CANCEL_PARA)}</div>
+      <div class="agcanp">${esc(agreementFill(AGREEMENT_CANCEL_PARA, brand, st))}</div>
       <div class="aginit">INITIALS ${agBlank(a.cancelInit, 70)}</div>
     </div>
   </div>
@@ -10138,8 +10352,8 @@ function agreementDocHtml(job, brand) {
 <section class="agpage agrev">
   <div class="agrevlogo">${mark}</div>
   <h1 class="agrevh">TERMS AND CONDITIONS</h1>
-  <p class="agrevi">${esc(agreementFill(brand.agreementIntro || AGREEMENT_TERMS_INTRO, brand))}</p>
-  <ol class="agrevo">${agreementTermsFor(brand).map((c) => `<li>${esc(agreementFill(c, brand))}</li>`).join("")}</ol>
+  <p class="agrevi">${esc(agreementFill(brand.agreementIntro || AGREEMENT_TERMS_INTRO, brand, st))}</p>
+  <ol class="agrevo">${agreementTermsFor(brand).map((c) => `<li>${esc(agreementFill(c, brand, st))}</li>`).join("")}</ol>
 </section>
 <div class="agfoot">${esc(brand.company)} &bull; Construction Agreement${a.customerName ? " &bull; " + esc(a.customerName) : ""}</div>
 ${agreementCss(brand)}`;
@@ -10688,7 +10902,11 @@ function buildPortalSnapshot(job, brand, token, users = []) {
           });
         }
         const con = job.contract;
-        if (con && con.price && con.status !== "Signed" && portal.contract) {
+        /* Same gate as the in-app signature pad. A homeowner opening the
+           portal is the one path where nobody from the office is looking
+           at the screen, so it is the last place a contract with an
+           unconfirmed state-law clause should be signable. */
+        if (con && con.price && con.status !== "Signed" && portal.contract && legalReady(job.state)) {
           out.push({
             type: "contract", id: con.number || "con", title: `Contract ${con.number || ""}`.trim(),
             subtitle: job.address,
@@ -10706,7 +10924,17 @@ function buildPortalSnapshot(job, brand, token, users = []) {
                points at the signed agreement, which carries the notice that
                actually applies, rather than naming the wrong statute. */
             terms: "By signing you enter into a binding agreement for the work described, at the price shown. Your signed agreement sets out your right to cancel and the notice period that applies where the property is located.",
-            snapshot: { number: con.number, price: con.price, address: job.address },
+            /* The rendered legal text travels with the signature, not just
+               a reference to the pack. Editing a state's pack later must
+               not retroactively change what a past signature appears to
+               have covered — the hash has to bind to the words the
+               homeowner actually read. */
+            snapshot: {
+              number: con.number, price: con.price, address: job.address,
+              legalPackState: job.state || "",
+              legalPackVersion: LEGAL_PACK_VERSION,
+              renderedLegalText: renderedLegalText(job),
+            },
           });
         }
         (job.changeOrders || []).filter((c) => c.status === "Sent").forEach((c) => {
@@ -16942,6 +17170,15 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
     r.readAsDataURL(file);
   };
   const removeAttachment = (id) => setCon({ attachments: (con.attachments || []).filter((a) => a.id !== id) });
+  /* What the state's legal pack has not settled yet. A contract is a
+     binding document: rendering the home market's cancellation window
+     to a homeowner in another state, or a blank where their rights
+     should be, is the failure this gate exists to prevent. Signing,
+     executing and emailing are all off until somebody has confirmed the
+     binding fields for this state on the Coverage screen. Printing is
+     deliberately still allowed — a rep needs to be able to look at the
+     draft and see exactly which slots are unfilled. */
+  const blockers = agreementBlockers(job);
   const estTotal = estimateTotal(job.estimate);
   const depositMode = con.depositMode || "pct";
   const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
@@ -16959,7 +17196,7 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
             ? <span style={{ fontFamily: "cursive", fontSize: 22 }}>{label === "Client" ? job.name : "Supreme Building Group"}</span>
             : <img src={value} alt={`${label} signature`} style={{ maxHeight: 66 }} />
         ) : (
-          <Btn small kind="soft" onClick={onSign} disabled={locked}><PenLine size={13} /> Sign here</Btn>
+          <Btn small kind="soft" onClick={onSign} disabled={locked || blockers.length > 0}><PenLine size={13} /> Sign here</Btn>
         )}
       </div>
       <div style={{ fontSize: 12, color: S.sub, marginTop: 6 }}>{label} {con.signedAt && value ? `· ${con.signedAt}` : ""}</div>
@@ -17111,11 +17348,26 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
         onExport={(name, dataUrl) => { setCon({ attachments: [...(con.attachments || []), { id: uid("att"), name, dataUrl }] }); toast("Filled PDF attached to the contract"); }} />
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Signatures</CardTitle>
+        {!locked && blockers.length > 0 && (
+          <Callout tone="amber" label={`Not ready to sign in ${stateName(job.state) || "an unknown state"}`}>
+            <div style={{ lineHeight: 1.55 }}>
+              This contract states rights that are set by state law, and nobody has confirmed them
+              for {stateName(job.state) || "this property's state"} yet. Until they are confirmed the
+              agreement prints a labelled placeholder wherever one of those clauses belongs, and it
+              cannot be signed or sent.
+              <div style={{ marginTop: 8 }}>
+                {blockers.map((b) => (
+                  <div key={b.key} style={{ fontSize: 12.5, marginTop: 3 }}>• <b>{b.label}</b>{b.help ? ` — ${b.help}` : ""}</div>
+                ))}
+              </div>
+            </div>
+          </Callout>
+        )}
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
           <SigLine label="Client" value={con.clientSig} onSign={() => setSigFor("client")} />
           <SigLine label={`${brand.company} representative`} value={con.contractorSig} onSign={() => setSigFor("contractor")} />
         </div>
-        {con.clientSig && con.contractorSig && !locked && (
+        {con.clientSig && con.contractorSig && !locked && blockers.length === 0 && (
           <Btn kind="green" style={{ marginTop: 14, width: "100%" }} onClick={() => {
             setCon({ status: "Signed", signedAt: nowStamp() });
             toast("Contract executed and locked");
@@ -17129,11 +17381,21 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
         <Btn kind="ghost" onClick={() => (form === "agreement"
           ? openDoc(`Construction Agreement — ${job.name}`, brand, agreementDocHtml(job, brand), toast, { bare: true })
           : openDoc(`Contract — ${job.name}`, brand, contractDocHtml(job, brand), toast))}><Printer size={15} /> PDF</Btn>
-        <Btn kind="ghost" onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
+        {/* Sending it is the act that puts it in front of a homeowner to
+            sign, so it is gated with the signature. Printing is not — the
+            rep has to be able to see the draft and its gaps. */}
+        <Btn kind="ghost" disabled={blockers.length > 0} onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
           subject: `Your contract is ready — ${brand.company}`,
           body: `Hi ${job.name}, your contract for ${job.address} is ready to review and sign. Reply to this email with any questions.`,
         })}><Send size={15} /> Email to client</Btn>
       </div>
+      {blockers.length > 0 && (
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+          Printing the draft still works so you can see exactly which clauses are unfilled.
+          Confirm {stateName(job.state) || "the state"}'s contract law under More → Insurance &amp; resources →
+          Coverage by state to unlock signing and sending.
+        </div>
+      )}
       <SignaturePad open={!!sigFor} onClose={() => setSigFor(null)}
         title={sigFor === "client" ? "Client signature" : "Company signature"}
         onApply={(dataUrl, at) => {
@@ -19982,7 +20244,163 @@ function ClaimAssistant({ job = null, defaultState = "" }) {
   );
 }
 
-function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {}, seed = null, onConsumeSeed = () => {} }) {
+/* Coverage by state — where a seeded pointer becomes a fact somebody
+   stands behind, which is the only way anything reaches `verified`.
+
+   Structured as a review, not a form: each field says what it governs,
+   what the supplied contract currently asserts, and which body settles
+   it, with a link. Confirming stamps who and when onto the org blob,
+   exactly as the building-department confirm flow does one level down.
+   Nothing here fills a value in for the reader. */
+function CoverageByState({ jobs = [], stateFacts = {}, onConfirm, onClear, toast = () => {} }) {
+  /* Every state the company actually has work in, plus anything already
+     confirmed — so a state does not vanish off this screen the moment
+     its last job closes. */
+  const active = useMemo(() => {
+    const set = new Set();
+    (jobs || []).forEach((j) => { if (j && j.state) set.add(j.state); });
+    Object.keys(stateFacts || {}).forEach((s) => set.add(s));
+    return [...set].sort();
+  }, [jobs, stateFacts]);
+  const [sel, setSel] = useState(active[0] || "");
+  useEffect(() => { if (!sel && active.length) setSel(active[0]); }, [active.length]);
+  const [draft, setDraft] = useState({});
+  const [openField, setOpenField] = useState(null);
+  useEffect(() => { setDraft({}); setOpenField(null); }, [sel]);
+
+  const pack = legalPackFor(sel, stateFacts);
+  const gaps = legalPackGaps(sel, stateFacts);
+  const ready = legalPackReady(sel, stateFacts);
+  const jobCount = (jobs || []).filter((j) => j && j.state === sel).length;
+
+  return (
+    <div>
+      <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }}>
+        A contract states rights that are set by the state the property is in. This is where those get
+        confirmed. Until a state's binding fields are confirmed, its contracts print a labelled
+        placeholder where the clause belongs and cannot be signed or sent — which is the point:
+        the app does not know your states' law and will not pretend to.
+      </div>
+      {!active.length ? (
+        <Card><div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
+          No jobs with a state on file yet. A state appears here as soon as there is a job in it.
+        </div></Card>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 14 }}>
+            {active.map((st) => {
+              const on = st === sel;
+              const good = legalPackReady(st, stateFacts);
+              return (
+                <button key={st} onClick={() => setSel(st)} style={{
+                  border: `1px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : S.card,
+                  color: on ? T.accent : S.ink, borderRadius: 999, padding: "7px 14px",
+                  fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                }}>
+                  {stateName(st) || st}
+                  <span style={{
+                    width: 8, height: 8, borderRadius: 99,
+                    background: good ? "var(--rl-green-fg)" : "var(--rl-amber-fg)",
+                  }} />
+                </button>
+              );
+            })}
+          </div>
+          <Card>
+            <CardTitle right={<Chip tone={ready ? "green" : "amber"}>{ready ? "Contracts can be signed" : `${gaps.length} to confirm`}</Chip>}>
+              {stateName(sel) || sel}
+            </CardTitle>
+            <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
+              {jobCount} {jobCount === 1 ? "job" : "jobs"} on file.
+              {ready
+                ? " Every binding field has been confirmed, so agreements here render and sign normally."
+                : " Agreements in this state are blocked from signing until the fields marked below are confirmed."}
+            </div>
+          </Card>
+          {LEGAL_FIELDS.map((f) => {
+            const cur = pack[f.key];
+            const conf = ((stateFacts || {})[sel] || {})[f.key];
+            const open = openField === f.key;
+            const val = draft[f.key] !== undefined ? draft[f.key] : (conf ? conf.value : cur.value);
+            return (
+              <Card key={f.key} style={{ marginTop: 10 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 800, color: S.ink, lineHeight: 1.3 }}>
+                      {f.label}{f.binding && <span style={{ color: "var(--rl-amber-fg)", marginLeft: 6, fontSize: 11.5, fontWeight: 800 }}>BINDING</span>}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 3 }}>{f.help}</div>
+                  </div>
+                </div>
+                {/* Not compact: this is the screen where the tier is the
+                    whole point, and compact mode drops the word for it —
+                    a seeded value would render as a chip with no label
+                    saying nobody has checked it. */}
+                {/* Cited renders the note and the authority link itself for
+                    a fact with nothing behind it — that pointer IS the
+                    unknown state. Repeating them here printed each one
+                    twice. */}
+                <Cited fact={cur} style={{ marginTop: 8 }} />
+                {cur.value && cur.note && (
+                  <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 6 }}>{cur.note}</div>
+                )}
+                {cur.value && cur.sourceUrl && (
+                  <a href={cur.sourceUrl} target="_blank" rel="noreferrer"
+                    style={{ display: "inline-block", fontSize: 12.5, fontWeight: 700, color: T.accent, textDecoration: "none", marginTop: 6 }}>
+                    {cur.sourceName || "Open the source"} →
+                  </a>
+                )}
+                {conf && (
+                  <div style={{ fontSize: 12, color: S.sub, marginTop: 6 }}>
+                    Confirmed by {conf.by} on {conf.at}.
+                  </div>
+                )}
+                {!open ? (
+                  <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                    <Btn kind="soft" small onClick={() => setOpenField(f.key)}>
+                      <PenLine size={13} /> {conf ? "Update" : "Confirm for " + (stateName(sel) || sel)}
+                    </Btn>
+                    {conf && <Btn kind="ghost" small onClick={() => onClear(sel, f.key)}>Withdraw</Btn>}
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 10 }}>
+                    <Field label={`What ${stateName(sel) || sel} requires`}
+                      hint="Write it as it should read to a homeowner. This text goes into the contract wherever this clause belongs.">
+                      <textarea style={{ ...inputStyle, minHeight: 72, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.55 }}
+                        value={val} onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })} />
+                    </Field>
+                    <div style={{ fontSize: 12, color: S.sub, lineHeight: 1.5, marginBottom: 8 }}>
+                      Confirming records your name and today's date against this field. Only confirm what you
+                      have actually read at the source — the whole gate is worthless if it is clicked through.
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Btn kind="green" small disabled={!String(val || "").trim()}
+                        onClick={() => {
+                          onConfirm(sel, f.key, { value: String(val).trim(), sourceUrl: cur.sourceUrl, sourceName: cur.sourceName });
+                          setOpenField(null);
+                          setDraft({ ...draft, [f.key]: undefined });
+                        }}>
+                        <CheckCircle2 size={14} /> I've read the source — confirm
+                      </Btn>
+                      <Btn kind="ghost" small onClick={() => { setOpenField(null); setDraft({ ...draft, [f.key]: undefined }); }}>Cancel</Btn>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+          <div style={{ fontSize: 11.5, color: S.sub, lineHeight: 1.5, marginTop: 14 }}>
+            This is a record of what your office has checked. It is not legal advice, and confirming a
+            field here does not make it correct — it records that a named person read the source on a date.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {}, stateFacts = {}, onConfirmLegal = () => {}, onClearLegal = () => {}, seed = null, onConsumeSeed = () => {} }) {
   const [tab, setTab] = useState(seed && seed.tab ? seed.tab : (seed && seed.zip ? "codes" : "clients"));
   const [zip, setZip] = useState(seed ? seed.zip || "" : "");
   const [tplState, setTplState] = useState("");
@@ -20008,7 +20426,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
   }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["coverage", "Coverage"], ["resources", "Resources"]];
 
   /* One index across codes, terms and supplement triggers, so a rep
      types what they half-remember rather than guessing which tab it
@@ -20049,6 +20467,10 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
       </div>
 
       {tab === "ask" && <ClaimAssistant defaultState={tplState} />}
+      {tab === "coverage" && (
+        <CoverageByState jobs={jobs} stateFacts={stateFacts} toast={toast}
+          onConfirm={onConfirmLegal} onClear={onClearLegal} />
+      )}
 
       {tab === "storm" && <StormScout toast={toast} />}
 
@@ -25061,6 +25483,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["insurance:ask", MessageCircle, "Roofing assistant", "Code, manufacturers, NRCA, claims — cited answers"],
       ["insurance", Shield, "Insurance & claims", "Clients, claims, supplements & depreciation"],
       ["insurance:codes", ScrollText, "Code lookup", "Adopted code & building department by zip"],
+      ["insurance:coverage", MapPin, "Coverage by state", "Confirm the contract law for every state you work"],
       ["insurance:resources", BookOpen, "Roofing resources", "Manufacturer specs, policy provisions, letters, playbook"],
     ]],
     ["Customers & documents", [
@@ -25937,6 +26360,12 @@ export default function SupremeCRM() {
      ZIP. Kept in company settings so one person's phone call becomes
      everyone's. */
   const [jurisContacts, setJurisContacts] = useState({});
+  /* Per-state contract law the office has confirmed, keyed by state and
+     then by field: { OH: { rescission: { value, note, at, by } } }. Same
+     reasoning as jurisContacts one level up — one person reading the
+     statute becomes every rep's contract. This is what promotes a
+     seeded pointer to a `verified` fact, and nothing else does. */
+  const [stateFacts, setStateFacts] = useState({});
   /* ZIPs looked up on demand. The jurisdiction table grows with use
      rather than needing every ZIP shipped up front. */
   const [learnedJuris, setLearnedJuris] = useState({});
@@ -25961,11 +26390,11 @@ export default function SupremeCRM() {
   };
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, stateFacts, learnedJuris];
   const orgPack = () => ({
     announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates,
     priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate,
-    features, security, jurisContacts, learnedJuris, version: 1,
+    features, security, jurisContacts, stateFacts, learnedJuris, version: 1,
   });
   const unpackOrg = (d) => {
     if (d.announcements) setAnnouncements(d.announcements);
@@ -25989,6 +26418,7 @@ export default function SupremeCRM() {
     if (d.ccAutoCreate !== undefined) setCcAutoCreate(d.ccAutoCreate);
     if (d.features) setFeatures(d.features);
     if (d.jurisContacts) { setJurisContacts(d.jurisContacts); setJurisOverrides(d.jurisContacts); }
+    if (d.stateFacts) { setStateFacts(d.stateFacts); setLegalOverrides(d.stateFacts); }
     if (d.learnedJuris) { setLearnedJuris(d.learnedJuris); setLearnedJurisdictions(d.learnedJuris); }
     if (d.security) setSecurity(d.security);
   };
@@ -26518,6 +26948,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           if (id === "insurance:ask") { setCodeSeed({ tab: "ask" }); return setNav("insurance"); }
           if (id === "insurance:codes") { setCodeSeed({ tab: "codes" }); return setNav("insurance"); }
           if (id === "insurance:resources") { setCodeSeed({ tab: "resources" }); return setNav("insurance"); }
+          if (id === "insurance:coverage") { setCodeSeed({ tab: "coverage" }); return setNav("insurance"); }
           return setNav(id);
         }} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} theme={theme} setTheme={setTheme} />
       ) : nav === "insurance" ? (
@@ -26537,6 +26968,23 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             toast(rec.needsContact
               ? "Saved — add the permit office when you have it"
               : "Saved with its building department");
+          }}
+          stateFacts={stateFacts}
+          onConfirmLegal={(st, key, rec) => {
+            const next = { ...stateFacts, [st]: { ...(stateFacts[st] || {}), [key]: { ...rec, at: todayIso(), by: userName } } };
+            setStateFacts(next);
+            setLegalOverrides(next);
+            logAct({ type: "code", text: `Confirmed ${key} for ${st}` });
+            toast("Confirmed for the whole company");
+          }}
+          onClearLegal={(st, key) => {
+            const rest = { ...(stateFacts[st] || {}) };
+            delete rest[key];
+            const next = { ...stateFacts, [st]: rest };
+            setStateFacts(next);
+            setLegalOverrides(next);
+            logAct({ type: "code", text: `Withdrew the confirmation of ${key} for ${st}` });
+            toast("Withdrawn — contracts in that state are blocked again");
           }}
           seed={codeSeed} onConsumeSeed={() => setCodeSeed(null)} />
       ) : nav === "performance" ? (
