@@ -9418,6 +9418,455 @@ function contractDocHtml(job, brand) {
   return out;
 }
 
+/* ==================================================================
+   CONSTRUCTION AGREEMENT
+
+   A roofer's real agreement is a one-page fill-in form: numbered
+   specification blocks, checkboxes, blanks, a price box, and initials.
+   Reps have been printing it and writing on it with a pen.
+
+   The whole form is defined once, in AGREEMENT_SPEC below, as rows of
+   parts — a label, a checkbox, or a blank. The same definition drives
+   the on-screen form and the printed page, so a field can never exist
+   in one and be missing from the other. Add a row here and it appears
+   in both.
+
+   Answers live on job.agreement as a flat key/value map. Header and
+   price fields are declared the same way (AGREEMENT_HEADER,
+   AGREEMENT_PRICE_ROWS) for the same reason.
+================================================================== */
+
+/* Part kinds: t = static label, c = checkbox (key), b = blank (key, width px). */
+const AGREEMENT_SPEC = [
+  { n: "1", title: "DECKING", col: "L", rows: [
+    [{ t: "t", v: "A. Remove existing roofing" }, { t: "b", k: "tearoffLayers", w: 52 }, { t: "t", v: "layers to roof deck" }],
+  ] },
+  { n: "2", title: "ROOF DECK PROTECTION", col: "L", rows: [
+    [{ t: "t", v: "A. Felt Underlayment 15lb" }, { t: "c", k: "felt15" }, { t: "t", v: "B. 30lb" }, { t: "c", k: "felt30" }],
+    [{ t: "t", v: "C. Synthetic" }, { t: "b", k: "synthetic", w: 175 }],
+  ] },
+  { n: "3", title: "DRIP EDGE / GUTTER APRON", col: "L", rows: [
+    [{ t: "t", v: "A. Drip Edge Color" }, { t: "b", k: "dripColor", w: 90 }, { t: "t", v: "Rakes" }],
+    [{ t: "t", v: "B. Gutter Apron Color" }, { t: "b", k: "apronColor", w: 80 }, { t: "t", v: "Eaves" }],
+  ] },
+  { n: "4", title: "ICE AND WATER BARRIER", col: "L", note: "Install along Eaves, Valleys, and Flashings", rows: [
+    [{ t: "t", v: "A. Standard" }, { t: "c", k: "iwStandard" }, { t: "t", v: "B. Premium" }, { t: "c", k: "iwPremium" }, { t: "b", k: "iwNote", w: 130 }],
+  ] },
+  { n: "5", title: "VALLEY", col: "L", rows: [
+    [{ t: "t", v: "A. Ice and Water" }, { t: "c", k: "valleyIw" }],
+    [{ t: "t", v: "B. Valley Metal" }, { t: "c", k: "valleyMetal" }, { t: "t", v: "Color" }, { t: "b", k: "valleyColor", w: 120 }],
+  ] },
+  { n: "6", title: "STARTER SHINGLES", col: "L", note: "Install along all Rakes and Eaves", rows: [
+    [{ t: "t", v: "A. Standard" }, { t: "c", k: "starterStandard" }, { t: "t", v: "B. Premium" }, { t: "c", k: "starterPremium" }, { t: "b", k: "starterNote", w: 130 }],
+  ] },
+  { n: "7", title: "SHINGLES PER MANUFACTURER SPECS", col: "L", rows: [
+    [{ t: "t", v: "A. Style" }, { t: "b", k: "shingleStyle", w: 150 }],
+    [{ t: "t", v: "B. Color" }, { t: "b", k: "shingleColor", w: 120 }, { t: "t", v: "C. Brand" }, { t: "b", k: "shingleBrand", w: 105 }],
+  ] },
+  { n: "8", title: "FLASHING", col: "L", rows: [
+    [{ t: "t", v: "A. Chimney" }, { t: "c", k: "flashChimney" }, { t: "t", v: "B. Wall" }, { t: "c", k: "flashWall" }, { t: "t", v: "C. Step" }, { t: "c", k: "flashStep" }],
+  ] },
+  /* Right column. EXTRA STRUCTURE is bulleted rather than numbered in the
+     original — it is not a step in the roof spec, it is a scope question. */
+  { title: "EXTRA STRUCTURE", col: "R", bullet: true, rows: [
+    [{ t: "t", v: "A. Garage" }, { t: "c", k: "extraGarage" }, { t: "t", v: "B. Shed" }, { t: "c", k: "extraShed" }, { t: "t", v: "C. Barn" }, { t: "c", k: "extraBarn" }],
+  ] },
+  { kind: "figure", col: "R" },
+  { n: "9", title: "EXTRUSIONS", col: "R", rows: [
+    [{ t: "t", v: "A. Pipe Boots" }, { t: "b", k: "pipeBoots", w: 68 }, { t: "t", v: "B. Skylights" }, { t: "b", k: "skylights", w: 68 }],
+  ] },
+  { n: "10", title: "VENTILATION", col: "R", rows: [
+    [{ t: "t", v: "A. Shingle Over Ridge Vent" }, { t: "t", v: "1. Standard" }, { t: "b", k: "ridgeStandard", w: 58 }, { t: "t", v: "2. Premium" }, { t: "b", k: "ridgePremium", w: 58 }],
+    [{ t: "t", v: "B. Box / Turtle Vents" }, { t: "b", k: "boxVents", w: 50 }, { t: "t", v: "C. Power Vent" }, { t: "b", k: "powerVent", w: 56 }, { t: "t", v: "D. Turbine" }, { t: "c", k: "turbine" }],
+  ] },
+  { n: "11", title: "RIDGE CAP / HIP CAP", col: "R", rows: [
+    [{ t: "t", v: "A. Standard" }, { t: "b", k: "capStandard", w: 140 }],
+    [{ t: "t", v: "B. High Profile" }, { t: "b", k: "capHigh", w: 130 }],
+  ] },
+  { kind: "warranty", col: "R", title: "WARRANTY SYSTEM", note: "Not responsible for reattachment of satellite or HVAC.", rows: [
+    [{ t: "c", k: "warrStandard" }, { t: "t", v: "Standard" }, { t: "c", k: "warrEnhanced" }, { t: "t", v: "Enhanced" }, { t: "c", k: "warrPremium" }, { t: "t", v: "Premium" }],
+  ] },
+];
+
+const AGREEMENT_HEADER = [
+  { box: "PROPERTY & CONTACT", rows: [
+    [{ k: "customerName", label: "CUSTOMER NAME" }],
+    [{ k: "propertyAddress", label: "PROPERTY ADDRESS" }],
+    [{ k: "city", label: "CITY", flex: 3 }, { k: "state", label: "STATE", flex: 2 }, { k: "zip", label: "ZIP", flex: 2 }],
+    [{ k: "homePhone", label: "HOME PHONE" }, { k: "cellPhone", label: "CELL PHONE" }],
+    [{ k: "email", label: "EMAIL" }],
+  ] },
+  { box: "INSURANCE & CLAIM", tint: true, rows: [
+    [{ k: "carrier", label: "INSURANCE CARRIER" }],
+    [{ k: "claimNumber", label: "CLAIM NUMBER" }, { k: "dateOfLoss", label: "DATE OF LOSS" }],
+    [{ k: "outOfPocket", label: "OUT OF POCKET" }, { k: "agreementDate", label: "DATE" }],
+    [{ k: "projectAddress", label: "PROJECT ADDRESS (IF DIFFERENT)" }],
+  ] },
+];
+
+const AGREEMENT_PRICE_ROWS = [
+  { k: "finalPrice", label: "Final Contract Price (“Price Agreeable”)" },
+  { k: "deductible", label: "Insurance Deductible (Owner Responsibility)" },
+  { k: "deposit", label: "Deposit" },
+];
+
+/* The three paragraphs that sit between the notes box and the price box.
+   Verbatim from the printed agreement. {company} is substituted from the
+   tenant's branding so the same template works for any company. */
+const AGREEMENT_ACK_INSURANCE = "Property Owner(s) acknowledges that Contractor is due any and all monies received from any insurance company pursuant to an insurance claim, including overhead and profit, approved cost increases, and approved claim supplements.";
+const AGREEMENT_HOA_LINE = "Property Owner to obtain required authorization from HOA and authorities.";
+const AGREEMENT_DECK_POLICY = "State building codes require that any damaged or deteriorated roof decking discovered during the tear off process be replaced to ensure a nail fastened surface. Most insurance carriers consider deck replacement a maintenance item and may not include it in your claim. The Property Owner agrees to a rate of $%RATE% per sheet for all necessary labor and materials.";
+const AGREEMENT_TERMS_PARA = "By signing this Agreement the Property Owner authorizes {company} to pursue the Property Owner’s best interest for a project replacement or repair at a “price agreeable” to the insurance company and {company} with no additional cost to the Property Owner except the deductible. When “price agreeable” is determined it shall become the final contract price and Property Owner authorizes {company} to obtain labor and material in accordance with the “price agreeable” and the specification set out herein and on the reverse side hereof.";
+const AGREEMENT_READ_PARA = "Property Owner(s) acknowledges that they have read the front and reverse of this Agreement, understands its terms, has received a completed, signed, and dated copy, and was orally advised of the right to cancel this transaction.";
+const AGREEMENT_CANCEL_PARA = "You, the Property Owner, may cancel this transaction at any time prior to midnight of the third business day after the date of this transaction.";
+
+/* Reverse-side terms. Shipped as the default template; a tenant edits their
+   own copy in Branding, which is stored on brand.agreementTerms and wins.
+   Transcribed exactly as printed — including the typos ("DDED", "th reverse
+   side"), because silently correcting the wording of a legal document is not
+   this app's call to make. */
+const AGREEMENT_TERMS_INTRO = "This contract and any agreement made pursuant thereto (the “Agreement”) is between {company} (the “Company”) and the customer(s) named herein on th reverse side. This Agreement is subject to all appropriate law, regulations and ordinances in the State of Ohio and Kentucky and these terms and conditions.";
+const AGREEMENT_TERMS = [
+  "This Agreement is composed of this page, the reverse (or front page) side of this page, the Pre-Start Checklist, the Scope of work Attachment if applicable, and all other documents referenced in or incorporated into this Agreement.",
+  "Each Agreement is subject to approval of our credit department and office without exception. This Agreement and all applicable warranties shall not be assigned except by or with the written permission of the Company.",
+  "SHOULD DEFAULT BE MADE IN PAYMENT OF THIS AGREEMENT, CHARGES SHALL BE DDED FROM THE DATE THEREOF AT A RATE OF ONE AND ONE HALF (1 1⁄2) PERCENT PER MONTH (18% PER ANNUM) WITH A MINIMUM CHARGE OF $2.00 PER MONTH. IF PLACED IN THE HAND OF AN ATTORNEY FOR COLLECTION, YOU SHALL PAY ALL ATTORNEYS FEES, COSTS, AND LEGAL FILING FEES INCURRED.",
+  "The Company shall have no responsibility for damages from rain, fire, tornado, windstorm, or other perils, as it is normally contemplated to be covered by HOMEOWNER’S INSURANCE or BUSINESS RISK INSURANCE, or unless a specified written agreement be made therefore prior to commencement of the work at your residence (the “Project.”) During the duration of the Project, your homeowner’s insurance will be responsible for any interior damage as long as the Company has taken appropriate action to protect the roof during the repair/replacement period. The company is not responsible for any mold, fungi, interior damage resulting from mold or fungi, or the abatement of any said items.",
+  "The quotation on the face hereof does not include expenses or charges for bond insurance premiums or costs beyond normal insurance coverage, and any such additional expenses, premiums, or costs shall be added to the amount of the Agreement.",
+  "Replacement of deteriorated decking, fascia boards, and roof jacks, ventilators, flashing or other materials, unless otherwise STATED IN THIS AGREEMENT, are NOT INCLUDED and will be charged as an extra, on a time and material basis.",
+  "This Company shall not be liable for failure of performances due to labor controversies, strikes, fires, weather, inability to obtain materials from usual sources, or any other circumstances beyond the control of the Company, whether of a similar or dissimilar nature.",
+  "The Company is not responsible for any damages on or below the roof due to leaks by excessive wind driven rain, ice, or hail during the period of warranty. EXCESSIVE WIND IS 65 M.P.H. THE WARRANTY IS NON-TRANSFERRABLE.",
+  "IF THIS AGREEMENT IS CANCELLED BY THE CUSTOMER LATER THAN 3 DAYS from its execution, customer shall pay to the Company fifteen percent (15%) of the insurance proceeds awarded by your insurer as liquidated damages, not as a penalty, and the Company agrees to accept such as a reasonable and just compensation for said cancellation.",
+  "THIS CONTRACT CANNOT BE CANCELLED ONCE WORK IS COMMENCED ON THE PROJECT EXCEPT BY MUTUAL WRITTEN AGREEMENT OF THE PARTIES.",
+  "ANY REPRESENTATIONS, STATEMENTS, OR OTHER COMMUNICATIONS NOT WRITTEN ON THIS AGREEMENT ARE AGREED TO BE IMMATERIAL, not relied upon by either party, and do not survive the execution of this Agreement. This Agreement may not be amended, modified, or otherwise changed except by a writing executed by the parties. If any provision of this Agreement should be held to be invalid or unenforceable, the validity and enforceability of the remaining provisions of this contract shall not be affected thereby.",
+  "The Company’s maximum liability in the event of any default by it shall be the original cost of labor and materials for the Project which you agree shall be a liquidated sum. You hereby release, indemnify, and hold the Company (including its owners, employees, and agents) harmless from and against all other liabilities, claims, causes of action, damages, losses and expenses (including attorney’s fees and costs,) including by not limited to, any property damage or personal injury incurred by your or any other party related to or arising out of the services rendered by the Company on the Project. This indemnification extends to all responsibilities and undertakings as set forth in this Agreement and all warranty exclusions as indicated in this Agreement and in the warranty provided to you by the Company.",
+  "If there are solar panels on the roof, the homeowner agrees to take all necessary steps to remove, protect, and reinstall the same. Under no circumstances will the Company be responsible for damage to them during the Project.",
+  "The company is not responsible for construction problems associated with your home. If pointed out to the Company, we will attempt to assist you on correcting them on a time and material basis.",
+  "The Company is not responsible for any damages related to leaks from skylights unless the Company completed the skylight replacement as part of the Project.",
+  "Workmanship Warranty is for 5 years on roof replacement, 1 year on siding replacement, 1 year on gutter repairs, and 1 year on all other repairs (including interior work.)",
+  "Payments are to be made: Half down payment AND Customer agrees to our percentage of completion billing policy. The company reserves the right to bill proportionately based on the percentage of work completed. Customer understands that the company may issue a stop work order if requested progress payment is not received.",
+  "Pay per Trade Policy: Customer agrees to pay in full at the completion of each trade on the project. The company reserves the right to collect payment in full per trade prior to beginning on the next trade.",
+  "Company Retainage Policy: Customer agrees to pay in full at the completion of each trade on the project. The company reserves the right to collect payment in full per trade prior to beginning the next trade.",
+  "The Company’s failure to enforce any right under this Agreement shall not be construed as a waiver of any subsequent right to enforce the same or any other right, term or condition.",
+  "You, the consumer, may cancel this transaction at any time prior to midnight of the 3rd business day after the date of this transaction.",
+];
+
+/* The numbered roof diagram on the right of page one. Ships as a bundled
+   default and is replaceable per tenant from Branding — the artwork belongs
+   to whoever's letterhead the agreement goes out on. */
+const AGREEMENT_DIAGRAM_DEFAULT = "/reference-diagram.jpg";
+function agreementDiagram(brand) {
+  return (brand && brand.agreementDiagram) || AGREEMENT_DIAGRAM_DEFAULT;
+}
+function agreementTermsFor(brand) {
+  const custom = brand && Array.isArray(brand.agreementTerms) && brand.agreementTerms.length
+    ? brand.agreementTerms : AGREEMENT_TERMS;
+  return custom;
+}
+function agreementFill(text, brand) {
+  return String(text || "").replace(/\{company\}/g, (brand && brand.company) || "the Company");
+}
+
+/* Everything the job file already knows. Not written to the job until the
+   rep edits something — opening a job must not mutate it. */
+function agreementPrefill(job, brand) {
+  const ins = job.insurance || {};
+  const cl = job.claim || {};
+  const con = job.contract || {};
+  /* Addresses are stored as one string ("127 Market Street, Vanceburg, KY").
+     Split on commas for the street/city boxes and fall back to the whole
+     string if it does not have that shape. */
+  const parts = String(job.address || "").split(",").map((s) => s.trim()).filter(Boolean);
+  const street = parts[0] || String(job.address || "");
+  const city = parts.length >= 2 ? parts[1] : "";
+  const tail = parts.length >= 3 ? parts[2] : "";
+  const price = num(con.price) || 0;
+  const depMode = con.depositMode || "pct";
+  const deposit = price ? (depMode === "fixed" ? num(con.depositFixed) : price * (num(con.depositPct) / 100)) : 0;
+  const layers = String((job.checklist || {}).layers || "").replace(/[^\d]/g, "");
+  return {
+    customerName: job.name || "",
+    propertyAddress: street,
+    city,
+    state: job.state || tail.replace(/\d{5}(-\d{4})?/, "").trim(),
+    zip: job.zip || (tail.match(/\d{5}(-\d{4})?/) || [""])[0],
+    homePhone: "",
+    cellPhone: job.phone || "",
+    email: job.email || "",
+    carrier: ins.carrier || "",
+    claimNumber: ins.claim || "",
+    dateOfLoss: cl.dateOfLoss || "",
+    outOfPocket: ins.deductible ? money0(num(ins.deductible)) : "",
+    agreementDate: todayIso(),
+    projectAddress: "",
+    tearoffLayers: layers,
+    finalPrice: price ? money0(price) : "",
+    deductible: ins.deductible ? money0(num(ins.deductible)) : "",
+    deposit: deposit ? money0(deposit) : "",
+    balance: "",
+  };
+}
+
+/* The agreement as it stands: prefill underneath, the rep's edits on top. */
+function agreementFor(job, brand) {
+  return { ...agreementPrefill(job, brand), ...(job.agreement || {}) };
+}
+
+function agBlank(v, w) {
+  return `<span class="agbl" style="min-width:${Math.round(w)}px">${esc(v || "")}</span>`;
+}
+function agCheck(on) {
+  return `<span class="agck${on ? " on" : ""}">${on ? "&#10003;" : ""}</span>`;
+}
+function agRowHtml(parts, a) {
+  return `<div class="agrow">${parts.map((p) => {
+    if (p.t === "c") return agCheck(!!a[p.k]);
+    if (p.t === "b") return agBlank(a[p.k], p.w || 90);
+    return `<span class="aglb">${esc(p.v)}</span>`;
+  }).join("")}</div>`;
+}
+function agSecHtml(sec, a, brand) {
+  if (sec.kind === "figure") {
+    return `<figure class="agfig">
+      <img src="${esc(agreementDiagram(brand))}" alt="Roof reference diagram, numbered to the specification">
+      <figcaption>REFERENCE DIAGRAM &mdash; NUMBERED TO SPECIFICATION</figcaption>
+    </figure>`;
+  }
+  const mark = sec.bullet ? `<span class="agdot"></span>` : (sec.n ? `<span class="agnum">${esc(sec.n)}</span>` : "");
+  const head = sec.title
+    ? `<div class="aghd">${mark}<span class="aght">${esc(sec.title)}</span></div>` : "";
+  const note = sec.note ? `<div class="agnote">${esc(sec.note)}</div>` : "";
+  const body = (sec.rows || []).map((r) => agRowHtml(r, a)).join("");
+  if (sec.kind === "warranty") {
+    return `<div class="agsec agwarr"><div class="agwt">${esc(sec.title)}</div>${body}${note}</div>`;
+  }
+  return `<div class="agsec">${head}${note}${body}</div>`;
+}
+function agFieldHtml(f, a) {
+  return `<div class="agfield" style="flex:${f.flex || 1}">
+    <div class="agflb">${esc(f.label)}</div>
+    <div class="agfval">${esc(a[f.k] || "")}</div>
+  </div>`;
+}
+
+/* The printed agreement. Page one is the form; the reverse is the terms. */
+function agreementDocHtml(job, brand) {
+  const a = agreementFor(job, brand);
+  const con = job.contract || {};
+  const left = AGREEMENT_SPEC.filter((s) => s.col === "L");
+  const right = AGREEMENT_SPEC.filter((s) => s.col === "R");
+  const mark = brand.logo
+    ? `<img class="aglogo" src="${brand.logo}" alt="${esc(brand.company)}">`
+    : `<div class="agmark">${esc(brand.company)}</div>`;
+  const price = num(String(a.finalPrice).replace(/[^0-9.]/g, ""));
+  const dep = num(String(a.deposit).replace(/[^0-9.]/g, ""));
+  /* The balance line is the one number on the sheet that is arithmetic
+     rather than negotiation, so it is computed — unless the rep has
+     deliberately written something else in it. */
+  const balance = String(a.balance || "").trim() || (price ? money0(price - dep) : "");
+  const sigCell = (img, who, role) => `<div class="agsigbox">
+    <div class="agsigwho">${esc(who)}</div>
+    <div class="agsigline">${img ? `<img src="${img}" alt="">` : ""}</div>
+    <div class="agsiglbl">${esc(role)}</div>
+  </div>`;
+
+  return `<section class="agpage">
+  <div class="agtop">
+    <div>${mark}</div>
+    <div class="agco">
+      <div class="agconame">${esc(brand.company)}</div>
+      ${brand.address ? `<div>${esc(brand.address)}</div>` : ""}
+      <div>${[brand.phone ? "Office " + esc(brand.phone) : "", esc(brand.email || "")].filter(Boolean).join(" &bull; ")}</div>
+      ${brand.website ? `<div class="agweb">${esc(brand.website)}</div>` : ""}
+    </div>
+  </div>
+  <div class="agbar"><span class="agbart">CONSTRUCTION AGREEMENT</span><span class="agbars">INSURANCE RESTORATION &bull; ROOFING &amp; EXTERIORS</span></div>
+
+  <div class="aginfo">
+    ${AGREEMENT_HEADER.map((box) => `<div class="agbox${box.tint ? " tint" : ""}">
+      <div class="agboxt">${esc(box.box)}</div>
+      ${box.rows.map((r) => `<div class="agfrow">${r.map((f) => agFieldHtml(f, a)).join("")}</div>`).join("")}
+    </div>`).join("")}
+  </div>
+
+  <div class="agrule"><span>ROOFING SPECIFICATION</span></div>
+  <div class="agspec">
+    <div class="agcol">${left.map((s) => agSecHtml(s, a, brand)).join("")}</div>
+    <div class="agcol">${right.map((s) => agSecHtml(s, a, brand)).join("")}</div>
+  </div>
+
+  <div class="agbox agnotes">
+    <div class="agboxt">NOTES</div>
+    <div class="agnoteval">${esc(a.notes || "")}</div>
+    <div class="agnoteline"></div><div class="agnoteline"></div>
+  </div>
+
+  <div class="agack">
+    <div class="agackt">${esc(AGREEMENT_ACK_INSURANCE)}</div>
+    <div class="aginit">OWNER INITIALS ${agBlank(a.ownerInit1, 70)}</div>
+  </div>
+  <div class="agack">
+    <div class="agackt"><b>HOA Approval Required</b> ${agCheck(a.hoaYes)} Yes &nbsp; ${agCheck(a.hoaNo)} No &nbsp; ${esc(AGREEMENT_HOA_LINE)}</div>
+    <div class="aginit">OWNER INITIALS ${agBlank(a.ownerInit2, 70)}</div>
+  </div>
+
+  <p class="agpara">The anticipated start date is ${agBlank(a.startWeeks, 46)} weeks from the date on which all HOA permissions, permits, and other contingencies are obtained, and the anticipated completion date is ${agBlank(a.endWeeks, 46)} weeks from the actual start date.</p>
+
+  <div class="agterm">
+    <p><b>Defective Decking and Plywood Policy</b>&nbsp; ${AGREEMENT_DECK_POLICY.split("%RATE%").map(esc).join(agBlank(a.deckRate, 70))}</p>
+    <p><b>Terms</b>&nbsp; ${esc(agreementFill(AGREEMENT_TERMS_PARA, brand))}</p>
+    <p>${esc(AGREEMENT_READ_PARA)}</p>
+  </div>
+
+  <div class="agbottom">
+    <div class="agprice">
+      <div class="agpricet">AGREEMENT PRICE</div>
+      <div class="agpriceb">
+        ${AGREEMENT_PRICE_ROWS.map((r) => `<div class="agprow"><span>${esc(r.label)}</span>${agBlank(a[r.k], 160)}</div>`).join("")}
+        <div class="agprow grand"><span>BALANCE DUE ON COMPLETION</span>${agBlank(balance, 160)}</div>
+      </div>
+    </div>
+    <div class="agbox tint agcancel">
+      <div class="agboxt">RIGHT TO CANCEL</div>
+      <div class="agcanp">${esc(AGREEMENT_CANCEL_PARA)}</div>
+      <div class="aginit">INITIALS ${agBlank(a.cancelInit, 70)}</div>
+    </div>
+  </div>
+
+  <div class="agsigs">
+    ${sigCell(con.contractorSig && con.contractorSig !== "signed" ? con.contractorSig : null, brand.company, "REPRESENTATIVE SIGNATURE / DATE")}
+    ${sigCell(con.clientSig && con.clientSig !== "signed" ? con.clientSig : null, "PROPERTY OWNER", "SIGNATURE / DATE")}
+    ${sigCell(null, "CO-OWNER", "SIGNATURE / DATE")}
+  </div>
+</section>
+
+<section class="agpage agrev">
+  <div class="agrevlogo">${mark}</div>
+  <h1 class="agrevh">TERMS AND CONDITIONS</h1>
+  <p class="agrevi">${esc(agreementFill(brand.agreementIntro || AGREEMENT_TERMS_INTRO, brand))}</p>
+  <ol class="agrevo">${agreementTermsFor(brand).map((c) => `<li>${esc(agreementFill(c, brand))}</li>`).join("")}</ol>
+</section>
+<div class="agfoot">${esc(brand.company)} &bull; Construction Agreement${a.customerName ? " &bull; " + esc(a.customerName) : ""}</div>
+${agreementCss(brand)}`;
+}
+
+function agreementCss(brand) {
+  const p = brand.primary || "#2B3440";
+  /* Page one has to be one page — a rep hands over a single sheet and the
+     reverse carries the terms. Everything below is sized against a
+     letter page at 0.6in margins (about 940 CSS px of usable height), and
+     build51 fails the build if the rendered page one exceeds it. */
+  return `<style>
+  /* The paper form is printed edge-to-edge; the shell's 0.6in document
+     margin would cost a full inch of the one page this has to fit on. */
+  @page { size: letter; margin: 0.35in 0.45in 0.3in; }
+  body { font: 9px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color: #1F2937; }
+  .agpage { page-break-after: always; }
+  .agpage:last-of-type { page-break-after: auto; }
+  .agtop { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 4px; }
+  .aglogo { height: 38px; object-fit: contain; display: block; }
+  .agmark { font: 800 16px Georgia,serif; color: ${p}; }
+  .agco { text-align: right; font-size: 9px; color: #4B5563; line-height: 1.35; }
+  .agconame { font-size: 11px; font-weight: 800; letter-spacing: .02em; color: #111827; text-transform: uppercase; }
+  .agweb { color: ${p}; }
+
+  .agbar { background: ${p}; color: #fff; display: flex; justify-content: space-between; align-items: center;
+           padding: 5px 12px; gap: 16px; }
+  .agbart { font-size: 13px; font-weight: 800; letter-spacing: .17em; }
+  .agbars { font-size: 8px; font-weight: 700; letter-spacing: .11em; opacity: .85; text-align: right; }
+
+  .aginfo { display: flex; gap: 8px; margin-top: 6px; }
+  .aginfo > .agbox { flex: 1; }
+  .agbox { border: 1px solid #D8DEE6; border-radius: 6px; padding: 4px 8px 5px; }
+  .agbox.tint { background: #F4F7FA; }
+  .agboxt { font-size: 8.5px; font-weight: 800; letter-spacing: .13em; color: ${p}; margin-bottom: 1px; }
+  .agfrow { display: flex; gap: 10px; }
+  .agfield { min-width: 0; padding-top: 1px; }
+  .agflb { font-size: 6.5px; line-height: 1.1; font-weight: 700; letter-spacing: .08em; color: #8A94A2; }
+  /* Every field prints its rule whether or not it was filled in, so a
+     half-completed agreement can still be finished with a pen on site. */
+  .agfval { border-bottom: 1px solid #C3CBD6; min-height: 9px; font-size: 9.5px; line-height: 1.15;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .agrule { display: flex; align-items: center; gap: 8px; margin: 5px 0 2px; }
+  .agrule span { font-size: 8.5px; font-weight: 800; letter-spacing: .15em; color: ${p}; white-space: nowrap; }
+  .agrule::after { content: ""; flex: 1; height: 1px; background: #D8DEE6; }
+
+  .agspec { display: flex; gap: 16px; }
+  .agcol { flex: 1; min-width: 0; }
+  .agsec { margin-bottom: 1px; page-break-inside: avoid; }
+  .aghd { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #E3E8EE; padding-bottom: 1px; margin-bottom: 1px; }
+  .agnum { width: 12px; height: 12px; border-radius: 50%; background: ${p}; color: #fff;
+           font-size: 7.5px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .agdot { width: 7px; height: 7px; border-radius: 50%; background: #9AA5B4; margin: 0 2px; flex: none; }
+  .aght { font-size: 9.5px; font-weight: 800; letter-spacing: .04em; color: #111827; }
+  .agnote { font-size: 8.5px; color: ${p}; margin: 0 0 1px 18px; }
+  .agrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; margin: 0 0 0 18px; }
+  .aglb { font-size: 9px; color: #1F2937; }
+  .agbl { display: inline-block; border-bottom: 1px solid #6B7280; font-size: 9px;
+          line-height: 1.25; padding: 0 3px; white-space: nowrap; }
+  .agck { display: inline-block; width: 9px; height: 9px; border: 1.1px solid #6B7280; border-radius: 2px;
+          font-size: 7px; line-height: 7px; text-align: center; color: #fff; }
+  .agck.on { background: ${p}; border-color: ${p}; }
+
+  .agfig { margin: 3px 0 4px; border: 1px solid #D8DEE6; border-radius: 6px; padding: 4px; text-align: center; page-break-inside: avoid; }
+  .agfig img { width: 58%; max-width: 152px; display: block; margin: 0 auto; }
+  .agfig figcaption { font-size: 7px; font-weight: 700; letter-spacing: .09em; color: ${p}; margin-top: 3px; }
+
+  .agwarr { background: #F4F7FA; border: 1px solid #D8DEE6; border-radius: 6px; padding: 4px 8px 5px; margin-top: 4px; }
+  .agwt { font-size: 8.5px; font-weight: 800; letter-spacing: .11em; color: #111827; margin-bottom: 2px; }
+  .agwarr .agrow { margin-left: 0; gap: 5px; }
+  .agwarr .agnote { margin-left: 0; margin-top: 3px; }
+
+  .agnotes { margin-top: 4px; }
+  /* Two ruled writing lines under whatever was typed, so the sheet stays
+     usable with a pen. Drawn as bordered rows rather than a repeating
+     gradient — Chromium prints repeating gradients unreliably. */
+  .agnoteline { border-bottom: 1px solid #D8DEE6; height: 8px; }
+  .agnoteval { font-size: 9px; white-space: pre-wrap; min-height: 11px; }
+
+  .agack { display: flex; align-items: center; gap: 12px; border: 1px solid #D8DEE6; border-left: 3px solid ${p};
+           border-radius: 5px; padding: 3px 9px; margin-top: 3px; page-break-inside: avoid; }
+  .agackt { flex: 1; font-size: 8.3px; line-height: 1.4; }
+  .aginit { font-size: 7.5px; font-weight: 800; letter-spacing: .09em; color: ${p}; white-space: nowrap; }
+
+  .agpara { font-size: 8px; line-height: 1.4; margin: 3px 0; }
+  .agterm { border: 1px solid #D8DEE6; border-radius: 6px; padding: 4px 8px; margin-top: 4px; }
+  .agterm p { font-size: 7.6px; line-height: 1.35; margin: 0 0 2px; }
+  .agterm p:last-child { margin-bottom: 0; }
+
+  .agbottom { display: flex; gap: 8px; margin-top: 4px; align-items: stretch; page-break-inside: avoid; }
+  .agprice { flex: 1.25; border: 1.5px solid ${p}; border-radius: 6px; overflow: hidden; }
+  .agpricet { background: ${p}; color: #fff; font-size: 8.5px; font-weight: 800; letter-spacing: .13em; padding: 4px 9px; }
+  .agpriceb { padding: 3px 9px 4px; }
+  .agprow { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 8.6px; padding: 1px 0; }
+  .agprow.grand { font-weight: 800; border-top: 1px solid #D8DEE6; margin-top: 2px; padding-top: 4px; }
+  .agcancel { flex: 1; }
+  .agcanp { font-size: 8.1px; line-height: 1.4; margin-bottom: 4px; }
+
+  .agsigs { display: flex; gap: 18px; margin-top: 5px; page-break-inside: avoid; }
+  .agsigbox { flex: 1; min-width: 0; }
+  .agsigwho { font-size: 9px; font-weight: 800; letter-spacing: .06em; color: #111827; text-transform: uppercase; }
+  .agsigline { border-bottom: 1px solid #111827; height: 18px; margin-top: 3px; display: flex; align-items: flex-end; }
+  .agsigline img { max-height: 24px; max-width: 100%; }
+  .agsiglbl { font-size: 7px; font-weight: 700; letter-spacing: .08em; color: ${p}; margin-top: 3px; }
+
+  .agrev { padding-top: 8px; }
+  .agrevlogo { text-align: center; margin-bottom: 10px; }
+  .agrevlogo .aglogo { margin: 0 auto; }
+  .agrevh { font-size: 15px; font-weight: 800; letter-spacing: .18em; text-align: center; color: #111827; margin: 0 0 10px; }
+  .agrevi { font-size: 9.5px; line-height: 1.6; font-style: italic; color: #374151; margin: 0 0 10px; }
+  .agrevo { font-size: 9.5px; line-height: 1.55; padding-left: 16px; margin: 0; }
+  .agrevo li { margin-bottom: 7px; text-align: justify; }
+
+  /* Identifies pages 2 and 3, which otherwise carry nothing naming the
+     parties. A literal page number is not reachable from HTML in browser
+     print — Chrome does not implement paged-media margin boxes. */
+  .agfoot { position: fixed; bottom: 2px; left: 0; right: 0; text-align: center;
+            font-size: 8px; color: #9AA5B4; }
+  @media print { body { padding-bottom: 16px; } }
+</style>`;
+}
+
 function reportDocHtml(job, brand) {
   const c = job.checklist || {};
   const m = job.measurements || {};
@@ -15852,6 +16301,159 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
 }
 
 /* ---------- Contract ---------- */
+/* ==================================================================
+   CONSTRUCTION AGREEMENT — the in-app form
+
+   Every input below is generated from AGREEMENT_SPEC / AGREEMENT_HEADER,
+   the same definitions agreementDocHtml prints from. There is no second
+   list of fields to keep in step: add a row to the spec and it shows up
+   here and on the printed page together.
+================================================================== */
+function AgreementBox({ on, onClick, label, disabled }) {
+  return (
+    <button type="button" disabled={disabled} onClick={onClick}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 6, border: "none", background: "none",
+        padding: "3px 0", cursor: disabled ? "default" : "pointer", color: S.ink, fontSize: 13.5, fontFamily: "inherit",
+      }}>
+      <span style={{
+        width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+        border: `1.5px solid ${on ? T.accent : S.line}`, background: on ? T.accent : S.card,
+        color: "#fff", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800,
+      }}>{on ? "✓" : ""}</span>
+      {label}
+    </button>
+  );
+}
+
+function AgreementForm({ job, brand, mut, toast, locked }) {
+  const a = agreementFor(job, brand);
+  /* The first edit freezes today's prefill onto the job. After that the
+     agreement is its own record — re-reading the job file later must not
+     quietly rewrite a document the homeowner has already been shown. */
+  const set = (k, v) => mut((j) => ({
+    ...j, agreement: { ...agreementPrefill(j, brand), ...(j.agreement || {}), [k]: v },
+  }));
+  const repull = () => {
+    mut((j) => ({ ...j, agreement: { ...(j.agreement || {}), ...agreementPrefill(j, brand) } }));
+    toast("Re-read the job file into the agreement");
+  };
+  const txt = (k, extra = {}) => (
+    <input style={{ ...inputStyle, ...extra }} value={a[k] || ""} disabled={locked}
+      onChange={(e) => set(k, e.target.value)} />
+  );
+  const partInput = (p, i) => {
+    if (p.t === "t") return <span key={i} style={{ fontSize: 13.5, color: S.ink }}>{p.v}</span>;
+    if (p.t === "c") return <AgreementBox key={i} on={!!a[p.k]} disabled={locked} onClick={() => set(p.k, !a[p.k])} />;
+    return (
+      /* Roughly the width of the printed blank, but capped so a long label
+         and its blank still fit inside a phone-width card. */
+      <input key={i} style={{ ...inputStyle, width: Math.min(180, Math.max(70, Math.round(p.w * 0.9))), maxWidth: "100%", padding: "7px 9px", fontSize: 13.5 }}
+        value={a[p.k] || ""} disabled={locked} onChange={(e) => set(p.k, e.target.value)} />
+    );
+  };
+  const price = num(String(a.finalPrice).replace(/[^0-9.]/g, ""));
+  const dep = num(String(a.deposit).replace(/[^0-9.]/g, ""));
+
+  return (
+    <>
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={!locked && <Btn kind="ghost" small onClick={repull}>Re-read job file</Btn>}>
+          Construction agreement
+        </CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55 }}>
+          Fill this in here and it prints exactly like the paper form — the customer and claim boxes
+          come from the job file, the specification numbers match the reference diagram, and the
+          reverse side carries your terms and conditions.
+        </div>
+      </Card>
+
+      {AGREEMENT_HEADER.map((box) => (
+        <Card key={box.box} style={{ marginTop: 12 }}>
+          <CardTitle>{box.box.charAt(0) + box.box.slice(1).toLowerCase()}</CardTitle>
+          {/* City / state / zip share a line on the printed form. On a phone
+              three boxes in a row truncate the city, so they wrap instead of
+              shrinking. */}
+          {box.rows.map((row, ri) => (
+            <div key={ri} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+              {row.map((f) => (
+                <Field key={f.k} label={f.label.charAt(0) + f.label.slice(1).toLowerCase()}>{txt(f.k)}</Field>
+              ))}
+            </div>
+          ))}
+        </Card>
+      ))}
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Roofing specification</CardTitle>
+        {AGREEMENT_SPEC.filter((s) => s.kind !== "figure").map((sec) => (
+          <div key={sec.title} style={{ paddingTop: 12, marginTop: 12, borderTop: `1px solid ${S.line}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              {sec.n && (
+                <span style={{
+                  width: 20, height: 20, borderRadius: 99, background: T.primary, color: "#fff",
+                  fontSize: 11, fontWeight: 800, display: "grid", placeItems: "center", flexShrink: 0,
+                }}>{sec.n}</span>
+              )}
+              <span style={{ fontSize: 14, fontWeight: 800, color: S.ink }}>{sec.title}</span>
+            </div>
+            {sec.note && <div style={{ fontSize: 12.5, color: T.accent, marginBottom: 6 }}>{sec.note}</div>}
+            {sec.rows.map((row, ri) => (
+              <div key={ri} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 9, margin: "6px 0" }}>
+                {row.map(partInput)}
+              </div>
+            ))}
+          </div>
+        ))}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Notes</CardTitle>
+        <textarea style={{ ...inputStyle, minHeight: 80, resize: "vertical" }} value={a.notes || ""} disabled={locked}
+          onChange={(e) => set("notes", e.target.value)} />
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Acknowledgements &amp; schedule</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 8 }}>{AGREEMENT_ACK_INSURANCE}</div>
+        <Field label="Owner initials"><input style={{ ...inputStyle, width: 120 }} value={a.ownerInit1 || ""} disabled={locked}
+          onChange={(e) => set("ownerInit1", e.target.value)} /></Field>
+        <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 8 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 700 }}>HOA approval required</span>
+          <AgreementBox on={!!a.hoaYes} disabled={locked} label="Yes" onClick={() => set("hoaYes", !a.hoaYes)} />
+          <AgreementBox on={!!a.hoaNo} disabled={locked} label="No" onClick={() => set("hoaNo", !a.hoaNo)} />
+        </div>
+        <Field label="Owner initials (HOA)"><input style={{ ...inputStyle, width: 120 }} value={a.ownerInit2 || ""} disabled={locked}
+          onChange={(e) => set("ownerInit2", e.target.value)} /></Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <Field label="Anticipated start (weeks)">{txt("startWeeks")}</Field>
+          <Field label="Anticipated completion (weeks)">{txt("endWeeks")}</Field>
+        </div>
+        <Field label="Defective decking rate ($ per sheet)" hint="Printed into the Defective Decking and Plywood Policy paragraph.">
+          {txt("deckRate")}
+        </Field>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Agreement price</CardTitle>
+        {AGREEMENT_PRICE_ROWS.map((r) => <Field key={r.k} label={r.label}>{txt(r.k)}</Field>)}
+        <Field label="Balance due on completion"
+          hint={price ? `Leave blank to print ${money0(price - dep)} — the contract price less the deposit.` : "Leave blank to print the contract price less the deposit."}>
+          <input style={inputStyle} value={a.balance || ""} disabled={locked} placeholder={price ? money0(price - dep) : ""}
+            onChange={(e) => set("balance", e.target.value)} />
+        </Field>
+        <Field label="Right-to-cancel initials"><input style={{ ...inputStyle, width: 120 }} value={a.cancelInit || ""} disabled={locked}
+          onChange={(e) => set("cancelInit", e.target.value)} /></Field>
+      </Card>
+
+      <Btn kind="ghost" style={{ marginTop: 14, width: "100%" }}
+        onClick={() => openDoc(`Construction Agreement — ${job.name}`, brand, agreementDocHtml(job, brand), toast, { bare: true })}>
+        <Printer size={15} /> Print the agreement
+      </Btn>
+    </>
+  );
+}
+
 function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {}, currentUser = null, integrations = {} }) {
   const con = job.contract;
   const [sigFor, setSigFor] = useState(null); // "client" | "contractor"
@@ -15872,6 +16474,9 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
   const estTotal = estimateTotal(job.estimate);
   const depositMode = con.depositMode || "pct";
   const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
+  /* Which paper this job goes out on. The signature, status, attachment and
+     portal plumbing is shared — only the body of the document differs. */
+  const form = con.form === "agreement" ? "agreement" : "simple";
   const SigLine = ({ label, value, onSign }) => (
     <div style={{ flex: 1, minWidth: 220 }}>
       <div style={{
@@ -15899,19 +16504,38 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
           This agreement is between <b>{brand.company}</b>, {brand.address}, {brand.phone}, and
           <b> {job.name}</b>, {job.address}.
         </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+          {[["simple", "Service contract"], ["agreement", "Construction agreement"]].map(([id, label]) => (
+            <button key={id} disabled={locked} onClick={() => setCon({ form: id })}
+              style={{
+                border: `1.5px solid ${form === id ? T.accent : S.line}`,
+                background: form === id ? T.accentSoft : S.card,
+                color: form === id ? T.accent : S.ink,
+                borderRadius: 999, padding: "7px 14px", fontSize: 13, fontWeight: 600,
+                cursor: locked ? "default" : "pointer",
+              }}>{label}</button>
+          ))}
+        </div>
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+          {form === "agreement"
+            ? "Prints the numbered specification form with your terms and conditions on the reverse."
+            : "Prints a plain scope-and-price contract."}
+        </div>
       </Card>
-      <Card style={{ marginTop: 12 }}>
-        <CardTitle>Scope of work</CardTitle>
-        <textarea style={{ ...inputStyle, minHeight: 100 }} disabled={locked} value={con.scope}
-          placeholder="References the accepted estimate…"
-          onChange={(e) => setCon({ scope: e.target.value })} />
-        {estTotal > 0 && !con.scope && !locked && (
-          <button style={{ ...linkBtn, marginTop: 8 }} onClick={() =>
-            setCon({ scope: `Per Estimate ${job.estimate.number || ""} dated ${job.estimate.date || ""}: ${job.estimate.scope}` })}>
-            Pull scope from estimate
-          </button>
-        )}
-      </Card>
+      {form === "simple" && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle>Scope of work</CardTitle>
+          <textarea style={{ ...inputStyle, minHeight: 100 }} disabled={locked} value={con.scope}
+            placeholder="References the accepted estimate…"
+            onChange={(e) => setCon({ scope: e.target.value })} />
+          {estTotal > 0 && !con.scope && !locked && (
+            <button style={{ ...linkBtn, marginTop: 8 }} onClick={() =>
+              setCon({ scope: `Per Estimate ${job.estimate.number || ""} dated ${job.estimate.date || ""}: ${job.estimate.scope}` })}>
+              Pull scope from estimate
+            </button>
+          )}
+        </Card>
+      )}
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Price & payment schedule</CardTitle>
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
@@ -15964,6 +16588,8 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
         <KV k={depositMode === "fixed" ? "Due at signing (fixed)" : `Due at signing (${con.depositPct}%)`} v={money(deposit)} />
         <KV k="Due on substantial completion" v={money((con.price || 0) - deposit)} strong />
       </Card>
+      {form === "agreement" && <AgreementForm job={job} brand={brand} mut={mut} toast={toast} locked={locked} />}
+      {form === "simple" && (
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Terms</CardTitle>
         <TemplateBar label="Terms" list={docTemplates.terms} setList={setDocTpl("terms")} value={con.terms} locked={locked}
@@ -15981,6 +16607,7 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
           </div>
         )}
       </Card>
+      )}
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="gray">{(con.attachments || []).length} on file</Chip>}>Attachments — T&amp;C, addenda, filled forms</CardTitle>
         <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
@@ -16032,7 +16659,9 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
         {locked && <div style={{ fontSize: 13, color: "#177245", marginTop: 12, fontWeight: 600 }}>Executed {con.signedAt}. Changes require a written change order.</div>}
       </Card>
       <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-        <Btn kind="ghost" onClick={() => openDoc(`Contract — ${job.name}`, brand, contractDocHtml(job, brand), toast)}><Printer size={15} /> PDF</Btn>
+        <Btn kind="ghost" onClick={() => (form === "agreement"
+          ? openDoc(`Construction Agreement — ${job.name}`, brand, agreementDocHtml(job, brand), toast, { bare: true })
+          : openDoc(`Contract — ${job.name}`, brand, contractDocHtml(job, brand), toast))}><Printer size={15} /> PDF</Btn>
         <Btn kind="ghost" onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
           subject: `Your contract is ready — ${brand.company}`,
           body: `Hi ${job.name}, your contract for ${job.address} is ready to review and sign. Reply to this email with any questions.`,
@@ -20397,6 +21026,93 @@ function LeadSourceManager({ sources, setSources, jobs, onBack, toast }) {
   );
 }
 
+/* The two parts of the construction agreement that belong to the company
+   rather than to any one job: the numbered roof diagram and the reverse-side
+   terms. Both ship with a working default and both are replaceable, because
+   the artwork and the legal text belong to whoever's name is on the page. */
+function AgreementBranding({ brand, setBrand, toast }) {
+  const diagRef = useRef(null);
+  const [openTerms, setOpenTerms] = useState(false);
+  const terms = agreementTermsFor(brand);
+  const custom = Array.isArray(brand.agreementTerms) && brand.agreementTerms.length;
+  const setClause = (i, v) => setBrand({ ...brand, agreementTerms: terms.map((c, x) => (x === i ? v : c)) });
+  const onDiagram = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast("That file isn't an image"); return; }
+    const url = await imageToDataUrl(file, 900, 0.78);
+    if (!url) { toast("Couldn't read that image"); return; }
+    setBrand({ ...brand, agreementDiagram: url });
+    toast(`Reference diagram updated (${Math.round(url.length / 1024)} KB)`);
+  };
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <CardTitle>Construction agreement</CardTitle>
+      <div style={{ fontSize: 13, color: S.sub, marginBottom: 12, lineHeight: 1.5 }}>
+        The reference diagram and terms &amp; conditions printed on every construction agreement.
+        Anywhere <code>{"{company}"}</code> appears in the text it is replaced with your company name.
+      </div>
+      <input ref={diagRef} type="file" accept="image/*" onChange={onDiagram} style={{ display: "none" }} />
+      <Field label="Reference diagram" hint="The numbered roof illustration beside the specification. Numbers should match items 1–11 on the form.">
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <img src={agreementDiagram(brand)} alt="Agreement reference diagram"
+            style={{ width: 130, borderRadius: 8, border: `1px solid ${S.line}`, background: "#fff" }} />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Btn kind="ghost" small onClick={() => diagRef.current && diagRef.current.click()}>
+              <Upload size={13} /> {brand.agreementDiagram ? "Replace" : "Upload"}
+            </Btn>
+            {brand.agreementDiagram && (
+              <Btn kind="danger" small onClick={() => setBrand({ ...brand, agreementDiagram: null })}>Reset</Btn>
+            )}
+          </div>
+        </div>
+      </Field>
+      <Field label="Opening paragraph" hint="Sets out who the parties are and which state's law applies.">
+        <textarea style={{ ...inputStyle, minHeight: 90, resize: "vertical", fontSize: 13, lineHeight: 1.6 }}
+          value={brand.agreementIntro === undefined ? AGREEMENT_TERMS_INTRO : brand.agreementIntro}
+          onChange={(e) => setBrand({ ...brand, agreementIntro: e.target.value })} />
+      </Field>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 8, borderTop: `1px solid ${S.line}` }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Numbered clauses</div>
+          <div style={{ fontSize: 12.5, color: S.sub }}>
+            {terms.length} clauses · {custom ? "edited by you" : "the text supplied with the app"}
+          </div>
+        </div>
+        <Btn kind="ghost" small onClick={() => setOpenTerms(!openTerms)}>{openTerms ? "Hide" : "Edit"}</Btn>
+      </div>
+      {openTerms && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{
+            background: "#FFF8E6", border: "1px solid #F0DCA8", borderRadius: 10, padding: "10px 12px",
+            fontSize: 12.5, color: "#6B4E0E", lineHeight: 1.5, marginBottom: 12,
+          }}>
+            This is contract language. Have your attorney review anything you change here — it prints on
+            every agreement your reps sign.
+          </div>
+          {terms.map((c, i) => (
+            <Field key={i} label={`Clause ${i + 1}`}>
+              <textarea style={{ ...inputStyle, minHeight: 78, resize: "vertical", fontSize: 12.5, lineHeight: 1.6 }}
+                value={c} onChange={(e) => setClause(i, e.target.value)} />
+            </Field>
+          ))}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Btn kind="ghost" small onClick={() => setBrand({ ...brand, agreementTerms: [...terms, ""] })}>
+              <Plus size={13} /> Add a clause
+            </Btn>
+            {custom && (
+              <Btn kind="danger" small onClick={() => { setBrand({ ...brand, agreementTerms: null, agreementIntro: undefined }); toast("Terms reset to the supplied text"); }}>
+                Reset to supplied text
+              </Btn>
+            )}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
   const set = (k) => (e) => setBrand({ ...brand, [k]: e.target.value });
   const logoRef = useRef(null);
@@ -20518,6 +21234,8 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
           );
         })}
       </Card>
+
+      <AgreementBranding brand={brand} setBrand={setBrand} toast={toast} />
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Btn kind="soft" small onClick={addLoc}><Plus size={13} /> Add location</Btn>}>Locations</CardTitle>
