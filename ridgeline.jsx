@@ -17863,28 +17863,22 @@ async function sendClientEmail(job, mut, currentUser, integrations, toast, { sub
    with no email on file the "recipient" was the customer's own name.
 
    Returns the real outcome and never throws. Callers record what it says. */
-async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, integrations, currentUser) {
-  const consent = job.consent || {};
-  const smsOk = !!(consent.sms && consent.sms.granted) && !!job.phone;
-  const emailOk = !!(consent.email && consent.email.granted) && !!job.email;
-  /* Preference, then the other channel, then nothing. Consent is per
-     channel and is not transferable between them. */
-  const kind = (prefer === "sms" && smsOk) ? "sms"
-    : (prefer === "email" && emailOk) ? "email"
-    : smsOk ? "sms" : emailOk ? "email" : null;
-  if (!kind) {
-    const why = (consent.sms && consent.sms.granted) || (consent.email && consent.email.granted)
-      ? "Not sent — no contact details on file"
-      : "Not sent — no messaging consent on file";
-    return { kind: prefer, to: "", status: why, delivered: false };
-  }
-  const to = kind === "sms" ? job.phone : job.email;
+/* The actual send attempt, with no address resolution and no consent
+   gating — those are what make a recipient a *customer* recipient, and a
+   crew or the office's own accounting inbox isn't subject to either. This
+   is what deliverToCustomer delegates to once it has resolved a channel
+   and address from the job's consent; it is also what an internal-audience
+   queued message (Crew, Accounting) drains through directly, since routing
+   those through deliverToCustomer put a customer's own phone/email in as
+   `to` and gated the send on the customer's consent — consent for messages
+   the customer was never the recipient of. */
+async function deliverMessage({ to, kind, subject = "", body, jobId }, integrations, currentUser) {
   const auth = AUTH();
   const notSetUp = (m) => /not configured|Function not found|Failed to send a request|non-2xx|isn't connected/i.test(m);
   if (kind === "sms") {
     if (!(auth && auth.sendSms)) return { kind, to, status: "Queued — no provider connected", delivered: false };
     try {
-      await auth.sendSms({ to, body, jobId: job.id });
+      await auth.sendSms({ to, body, jobId });
       return { kind, to, status: "Sent", delivered: true };
     } catch (e) {
       const m = (e && e.message) || "Could not send";
@@ -17902,6 +17896,24 @@ async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, in
     const m = (e && e.message) || "Could not send";
     return { kind, to, status: notSetUp(m) ? "Queued — email not set up yet" : `Failed — ${m}`, delivered: false };
   }
+}
+async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, integrations, currentUser) {
+  const consent = job.consent || {};
+  const smsOk = !!(consent.sms && consent.sms.granted) && !!job.phone;
+  const emailOk = !!(consent.email && consent.email.granted) && !!job.email;
+  /* Preference, then the other channel, then nothing. Consent is per
+     channel and is not transferable between them. */
+  const kind = (prefer === "sms" && smsOk) ? "sms"
+    : (prefer === "email" && emailOk) ? "email"
+    : smsOk ? "sms" : emailOk ? "email" : null;
+  if (!kind) {
+    const why = (consent.sms && consent.sms.granted) || (consent.email && consent.email.granted)
+      ? "Not sent — no contact details on file"
+      : "Not sent — no messaging consent on file";
+    return { kind: prefer, to: "", status: why, delivered: false };
+  }
+  const to = kind === "sms" ? job.phone : job.email;
+  return deliverMessage({ to, kind, subject, body, jobId: job.id }, integrations, currentUser);
 }
 
 /* ================================================================
@@ -19308,16 +19320,22 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
   };
   const send = () => {
     const stamp = nowStamp();
+    /* Queued, not asserted as sent — nothing has attempted delivery yet.
+       "No provider connected" used to be hardcoded here regardless of
+       whether that was true; it now reads the same way the sub-invoice's
+       accounting notice already does — the actual state gets reported
+       correctly once "Send now" in the Inbox runs the real attempt. */
+    const status = crew.email ? "Queued" : "Queued — add an email on this crew's file to notify them";
     mut((j) => ({
       ...j,
       workOrder: { ...wo, number: wo.number || `WO-${String(Math.floor(Math.random() * 900) + 100)}`, sentAt: stamp, status: "Sent", notes },
       messages: [...(j.messages || []), {
         id: uid("msg"), kind: "email", audience: "Crew", to: crew.email,
-        subject, body, at: stamp, by: currentUser.name, status: "Queued — no provider connected",
+        subject, body, at: stamp, by: currentUser.name, status,
       }],
     }));
     setSending(false);
-    toast("Work order sent to crew");
+    toast("Work order queued to crew — send it from the Inbox");
   };
 
   return (
@@ -21968,10 +21986,16 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
       <Card style={{ marginTop: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ flex: 1, paddingRight: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>Automatic review requests</div>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>Review request sequence</div>
+            {/* Was labelled "Automatic" — the app tracks the four-touch
+                sequence, surfaces who is due next, and pauses it the moment
+                someone rates three or below, but no message goes out on its
+                own. A rep sends it (a text, a call, an email) and taps
+                "Mark sent" below to advance the sequence; nothing here
+                dispatches anything by itself. */}
             <div style={{ fontSize: 13, color: S.sub, marginTop: 3, lineHeight: 1.5 }}>
-              A four-touch sequence starting the day after a job completes,
-              stopping the moment they review.
+              A four-touch sequence you work from the Due now list below — mark each touch sent as you make it
+              and the sequence advances on its own timing. Pauses automatically the moment someone rates three or below.
             </div>
           </div>
           <Toggle on={settings.enabled} onClick={() => set("enabled")(!settings.enabled)} />
@@ -23662,6 +23686,8 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const [range, setRange] = useState("all");
   const docRef = useRef(null);
   const priceRef = useRef(null);
+  const [docBusy, setDocBusy] = useState(false);
+  const [docErr, setDocErr] = useState("");
   /* Read a subcontractor's uploaded price sheet (CSV: an item/description
      column and a price/rate column) and map each row to a known pay code so
      it drives pay automatically. Unrecognized rows are kept as flat add-ons. */
@@ -23729,9 +23755,13 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
         .reduce((t, l) => t + num(l.amt), 0);
     }, 0);
   };
-  const open = (c) => { setEditing(c || "new"); setF(c ? { ...c } : blank); };
+  /* A new crew gets its real id immediately, not at save — a document
+     uploaded while filling out a brand-new crew's sheet needs a stable id
+     to scope its storage key by, and there is otherwise no id to give it
+     until the crew is saved. */
+  const open = (c) => { setEditing(c || "new"); setF(c ? { ...c } : { ...blank, id: uid("c") }); setDocErr(""); };
   const save = () => {
-    if (editing === "new") setCrews([...crews, { ...f, id: uid("c") }]);
+    if (editing === "new") setCrews([...crews, f]);
     else setCrews(crews.map((c) => (c.id === editing.id ? { ...c, ...f } : c)));
     setEditing(null); toast("Crew saved");
   };
@@ -23798,11 +23828,27 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
         </div>
         <Field label="Documents" hint="COIs, W-9s, licenses. Add an expiry date and the app warns you before paying a sub whose paperwork has lapsed.">
           <input ref={docRef} type="file" style={{ display: "none" }}
-            onChange={(e) => {
+            onChange={async (e) => {
               const file = e.target.files && e.target.files[0];
-              if (!file) return;
-              setF({ ...f, docs: [...(f.docs || []), { id: uid("cd"), name: file.name, at: new Date().toISOString().slice(0, 10), type: "", expires: "" }] });
               e.target.value = "";
+              if (!file) return;
+              setDocBusy(true); setDocErr("");
+              /* Same storage path Company Documents uses, and the same rule:
+                 a failed upload records nothing rather than a row that
+                 claims to hold a COI or W-9 that was never actually stored. */
+              let up = null;
+              try {
+                up = await uploadCompanyFile(file);
+              } catch (ex) {
+                setDocBusy(false);
+                setDocErr((ex && ex.message) || "Couldn't save that file.");
+                return;
+              }
+              setDocBusy(false);
+              setF((prev) => ({ ...prev, docs: [...(prev.docs || []), {
+                id: uid("cd"), name: file.name, at: new Date().toISOString().slice(0, 10), type: "", expires: "",
+                url: up.url, storage: up.storage, storageKey: up.key, mime: up.mime,
+              }] }));
             }} />
           {(f.docs || []).map((d) => {
             const expired = d.expires && d.expires < todayIso();
@@ -23810,7 +23856,15 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             return (
               <div key={d.id} style={{ padding: "9px 0", borderBottom: `1px solid ${S.line}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 13.5, flex: 1, minWidth: 0 }}>{d.name} <span style={{ color: S.sub, fontSize: 12 }}>· {d.at}</span></span>
+                  {d.url ? (
+                    <a href={d.url} target="_blank" rel="noreferrer" style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: T.accent, textDecoration: "none" }}>
+                      {d.name} <span style={{ color: S.sub, fontSize: 12 }}>· {d.at}</span>
+                    </a>
+                  ) : (
+                    <span style={{ fontSize: 13.5, flex: 1, minWidth: 0 }}>
+                      {d.name} <span style={{ color: S.sub, fontSize: 12 }}>· {d.at} · no file attached — re-upload to attach it</span>
+                    </span>
+                  )}
                   {d.expires && <Chip tone={expired ? "red" : "green"}>{expired ? "Expired" : "Valid"}</Chip>}
                   <button onClick={() => setF({ ...f, docs: (f.docs || []).filter((x) => x.id !== d.id) })}
                     style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={14} color="#B42318" /></button>
@@ -23824,8 +23878,9 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
               </div>
             );
           })}
-          <Btn kind="ghost" small style={{ marginTop: 8 }} onClick={() => docRef.current && docRef.current.click()}>
-            <Upload size={13} /> Add document
+          {docErr && <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 6 }}>{docErr}</div>}
+          <Btn kind="ghost" small disabled={docBusy} style={{ marginTop: 8 }} onClick={() => docRef.current && docRef.current.click()}>
+            <Upload size={13} /> {docBusy ? "Saving…" : "Add document"}
           </Btn>
         </Field>
         <Field label="Payment details" hint="How this sub gets paid — stored on their file for accounting. Keep it to a handle or last 4, not full bank/SSN.">
@@ -27284,7 +27339,14 @@ export default function SupremeCRM() {
          Stamped once and never overwritten for exactly that reason;
          the certificate screen can correct it. */
       if (stageId === "s10" && !next.completedAt) next.completedAt = todayIso();
-      if (j.portal?.notifyStage && stage) {
+      /* Both have to allow it: the per-job portal preference, and the
+         per-stage policy set in the Workflow editor's "Queue a portal
+         update to the homeowner on arrival" checkbox. That checkbox wrote
+         to `rule.notify` and was never read here — every stage notified
+         the customer as long as the job-level toggle was on, so unchecking
+         it for one specific stage (e.g. a stage that shouldn't ping the
+         homeowner) did nothing at all. */
+      if (j.portal?.notifyStage && rule.notify && stage) {
         const channel = j.consent?.sms?.granted ? "sms" : j.consent?.email?.granted ? "email" : null;
         if (channel) {
           const first = (j.name || "").split(" ")[0];
@@ -27333,10 +27395,24 @@ export default function SupremeCRM() {
     const jb = jobs.find((j) => j.id === jobId);
     const msg = jb && (jb.messages || []).find((m) => m.id === msgId);
     if (!jb || !msg) return;
-    const out = await deliverToCustomer(
-      jb, { prefer: msg.kind || "sms", subject: msg.subject || "", body: msg.body },
-      integrations, liveUser,
-    );
+    /* Audience-aware. A Crew or Accounting message was already addressed
+       when it was queued — `msg.to` is the crew's email or the office's
+       accounting inbox, neither of which is the customer's own phone or
+       email. Routing every queued message through deliverToCustomer sent
+       an internal sub-pay notice (crew payout, PO number, payment method)
+       to the CUSTOMER whenever they had SMS/email consent on file, and
+       silently never reached accounting when they didn't — consent is a
+       customer-protection mechanic, and neither crews nor the office's own
+       inbox are subject to it. Only a Customer-audience message (or one
+       from before this field existed) resolves the address from the job. */
+    const out = (msg.audience && msg.audience !== "Customer")
+      ? (msg.to
+          ? await deliverMessage({ to: msg.to, kind: msg.kind || "email", subject: msg.subject || "", body: msg.body, jobId }, integrations, liveUser)
+          : { kind: msg.kind || "email", to: "", status: `Not sent — no address on file for ${msg.audience}`, delivered: false })
+      : await deliverToCustomer(
+          jb, { prefer: msg.kind || "sms", subject: msg.subject || "", body: msg.body },
+          integrations, liveUser,
+        );
     setJobs((prev) => prev.map((j) => j.id !== jobId ? j : {
       ...j,
       messages: (j.messages || []).map((m) => m.id !== msgId ? m

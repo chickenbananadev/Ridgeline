@@ -19261,22 +19261,13 @@ async function sendClientEmail(job, mut, currentUser, integrations, toast, { sub
   record("Queued \u2014 no provider connected");
   toast("Saved to thread \u2014 connect your Gmail to deliver");
 }
-async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, integrations, currentUser) {
-  const consent = job.consent || {};
-  const smsOk = !!(consent.sms && consent.sms.granted) && !!job.phone;
-  const emailOk = !!(consent.email && consent.email.granted) && !!job.email;
-  const kind = prefer === "sms" && smsOk ? "sms" : prefer === "email" && emailOk ? "email" : smsOk ? "sms" : emailOk ? "email" : null;
-  if (!kind) {
-    const why = consent.sms && consent.sms.granted || consent.email && consent.email.granted ? "Not sent \u2014 no contact details on file" : "Not sent \u2014 no messaging consent on file";
-    return { kind: prefer, to: "", status: why, delivered: false };
-  }
-  const to = kind === "sms" ? job.phone : job.email;
+async function deliverMessage({ to, kind, subject = "", body, jobId }, integrations, currentUser) {
   const auth = AUTH();
   const notSetUp = (m) => /not configured|Function not found|Failed to send a request|non-2xx|isn't connected/i.test(m);
   if (kind === "sms") {
     if (!(auth && auth.sendSms)) return { kind, to, status: "Queued \u2014 no provider connected", delivered: false };
     try {
-      await auth.sendSms({ to, body, jobId: job.id });
+      await auth.sendSms({ to, body, jobId });
       return { kind, to, status: "Sent", delivered: true };
     } catch (e) {
       const m = e && e.message || "Could not send";
@@ -19294,6 +19285,18 @@ async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, in
     const m = e && e.message || "Could not send";
     return { kind, to, status: notSetUp(m) ? "Queued \u2014 email not set up yet" : `Failed \u2014 ${m}`, delivered: false };
   }
+}
+async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, integrations, currentUser) {
+  const consent = job.consent || {};
+  const smsOk = !!(consent.sms && consent.sms.granted) && !!job.phone;
+  const emailOk = !!(consent.email && consent.email.granted) && !!job.email;
+  const kind = prefer === "sms" && smsOk ? "sms" : prefer === "email" && emailOk ? "email" : smsOk ? "sms" : emailOk ? "email" : null;
+  if (!kind) {
+    const why = consent.sms && consent.sms.granted || consent.email && consent.email.granted ? "Not sent \u2014 no contact details on file" : "Not sent \u2014 no messaging consent on file";
+    return { kind: prefer, to: "", status: why, delivered: false };
+  }
+  const to = kind === "sms" ? job.phone : job.email;
+  return deliverMessage({ to, kind, subject, body, jobId: job.id }, integrations, currentUser);
 }
 function TabMessages({ job, mut, toast, brand: brand2, templates, crews, integrations, currentUser, users }) {
   const [compose, setCompose] = (0, import_react.useState)(null);
@@ -20871,6 +20874,7 @@ function TabWorkOrder({ job, mut, toast, brand: brand2, crews, templates, curren
   };
   const send = () => {
     const stamp = nowStamp();
+    const status = crew.email ? "Queued" : "Queued \u2014 add an email on this crew's file to notify them";
     mut((j) => ({
       ...j,
       workOrder: { ...wo, number: wo.number || `WO-${String(Math.floor(Math.random() * 900) + 100)}`, sentAt: stamp, status: "Sent", notes },
@@ -20883,11 +20887,11 @@ function TabWorkOrder({ job, mut, toast, brand: brand2, crews, templates, curren
         body,
         at: stamp,
         by: currentUser.name,
-        status: "Queued \u2014 no provider connected"
+        status
       }]
     }));
     setSending(false);
-    toast("Work order sent to crew");
+    toast("Work order queued to crew \u2014 send it from the Inbox");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
@@ -23370,8 +23374,8 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Review automation", onBack }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, paddingRight: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700 }, children: "Automatic review requests" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 3, lineHeight: 1.5 }, children: "A four-touch sequence starting the day after a job completes, stopping the moment they review." })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700 }, children: "Review request sequence" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 3, lineHeight: 1.5 }, children: "A four-touch sequence you work from the Due now list below \u2014 mark each touch sent as you make it and the sequence advances on its own timing. Pauses automatically the moment someone rates three or below." })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Toggle, { on: settings.enabled, onClick: () => set("enabled")(!settings.enabled) })
     ] }) }),
@@ -25344,6 +25348,8 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const [range, setRange] = (0, import_react.useState)("all");
   const docRef = (0, import_react.useRef)(null);
   const priceRef = (0, import_react.useRef)(null);
+  const [docBusy, setDocBusy] = (0, import_react.useState)(false);
+  const [docErr, setDocErr] = (0, import_react.useState)("");
   const parseSubSheet = (text) => {
     const rows0 = String(text).split(/\r?\n/).filter((l) => l.trim());
     if (!rows0.length) return [];
@@ -25426,10 +25432,11 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   };
   const open = (c) => {
     setEditing(c || "new");
-    setF(c ? { ...c } : blank);
+    setF(c ? { ...c } : { ...blank, id: uid("c") });
+    setDocErr("");
   };
   const save = () => {
-    if (editing === "new") setCrews([...crews, { ...f, id: uid("c") }]);
+    if (editing === "new") setCrews([...crews, f]);
     else setCrews(crews.map((c) => c.id === editing.id ? { ...c, ...f } : c));
     setEditing(null);
     toast("Crew saved");
@@ -25536,11 +25543,32 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
                 ref: docRef,
                 type: "file",
                 style: { display: "none" },
-                onChange: (e) => {
+                onChange: async (e) => {
                   const file = e.target.files && e.target.files[0];
-                  if (!file) return;
-                  setF({ ...f, docs: [...f.docs || [], { id: uid("cd"), name: file.name, at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), type: "", expires: "" }] });
                   e.target.value = "";
+                  if (!file) return;
+                  setDocBusy(true);
+                  setDocErr("");
+                  let up = null;
+                  try {
+                    up = await uploadCompanyFile(file);
+                  } catch (ex) {
+                    setDocBusy(false);
+                    setDocErr(ex && ex.message || "Couldn't save that file.");
+                    return;
+                  }
+                  setDocBusy(false);
+                  setF((prev) => ({ ...prev, docs: [...prev.docs || [], {
+                    id: uid("cd"),
+                    name: file.name,
+                    at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
+                    type: "",
+                    expires: "",
+                    url: up.url,
+                    storage: up.storage,
+                    storageKey: up.key,
+                    mime: up.mime
+                  }] }));
                 }
               }
             ),
@@ -25549,12 +25577,20 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
               const setDoc = (patch) => setF({ ...f, docs: (f.docs || []).map((x) => x.id === d.id ? { ...x, ...patch } : x) });
               return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "9px 0", borderBottom: `1px solid ${S.line}` }, children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }, children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, flex: 1, minWidth: 0 }, children: [
+                  d.url ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: d.url, target: "_blank", rel: "noreferrer", style: { flex: 1, minWidth: 0, fontSize: 13.5, color: T.accent, textDecoration: "none" }, children: [
                     d.name,
                     " ",
                     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub, fontSize: 12 }, children: [
                       "\xB7 ",
                       d.at
+                    ] })
+                  ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, flex: 1, minWidth: 0 }, children: [
+                    d.name,
+                    " ",
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub, fontSize: 12 }, children: [
+                      "\xB7 ",
+                      d.at,
+                      " \xB7 no file attached \u2014 re-upload to attach it"
                     ] })
                   ] }),
                   d.expires && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: expired ? "red" : "green", children: expired ? "Expired" : "Valid" }),
@@ -25580,9 +25616,11 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
                 ] })
               ] }, d.id);
             }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { marginTop: 8 }, onClick: () => docRef.current && docRef.current.click(), children: [
+            docErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginTop: 6 }, children: docErr }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, disabled: docBusy, style: { marginTop: 8 }, onClick: () => docRef.current && docRef.current.click(), children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
-              " Add document"
+              " ",
+              docBusy ? "Saving\u2026" : "Add document"
             ] })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Payment details", hint: "How this sub gets paid \u2014 stored on their file for accounting. Keep it to a handle or last 4, not full bank/SSN.", children: (() => {
@@ -29052,7 +29090,7 @@ function SupremeCRM() {
         }
       }
       if (stageId === "s10" && !next.completedAt) next.completedAt = todayIso();
-      if (j.portal?.notifyStage && stage) {
+      if (j.portal?.notifyStage && rule.notify && stage) {
         const channel = j.consent?.sms?.granted ? "sms" : j.consent?.email?.granted ? "email" : null;
         if (channel) {
           const first = (j.name || "").split(" ")[0];
@@ -29096,7 +29134,7 @@ function SupremeCRM() {
     const jb = jobs.find((j) => j.id === jobId);
     const msg = jb && (jb.messages || []).find((m) => m.id === msgId);
     if (!jb || !msg) return;
-    const out = await deliverToCustomer(
+    const out = msg.audience && msg.audience !== "Customer" ? msg.to ? await deliverMessage({ to: msg.to, kind: msg.kind || "email", subject: msg.subject || "", body: msg.body, jobId }, integrations, liveUser) : { kind: msg.kind || "email", to: "", status: `Not sent \u2014 no address on file for ${msg.audience}`, delivered: false } : await deliverToCustomer(
       jb,
       { prefer: msg.kind || "sms", subject: msg.subject || "", body: msg.body },
       integrations,
