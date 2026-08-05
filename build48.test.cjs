@@ -76,8 +76,8 @@ ok(/in recoverable depreciation not yet requested/.test(src), "held depreciation
 ok(/call before asking for anything public/.test(src), "a sub-3★ review is a blocker");
 ok(/function Dashboard\(\{ jobs: allJobs,/.test(src),
   "Dashboard shadows the jobs prop so every card scopes at once");
-ok(/<FocusList jobs=\{jobs\} onOpenJob=\{onOpenJob\} \/>/.test(src),
-  "FocusList is unchanged and now reads the scoped list for free");
+ok(/<FocusList jobs=\{jobs\} onOpenJob=\{onOpenJob\}/.test(src),
+  "FocusList reads the scoped list for free");
 /* The three duplicate cards are gone. These are the assertions that keep
    them gone — a future edit that re-adds one fails here. */
 ok(!/>Pipeline by stage</.test(src), "the duplicate 'Pipeline by stage' card is gone");
@@ -85,7 +85,7 @@ ok(!/>Needs attention</.test(src), "the duplicate 'Needs attention' card is gone
 /* One Reviews card on the dashboard. The other match is the reviews screen's
    own title, which is a different component. */
 ok((src.match(/>Reviews<\/CardTitle>/g) || []).length === 2, "only one Reviews card remains on the dashboard");
-ok((src.match(/<FocusList jobs=\{jobs\} onOpenJob=\{onOpenJob\} \/>/g) || []).length === 1,
+ok((src.match(/<FocusList jobs=\{jobs\} onOpenJob=\{onOpenJob\}/g) || []).length === 1,
   "FocusList renders exactly once");
 ok(/{showMoney && \(<>/.test(src), "the money tiles are hidden from a crew seat");
 

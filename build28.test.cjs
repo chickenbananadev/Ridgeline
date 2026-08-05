@@ -31,9 +31,13 @@ check("empty estimate produces no findings", /if \(items\.length === 0\) return 
 check("waste-factor rule exists", /Waste factor looks low/.test(src));
 
 check("focusScore exists and is deterministic", /function focusScore\(job\)/.test(src));
-check("focus reasons are user-visible", /reasons\.push\(/.test(src));
+/* Reasons are now split into causes (things gone wrong, which can put a
+   job on the list) and context (attributes, which only rank it). Both are
+   still shown on the row. */
+check("focus reasons are user-visible", /causes\.push\(/.test(src) && /context\.push\(/.test(src));
+check("only a cause can surface a job", /if \(!causes\.length\) return null;/.test(src));
 check("dead and completed stages excluded from focus", /DEAD_STAGES\.includes\(job\.stageId\) \|\| job\.stageId === "s10"/.test(src));
-check("FocusList renders on dashboard", /<FocusList jobs=\{jobs\} onOpenJob=\{onOpenJob\} \/>/.test(src));
+check("FocusList renders on dashboard reading the scoped job list", /<FocusList jobs=\{jobs\} onOpenJob=\{onOpenJob\}/.test(src));
 
 check("collections card exists", /CardTitle right=\{<Chip tone="red">\{money\(owing\.reduce/.test(src));
 check("collections only counts won/completed jobs", /WON_STAGES\.concat\(\["s10"\]\)\.includes\(j\.stageId\)/.test(src));

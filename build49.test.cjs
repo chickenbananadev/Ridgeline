@@ -87,5 +87,47 @@ ok(/if \(left < -120\) return null;/.test(src),
   "a two-hour-stale banner removes itself rather than lying about the time");
 ok(/<PortalEnRoute er=\{d\.enroute\} accent=\{prim\} \/>/.test(src), "it sits above the ordered portal sections");
 
+/* ---------- 5. The rep's contact card reaches the customer ---------- */
+/* job.assigneeContact was read in four places and written in none, so the
+   portal's "your project contact" showed a bare name with no phone and no
+   email on every job nobody hand-typed. */
+ok(!/job\.assigneeContact\?\./.test(src), "nothing reads the dead assigneeContact field any more");
+ok(/function repContactFor\(users, job\)/.test(src), "the contact resolves from the seat");
+ok(/function seatLineFor\(seat, state\)/.test(src), "a seat can carry a different number per state");
+ok(/\(line && line\.phone\) \|\| seat\.repPhone \|\| seat\.phone/.test(src),
+  "a state line beats the seat's direct line, which beats its login number");
+ok(/const pick = \(k\) => \(String\(o\[k\] \|\| ""\)\.trim\(\) \? o\[k\] : base\[k\]\);/.test(src),
+  "a per-job override still wins over both");
+ok(/function buildPortalSnapshot\(job, brand, token, users = \[\]\)/.test(src),
+  "the portal snapshot resolves the same way the job screen does");
+ok(/const c = repContactFor\(users, job\);/.test(src), "and uses the shared resolver, not its own chain");
+ok(/usersRef: users,/.test(src), "the sync layer has the seats it needs to resolve on republish");
+/* Prefilled means the field shows the resolved value, not a placeholder —
+   and stays live, so a rep changing their number fixes every job at once
+   instead of leaving stale copies on each one. */
+ok(/<input style=\{inputStyle\} type=\{type \|\| "text"\} value=\{contact\[k\] \|\| ""\}/.test(src),
+  "the Project contact fields show the resolved value");
+ok(/Reset to \{contact\.base\[k\]\}/.test(src), "an overridden field can be put back on the seat");
+ok(/Filled in from \{contact\.seat\.name\}/.test(src), "the card says where the values came from");
+ok(/Numbers by state/.test(src) && /Add a state line/.test(src), "seats can be given per-state numbers");
+
+/* ---------- 6. "Needs your attention" explains itself ---------- */
+/* A row used to be a bare name plus a reason, and lead quality alone could
+   surface a job — so a lead entered five minutes ago and rated 4/5 topped
+   the list with "4/5 lead quality" as its whole justification. */
+ok(/const causes = \[\];\s*\n\s*const context = \[\];/.test(src), "signals split into causes and context");
+ok(/context\.push\(`\$\{job\.leadQuality\}\/5 lead quality`\)/.test(src),
+  "lead quality is context — it ranks a job but can't surface one");
+ok(/context\.push\(`\$\{money\(v\)\} at stake`\)/.test(src), "so is dollar value");
+ok(/causes\.push\(`\$\{late\} overdue/.test(src), "a broken commitment is a cause");
+ok(/if \(!causes\.length\) return null;/.test(src), "no cause, no row");
+ok(/causes\.push\("new lead, no contact logged yet"\)/.test(src),
+  "an uncalled lead is a real cause, and now says so");
+ok(/function focusAction\(job, f\)/.test(src), "each row carries the next thing to do");
+ok(/onOpenJob\(j\.id, act\.tab \|\| undefined\)/.test(src), "and opens the section that action lives in");
+ok(/\[j\.address, stage && stage\.name\]\.filter\(Boolean\)\.join\(" · "\)/.test(src),
+  "the row shows the address and stage, so it reads as a job rather than a name");
+
+
 if (fails) { console.log("\nbuild 49: " + fails + " FAILED"); process.exit(1); }
 console.log("build 49 tests passed");

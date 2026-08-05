@@ -1113,6 +1113,56 @@ const SEED_USERS = [
   { id: "u3", name: "Stephen Klein", email: "stephen@supremebuildinggroup.com", phone: "", role: "rep", title: "Sales Rep", active: true, commissionRate: 55, addedAt: "2026-03-02" },
   { id: "u4", name: "Steven Tatgenhorst", email: "steven@supremebuildinggroup.com", phone: "", role: "rep", title: "Sales Rep", active: true, commissionRate: 60, addedAt: "2026-03-02" },
 ];
+/* ==================================================================
+   THE REP'S CONTACT CARD
+
+   Every job shows a "project contact" to the homeowner. That used to read
+   job.assigneeContact — a field nothing in the app ever wrote — so the
+   portal showed a bare name with no phone and no email unless someone
+   hand-typed one onto each job. This resolves it from the seat instead.
+
+   A rep working several states usually carries a different number in
+   each, so a seat can hold extra lines keyed by state. The line whose
+   state matches the job wins; otherwise the seat's own details do; and a
+   per-job override still beats both, because sometimes a specific
+   customer needs a specific person in front of them.
+================================================================== */
+function repSeatFor(users, job) {
+  if (!job) return null;
+  const list = users || [];
+  return list.find((u) => u.name && u.name === job.assignee) || null;
+}
+/* The seat's details as they apply to THIS job's state. A seat already
+   separates its customer-facing repPhone/workEmail from its login
+   phone/email; a state line beats both. */
+function seatLineFor(seat, state) {
+  if (!seat) return { name: "", title: "", phone: "", email: "" };
+  const line = (seat.lines || []).find((l) => l.state && state && l.state === state);
+  return {
+    name: seat.name || "",
+    title: seat.title || "",
+    phone: (line && line.phone) || seat.repPhone || seat.phone || "",
+    email: (line && line.email) || seat.workEmail || seat.email || "",
+    lineState: line ? line.state : null,
+  };
+}
+/* What the customer actually sees, and what the Project-contact fields
+   prefill with. Resolution order: per-job override → state line → seat. */
+function repContactFor(users, job) {
+  const seat = repSeatFor(users, job);
+  const base = seatLineFor(seat, job && job.state);
+  const o = (job && job.repOverride) || {};
+  const pick = (k) => (String(o[k] || "").trim() ? o[k] : base[k]);
+  return {
+    name: pick("name") || (job && job.assignee) || "",
+    title: pick("title"),
+    phone: pick("phone"),
+    email: pick("email"),
+    base, seat,
+    /* True when this job is showing someone other than the assigned seat. */
+    overridden: ["name", "title", "phone", "email"].some((k) => String(o[k] || "").trim() && o[k] !== base[k]),
+  };
+}
 const canSeeMoney = (u) => u && u.role !== "crew";
 const canEditStructure = (u) => u && u.role === "admin";
 const canManageSeats = (u) => u && u.role === "admin";
@@ -4120,43 +4170,74 @@ function Login({ brand, users, onLogin, initialMode = "login", selectedPlan = "p
    ================================================================== */
 function focusScore(job) {
   if (DEAD_STAGES.includes(job.stageId) || job.stageId === "s10") return null;
-  const reasons = [];
+  /* Two kinds of signal, and the difference matters.
+
+     A CAUSE is something that has gone wrong and that a rep can act on:
+     silence, a broken commitment, sold work that isn't moving. A CONTEXT
+     is an attribute — how big the job is, how good the lead looked. A
+     $40k job with a 5-star lead and nothing wrong with it does not
+     "need your attention"; it's just a good job.
+
+     The card promises "time in stage, dollars at stake, and broken
+     commitments" and then ranks by all of them — but only a cause can
+     put a row on the list. Without that split, a lead someone entered
+     five minutes ago and rated 4/5 surfaces at the top with "4/5 lead
+     quality" as its entire justification, which reads as noise and
+     teaches people to ignore the list. */
+  const causes = [];
+  const context = [];
   let score = 0;
 
   // Staleness — the dominant factor. Deals die of silence, not "no".
   const days = stageDays(job);
-  if (days >= 21) { score += 40; reasons.push(`${days} days sitting in this stage`); }
-  else if (days >= 14) { score += 28; reasons.push(`${days} days in stage`); }
-  else if (days >= 7) { score += 14; reasons.push(`${days} days in stage`); }
+  if (days >= 21) { score += 40; causes.push(`${days} days sitting in this stage`); }
+  else if (days >= 14) { score += 28; causes.push(`${days} days in stage`); }
+  else if (days >= 7) { score += 14; causes.push(`${days} days in stage`); }
 
   // Money on the table, scaled so a big roof outranks a small one at equal staleness.
   const v = num(job.value || (job.contract && job.contract.price));
-  if (v >= 25000) { score += 18; reasons.push(`${money(v)} at stake`); }
-  else if (v >= 12000) { score += 11; reasons.push(`${money(v)} at stake`); }
+  if (v >= 25000) { score += 18; context.push(`${money(v)} at stake`); }
+  else if (v >= 12000) { score += 11; context.push(`${money(v)} at stake`); }
   else if (v > 0) { score += 5; }
 
   // What the rep already flagged by hand.
-  if (job.priority === "Urgent") { score += 25; reasons.push("marked Urgent"); }
-  else if (job.priority === "High") { score += 14; reasons.push("marked High priority"); }
-  if (num(job.leadQuality) >= 4) { score += 10; reasons.push(`${job.leadQuality}/5 lead quality`); }
+  if (job.priority === "Urgent") { score += 25; causes.push("marked Urgent"); }
+  else if (job.priority === "High") { score += 14; causes.push("marked High priority"); }
+  if (num(job.leadQuality) >= 4) { score += 10; context.push(`${job.leadQuality}/5 lead quality`); }
 
   // Overdue tasks are commitments already broken.
   const t = todayIso();
   const late = (job.tasks || []).filter((x) => !x.done && x.due && x.due < t).length;
-  if (late > 0) { score += 12 + late * 4; reasons.push(`${late} overdue ${late === 1 ? "task" : "tasks"}`); }
+  if (late > 0) { score += 12 + late * 4; causes.push(`${late} overdue ${late === 1 ? "task" : "tasks"}`); }
 
   // Signed but unscheduled: sold work that isn't moving is churn risk.
-  if (WON_STAGES.includes(job.stageId) && !job.schedDate) { score += 15; reasons.push("signed but not scheduled"); }
+  if (WON_STAGES.includes(job.stageId) && !job.schedDate) { score += 15; causes.push("signed but not scheduled"); }
 
   // An estimate sent and never signed goes cold fast.
   const est = job.estimate || {};
-  if (est.status === "Sent" && days >= 5) { score += 12; reasons.push("estimate out with no answer"); }
+  if (est.status === "Sent" && days >= 5) { score += 12; causes.push("estimate out with no answer"); }
 
-  /* No reason to show means no row: value alone can nudge a ranking but
-     must never surface a job by itself — an unexplained entry breaks the
-     whole promise that the list justifies itself. */
-  if (score === 0 || reasons.length === 0) return null;
-  return { score, reasons: reasons.slice(0, 3) };
+  // A brand-new lead nobody has called yet is a cause in its own right.
+  if (job.stageId === "s1" && days >= 2 && !(job.tasks || []).some((x) => x.done)) {
+    score += 16; causes.push("new lead, no contact logged yet");
+  }
+
+  /* No cause means no row. Context still ranks — a big job and a small
+     job with the same problem are not equally urgent — but it can never
+     put a job on the list by itself. */
+  if (!causes.length) return null;
+  return { score, reasons: [...causes, ...context].slice(0, 3), causes };
+}
+/* The single next thing to do about the top reason. The list is useless if
+   it tells you a job is stuck and leaves you to work out what that means. */
+function focusAction(job, f) {
+  const top = (f && f.causes && f.causes[0]) || "";
+  if (/overdue/.test(top)) return { label: "Open tasks", tab: "tasks" };
+  if (/not scheduled/.test(top)) return { label: "Get it on the schedule", tab: "workorder" };
+  if (/estimate out/.test(top)) return { label: "Follow up on the estimate", tab: "estimate" };
+  if (/new lead/.test(top)) return { label: "Call them", tab: "overview" };
+  if (/Urgent|High priority/.test(top)) return { label: "Open the job", tab: null };
+  return { label: "Move it forward", tab: null };
 }
 
 /* ==================================================================
@@ -4211,7 +4292,7 @@ function exceptionFeed(jobs, ctx) {
   return all.sort((a, b) => (a.tone === b.tone ? 0 : a.tone === "red" ? -1 : 1));
 }
 
-function FocusList({ jobs, onOpenJob }) {
+function FocusList({ jobs, onOpenJob, stages = [] }) {
   const ranked = jobs
     .map((j) => ({ j, f: focusScore(j) }))
     .filter((x) => x.f)
@@ -4224,27 +4305,41 @@ function FocusList({ jobs, onOpenJob }) {
       <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
         Ranked by time in stage, dollars at stake, and broken commitments — every reason shown.
       </div>
-      {ranked.map(({ j, f }, i) => (
-        <button key={j.id} onClick={() => onOpenJob(j.id)} style={{
-          display: "flex", gap: 10, alignItems: "flex-start", width: "100%",
-          border: "none", background: "none", cursor: "pointer", textAlign: "left",
-          padding: "10px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontFamily: "inherit",
-        }}>
-          <span style={{
-            width: 24, height: 24, borderRadius: 999, flexShrink: 0, marginTop: 1,
-            background: i === 0 ? "#FDECEC" : S.soft,
-            color: i === 0 ? "#B42318" : S.sub,
-            display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800,
-          }}>{i + 1}</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{j.name}</div>
-            <div style={{ fontSize: 12, color: S.sub, lineHeight: 1.5, marginTop: 1 }}>
-              {f.reasons.join(" · ")}
+      {ranked.map(({ j, f }, i) => {
+        /* A row used to be a bare name and a reason, which left people
+           asking what it even was — customer or rep, and where does
+           tapping it go. It's a job, so it says so: who, where, which
+           stage, and the one thing to do next. */
+        const act = focusAction(j, f);
+        const stage = stages.find((s) => s.id === j.stageId);
+        return (
+          <button key={j.id} onClick={() => onOpenJob(j.id, act.tab || undefined)} style={{
+            display: "flex", gap: 10, alignItems: "flex-start", width: "100%",
+            border: "none", background: "none", cursor: "pointer", textAlign: "left",
+            padding: "11px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontFamily: "inherit",
+          }}>
+            <span style={{
+              width: 24, height: 24, borderRadius: 999, flexShrink: 0, marginTop: 2,
+              background: i === 0 ? "var(--rl-red-bg)" : S.soft,
+              color: i === 0 ? "var(--rl-red-fg)" : S.sub,
+              display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800,
+            }}>{i + 1}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{j.name}</div>
+              <div style={{ fontSize: 12, color: S.sub, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {[j.address, stage && stage.name].filter(Boolean).join(" · ")}
+              </div>
+              <div style={{ fontSize: 12, color: S.sub, lineHeight: 1.5, marginTop: 3 }}>
+                {f.reasons.join(" · ")}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.accent, marginTop: 4 }}>
+                {act.label} →
+              </div>
             </div>
-          </div>
-          <ChevronRight size={15} color="#C7CBD1" style={{ flexShrink: 0, marginTop: 4 }} />
-        </button>
-      ))}
+            <ChevronRight size={15} color="#C7CBD1" style={{ flexShrink: 0, marginTop: 4 }} />
+          </button>
+        );
+      })}
     </Card>
   );
 }
@@ -4517,7 +4612,7 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
       })()}
 
       {/* Team chat lives in the Inbox, not on the home page. */}
-      <FocusList jobs={jobs} onOpenJob={onOpenJob} />
+      <FocusList jobs={jobs} onOpenJob={onOpenJob} stages={stages} />
 
       {/* Week ahead — the next seven days of appointments and crew
           assignments, so the calendar and the dispatch board are answered
@@ -7595,6 +7690,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "files": return <TabFiles job={job} mut={mut} toast={toast} />;
               case "assistant": return <ClaimAssistant job={job} />;
               case "portal": return <TabPortal job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser}
+                users={users}
                 stageLabel={(stages.find((stage) => stage.id === job.stageId) || {}).name || ""} />;
               default: return null;
             }
@@ -8954,7 +9050,7 @@ function projectNoun(job) {
   return "roofing";
 }
 
-function buildPortalSnapshot(job, brand, token) {
+function buildPortalSnapshot(job, brand, token, users = []) {
   const portal = { ...DEFAULT_PORTAL_SETTINGS, ...(job.portal || {}) };
   const pay = paymentsSummary(job);
   return {
@@ -8969,12 +9065,10 @@ function buildPortalSnapshot(job, brand, token) {
       /* Rep block: a per-job override wins over the assigned seat, so a
          different face can be put in front of a customer without
          reassigning the job. */
-      rep: portal.showRep ? {
-        name: job.repOverride?.name || job.assigneeContact?.name || job.assignee || "",
-        email: job.repOverride?.email || job.assigneeContact?.email || "",
-        phone: job.repOverride?.phone || job.assigneeContact?.phone || "",
-        title: job.repOverride?.title || job.assigneeContact?.title || "",
-      } : null,
+      rep: portal.showRep ? (() => {
+        const c = repContactFor(users, job);
+        return { name: c.name, email: c.email, phone: c.phone, title: c.title };
+      })() : null,
       /* Anything awaiting the homeowner's signature, with the exact
          content they will see so the hash binds to it. */
       signDocs: (() => {
@@ -17026,12 +17120,13 @@ function PortalContactApprovals({ token, job, mut, toast }) {
   );
 }
 
-function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "" }) {
+function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "", users = [] }) {
   const [busy, setBusy] = useState(false);
   const portalUrl = (tok) => `${window.location.origin}/?portal=${tok}`;
   const portalSettings = { ...DEFAULT_PORTAL_SETTINGS, ...(job.portal || {}) };
   const progress = portalProgressFor({ ...job, stageLabel });
-  const snapshot = (tok) => buildPortalSnapshot({ ...job, stageLabel }, brand, tok);
+  const snapshot = (tok) => buildPortalSnapshot({ ...job, stageLabel }, brand, tok, users);
+  const contact = repContactFor(users, job);
   const publishPortal = async () => {
     const db = DB();
     const tok = job.portalToken || (uid("p") + Math.random().toString(36).slice(2, 10));
@@ -17165,32 +17260,60 @@ function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "" }) {
         </div>
         {portalSettings.showRep && (
           <div style={{ marginTop: 16 }}>
-            <CardTitle>Project contact shown to the customer</CardTitle>
+            <CardTitle right={contact.overridden ? <Chip tone="amber">Custom</Chip> : <Chip tone="gray">From their card</Chip>}>
+              Project contact shown to the customer
+            </CardTitle>
+            {/* Prefilled, not blank. The fields show what the customer will
+                actually see, resolved from the assigned rep's own contact
+                card — including the number they carry in this job's state.
+                Typing over a field overrides it for this job only; the reset
+                puts it back on the seat, so a rep who changes their number
+                fixes every job at once instead of one at a time. */}
             <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
-              Blank fields fall back to the assigned rep, {job.assignee || "unassigned"}.
-              Fill these in to put a different person in front of this customer
-              without reassigning the job.
+              {contact.seat
+                ? <>Filled in from {contact.seat.name}’s contact card{contact.base.lineState ? ` — their ${contact.base.lineState} line` : ""}. Edit any field to put a different person, or a different number, in front of this customer without reassigning the job.</>
+                : <>No seat matches “{job.assignee || "unassigned"}”, so nothing prefilled. Assign the job to a team member, or type the contact details here.</>}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <Field label="Name">
-                <input style={inputStyle} value={job.repOverride?.name || ""}
-                  onChange={(e) => mut((j) => ({ ...j, repOverride: { ...(j.repOverride || {}), name: e.target.value } }))}
-                  placeholder={job.assignee || ""} />
-              </Field>
-              <Field label="Title">
-                <input style={inputStyle} value={job.repOverride?.title || ""}
-                  onChange={(e) => mut((j) => ({ ...j, repOverride: { ...(j.repOverride || {}), title: e.target.value } }))}
-                  placeholder="Project manager" />
-              </Field>
-            </div>
-            <Field label="Phone">
-              <input style={inputStyle} type="tel" value={job.repOverride?.phone || ""}
-                onChange={(e) => mut((j) => ({ ...j, repOverride: { ...(j.repOverride || {}), phone: e.target.value } }))} />
-            </Field>
-            <Field label="Email">
-              <input style={inputStyle} type="email" value={job.repOverride?.email || ""}
-                onChange={(e) => mut((j) => ({ ...j, repOverride: { ...(j.repOverride || {}), email: e.target.value } }))} />
-            </Field>
+            {(() => {
+              const RepField = ({ k, label, type, span }) => {
+                const overridden = String((job.repOverride || {})[k] || "").trim() !== "";
+                return (
+                  <div style={span ? undefined : { minWidth: 0 }}>
+                    <Field label={label}>
+                      <input style={inputStyle} type={type || "text"} value={contact[k] || ""}
+                        onChange={(e) => mut((j) => ({ ...j, repOverride: { ...(j.repOverride || {}), [k]: e.target.value } }))} />
+                    </Field>
+                    {overridden && contact.base[k] && contact.base[k] !== contact[k] && (
+                      <button onClick={() => mut((j) => {
+                        const next = { ...(j.repOverride || {}) };
+                        delete next[k];
+                        return { ...j, repOverride: next };
+                      })} style={{ ...linkBtn, fontSize: 11.5, padding: "0 0 10px" }}>
+                        Reset to {contact.base[k]}
+                      </button>
+                    )}
+                  </div>
+                );
+              };
+              return (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <RepField k="name" label="Name" />
+                    <RepField k="title" label="Title" />
+                  </div>
+                  <RepField k="phone" label="Phone" type="tel" span />
+                  <RepField k="email" label="Email" type="email" span />
+                </>
+              );
+            })()}
+            {contact.seat && (contact.seat.lines || []).length > 0 && (
+              <div style={{ fontSize: 11.5, color: S.sub, lineHeight: 1.5 }}>
+                {contact.seat.name} has {contact.seat.lines.length} state
+                {contact.seat.lines.length === 1 ? " line" : " lines"} on file
+                ({contact.seat.lines.map((l) => l.state).filter(Boolean).join(", ")}).
+                This job is in {job.state || "no state"}.
+              </div>
+            )}
           </div>
         )}
 
@@ -21548,6 +21671,37 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
             <input style={inputStyle} type="email" value={f.workEmail || ""} onChange={(e) => setF((p2) => ({ ...p2, workEmail: e.target.value }))} />
           </Field>
         </div>
+        {/* A rep working several states usually carries a different number in
+            each. A job in that state picks up the matching line automatically
+            on its customer-facing contact, so nobody has to remember which
+            number goes on which file. */}
+        {f.role !== "crew" && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: S.ink, marginBottom: 6 }}>Numbers by state</div>
+            <div style={{ fontSize: 12, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
+              Optional. A job in one of these states shows that line to the customer instead
+              of the direct phone above.
+            </div>
+            {(f.lines || []).map((l, i) => (
+              <div key={l.id || i} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                <select style={{ ...selStyle, width: 92, padding: "9px 8px" }} value={l.state || ""}
+                  onChange={(e) => setF((p2) => ({ ...p2, lines: (p2.lines || []).map((x, k) => k === i ? { ...x, state: e.target.value } : x) }))}>
+                  <option value="">State</option>
+                  {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} inputMode="tel" placeholder="Phone" value={l.phone || ""}
+                  onChange={(e) => setF((p2) => ({ ...p2, lines: (p2.lines || []).map((x, k) => k === i ? { ...x, phone: formatPhone(e.target.value) } : x) }))} />
+                <button onClick={() => setF((p2) => ({ ...p2, lines: (p2.lines || []).filter((x, k) => k !== i) }))}
+                  style={{ border: "none", background: "none", cursor: "pointer", padding: 4 }}>
+                  <Trash2 size={15} color="#B42318" />
+                </button>
+              </div>
+            ))}
+            <Btn kind="soft" small onClick={() => setF((p2) => ({ ...p2, lines: [...(p2.lines || []), { id: uid("ln"), state: "", phone: "", email: "" }] }))}>
+              <Plus size={13} /> Add a state line
+            </Btn>
+          </div>
+        )}
         {f.role !== "crew" && (
           <Field label="Default commission rate (%)" hint="Starting rate on new jobs. Can be changed per job by an admin.">
             <input style={inputStyle} inputMode="decimal" value={f.commissionRate}
@@ -23116,7 +23270,7 @@ function useDbSync(st) {
           const published = changed.filter((j) => j.portalToken);
           if (published.length && st.brandRef) {
             const snaps = published.map((j) => ({
-              ...buildPortalSnapshot({ ...j, stageLabel: ((st.stagesRef || []).find((x) => x.id === j.stageId) || {}).name || ((st.stagesRef || []).find((x) => x.id === j.stageId) || {}).label || "" }, st.brandRef, j.portalToken),
+              ...buildPortalSnapshot({ ...j, stageLabel: ((st.stagesRef || []).find((x) => x.id === j.stageId) || {}).name || ((st.stagesRef || []).find((x) => x.id === j.stageId) || {}).label || "" }, st.brandRef, j.portalToken, st.usersRef || []),
               revoked: false,
             }));
             await db.from("crm_portal").upsert(snaps);
@@ -23570,7 +23724,7 @@ export default function SupremeCRM() {
     jobs, setJobs, appointments, setAppointments,
     activity, setActivity, chatMsgs, setChatMsgs,
     orgPack, unpackOrg, orgDeps,
-    brandRef: brand, stagesRef: stages,
+    brandRef: brand, stagesRef: stages, usersRef: users,
   });
 
   /* Copy brand colors into the live theme before anything renders. */

@@ -1477,6 +1477,38 @@ var SEED_USERS = [
   { id: "u3", name: "Stephen Klein", email: "stephen@supremebuildinggroup.com", phone: "", role: "rep", title: "Sales Rep", active: true, commissionRate: 55, addedAt: "2026-03-02" },
   { id: "u4", name: "Steven Tatgenhorst", email: "steven@supremebuildinggroup.com", phone: "", role: "rep", title: "Sales Rep", active: true, commissionRate: 60, addedAt: "2026-03-02" }
 ];
+function repSeatFor(users, job) {
+  if (!job) return null;
+  const list = users || [];
+  return list.find((u) => u.name && u.name === job.assignee) || null;
+}
+function seatLineFor(seat, state) {
+  if (!seat) return { name: "", title: "", phone: "", email: "" };
+  const line = (seat.lines || []).find((l) => l.state && state && l.state === state);
+  return {
+    name: seat.name || "",
+    title: seat.title || "",
+    phone: line && line.phone || seat.repPhone || seat.phone || "",
+    email: line && line.email || seat.workEmail || seat.email || "",
+    lineState: line ? line.state : null
+  };
+}
+function repContactFor(users, job) {
+  const seat = repSeatFor(users, job);
+  const base = seatLineFor(seat, job && job.state);
+  const o = job && job.repOverride || {};
+  const pick = (k) => String(o[k] || "").trim() ? o[k] : base[k];
+  return {
+    name: pick("name") || job && job.assignee || "",
+    title: pick("title"),
+    phone: pick("phone"),
+    email: pick("email"),
+    base,
+    seat,
+    /* True when this job is showing someone other than the assigned seat. */
+    overridden: ["name", "title", "phone", "email"].some((k) => String(o[k] || "").trim() && o[k] !== base[k])
+  };
+}
 var canSeeMoney = (u) => u && u.role !== "crew";
 var canEditStructure = (u) => u && u.role === "admin";
 var canManageSeats = (u) => u && u.role === "admin";
@@ -4980,57 +5012,71 @@ function Login({ brand: brand2, users, onLogin, initialMode = "login", selectedP
 }
 function focusScore(job) {
   if (DEAD_STAGES.includes(job.stageId) || job.stageId === "s10") return null;
-  const reasons = [];
+  const causes = [];
+  const context = [];
   let score = 0;
   const days = stageDays(job);
   if (days >= 21) {
     score += 40;
-    reasons.push(`${days} days sitting in this stage`);
+    causes.push(`${days} days sitting in this stage`);
   } else if (days >= 14) {
     score += 28;
-    reasons.push(`${days} days in stage`);
+    causes.push(`${days} days in stage`);
   } else if (days >= 7) {
     score += 14;
-    reasons.push(`${days} days in stage`);
+    causes.push(`${days} days in stage`);
   }
   const v = num(job.value || job.contract && job.contract.price);
   if (v >= 25e3) {
     score += 18;
-    reasons.push(`${money(v)} at stake`);
+    context.push(`${money(v)} at stake`);
   } else if (v >= 12e3) {
     score += 11;
-    reasons.push(`${money(v)} at stake`);
+    context.push(`${money(v)} at stake`);
   } else if (v > 0) {
     score += 5;
   }
   if (job.priority === "Urgent") {
     score += 25;
-    reasons.push("marked Urgent");
+    causes.push("marked Urgent");
   } else if (job.priority === "High") {
     score += 14;
-    reasons.push("marked High priority");
+    causes.push("marked High priority");
   }
   if (num(job.leadQuality) >= 4) {
     score += 10;
-    reasons.push(`${job.leadQuality}/5 lead quality`);
+    context.push(`${job.leadQuality}/5 lead quality`);
   }
   const t = todayIso();
   const late = (job.tasks || []).filter((x) => !x.done && x.due && x.due < t).length;
   if (late > 0) {
     score += 12 + late * 4;
-    reasons.push(`${late} overdue ${late === 1 ? "task" : "tasks"}`);
+    causes.push(`${late} overdue ${late === 1 ? "task" : "tasks"}`);
   }
   if (WON_STAGES.includes(job.stageId) && !job.schedDate) {
     score += 15;
-    reasons.push("signed but not scheduled");
+    causes.push("signed but not scheduled");
   }
   const est = job.estimate || {};
   if (est.status === "Sent" && days >= 5) {
     score += 12;
-    reasons.push("estimate out with no answer");
+    causes.push("estimate out with no answer");
   }
-  if (score === 0 || reasons.length === 0) return null;
-  return { score, reasons: reasons.slice(0, 3) };
+  if (job.stageId === "s1" && days >= 2 && !(job.tasks || []).some((x) => x.done)) {
+    score += 16;
+    causes.push("new lead, no contact logged yet");
+  }
+  if (!causes.length) return null;
+  return { score, reasons: [...causes, ...context].slice(0, 3), causes };
+}
+function focusAction(job, f) {
+  const top = f && f.causes && f.causes[0] || "";
+  if (/overdue/.test(top)) return { label: "Open tasks", tab: "tasks" };
+  if (/not scheduled/.test(top)) return { label: "Get it on the schedule", tab: "workorder" };
+  if (/estimate out/.test(top)) return { label: "Follow up on the estimate", tab: "estimate" };
+  if (/new lead/.test(top)) return { label: "Call them", tab: "overview" };
+  if (/Urgent|High priority/.test(top)) return { label: "Open the job", tab: null };
+  return { label: "Move it forward", tab: null };
 }
 function jobExceptions(job, ctx) {
   const c = ctx || {};
@@ -5068,44 +5114,53 @@ function exceptionFeed(jobs, ctx) {
   const all = (jobs || []).flatMap((j) => jobExceptions(j, ctx));
   return all.sort((a, b) => a.tone === b.tone ? 0 : a.tone === "red" ? -1 : 1);
 }
-function FocusList({ jobs, onOpenJob }) {
+function FocusList({ jobs, onOpenJob, stages = [] }) {
   const ranked = jobs.map((j) => ({ j, f: focusScore(j) })).filter((x) => x.f).sort((a, b) => b.f.score - a.f.score).slice(0, 5);
   if (ranked.length === 0) return null;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: ranked.length }), children: "Needs your attention" }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }, children: "Ranked by time in stage, dollars at stake, and broken commitments \u2014 every reason shown." }),
-    ranked.map(({ j, f }, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: {
-      display: "flex",
-      gap: 10,
-      alignItems: "flex-start",
-      width: "100%",
-      border: "none",
-      background: "none",
-      cursor: "pointer",
-      textAlign: "left",
-      padding: "10px 0",
-      borderTop: i ? `1px solid ${S.line}` : "none",
-      fontFamily: "inherit"
-    }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
-        width: 24,
-        height: 24,
-        borderRadius: 999,
-        flexShrink: 0,
-        marginTop: 1,
-        background: i === 0 ? "#FDECEC" : S.soft,
-        color: i === 0 ? "#B42318" : S.sub,
-        display: "grid",
-        placeItems: "center",
-        fontSize: 12,
-        fontWeight: 800
-      }, children: i + 1 }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, color: S.ink }, children: j.name }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, lineHeight: 1.5, marginTop: 1 }, children: f.reasons.join(" \xB7 ") })
-      ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 15, color: "#C7CBD1", style: { flexShrink: 0, marginTop: 4 } })
-    ] }, j.id))
+    ranked.map(({ j, f }, i) => {
+      const act = focusAction(j, f);
+      const stage = stages.find((s) => s.id === j.stageId);
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id, act.tab || void 0), style: {
+        display: "flex",
+        gap: 10,
+        alignItems: "flex-start",
+        width: "100%",
+        border: "none",
+        background: "none",
+        cursor: "pointer",
+        textAlign: "left",
+        padding: "11px 0",
+        borderTop: i ? `1px solid ${S.line}` : "none",
+        fontFamily: "inherit"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+          width: 24,
+          height: 24,
+          borderRadius: 999,
+          flexShrink: 0,
+          marginTop: 2,
+          background: i === 0 ? "var(--rl-red-bg)" : S.soft,
+          color: i === 0 ? "var(--rl-red-fg)" : S.sub,
+          display: "grid",
+          placeItems: "center",
+          fontSize: 12,
+          fontWeight: 800
+        }, children: i + 1 }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, color: S.ink }, children: j.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [j.address, stage && stage.name].filter(Boolean).join(" \xB7 ") }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, lineHeight: 1.5, marginTop: 3 }, children: f.reasons.join(" \xB7 ") }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, fontWeight: 700, color: T.accent, marginTop: 4 }, children: [
+            act.label,
+            " \u2192"
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 15, color: "#C7CBD1", style: { flexShrink: 0, marginTop: 4 } })
+      ] }, j.id);
+    })
   ] });
 }
 function Dashboard({
@@ -5394,7 +5449,7 @@ function Dashboard({
         }, children: showAllBlockers ? "Show less" : `Show all ${feed.length}` })
       ] });
     })(),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FocusList, { jobs, onOpenJob }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FocusList, { jobs, onOpenJob, stages }),
     (() => {
       const days = [];
       for (let i = 0; i < 7; i++) {
@@ -9101,6 +9156,7 @@ function JobDetail({
                   mut,
                   toast,
                   currentUser,
+                  users,
                   stageLabel: (stages.find((stage2) => stage2.id === job.stageId) || {}).name || ""
                 }
               );
@@ -10454,7 +10510,7 @@ function projectNoun(job) {
   if (has("window")) return "window";
   return "roofing";
 }
-function buildPortalSnapshot(job, brand2, token) {
+function buildPortalSnapshot(job, brand2, token, users = []) {
   const portal = { ...DEFAULT_PORTAL_SETTINGS, ...job.portal || {} };
   const pay = paymentsSummary(job);
   return {
@@ -10476,12 +10532,10 @@ function buildPortalSnapshot(job, brand2, token) {
       /* Rep block: a per-job override wins over the assigned seat, so a
          different face can be put in front of a customer without
          reassigning the job. */
-      rep: portal.showRep ? {
-        name: job.repOverride?.name || job.assigneeContact?.name || job.assignee || "",
-        email: job.repOverride?.email || job.assigneeContact?.email || "",
-        phone: job.repOverride?.phone || job.assigneeContact?.phone || "",
-        title: job.repOverride?.title || job.assigneeContact?.title || ""
-      } : null,
+      rep: portal.showRep ? (() => {
+        const c = repContactFor(users, job);
+        return { name: c.name, email: c.email, phone: c.phone, title: c.title };
+      })() : null,
       /* Anything awaiting the homeowner's signature, with the exact
          content they will see so the hash binds to it. */
       signDocs: (() => {
@@ -19019,12 +19073,13 @@ function PortalContactApprovals({ token, job, mut, toast }) {
     ] }, r.id))
   ] });
 }
-function TabPortal({ job, brand: brand2, mut, toast, currentUser, stageLabel = "" }) {
+function TabPortal({ job, brand: brand2, mut, toast, currentUser, stageLabel = "", users = [] }) {
   const [busy, setBusy] = (0, import_react.useState)(false);
   const portalUrl = (tok) => `${window.location.origin}/?portal=${tok}`;
   const portalSettings = { ...DEFAULT_PORTAL_SETTINGS, ...job.portal || {} };
   const progress = portalProgressFor({ ...job, stageLabel });
-  const snapshot = (tok) => buildPortalSnapshot({ ...job, stageLabel }, brand2, tok);
+  const snapshot = (tok) => buildPortalSnapshot({ ...job, stageLabel }, brand2, tok, users);
+  const contact = repContactFor(users, job);
   const publishPortal = async () => {
     const db = DB();
     const tok = job.portalToken || uid("p") + Math.random().toString(36).slice(2, 10);
@@ -19194,50 +19249,62 @@ function TabPortal({ job, brand: brand2, mut, toast, currentUser, stageLabel = "
         ] }, key))
       ] }),
       portalSettings.showRep && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 16 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Project contact shown to the customer" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: [
-          "Blank fields fall back to the assigned rep, ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: contact.overridden ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "Custom" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "From their card" }), children: "Project contact shown to the customer" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: contact.seat ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          "Filled in from ",
+          contact.seat.name,
+          "\u2019s contact card",
+          contact.base.lineState ? ` \u2014 their ${contact.base.lineState} line` : "",
+          ". Edit any field to put a different person, or a different number, in front of this customer without reassigning the job."
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          "No seat matches \u201C",
           job.assignee || "unassigned",
-          ". Fill these in to put a different person in front of this customer without reassigning the job."
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Name", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "input",
-            {
-              style: inputStyle,
-              value: job.repOverride?.name || "",
-              onChange: (e) => mut((j) => ({ ...j, repOverride: { ...j.repOverride || {}, name: e.target.value } })),
-              placeholder: job.assignee || ""
-            }
-          ) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Title", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "input",
-            {
-              style: inputStyle,
-              value: job.repOverride?.title || "",
-              onChange: (e) => mut((j) => ({ ...j, repOverride: { ...j.repOverride || {}, title: e.target.value } })),
-              placeholder: "Project manager"
-            }
-          ) })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
-          {
-            style: inputStyle,
-            type: "tel",
-            value: job.repOverride?.phone || "",
-            onChange: (e) => mut((j) => ({ ...j, repOverride: { ...j.repOverride || {}, phone: e.target.value } }))
-          }
-        ) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
-          {
-            style: inputStyle,
-            type: "email",
-            value: job.repOverride?.email || "",
-            onChange: (e) => mut((j) => ({ ...j, repOverride: { ...j.repOverride || {}, email: e.target.value } }))
-          }
-        ) })
+          "\u201D, so nothing prefilled. Assign the job to a team member, or type the contact details here."
+        ] }) }),
+        /* @__PURE__ */ (() => {
+          const RepField = ({ k, label, type, span }) => {
+            const overridden = String((job.repOverride || {})[k] || "").trim() !== "";
+            return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: span ? void 0 : { minWidth: 0 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "input",
+                {
+                  style: inputStyle,
+                  type: type || "text",
+                  value: contact[k] || "",
+                  onChange: (e) => mut((j) => ({ ...j, repOverride: { ...j.repOverride || {}, [k]: e.target.value } }))
+                }
+              ) }),
+              overridden && contact.base[k] && contact.base[k] !== contact[k] && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => mut((j) => {
+                const next = { ...j.repOverride || {} };
+                delete next[k];
+                return { ...j, repOverride: next };
+              }), style: { ...linkBtn, fontSize: 11.5, padding: "0 0 10px" }, children: [
+                "Reset to ",
+                contact.base[k]
+              ] })
+            ] });
+          };
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RepField, { k: "name", label: "Name" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RepField, { k: "title", label: "Title" })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RepField, { k: "phone", label: "Phone", type: "tel", span: true }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RepField, { k: "email", label: "Email", type: "email", span: true })
+          ] });
+        })(),
+        contact.seat && (contact.seat.lines || []).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub, lineHeight: 1.5 }, children: [
+          contact.seat.name,
+          " has ",
+          contact.seat.lines.length,
+          " state",
+          contact.seat.lines.length === 1 ? " line" : " lines",
+          " on file (",
+          contact.seat.lines.map((l) => l.state).filter(Boolean).join(", "),
+          "). This job is in ",
+          job.state || "no state",
+          "."
+        ] })
       ] }),
       job.portalToken && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 16 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PortalContactApprovals, { token: job.portalToken, job, mut, toast }) }),
       job.portalToken && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
@@ -23763,6 +23830,46 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand:
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Direct phone", hint: "Shows on this rep's documents.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.repPhone || "", inputMode: "tel", onChange: (e) => setF((p2) => ({ ...p2, repPhone: formatPhone(e.target.value) })) }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Work email", hint: "Used on their documents; falls back to the office address.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: f.workEmail || "", onChange: (e) => setF((p2) => ({ ...p2, workEmail: e.target.value })) }) })
           ] }),
+          f.role !== "crew" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 14 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 600, color: S.ink, marginBottom: 6 }, children: "Numbers by state" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginBottom: 8, lineHeight: 1.5 }, children: "Optional. A job in one of these states shows that line to the customer instead of the direct phone above." }),
+            (f.lines || []).map((l, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                "select",
+                {
+                  style: { ...selStyle, width: 92, padding: "9px 8px" },
+                  value: l.state || "",
+                  onChange: (e) => setF((p2) => ({ ...p2, lines: (p2.lines || []).map((x, k) => k === i ? { ...x, state: e.target.value } : x) })),
+                  children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "State" }),
+                    US_STATES.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: s, children: s }, s))
+                  ]
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "input",
+                {
+                  style: { ...inputStyle, flex: 1, padding: "9px 11px" },
+                  inputMode: "tel",
+                  placeholder: "Phone",
+                  value: l.phone || "",
+                  onChange: (e) => setF((p2) => ({ ...p2, lines: (p2.lines || []).map((x, k) => k === i ? { ...x, phone: formatPhone(e.target.value) } : x) }))
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "button",
+                {
+                  onClick: () => setF((p2) => ({ ...p2, lines: (p2.lines || []).filter((x, k) => k !== i) })),
+                  style: { border: "none", background: "none", cursor: "pointer", padding: 4 },
+                  children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" })
+                }
+              )
+            ] }, l.id || i)),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => setF((p2) => ({ ...p2, lines: [...p2.lines || [], { id: uid("ln"), state: "", phone: "", email: "" }] })), children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+              " Add a state line"
+            ] })
+          ] }),
           f.role !== "crew" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Default commission rate (%)", hint: "Starting rate on new jobs. Can be changed per job by an admin.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             "input",
             {
@@ -25335,7 +25442,7 @@ function useDbSync(st) {
           const published = changed.filter((j) => j.portalToken);
           if (published.length && st.brandRef) {
             const snaps = published.map((j) => ({
-              ...buildPortalSnapshot({ ...j, stageLabel: ((st.stagesRef || []).find((x) => x.id === j.stageId) || {}).name || ((st.stagesRef || []).find((x) => x.id === j.stageId) || {}).label || "" }, st.brandRef, j.portalToken),
+              ...buildPortalSnapshot({ ...j, stageLabel: ((st.stagesRef || []).find((x) => x.id === j.stageId) || {}).name || ((st.stagesRef || []).find((x) => x.id === j.stageId) || {}).label || "" }, st.brandRef, j.portalToken, st.usersRef || []),
               revoked: false
             }));
             await db.from("crm_portal").upsert(snaps);
@@ -25809,7 +25916,8 @@ function SupremeCRM() {
     unpackOrg,
     orgDeps,
     brandRef: brand2,
-    stagesRef: stages
+    stagesRef: stages,
+    usersRef: users
   });
   T.primary = brand2.primary || "#28373E";
   T.accent = brand2.accent || "#0A9E98";
