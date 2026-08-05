@@ -484,7 +484,7 @@ const KB_CODES = [
     body: "On slopes from 2:12 up to 4:12, underlayment must be applied in two layers, lapped 19 inches. Carriers routinely scope single-layer felt across the whole roof regardless of slope.",
     supplement: "Slopes measured at ___:12 require two-ply underlayment per R905.2.2. Requesting the additional layer over ___ squares." },
   { sys: "asphalt", title: "Ice barrier at eaves", cite: "IRC R905.1.2", src: "ICC",
-    body: "In areas with a history of ice forming along eaves, an ice barrier of two layers of cemented underlayment or a self-adhering polymer-modified bitumen sheet must extend from the lowest edge to at least 24 inches inside the exterior wall line. Ohio, Kentucky and Illinois all sit in jurisdictions where this is commonly required.",
+    body: "In areas with a history of ice forming along eaves, an ice barrier of two layers of cemented underlayment or a self-adhering polymer-modified bitumen sheet must extend from the lowest edge to at least 24 inches inside the exterior wall line. Whether it applies to a given roof is set by the local jurisdiction, which decides where ice forming along eaves has a history — so check the adopted code for the property's own jurisdiction before scoping it.",
     supplement: "Ice and water shield is required from the eave to 24 inches inside the exterior wall line. Carrier scope omits it entirely / includes only ___ LF." },
   { sys: "asphalt", title: "Fastener count and wind rating", cite: "IRC R905.2.6 / manufacturer instructions", src: "ICC",
     body: "Shingles must be fastened per the manufacturer's published instructions, which govern where they exceed code. Most high-wind warranties require six nails per shingle rather than four, and require nailing in the designated zone. A four-nail scope on a six-nail product voids the wind warranty.",
@@ -589,7 +589,7 @@ const KB_TERMS = [
   ["Betterment", "", "A carrier's term for an improvement over pre-loss condition, which they generally do not owe. Code requirements are not betterment — they are Ordinance and Law."],
   ["Matching", "", "The obligation to produce a reasonably comparable appearance when a partial repair would leave a mismatch. The basis of most full-slope and full-roof arguments."],
   ["Mortgagee clause", "", "Names the lender on the claim cheque. Requires endorsement and often a lender inspection before funds release — the most common reason a paid claim still has not funded."],
-  ["Public adjuster", "", "Licensed to negotiate coverage and settlement on the insured's behalf. In Ohio this is ORC Chapter 3951, and a contractor cannot act as the public adjuster on the same loss."],
+  ["Public adjuster", "", "Licensed by the state to negotiate coverage and settlement on the insured's behalf. Licensing is state law and the statute differs everywhere; in most states a contractor may not act as the public adjuster on a loss it is also repairing. Check the property state's insurance department before referring one."],
   ["Appraisal clause", "", "A policy provision for resolving disputes over the amount of loss, not over coverage. Each side appoints an appraiser, and the two select an umpire. Slower than negotiation but binding on amount."],
   ["Date of loss", "", "The date the damage occurred, not the date it was noticed or reported. Carriers use it to test policy period, deadlines and whether the storm event matches."],
   ["Proof of loss", "", "A sworn statement of the claim amount, sometimes demanded by the carrier with a deadline. Missing the deadline can prejudice the claim; treat any request for one as urgent."],
@@ -710,7 +710,7 @@ const CLAIM_SCENARIOS = [
       "For an aged roof that also has hail impact, granule loss at impact sites (fractured mat under the impact) is diagnostic of storm damage. Photograph in raking light.",
       "Brittleness test on a cool day is more reliable than on hot; document date and temperature.",
       "Request the carrier's engineer report if damage is denied on that basis.",
-      "Where the carrier blames installation or age rather than the storm, Ohio applies efficient proximate cause: if the covered peril was the predominant cause, the loss is covered even with contributing factors. Pin the storm date with NWS wind data and NOAA hail reports, and document neighboring properties.",
+      "Where the carrier blames installation or age rather than the storm, the argument is causation: that the covered peril was the predominant cause, so the loss is covered even with contributing factors. Which causation rule governs is state law — many states apply efficient proximate cause, others enforce anti-concurrent-causation wording in the policy — so confirm the property state's rule before you make the argument. Either way, pin the storm date with NWS wind data and NOAA hail reports, and document neighboring properties.",
     ]},
   { q: "“Roof is too old for full replacement value”",
     setup: "Adjuster settles on Actual Cash Value only, or applies a roof-age depreciation schedule that reduces the payment significantly.",
@@ -19647,14 +19647,39 @@ function ManufacturerSpecs() {
    can synthesize; until then it surfaces the most relevant cited entries.
    ================================================================ */
 const CLAIM_STOPWORDS = new Set("the a an of to in on for is are do does how what when should i my me we our you your can could with and or if it this that at as be by from about".split(" "));
+/* Every corpus record now declares whose law it is. Without this the
+   retrieval index was flat and stateless, so a New Mexico rep asking about
+   drip edge got an Ohio RCO section quoted back with a citation attached —
+   and the edge function is told to use citations verbatim, which made the
+   answer look authoritative. `state: null` means national and is never
+   filtered; a two-letter code is filtered against the job's state. */
+/* Playbook answers and trigger lists carry their cites inside free prose,
+   so the only honest way to tell whose law a record states is to look for
+   an Ohio citation in it. Anything without one is treated as national. */
+/* Tags whose records assert what the law requires. Everything else —
+   manufacturer specs, NRCA practice, the glossary, app help — is national
+   and stays visible in every state. */
+const LAW_STATING_TAGS = new Set(["Code", "Policy", "Playbook", "Supplement"]);
+function ohIfCited(parts) {
+  return /\b(RCO|OAC|O\.A\.C|R\.C\.|ORC)\b/.test((parts || []).join(" ")) ? "OH" : null;
+}
 function buildClaimCorpus() {
   const items = [];
-  (KB_CODES || []).forEach((c) => items.push({ title: c.title, body: `${c.body} ${c.supplement || ""}`, cite: c.cite, source: "Code", tag: "Code" }));
+  /* KB_CODES is mostly IRC, but four records are Ohio insurance regulation
+     wearing a code jacket — the matching provision, the claim-handling
+     deadlines. Their cites carry OAC, so the same test that tags the
+     playbooks tags these. */
+  (KB_CODES || []).forEach((c) => items.push({ title: c.title, body: `${c.body} ${c.supplement || ""}`, cite: c.cite, source: "Code", tag: "Code", state: ohIfCited([c.cite, c.body, c.supplement]) }));
   (KB_TERMS || []).forEach(([term, expand, def]) => items.push({ title: `${term}${expand ? ` — ${expand}` : ""}`, body: def, source: "Glossary", tag: "Term" }));
-  (CLAIM_SCENARIOS || []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook" }));
-  (typeof MORE_SCENARIOS !== "undefined" ? MORE_SCENARIOS : []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook" }));
+  (CLAIM_SCENARIOS || []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook", state: ohIfCited(s.answer) }));
+  (typeof MORE_SCENARIOS !== "undefined" ? MORE_SCENARIOS : []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook", state: ohIfCited(s.answer) }));
   (typeof CARRIER_PATTERNS !== "undefined" ? CARRIER_PATTERNS : []).forEach((c) => items.push({ title: c.title, body: `${c.pattern || ""} ${(c.answer || []).join(" ")}`, source: "Carrier patterns", tag: "Carrier" }));
-  (SUPPLEMENT_TEMPLATES || []).forEach((t) => items.push({ title: t.title, body: `${t.scenario || ""} ${t.wording || ""}`, source: "Supplement template", tag: "Supplement" }));
+  /* The wording carries a {CITE} token that the supplement screen resolves
+     per state through citeFor. The corpus is built once and memoised, so it
+     cannot resolve it — and pushing the raw string surfaced the literal
+     "Per {CITE}, ice barrier is required…" on a source card. Carry the topic
+     so the render can resolve it, and neutralise the token in the body. */
+  (SUPPLEMENT_TEMPLATES || []).forEach((t) => items.push({ title: t.title, topic: t.topic, body: `${t.scenario || ""} ${String(t.wording || "").replace(/\{CITE\}/g, "the code section adopted in this state")}`, source: "Supplement template", tag: "Supplement" }));
   (typeof POLICY_CARDS !== "undefined" ? POLICY_CARDS : []).forEach((c) => items.push({ title: c.title, body: `${c.body || ""} ${(c.callout && c.callout.text) || ""}`, source: "Policy provisions", tag: "Policy" }));
   /* Everything below was already bundled and already maintained — it just
      wasn't reachable from the assistant, so a rep asking "what nail count
@@ -19663,13 +19688,13 @@ function buildClaimCorpus() {
   (typeof NRCA_PRACTICE !== "undefined" ? NRCA_PRACTICE : []).forEach((n) => items.push({ title: `NRCA — ${n.topic}`, body: n.body, cite: n.cite, source: "NRCA best practice", tag: "NRCA" }));
   (typeof IRC_DEEP !== "undefined" ? IRC_DEEP : []).forEach((c) => items.push({ title: `${c.topic}`, body: c.body, cite: c.cite, source: "Building code (IRC)", tag: "Code" }));
   (typeof IRC_BASE !== "undefined" ? IRC_BASE : {}) && Object.entries(IRC_BASE || {}).forEach(([k, v]) => items.push({ title: k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()), body: v.note, cite: v.cite, source: "Building code (IRC)", tag: "Code" }));
-  (typeof PROVISION_TOPICS !== "undefined" ? PROVISION_TOPICS : []).forEach((p) => items.push({ title: p.topic, body: p.note, cite: p.oh, source: "Code provisions", tag: "Code" }));
+  (typeof PROVISION_TOPICS !== "undefined" ? PROVISION_TOPICS : []).forEach((p) => items.push({ title: p.topic, body: p.note, cite: p.oh, source: "Code provisions", tag: "Code", state: "OH" }));
   /* Per-state code provisions: one record per state × topic, so "ice barrier
      in Texas" resolves to the Texas cite rather than the Ohio one. */
   Object.entries(typeof CODE_PROVISIONS !== "undefined" ? CODE_PROVISIONS : {}).forEach(([st, topics]) => {
     Object.entries(topics || {}).forEach(([k, v]) => {
       if (!v || !v.note) return;
-      items.push({ title: `${st} — ${k.replace(/([A-Z])/g, " $1").toLowerCase().trim()}`, body: v.note, cite: v.cite, source: `Building code (${st})`, tag: "Code" });
+      items.push({ title: `${st} — ${k.replace(/([A-Z])/g, " $1").toLowerCase().trim()}`, body: v.note, cite: v.cite, source: `Building code (${st})`, tag: "Code", state: st });
     });
   });
   (typeof MFR_SPECS !== "undefined" ? MFR_SPECS : []).forEach((m) => items.push({
@@ -19680,10 +19705,18 @@ function buildClaimCorpus() {
     title: `${s.mfr} ${s.line}`,
     body: `${s.type}, ${s.status === "disco" ? "discontinued" : "current"}${s.years ? ` (${s.years})` : ""}. ${s.w} by ${s.l} with ${s.exp} exposure. ${s.note || ""}`,
     source: "Shingle database", tag: "Manufacturer" }));
-  (typeof SUPPLEMENT_TRIGGERS !== "undefined" ? SUPPLEMENT_TRIGGERS : []).forEach(([label, cite]) => items.push({ title: label, body: `Commonly omitted from a carrier's scope and supportable on code grounds.`, cite, source: "Supplement trigger", tag: "Supplement" }));
-  (typeof LETTER_TEMPLATES !== "undefined" ? LETTER_TEMPLATES : []).forEach((t) => items.push({ title: `Letter — ${t.title}`, body: `${t.when || ""} ${t.body || ""}`, source: "Letter template", tag: "Letter" }));
-  (typeof LAW_ITEMS !== "undefined" ? LAW_ITEMS : []).forEach((l) => items.push({ title: l.title, body: l.body, source: "Regulation", tag: "Policy" }));
-  (typeof KEY_CONTACTS !== "undefined" ? KEY_CONTACTS : []).forEach(([name, phone, web]) => items.push({ title: name, body: `Technical services / consumer line. ${[phone, web].filter(Boolean).join("  ·  ")}`, source: "Contacts", tag: "Term" }));
+  (typeof SUPPLEMENT_TRIGGERS !== "undefined" ? SUPPLEMENT_TRIGGERS : []).forEach(([label, cite]) => items.push({ title: label, body: `Commonly omitted from a carrier's scope and supportable on code grounds.`, cite, source: "Supplement trigger", tag: "Supplement", state: ohIfCited([cite]) }));
+  /* The bodies are tokenised now, so what the corpus sees is state-neutral
+     — but the letters resolve per state at render time, so the record says
+     so rather than implying the tokens are the answer. */
+  (typeof LETTER_TEMPLATES !== "undefined" ? LETTER_TEMPLATES : []).forEach((t) => items.push({ title: `Letter — ${t.title}`, body: `${t.when || ""} ${String(t.body || "").replace(/\{[A-Z_:a-zA-Z]+\}/g, "the applicable citation")}`, source: "Letter template", tag: "Letter", state: null }));
+  /* Every LAW_ITEMS record is Ohio insurance law — the header comment on
+     the constant says so. Untagged, these were the single biggest source of
+     "the app told a Texas rep what Ohio requires". */
+  (typeof LAW_ITEMS !== "undefined" ? LAW_ITEMS : []).forEach((l) => items.push({ title: l.title, body: l.body, source: "Regulation", tag: "Policy", state: "OH" }));
+  /* Mixed: two Ohio agencies, the rest national manufacturer and NOAA
+     lines. Tagged per row rather than per constant. */
+  (typeof KEY_CONTACTS !== "undefined" ? KEY_CONTACTS : []).forEach(([name, phone, web]) => items.push({ title: name, body: `Technical services / consumer line. ${[phone, web].filter(Boolean).join("  ·  ")}`, source: "Contacts", tag: "Term", state: /\bOhio\b/.test(name) ? "OH" : null }));
   (typeof SIDING_MATCHING !== "undefined" ? [SIDING_MATCHING] : []).forEach((s) => items.push({ title: "Vinyl siding — the matching reality", body: `${(s.points || []).join(" ")} ${s.argument || ""}`, source: "Claim playbook", tag: "Playbook" }));
   (typeof VENT_EXHAUST !== "undefined" ? VENT_EXHAUST : []).forEach((v) => items.push({ title: `Exhaust vent — ${v.name || v[0]}`, body: JSON.stringify(v).replace(/["{}]/g, " "), source: "Ventilation", tag: "Term" }));
   (typeof VENT_INTAKE !== "undefined" ? VENT_INTAKE : []).forEach((v) => items.push({ title: `Intake vent — ${v.name || v[0]}`, body: JSON.stringify(v).replace(/["{}]/g, " "), source: "Ventilation", tag: "Term" }));
@@ -19706,7 +19739,14 @@ function claimCorpus() {
    is also what selects the grounding records when one is — so it keeps a
    permanent job either way. limit is higher for the model than for the
    on-screen cards, which only have room for a handful. */
-function answerClaim(q, limit = 4) {
+/* `state` is the property's state. A record tagged with a different state
+   is dropped outright when it states law (code, regulation, playbook) and
+   down-weighted otherwise; a record with no state is national and untouched.
+
+   The penalty has to be a multiplier. Scoring below adds covered² × 2, so
+   on a long question an additive penalty is swamped by the coverage term
+   and an out-of-state record still wins. */
+function answerClaim(q, limit = 4, state = "") {
   const raw = String(q || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/)
     .filter((w) => w.length > 2 && !CLAIM_STOPWORDS.has(w));
   if (!raw.length) return [];
@@ -19730,7 +19770,19 @@ function answerClaim(q, limit = 4) {
        the minimum-slope rule. */
     score += covered * covered * 2;
     return { it, score };
-  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map((x) => x.it);
+  }).filter((x) => {
+    if (x.score <= 0) return false;
+    const rs = x.it.state;
+    if (!rs || !state || rs === state) return true;
+    /* A record that states another state's law is not "less relevant" —
+       it is wrong for this roof, and quoting it is how a rep ends up
+       citing Ohio administrative code to a Texas adjuster. */
+    return !LAW_STATING_TAGS.has(x.it.tag);
+  }).map((x) => {
+    const rs = x.it.state;
+    const off = rs && state && rs !== state;
+    return off ? { ...x, score: x.score * 0.2 } : x;
+  }).sort((a, b) => b.score - a.score).slice(0, limit).map((x) => x.it);
 }
 
 /* A compact, money-free summary of the open job, so "what's missing on this
@@ -19756,8 +19808,13 @@ function assistantJobContext(job) {
   };
 }
 
-function ClaimAssistant({ job = null }) {
+function ClaimAssistant({ job = null, defaultState = "" }) {
   const auth = AUTH();
+  /* Which state's law applies. From the open job when there is one; from a
+     picker otherwise, because this component is also rendered with no job
+     at all in the Insurance hub and had no state source there whatsoever. */
+  const [askState, setAskState] = useState((job && job.state) || defaultState || "");
+  useEffect(() => { if (job && job.state) setAskState(job.state); }, [job && job.state]);
   const jobSuggestions = job ? [
     "What's missing on this roof before it goes to production?",
     job.claimType === "Insurance"
@@ -19785,8 +19842,8 @@ function ClaimAssistant({ job = null }) {
     /* The local scorer runs first, always. It is the answer when no key is
        deployed, and it is what selects the grounding records when one is —
        so the assistant is never worse than it was, only sometimes better. */
-    const hits = answerClaim(question, 4);
-    const grounding = answerClaim(question, 12);
+    const hits = answerClaim(question, 4, askState);
+    const grounding = answerClaim(question, 12, askState);
     setQ("");
     setMsgs((m) => [...m, { role: "user", text: question }, {
       role: "bot", hits, pending: true,
@@ -19801,7 +19858,14 @@ function ClaimAssistant({ job = null }) {
     try {
       answer = await auth.askAssistant({
         question,
-        records: grounding.map((h) => ({ title: h.title, body: h.body, cite: h.cite || "", source: h.source })),
+        /* `state` travels with each record so the model can be told which
+           jurisdiction a citation belongs to. Without it the prompt's
+           "use the citation verbatim" rule had nothing to weigh against
+           its "code varies by jurisdiction" rule. */
+        records: grounding.map((h) => ({
+          title: h.title, body: h.body, cite: h.cite || "", source: h.source,
+          state: h.state || "national",
+        })),
         job: useJob ? assistantJobContext(job) : null,
       });
     } catch { answer = null; }
@@ -19823,6 +19887,20 @@ function ClaimAssistant({ job = null }) {
           library — building code, manufacturer install specs and warranty terms, NRCA best practice, policy provisions,
           carrier patterns and the claim playbook — with every source shown so you can verify before you quote it.
         </div>
+        {!job && (
+          <Field label="Which state is the property in?"
+            hint="Code sections and insurance regulation are state law. Without this the assistant answers from every state at once.">
+            <select style={selStyle} value={askState} onChange={(e) => setAskState(e.target.value)}>
+              <option value="">All states — nothing filtered</option>
+              {US_STATES.map(([ab, name]) => <option key={ab} value={ab}>{name}</option>)}
+            </select>
+          </Field>
+        )}
+        {job && job.state && (
+          <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8 }}>
+            Answering for <b>{job.state}</b> — records that state another state's law are filtered out.
+          </div>
+        )}
         {job && (
           <label style={{ display: "flex", gap: 9, alignItems: "center", fontSize: 13, cursor: "pointer", marginTop: 10 }}>
             <input type="checkbox" checked={useJob} onChange={(e) => setUseJob(e.target.checked)}
@@ -19865,6 +19943,16 @@ function ClaimAssistant({ job = null }) {
                 <Card key={j} style={{ marginBottom: 8 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 5 }}>
                     <Chip tone={tone[h.tag] || "gray"}>{h.source}</Chip>
+                    {/* Whose law this is. A record with no state applies
+                        anywhere — the IRC, a manufacturer spec, NRCA. Saying
+                        so is the difference between a rep quoting a section
+                        and a rep quoting the wrong state's section. */}
+                    <Chip tone={h.state ? "slate" : "gray"}>{h.state || "Applies nationally"}</Chip>
+                    {/* A supplement template's citation is per state, so it is
+                        resolved here rather than baked into the corpus. */}
+                    {!h.cite && h.topic && askState && (
+                      <Cited fact={asFact(citeFor(askState, h.topic))} compact />
+                    )}
                     {h.cite && <Cited fact={fact(h.cite, {
                       /* Only real code sections read as authority here. The
                          corpus also carries "NRCA Roofing Manual" and
@@ -19897,7 +19985,7 @@ function ClaimAssistant({ job = null }) {
 function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {}, seed = null, onConsumeSeed = () => {} }) {
   const [tab, setTab] = useState(seed && seed.tab ? seed.tab : (seed && seed.zip ? "codes" : "clients"));
   const [zip, setZip] = useState(seed ? seed.zip || "" : "");
-  const [tplState, setTplState] = useState("OH");
+  const [tplState, setTplState] = useState("");
   const [openTpl, setOpenTpl] = useState(null);
   const [resourcePage, setResourcePage] = useState(null);
   const [lookingUp, setLookingUp] = useState(false);
@@ -19960,7 +20048,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
         ))}
       </div>
 
-      {tab === "ask" && <ClaimAssistant />}
+      {tab === "ask" && <ClaimAssistant defaultState={tplState} />}
 
       {tab === "storm" && <StormScout toast={toast} />}
 

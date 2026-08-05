@@ -646,7 +646,7 @@ var KB_CODES = [
     title: "Ice barrier at eaves",
     cite: "IRC R905.1.2",
     src: "ICC",
-    body: "In areas with a history of ice forming along eaves, an ice barrier of two layers of cemented underlayment or a self-adhering polymer-modified bitumen sheet must extend from the lowest edge to at least 24 inches inside the exterior wall line. Ohio, Kentucky and Illinois all sit in jurisdictions where this is commonly required.",
+    body: "In areas with a history of ice forming along eaves, an ice barrier of two layers of cemented underlayment or a self-adhering polymer-modified bitumen sheet must extend from the lowest edge to at least 24 inches inside the exterior wall line. Whether it applies to a given roof is set by the local jurisdiction, which decides where ice forming along eaves has a history \u2014 so check the adopted code for the property's own jurisdiction before scoping it.",
     supplement: "Ice and water shield is required from the eave to 24 inches inside the exterior wall line. Carrier scope omits it entirely / includes only ___ LF."
   },
   {
@@ -876,7 +876,7 @@ var KB_TERMS = [
   ["Betterment", "", "A carrier's term for an improvement over pre-loss condition, which they generally do not owe. Code requirements are not betterment \u2014 they are Ordinance and Law."],
   ["Matching", "", "The obligation to produce a reasonably comparable appearance when a partial repair would leave a mismatch. The basis of most full-slope and full-roof arguments."],
   ["Mortgagee clause", "", "Names the lender on the claim cheque. Requires endorsement and often a lender inspection before funds release \u2014 the most common reason a paid claim still has not funded."],
-  ["Public adjuster", "", "Licensed to negotiate coverage and settlement on the insured's behalf. In Ohio this is ORC Chapter 3951, and a contractor cannot act as the public adjuster on the same loss."],
+  ["Public adjuster", "", "Licensed by the state to negotiate coverage and settlement on the insured's behalf. Licensing is state law and the statute differs everywhere; in most states a contractor may not act as the public adjuster on a loss it is also repairing. Check the property state's insurance department before referring one."],
   ["Appraisal clause", "", "A policy provision for resolving disputes over the amount of loss, not over coverage. Each side appoints an appraiser, and the two select an umpire. Slower than negotiation but binding on amount."],
   ["Date of loss", "", "The date the damage occurred, not the date it was noticed or reported. Carriers use it to test policy period, deadlines and whether the storm event matches."],
   ["Proof of loss", "", "A sworn statement of the claim amount, sometimes demanded by the carrier with a deadline. Missing the deadline can prejudice the claim; treat any request for one as urgent."],
@@ -1006,7 +1006,7 @@ var CLAIM_SCENARIOS = [
       "For an aged roof that also has hail impact, granule loss at impact sites (fractured mat under the impact) is diagnostic of storm damage. Photograph in raking light.",
       "Brittleness test on a cool day is more reliable than on hot; document date and temperature.",
       "Request the carrier's engineer report if damage is denied on that basis.",
-      "Where the carrier blames installation or age rather than the storm, Ohio applies efficient proximate cause: if the covered peril was the predominant cause, the loss is covered even with contributing factors. Pin the storm date with NWS wind data and NOAA hail reports, and document neighboring properties."
+      "Where the carrier blames installation or age rather than the storm, the argument is causation: that the covered peril was the predominant cause, so the loss is covered even with contributing factors. Which causation rule governs is state law \u2014 many states apply efficient proximate cause, others enforce anti-concurrent-causation wording in the policy \u2014 so confirm the property state's rule before you make the argument. Either way, pin the storm date with NWS wind data and NOAA hail reports, and document neighboring properties."
     ]
   },
   {
@@ -21323,24 +21323,28 @@ function ManufacturerSpecs() {
   ] });
 }
 var CLAIM_STOPWORDS = new Set("the a an of to in on for is are do does how what when should i my me we our you your can could with and or if it this that at as be by from about".split(" "));
+var LAW_STATING_TAGS = /* @__PURE__ */ new Set(["Code", "Policy", "Playbook", "Supplement"]);
+function ohIfCited(parts) {
+  return /\b(RCO|OAC|O\.A\.C|R\.C\.|ORC)\b/.test((parts || []).join(" ")) ? "OH" : null;
+}
 function buildClaimCorpus() {
   const items = [];
-  (KB_CODES || []).forEach((c) => items.push({ title: c.title, body: `${c.body} ${c.supplement || ""}`, cite: c.cite, source: "Code", tag: "Code" }));
+  (KB_CODES || []).forEach((c) => items.push({ title: c.title, body: `${c.body} ${c.supplement || ""}`, cite: c.cite, source: "Code", tag: "Code", state: ohIfCited([c.cite, c.body, c.supplement]) }));
   (KB_TERMS || []).forEach(([term, expand, def]) => items.push({ title: `${term}${expand ? ` \u2014 ${expand}` : ""}`, body: def, source: "Glossary", tag: "Term" }));
-  (CLAIM_SCENARIOS || []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook" }));
-  (typeof MORE_SCENARIOS !== "undefined" ? MORE_SCENARIOS : []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook" }));
+  (CLAIM_SCENARIOS || []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook", state: ohIfCited(s.answer) }));
+  (typeof MORE_SCENARIOS !== "undefined" ? MORE_SCENARIOS : []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook", state: ohIfCited(s.answer) }));
   (typeof CARRIER_PATTERNS !== "undefined" ? CARRIER_PATTERNS : []).forEach((c) => items.push({ title: c.title, body: `${c.pattern || ""} ${(c.answer || []).join(" ")}`, source: "Carrier patterns", tag: "Carrier" }));
-  (SUPPLEMENT_TEMPLATES || []).forEach((t) => items.push({ title: t.title, body: `${t.scenario || ""} ${t.wording || ""}`, source: "Supplement template", tag: "Supplement" }));
+  (SUPPLEMENT_TEMPLATES || []).forEach((t) => items.push({ title: t.title, topic: t.topic, body: `${t.scenario || ""} ${String(t.wording || "").replace(/\{CITE\}/g, "the code section adopted in this state")}`, source: "Supplement template", tag: "Supplement" }));
   (typeof POLICY_CARDS !== "undefined" ? POLICY_CARDS : []).forEach((c) => items.push({ title: c.title, body: `${c.body || ""} ${c.callout && c.callout.text || ""}`, source: "Policy provisions", tag: "Policy" }));
   (typeof INSTALL_SPECS !== "undefined" ? INSTALL_SPECS : []).forEach((s) => items.push({ title: `${s.mfr} \u2014 ${s.topic}`, body: s.spec, cite: s.cite, source: "Manufacturer install spec", tag: "Manufacturer" }));
   (typeof NRCA_PRACTICE !== "undefined" ? NRCA_PRACTICE : []).forEach((n) => items.push({ title: `NRCA \u2014 ${n.topic}`, body: n.body, cite: n.cite, source: "NRCA best practice", tag: "NRCA" }));
   (typeof IRC_DEEP !== "undefined" ? IRC_DEEP : []).forEach((c) => items.push({ title: `${c.topic}`, body: c.body, cite: c.cite, source: "Building code (IRC)", tag: "Code" }));
   (typeof IRC_BASE !== "undefined" ? IRC_BASE : {}) && Object.entries(IRC_BASE || {}).forEach(([k, v]) => items.push({ title: k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()), body: v.note, cite: v.cite, source: "Building code (IRC)", tag: "Code" }));
-  (typeof PROVISION_TOPICS !== "undefined" ? PROVISION_TOPICS : []).forEach((p) => items.push({ title: p.topic, body: p.note, cite: p.oh, source: "Code provisions", tag: "Code" }));
+  (typeof PROVISION_TOPICS !== "undefined" ? PROVISION_TOPICS : []).forEach((p) => items.push({ title: p.topic, body: p.note, cite: p.oh, source: "Code provisions", tag: "Code", state: "OH" }));
   Object.entries(typeof CODE_PROVISIONS !== "undefined" ? CODE_PROVISIONS : {}).forEach(([st, topics]) => {
     Object.entries(topics || {}).forEach(([k, v]) => {
       if (!v || !v.note) return;
-      items.push({ title: `${st} \u2014 ${k.replace(/([A-Z])/g, " $1").toLowerCase().trim()}`, body: v.note, cite: v.cite, source: `Building code (${st})`, tag: "Code" });
+      items.push({ title: `${st} \u2014 ${k.replace(/([A-Z])/g, " $1").toLowerCase().trim()}`, body: v.note, cite: v.cite, source: `Building code (${st})`, tag: "Code", state: st });
     });
   });
   (typeof MFR_SPECS !== "undefined" ? MFR_SPECS : []).forEach((m) => items.push({
@@ -21355,10 +21359,10 @@ function buildClaimCorpus() {
     source: "Shingle database",
     tag: "Manufacturer"
   }));
-  (typeof SUPPLEMENT_TRIGGERS !== "undefined" ? SUPPLEMENT_TRIGGERS : []).forEach(([label, cite]) => items.push({ title: label, body: `Commonly omitted from a carrier's scope and supportable on code grounds.`, cite, source: "Supplement trigger", tag: "Supplement" }));
-  (typeof LETTER_TEMPLATES !== "undefined" ? LETTER_TEMPLATES : []).forEach((t) => items.push({ title: `Letter \u2014 ${t.title}`, body: `${t.when || ""} ${t.body || ""}`, source: "Letter template", tag: "Letter" }));
-  (typeof LAW_ITEMS !== "undefined" ? LAW_ITEMS : []).forEach((l) => items.push({ title: l.title, body: l.body, source: "Regulation", tag: "Policy" }));
-  (typeof KEY_CONTACTS !== "undefined" ? KEY_CONTACTS : []).forEach(([name, phone, web]) => items.push({ title: name, body: `Technical services / consumer line. ${[phone, web].filter(Boolean).join("  \xB7  ")}`, source: "Contacts", tag: "Term" }));
+  (typeof SUPPLEMENT_TRIGGERS !== "undefined" ? SUPPLEMENT_TRIGGERS : []).forEach(([label, cite]) => items.push({ title: label, body: `Commonly omitted from a carrier's scope and supportable on code grounds.`, cite, source: "Supplement trigger", tag: "Supplement", state: ohIfCited([cite]) }));
+  (typeof LETTER_TEMPLATES !== "undefined" ? LETTER_TEMPLATES : []).forEach((t) => items.push({ title: `Letter \u2014 ${t.title}`, body: `${t.when || ""} ${String(t.body || "").replace(/\{[A-Z_:a-zA-Z]+\}/g, "the applicable citation")}`, source: "Letter template", tag: "Letter", state: null }));
+  (typeof LAW_ITEMS !== "undefined" ? LAW_ITEMS : []).forEach((l) => items.push({ title: l.title, body: l.body, source: "Regulation", tag: "Policy", state: "OH" }));
+  (typeof KEY_CONTACTS !== "undefined" ? KEY_CONTACTS : []).forEach(([name, phone, web]) => items.push({ title: name, body: `Technical services / consumer line. ${[phone, web].filter(Boolean).join("  \xB7  ")}`, source: "Contacts", tag: "Term", state: /\bOhio\b/.test(name) ? "OH" : null }));
   (typeof SIDING_MATCHING !== "undefined" ? [SIDING_MATCHING] : []).forEach((s) => items.push({ title: "Vinyl siding \u2014 the matching reality", body: `${(s.points || []).join(" ")} ${s.argument || ""}`, source: "Claim playbook", tag: "Playbook" }));
   (typeof VENT_EXHAUST !== "undefined" ? VENT_EXHAUST : []).forEach((v) => items.push({ title: `Exhaust vent \u2014 ${v.name || v[0]}`, body: JSON.stringify(v).replace(/["{}]/g, " "), source: "Ventilation", tag: "Term" }));
   (typeof VENT_INTAKE !== "undefined" ? VENT_INTAKE : []).forEach((v) => items.push({ title: `Intake vent \u2014 ${v.name || v[0]}`, body: JSON.stringify(v).replace(/["{}]/g, " "), source: "Ventilation", tag: "Term" }));
@@ -21370,7 +21374,7 @@ function claimCorpus() {
   if (!_claimCorpus) _claimCorpus = buildClaimCorpus();
   return _claimCorpus;
 }
-function answerClaim(q, limit = 4) {
+function answerClaim(q, limit = 4, state = "") {
   const raw = String(q || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !CLAIM_STOPWORDS.has(w));
   if (!raw.length) return [];
   const stem = (w) => w.replace(/ies$/, "y").replace(/(sses|ches|shes|xes)$/, (m) => m.slice(0, -2)).replace(/s$/, "");
@@ -21386,7 +21390,16 @@ function answerClaim(q, limit = 4) {
     });
     score += covered * covered * 2;
     return { it, score };
-  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map((x) => x.it);
+  }).filter((x) => {
+    if (x.score <= 0) return false;
+    const rs = x.it.state;
+    if (!rs || !state || rs === state) return true;
+    return !LAW_STATING_TAGS.has(x.it.tag);
+  }).map((x) => {
+    const rs = x.it.state;
+    const off = rs && state && rs !== state;
+    return off ? { ...x, score: x.score * 0.2 } : x;
+  }).sort((a, b) => b.score - a.score).slice(0, limit).map((x) => x.it);
 }
 function assistantJobContext(job) {
   if (!job) return null;
@@ -21405,8 +21418,12 @@ function assistantJobContext(job) {
     scheduled: !!job.schedDate
   };
 }
-function ClaimAssistant({ job = null }) {
+function ClaimAssistant({ job = null, defaultState = "" }) {
   const auth = AUTH();
+  const [askState, setAskState] = (0, import_react.useState)(job && job.state || defaultState || "");
+  (0, import_react.useEffect)(() => {
+    if (job && job.state) setAskState(job.state);
+  }, [job && job.state]);
   const jobSuggestions = job ? [
     "What's missing on this roof before it goes to production?",
     job.claimType === "Insurance" ? "What should I be supplementing for on this claim?" : "What does code require on a replacement here?"
@@ -21428,8 +21445,8 @@ function ClaimAssistant({ job = null }) {
   const ask = async (text) => {
     const question = (text || "").trim();
     if (!question || busy) return;
-    const hits = answerClaim(question, 4);
-    const grounding = answerClaim(question, 12);
+    const hits = answerClaim(question, 4, askState);
+    const grounding = answerClaim(question, 12, askState);
     setQ("");
     setMsgs((m) => [...m, { role: "user", text: question }, {
       role: "bot",
@@ -21446,7 +21463,17 @@ function ClaimAssistant({ job = null }) {
     try {
       answer = await auth.askAssistant({
         question,
-        records: grounding.map((h) => ({ title: h.title, body: h.body, cite: h.cite || "", source: h.source })),
+        /* `state` travels with each record so the model can be told which
+           jurisdiction a citation belongs to. Without it the prompt's
+           "use the citation verbatim" rule had nothing to weigh against
+           its "code varies by jurisdiction" rule. */
+        records: grounding.map((h) => ({
+          title: h.title,
+          body: h.body,
+          cite: h.cite || "",
+          source: h.source,
+          state: h.state || "national"
+        })),
         job: useJob ? assistantJobContext(job) : null
       });
     } catch {
@@ -21466,6 +21493,22 @@ function ClaimAssistant({ job = null }) {
         " sources"
       ] }), children: "Roofing assistant" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: "Ask a claim, code, manufacturer, or adjuster question in plain words. Answers are grounded in this app's own library \u2014 building code, manufacturer install specs and warranty terms, NRCA best practice, policy provisions, carrier patterns and the claim playbook \u2014 with every source shown so you can verify before you quote it." }),
+      !job && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        Field,
+        {
+          label: "Which state is the property in?",
+          hint: "Code sections and insurance regulation are state law. Without this the assistant answers from every state at once.",
+          children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: askState, onChange: (e) => setAskState(e.target.value), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "All states \u2014 nothing filtered" }),
+            US_STATES.map(([ab, name]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: ab, children: name }, ab))
+          ] })
+        }
+      ),
+      job && job.state && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 8 }, children: [
+        "Answering for ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: job.state }),
+        " \u2014 records that state another state's law are filtered out."
+      ] }),
       job && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 9, alignItems: "center", fontSize: 13, cursor: "pointer", marginTop: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "input",
@@ -21497,6 +21540,8 @@ function ClaimAssistant({ job = null }) {
         (m.hits || []).map((h, j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 8 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 5 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: tone[h.tag] || "gray", children: h.source }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: h.state ? "slate" : "gray", children: h.state || "Applies nationally" }),
+            !h.cite && h.topic && askState && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: asFact(citeFor(askState, h.topic)), compact: true }),
             h.cite && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: fact(h.cite, {
               /* Only real code sections read as authority here. The
                  corpus also carries "NRCA Roofing Manual" and
@@ -21533,7 +21578,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
 } }) {
   const [tab, setTab] = (0, import_react.useState)(seed && seed.tab ? seed.tab : seed && seed.zip ? "codes" : "clients");
   const [zip, setZip] = (0, import_react.useState)(seed ? seed.zip || "" : "");
-  const [tplState, setTplState] = (0, import_react.useState)("OH");
+  const [tplState, setTplState] = (0, import_react.useState)("");
   const [openTpl, setOpenTpl] = (0, import_react.useState)(null);
   const [resourcePage, setResourcePage] = (0, import_react.useState)(null);
   const [lookingUp, setLookingUp] = (0, import_react.useState)(false);
@@ -21587,7 +21632,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
       background: tab === id ? T.primary : S.card,
       color: tab === id ? "#fff" : S.ink
     }, children: label }, id)) }),
-    tab === "ask" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimAssistant, {}),
+    tab === "ask" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimAssistant, { defaultState: tplState }),
     tab === "storm" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StormScout, { toast }),
     tab === "search" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(

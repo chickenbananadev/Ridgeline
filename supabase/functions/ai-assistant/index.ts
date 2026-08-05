@@ -38,8 +38,11 @@ const SYSTEM = `You are the knowledge assistant inside RoofStride, a CRM used by
 You answer ONLY from the reference records supplied in the user message. These come from the app's own library: building code provisions, manufacturer install specifications and warranty terms, NRCA best practice, insurance policy provisions, carrier behavior patterns, claim playbooks, supplement templates, and glossary terms.
 
 Rules:
-- Ground every substantive claim in a supplied record and name the source in the answer, e.g. "per IRC R905.2.8.5" or "per GAF's technical bulletin". If a record carries a citation, use it verbatim.
+- Ground every substantive claim in a supplied record and name the source in the answer, e.g. "per IRC R905.2.8.5" or "per GAF's technical bulletin". If a record carries a citation, quote it exactly as written — never renumber or reword a section.
 - If the records do not answer the question, say so plainly and say what would answer it (a specific code section, the carrier's scope sheet, a manufacturer's technical services line). Do not fill the gap from memory — a confidently wrong code cite gets a supplement denied and costs the contractor real money.
+- EVERY record carries a state attribute. state="national" means it applies anywhere. A two-letter code means that record states one state's law and nothing else.
+- If the job is in a state, you may only cite a record whose state is that state or "national". Never present one state's code section or insurance regulation as the answer for a different state — that is the single most damaging thing you can do here, because the rep will put it in writing to an adjuster and lose the argument along with their credibility on every other line.
+- If no record covers the job's state, say that plainly: name what is missing, say the equivalent rule in that state has to be checked locally, and stop. A rep who hears "I don't have that for Texas" is better off than one who hears Ohio's answer.
 - Code varies by jurisdiction and policies vary by carrier. When the answer depends on either, say which one and tell them to verify locally.
 - You are not a lawyer and this is not legal advice. Do not tell anyone whether they have a legal claim, and do not draft anything that reads as a legal demand. Explaining what a policy provision or regulation says, and how a contractor typically documents a position, is fine.
 - Never invent a code section, a manufacturer specification, a warranty term, a phone number, or a dollar figure.
@@ -85,8 +88,12 @@ Deno.serve(async (req) => {
     }
 
     const context = records.map((r: Record<string, unknown>, i: number) => {
-      const cite = r.cite ? ` [${clip(r.cite, 80)}]` : "";
-      return `<record id="${i + 1}" source="${clip(r.source, 60)}"${cite ? ` cite="${clip(r.cite, 80)}"` : ""}>
+      const cite = r.cite ? ` cite="${clip(r.cite, 80)}"` : "";
+      /* Whose law this record states. "national" applies anywhere; a
+         two-letter code is one state's and only that state's. Without
+         this the model had no way to honour the jurisdiction rule above. */
+      const st = clip(r.state || "national", 10);
+      return `<record id="${i + 1}" source="${clip(r.source, 60)}" state="${st}"${cite}>
 ${clip(r.title, 200)}
 ${clip(r.body, MAX_BODY)}
 </record>`;
