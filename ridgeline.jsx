@@ -19832,6 +19832,12 @@ async function uploadJobFile(jobId, file) {
   const url = await readAsDataUrl(file);
   return { storage: "inline", key, url, size: file.size, mime: file.type };
 }
+/* Company-level documents (COIs, licenses, warranty terms) are not tied to
+   a job, so they get their own key prefix in the same bucket rather than a
+   second bucket to provision. Same storage, same inline fallback below the
+   3 MB cap — reusing uploadJobFile's tested path rather than a parallel one
+   that could drift from it. */
+function uploadCompanyFile(file) { return uploadJobFile("_company", file); }
 
 function TabFiles({ job, mut, toast }) {
   const [cat, setCat] = useState(FILE_CATS[0]);
@@ -23088,7 +23094,10 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
   const [f, setF] = useState({ name: "", cat: DOC_CATEGORIES[0], expires: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
   const fileRef = useRef(null);
+  const pendingFile = useRef(null);
   const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
 
   const today = todayIso();
@@ -23115,17 +23124,40 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   const onFile = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    /* Held in a ref, not state — a File object doesn't survive being put
+       through setState-and-read-back the way this sheet's other fields do,
+       and a ref is enough since nothing here needs to re-render on it. */
+    pendingFile.current = file;
     setF({ name: file.name, cat: f.cat, expires: "" });
+    setErr("");
     setAdding(true);
     e.target.value = "";
   };
-  const save = () => {
+  /* Same rule uploadJobFile's callers already follow: an upload that fails
+     records nothing, rather than a row that claims to hold a document that
+     was never actually stored — which was the entire bug here. */
+  const save = async () => {
+    const file = pendingFile.current;
+    if (!file) { setErr("Choose a file first."); return; }
+    setBusy(true); setErr("");
+    let up = null;
+    try {
+      up = await uploadCompanyFile(file);
+    } catch (e) {
+      setBusy(false);
+      setErr((e && e.message) || "Couldn't save that file.");
+      return;
+    }
+    setBusy(false);
+    const sizeKb = up.size ? `${Math.max(1, Math.round(up.size / 1024))} KB` : "—";
     setDocs([...docs, {
-      id: uid("d"), name: f.name.trim(), cat: f.cat, size: "—",
+      id: uid("d"), name: f.name.trim(), cat: f.cat, size: sizeKb,
       at: today, by: currentUser.name, pinned: false, expires: f.expires || null,
+      url: up.url, storage: up.storage, storageKey: up.key, mime: up.mime,
     }]);
+    pendingFile.current = null;
     setAdding(false); setF({ name: "", cat: DOC_CATEGORIES[0], expires: "" });
-    toast("Document added");
+    toast("Document saved");
   };
 
   return (
@@ -23199,20 +23231,39 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
             <KV k="Category" v={viewing.cat} />
             <KV k="Added" v={`${viewing.at} by ${viewing.by}`} />
             {viewing.expires && <KV k="Expires" v={viewing.expires} />}
-            <div style={{
-              marginTop: 14, border: `1.5px dashed ${S.line}`, borderRadius: 12, padding: "34px 16px",
-              textAlign: "center", color: S.sub, fontSize: 13.5, lineHeight: 1.6,
-            }}>
-              <FileText size={28} color="#C7CBD1" style={{ marginBottom: 8 }} />
-              <div>Preview isn't available yet — files aren't stored anywhere while the app runs on in-memory data.
-              Once documents are wired to Supabase Storage, this opens the actual PDF.</div>
-            </div>
+            {viewing.url ? (
+              <a href={viewing.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                <div style={{
+                  marginTop: 14, border: `1.5px solid ${S.line}`, borderRadius: 12, padding: "20px 16px",
+                  textAlign: "center", color: T.accent, fontSize: 13.5, lineHeight: 1.6, cursor: "pointer",
+                }}>
+                  <FileText size={28} color={T.accent} style={{ marginBottom: 8 }} />
+                  <div style={{ fontWeight: 700 }}>Open {viewing.name}</div>
+                  {viewing.storage === "inline" && (
+                    <div style={{ fontSize: 11.5, color: S.sub, marginTop: 4, fontWeight: 400 }}>
+                      Stored inline — connect Supabase Storage under Setup &amp; keys for full-size files.
+                    </div>
+                  )}
+                </div>
+              </a>
+            ) : (
+              <div style={{
+                marginTop: 14, border: `1.5px dashed ${S.line}`, borderRadius: 12, padding: "34px 16px",
+                textAlign: "center", color: S.sub, fontSize: 13.5, lineHeight: 1.6,
+              }}>
+                <FileText size={28} color="#C7CBD1" style={{ marginBottom: 8 }} />
+                <div>This record predates file storage and has no file attached — only the name and category were
+                saved. Delete it and re-upload to attach the actual document.</div>
+              </div>
+            )}
           </>
         )}
       </Sheet>
 
-      <Sheet open={adding} onClose={() => setAdding(false)} title="Add document"
-        footer={<Btn style={{ width: "100%" }} disabled={!f.name.trim()} onClick={save}>Save document</Btn>}>
+      <Sheet open={adding} onClose={() => { setAdding(false); setErr(""); }} title="Add document"
+        footer={<Btn style={{ width: "100%" }} disabled={!f.name.trim() || busy} onClick={save}>
+          {busy ? "Saving…" : "Save document"}
+        </Btn>}>
         <Field label="File name"><input style={inputStyle} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
         <Field label="Category">
           <select style={selStyle} value={f.cat} onChange={(e) => setF({ ...f, cat: e.target.value })}>
@@ -23222,6 +23273,7 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
         <Field label="Expiration date" hint="Optional. Certificates and licenses get an expiry warning 60 days out.">
           <input style={inputStyle} type="date" value={f.expires} onChange={(e) => setF({ ...f, expires: e.target.value })} />
         </Field>
+        {err && <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 4 }}>{err}</div>}
       </Sheet>
     </div>
   );

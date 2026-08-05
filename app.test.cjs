@@ -21461,6 +21461,9 @@ async function uploadJobFile(jobId, file) {
   const url = await readAsDataUrl(file);
   return { storage: "inline", key, url, size: file.size, mime: file.type };
 }
+function uploadCompanyFile(file) {
+  return uploadJobFile("_company", file);
+}
 function TabFiles({ job, mut, toast }) {
   const [cat, setCat] = (0, import_react.useState)(FILE_CATS[0]);
   const [busy, setBusy] = (0, import_react.useState)(false);
@@ -24710,7 +24713,10 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   const [q, setQ] = (0, import_react.useState)("");
   const [adding, setAdding] = (0, import_react.useState)(false);
   const [f, setF] = (0, import_react.useState)({ name: "", cat: DOC_CATEGORIES[0], expires: "" });
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const [err, setErr] = (0, import_react.useState)("");
   const fileRef = (0, import_react.useRef)(null);
+  const pendingFile = (0, import_react.useRef)(null);
   const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
   const today = todayIso();
   const soon = isoLocal(new Date(Date.now() + 60 * 864e5));
@@ -24733,24 +24739,48 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   const onFile = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    pendingFile.current = file;
     setF({ name: file.name, cat: f.cat, expires: "" });
+    setErr("");
     setAdding(true);
     e.target.value = "";
   };
-  const save = () => {
+  const save = async () => {
+    const file = pendingFile.current;
+    if (!file) {
+      setErr("Choose a file first.");
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    let up = null;
+    try {
+      up = await uploadCompanyFile(file);
+    } catch (e) {
+      setBusy(false);
+      setErr(e && e.message || "Couldn't save that file.");
+      return;
+    }
+    setBusy(false);
+    const sizeKb = up.size ? `${Math.max(1, Math.round(up.size / 1024))} KB` : "\u2014";
     setDocs([...docs, {
       id: uid("d"),
       name: f.name.trim(),
       cat: f.cat,
-      size: "\u2014",
+      size: sizeKb,
       at: today,
       by: currentUser.name,
       pinned: false,
-      expires: f.expires || null
+      expires: f.expires || null,
+      url: up.url,
+      storage: up.storage,
+      storageKey: up.key,
+      mime: up.mime
     }]);
+    pendingFile.current = null;
     setAdding(false);
     setF({ name: "", cat: DOC_CATEGORIES[0], expires: "" });
-    toast("Document added");
+    toast("Document saved");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: fileRef, type: "file", onChange: onFile, style: { display: "none" } }),
@@ -24839,7 +24869,24 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Category", v: viewing.cat }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Added", v: `${viewing.at} by ${viewing.by}` }),
       viewing.expires && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Expires", v: viewing.expires }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+      viewing.url ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: viewing.url, target: "_blank", rel: "noreferrer", style: { textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+        marginTop: 14,
+        border: `1.5px solid ${S.line}`,
+        borderRadius: 12,
+        padding: "20px 16px",
+        textAlign: "center",
+        color: T.accent,
+        fontSize: 13.5,
+        lineHeight: 1.6,
+        cursor: "pointer"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.FileText, { size: 28, color: T.accent, style: { marginBottom: 8 } }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontWeight: 700 }, children: [
+          "Open ",
+          viewing.name
+        ] }),
+        viewing.storage === "inline" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 4, fontWeight: 400 }, children: "Stored inline \u2014 connect Supabase Storage under Setup & keys for full-size files." })
+      ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
         marginTop: 14,
         border: `1.5px dashed ${S.line}`,
         borderRadius: 12,
@@ -24850,20 +24897,24 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
         lineHeight: 1.6
       }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.FileText, { size: 28, color: "#C7CBD1", style: { marginBottom: 8 } }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: "Preview isn't available yet \u2014 files aren't stored anywhere while the app runs on in-memory data. Once documents are wired to Supabase Storage, this opens the actual PDF." })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: "This record predates file storage and has no file attached \u2014 only the name and category were saved. Delete it and re-upload to attach the actual document." })
       ] })
     ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
       Sheet,
       {
         open: adding,
-        onClose: () => setAdding(false),
+        onClose: () => {
+          setAdding(false);
+          setErr("");
+        },
         title: "Add document",
-        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, disabled: !f.name.trim(), onClick: save, children: "Save document" }),
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, disabled: !f.name.trim() || busy, onClick: save, children: busy ? "Saving\u2026" : "Save document" }),
         children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "File name", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.name, onChange: (e) => setF({ ...f, name: e.target.value }) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Category", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: f.cat, onChange: (e) => setF({ ...f, cat: e.target.value }), children: DOC_CATEGORIES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: c }, c)) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Expiration date", hint: "Optional. Certificates and licenses get an expiry warning 60 days out.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "date", value: f.expires, onChange: (e) => setF({ ...f, expires: e.target.value }) }) })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Expiration date", hint: "Optional. Certificates and licenses get an expiry warning 60 days out.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "date", value: f.expires, onChange: (e) => setF({ ...f, expires: e.target.value }) }) }),
+          err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginTop: 4 }, children: err })
         ]
       }
     )
