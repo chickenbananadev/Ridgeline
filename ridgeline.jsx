@@ -88,55 +88,69 @@ const JURISDICTIONS = {
     codeName: "Residential Code of Ohio (RCO)", codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "Roofing permit required for full replacement; verify with the building department.",
-    inspector: { office: "Forest Park Building Department", phone: "(513) 555-0100 — sample, verify", address: "1201 W Kemper Rd, Forest Park, OH" },
+    inspector: { office: "Forest Park Building Department", phone: "5135955264", address: "1201 W Kemper Rd, Forest Park, OH 45240",
+      email: "bldgdept@forestpark.org", web: "https://www.forestpark.org/government/building/index.php",
+      source: "https://www.forestpark.org/government/building/contact_the_building_department.php" },
     /* The inspector phone below is a placeholder, not a checked number.
        This used to say verified:true, which painted a green "Verified"
        chip and a tap-to-call button over a 555 number. Until the office
        confirms it, it is unverified and needs a contact. */
-    verified: false, needsContact: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
+    verified: false, needsContact: false, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
   },
   "45410": {
     zip: "45410", city: "Dayton", county: "Montgomery County", state: "OH",
     codeName: "Residential Code of Ohio (RCO)", codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "Permit required; verify regional building services handling for residential.",
-    inspector: { office: "City of Dayton — Building Inspection", phone: "(937) 555-0100 — sample, verify", address: "371 W 2nd St, Dayton, OH" },
+    inspector: { office: "City of Dayton — Division of Building Inspection", phone: "9373333980", address: "371 W Second St, 2nd floor (One Stop Center), Dayton, OH 45402",
+      web: "https://www.daytonohio.gov/190/Building-Inspection",
+      note: "Permit status and plan-submittal questions: 1(937)333-3883.",
+      source: "https://www.daytonohio.gov/650/Building-Inspection-Directory" },
     /* The inspector phone below is a placeholder, not a checked number.
        This used to say verified:true, which painted a green "Verified"
        chip and a tap-to-call button over a 555 number. Until the office
        confirms it, it is unverified and needs a contact. */
-    verified: false, needsContact: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
+    verified: false, needsContact: false, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
   },
   "45056": {
     zip: "45056", city: "Oxford", county: "Butler County", state: "OH",
     codeName: "Residential Code of Ohio (RCO)", codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "Roofing permit required for tear-off and re-roof.",
-    inspector: { office: "Butler County Building Department", phone: "(513) 555-0100 — sample, verify", address: "130 High St, Hamilton, OH" },
+    inspector: { office: "City of Oxford — Community Development", phone: "5135245204", address: "15 S College Ave, Oxford, OH 45056",
+      email: "commdev@cityofoxford.org", web: "https://www.cityofoxford.org/government/departments/community_development/construction_and_development/building_and_zoning_permits.php",
+      note: "Oxford runs its own building and zoning office — Butler County does not serve this address.",
+      source: "https://www.cityofoxford.org/departments/community_development/building_zoning_permit.php" },
     /* The inspector phone below is a placeholder, not a checked number.
        This used to say verified:true, which painted a green "Verified"
        chip and a tap-to-call button over a 555 number. Until the office
        confirms it, it is unverified and needs a contact. */
-    verified: false, needsContact: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
+    verified: false, needsContact: false, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
   },
   "43235": {
     zip: "43235", city: "Columbus", county: "Franklin County", state: "OH",
     codeName: "Residential Code of Ohio (RCO)", codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "City of Columbus permit required for re-roofing.",
-    inspector: { office: "Columbus Building & Zoning Services", phone: "(614) 555-0100 — sample, verify", address: "111 N Front St, Columbus, OH" },
+    inspector: { office: "City of Columbus — Building & Zoning Services", phone: "6146457433", address: "111 N Front St, Columbus, OH 43215",
+      web: "https://www.columbus.gov/Business-Development/Building-Zoning-Services",
+      note: "Counter hours 9:00-4:00 weekdays.",
+      source: "https://www.columbus.gov/files/sharedassets/city/v/7/building-and-zoning/bzs-contact-sheet-2026.pdf" },
     /* The inspector phone below is a placeholder, not a checked number.
        This used to say verified:true, which painted a green "Verified"
        chip and a tap-to-call button over a 555 number. Until the office
        confirms it, it is unverified and needs a contact. */
-    verified: false, needsContact: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
+    verified: false, needsContact: false, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
   },
   "41179": {
     zip: "41179", city: "Vanceburg", county: "Lewis County", state: "KY",
     codeName: "Kentucky Residential Code (KRC)", codeEdition: "Current KRC — verify edition",
     adoption: "Statewide residential code",
     permit: "Verify permit handling with the county building official before tear-off.",
-    inspector: { office: "Lewis County Building Official", phone: "(606) 555-0100 — sample, verify", address: "Vanceburg, KY" },
+    inspector: { office: "No local building inspector — Lewis County", phone: "6067963062", address: "County Clerk, 112 2nd St, Vanceburg, KY 41179",
+      web: "https://dhbc.ky.gov",
+      note: "Kentucky DHBC lists no local building inspector for Lewis County. The Kentucky Residential Code still applies; commercial work goes to the state department. The clerk\u2019s number above is the starting point for zoning, not a building official.",
+      source: "https://dhbc.ky.gov/Documents/Lewis%20County.pdf" },
     verified: false, sources: ["KYDHBC", "ICC"], verifiedDetail: { date: null, by: null },
   },
   "41056": {
@@ -144,7 +158,10 @@ const JURISDICTIONS = {
     codeName: "Kentucky Residential Code (KRC)", codeEdition: "Current KRC — verify edition",
     adoption: "Statewide residential code",
     permit: "Verify with the Maysville building official before tear-off.",
-    inspector: { office: "City of Maysville Building Inspector", phone: "(606) 555-0100 — sample, verify", address: "216 Bridge St, Maysville, KY" },
+    inspector: { office: "City of Maysville / Mason County Codes Department", phone: "6065642525", address: "216 Bridge St, Maysville, KY 41056",
+      web: "https://www.cityofmaysvilleky.gov/departments/codes_department/index.php",
+      note: "Codes Officer 1(606)564-2504. Inspector in the office Mon, Tue, Wed, Fri 8:00-11:00am.",
+      source: "https://www.cityofmaysvilleky.gov/departments/codes_department/index.php" },
     verified: false, sources: ["KYDHBC", "ICC"], verifiedDetail: { date: null, by: null },
   },
   "60014": {
@@ -152,7 +169,10 @@ const JURISDICTIONS = {
     codeName: "Adopted IRC (local amendment)", codeEdition: "Locally adopted IRC — verify edition & amendments",
     adoption: "Illinois has no statewide residential code; adoption is municipal.",
     permit: "City roofing permit required; local amendments apply.",
-    inspector: { office: "Crystal Lake Community Development", phone: "(815) 555-0100 — sample, verify", address: "100 W Woodstock St, Crystal Lake, IL" },
+    inspector: { office: "City of Crystal Lake — Community Development, Building Division", phone: "8153563605", address: "100 W Woodstock St, Crystal Lake, IL 60014",
+      web: "https://www.crystallake.org/your-government/departments/community-development/building",
+      note: "Building, electrical and plumbing permits. City Hall main line 1(815)459-2020.",
+      source: "https://www.crystallake.org/your-government/departments/community-development/building" },
     verified: false, sources: ["MUNICODE", "ICC"], verifiedDetail: { date: null, by: null },
   },
 };
@@ -19920,12 +19940,21 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
             <input style={inputStyle} placeholder="Zip code — try 45402, 41056, 45103" value={zip}
               inputMode="numeric" onChange={(e) => { setZip(e.target.value); setLookupResult(null); setLookupErr(""); }} />
           </Card>
-          {zip.trim().length === 5 && !juris && (
+          {/* This used to be gated on `!juris`, which is only true for a zip
+              whose prefix is missing from the national table — about two
+              percent of the country. Everywhere else resolved to a
+              state-level guess and the enrichment flow, the one thing that
+              can put a real building department on file, was unreachable
+              from the exact zips that needed it. It now opens whenever we
+              do not have an office for the address. */}
+          {zip.trim().length === 5 && (!juris || juris.needsContact) && (
             <Card style={{ marginTop: 12 }}>
               {!lookupResult && (
                 <>
                   <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.55 }}>
-                    {zip.trim()} is not on file yet.
+                    {juris
+                      ? `We know ${zip.trim()} is in ${juris.state}, but not which office issues permits there.`
+                      : `${zip.trim()} is not on file yet.`}
                   </div>
                   <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginTop: 6 }}>
                     Look it up and it is saved for everyone. If it falls in a county
@@ -20109,6 +20138,23 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                         </a>
                       )}
                     </div>
+                    {!juris.verified && juris.inspector.source && (
+                      <div style={{ marginTop: 10, background: "#FFF8E6", border: "1px solid #F0DCA8",
+                        borderRadius: 10, padding: "10px 12px" }}>
+                        <div style={{ fontSize: 12.5, color: "#6B4E0E", lineHeight: 1.5 }}>
+                          Taken from the department's published contact page — nobody here has
+                          called it yet. Confirm it once and the whole company gets it.
+                        </div>
+                        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+                          <Btn kind="soft" small onClick={() => onSaveDept(juris.zip, {
+                            office: juris.inspector.office, phone: juris.inspector.phone,
+                            address: juris.inspector.address, web: juris.inspector.web || "",
+                            note: juris.inspector.note || "",
+                          })}><Check size={13} /> I called this — confirm it</Btn>
+                          <AssistLink href={juris.inspector.source}>Source page</AssistLink>
+                        </div>
+                      </div>
+                    )}
                     {juris.inspector.checked && (
                       <div style={{ fontSize: 11, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
                         Looked up {juris.inspector.checked} from the department's own

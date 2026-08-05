@@ -47,10 +47,43 @@ ok(/COUNTY_DEPARTMENTS\[`\$\{state\}:\$\{county\}`\]/.test(src), "department loo
 ok((src.match(/COUNTY_DEPARTMENTS\[/g) || []).length === 2, "no unscoped department lookup remains");
 ok(/"OH:Hamilton County"/.test(src) && /"KY:Campbell County"/.test(src), "the department table carries state-scoped keys");
 
-/* No record may claim to be verified while carrying a placeholder number. */
+/* The placeholders are gone entirely now — replaced with the real offices,
+   which is what the assertions further down check. Nothing in this block may
+   claim to be verified: a directory lookup is not a phone call. */
 const sampleBlock = src.slice(src.indexOf("const JURISDICTIONS"), src.indexOf("const CODE_PROVISIONS"));
-ok(/555-0100/.test(sampleBlock), "the sample numbers are still there (they are honest placeholders)");
-ok(!/verified: true/.test(sampleBlock), "but no sample record claims to be verified");
+ok(!/555-0100/.test(sampleBlock), "no placeholder numbers remain in the jurisdiction records");
+ok(!/verified: true/.test(sampleBlock), "and no record claims to be verified");
+
+/* ---------- building departments are real contacts ----------
+   Seven jurisdiction records shipped with "(513) 555-0100 — sample, verify"
+   as the inspector's phone. Two were also wrong on substance, not just the
+   number. Public info, so there is no excuse for a placeholder. */
+ok(!/555-0100 — sample, verify/.test(src), "no placeholder inspector number survives");
+ok(!/inspector: \{ office: "[^"]*", phone: "\(\d{3}\) 555/.test(src), "no 555 number in any inspector record");
+
+/* 45056 is Oxford, which runs its own department — the app's own Butler
+   County note says the county does not serve it, and this record pointed at
+   the county anyway. */
+ok(/City of Oxford — Community Development/.test(src), "45056 points at Oxford's own office");
+ok(/Oxford runs its own building and zoning office/.test(src), "and says why");
+
+/* Kentucky DHBC publishes no local building inspector for Lewis County. The
+   record claimed one existed, contradicting the county record in the same
+   file. */
+ok(/No local building inspector — Lewis County/.test(src), "Lewis County does not claim an inspector it does not have");
+
+/* Every sourced contact carries the page it came from, and none of them
+   claims to be verified — a directory listing is a lead, not a phone call. */
+const inspectorBlocks = src.match(/inspector: \{[^}]*\}/g) || [];
+const sourced = inspectorBlocks.filter((b) => /source:/.test(b));
+ok(sourced.length >= 6, `sourced inspector records carry their source URL (found ${sourced.length})`);
+ok(sourced.every((b) => /https?:\/\//.test(b)), "each source is a real URL");
+ok(/Taken from the department's published contact page/.test(src),
+  "the UI says the contact is unconfirmed and offers a one-tap confirm");
+
+/* The enrichment path has to be reachable for the zips that need it. */
+ok(/zip\.trim\(\)\.length === 5 && \(!juris \|\| juris\.needsContact\)/.test(src),
+  "the zip lookup opens whenever there is no building department, not only when the zip is unknown");
 
 /* ---------- behavioural ---------- */
 const scratch = path.join(__dirname, "_geo53.jsx");

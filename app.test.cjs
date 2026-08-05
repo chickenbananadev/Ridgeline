@@ -88,13 +88,20 @@ var JURISDICTIONS = {
     codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "Roofing permit required for full replacement; verify with the building department.",
-    inspector: { office: "Forest Park Building Department", phone: "(513) 555-0100 \u2014 sample, verify", address: "1201 W Kemper Rd, Forest Park, OH" },
+    inspector: {
+      office: "Forest Park Building Department",
+      phone: "5135955264",
+      address: "1201 W Kemper Rd, Forest Park, OH 45240",
+      email: "bldgdept@forestpark.org",
+      web: "https://www.forestpark.org/government/building/index.php",
+      source: "https://www.forestpark.org/government/building/contact_the_building_department.php"
+    },
     /* The inspector phone below is a placeholder, not a checked number.
        This used to say verified:true, which painted a green "Verified"
        chip and a tap-to-call button over a 555 number. Until the office
        confirms it, it is unverified and needs a contact. */
     verified: false,
-    needsContact: true,
+    needsContact: false,
     sources: ["RCO", "OAC3901"],
     verifiedDetail: { date: null, by: null }
   },
@@ -107,13 +114,20 @@ var JURISDICTIONS = {
     codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "Permit required; verify regional building services handling for residential.",
-    inspector: { office: "City of Dayton \u2014 Building Inspection", phone: "(937) 555-0100 \u2014 sample, verify", address: "371 W 2nd St, Dayton, OH" },
+    inspector: {
+      office: "City of Dayton \u2014 Division of Building Inspection",
+      phone: "9373333980",
+      address: "371 W Second St, 2nd floor (One Stop Center), Dayton, OH 45402",
+      web: "https://www.daytonohio.gov/190/Building-Inspection",
+      note: "Permit status and plan-submittal questions: 1(937)333-3883.",
+      source: "https://www.daytonohio.gov/650/Building-Inspection-Directory"
+    },
     /* The inspector phone below is a placeholder, not a checked number.
        This used to say verified:true, which painted a green "Verified"
        chip and a tap-to-call button over a 555 number. Until the office
        confirms it, it is unverified and needs a contact. */
     verified: false,
-    needsContact: true,
+    needsContact: false,
     sources: ["RCO", "OAC3901"],
     verifiedDetail: { date: null, by: null }
   },
@@ -126,13 +140,21 @@ var JURISDICTIONS = {
     codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "Roofing permit required for tear-off and re-roof.",
-    inspector: { office: "Butler County Building Department", phone: "(513) 555-0100 \u2014 sample, verify", address: "130 High St, Hamilton, OH" },
+    inspector: {
+      office: "City of Oxford \u2014 Community Development",
+      phone: "5135245204",
+      address: "15 S College Ave, Oxford, OH 45056",
+      email: "commdev@cityofoxford.org",
+      web: "https://www.cityofoxford.org/government/departments/community_development/construction_and_development/building_and_zoning_permits.php",
+      note: "Oxford runs its own building and zoning office \u2014 Butler County does not serve this address.",
+      source: "https://www.cityofoxford.org/departments/community_development/building_zoning_permit.php"
+    },
     /* The inspector phone below is a placeholder, not a checked number.
        This used to say verified:true, which painted a green "Verified"
        chip and a tap-to-call button over a 555 number. Until the office
        confirms it, it is unverified and needs a contact. */
     verified: false,
-    needsContact: true,
+    needsContact: false,
     sources: ["RCO", "OAC3901"],
     verifiedDetail: { date: null, by: null }
   },
@@ -145,13 +167,20 @@ var JURISDICTIONS = {
     codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "City of Columbus permit required for re-roofing.",
-    inspector: { office: "Columbus Building & Zoning Services", phone: "(614) 555-0100 \u2014 sample, verify", address: "111 N Front St, Columbus, OH" },
+    inspector: {
+      office: "City of Columbus \u2014 Building & Zoning Services",
+      phone: "6146457433",
+      address: "111 N Front St, Columbus, OH 43215",
+      web: "https://www.columbus.gov/Business-Development/Building-Zoning-Services",
+      note: "Counter hours 9:00-4:00 weekdays.",
+      source: "https://www.columbus.gov/files/sharedassets/city/v/7/building-and-zoning/bzs-contact-sheet-2026.pdf"
+    },
     /* The inspector phone below is a placeholder, not a checked number.
        This used to say verified:true, which painted a green "Verified"
        chip and a tap-to-call button over a 555 number. Until the office
        confirms it, it is unverified and needs a contact. */
     verified: false,
-    needsContact: true,
+    needsContact: false,
     sources: ["RCO", "OAC3901"],
     verifiedDetail: { date: null, by: null }
   },
@@ -164,7 +193,14 @@ var JURISDICTIONS = {
     codeEdition: "Current KRC \u2014 verify edition",
     adoption: "Statewide residential code",
     permit: "Verify permit handling with the county building official before tear-off.",
-    inspector: { office: "Lewis County Building Official", phone: "(606) 555-0100 \u2014 sample, verify", address: "Vanceburg, KY" },
+    inspector: {
+      office: "No local building inspector \u2014 Lewis County",
+      phone: "6067963062",
+      address: "County Clerk, 112 2nd St, Vanceburg, KY 41179",
+      web: "https://dhbc.ky.gov",
+      note: "Kentucky DHBC lists no local building inspector for Lewis County. The Kentucky Residential Code still applies; commercial work goes to the state department. The clerk\u2019s number above is the starting point for zoning, not a building official.",
+      source: "https://dhbc.ky.gov/Documents/Lewis%20County.pdf"
+    },
     verified: false,
     sources: ["KYDHBC", "ICC"],
     verifiedDetail: { date: null, by: null }
@@ -178,7 +214,14 @@ var JURISDICTIONS = {
     codeEdition: "Current KRC \u2014 verify edition",
     adoption: "Statewide residential code",
     permit: "Verify with the Maysville building official before tear-off.",
-    inspector: { office: "City of Maysville Building Inspector", phone: "(606) 555-0100 \u2014 sample, verify", address: "216 Bridge St, Maysville, KY" },
+    inspector: {
+      office: "City of Maysville / Mason County Codes Department",
+      phone: "6065642525",
+      address: "216 Bridge St, Maysville, KY 41056",
+      web: "https://www.cityofmaysvilleky.gov/departments/codes_department/index.php",
+      note: "Codes Officer 1(606)564-2504. Inspector in the office Mon, Tue, Wed, Fri 8:00-11:00am.",
+      source: "https://www.cityofmaysvilleky.gov/departments/codes_department/index.php"
+    },
     verified: false,
     sources: ["KYDHBC", "ICC"],
     verifiedDetail: { date: null, by: null }
@@ -192,7 +235,14 @@ var JURISDICTIONS = {
     codeEdition: "Locally adopted IRC \u2014 verify edition & amendments",
     adoption: "Illinois has no statewide residential code; adoption is municipal.",
     permit: "City roofing permit required; local amendments apply.",
-    inspector: { office: "Crystal Lake Community Development", phone: "(815) 555-0100 \u2014 sample, verify", address: "100 W Woodstock St, Crystal Lake, IL" },
+    inspector: {
+      office: "City of Crystal Lake \u2014 Community Development, Building Division",
+      phone: "8153563605",
+      address: "100 W Woodstock St, Crystal Lake, IL 60014",
+      web: "https://www.crystallake.org/your-government/departments/community-development/building",
+      note: "Building, electrical and plumbing permits. City Hall main line 1(815)459-2020.",
+      source: "https://www.crystallake.org/your-government/departments/community-development/building"
+    },
     verified: false,
     sources: ["MUNICODE", "ICC"],
     verifiedDetail: { date: null, by: null }
@@ -21623,12 +21673,9 @@ Authority: ${c.cite}`;
           }
         )
       ] }),
-      zip.trim().length === 5 && !juris && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      zip.trim().length === 5 && (!juris || juris.needsContact) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
         !lookupResult && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14, color: S.ink, lineHeight: 1.55 }, children: [
-            zip.trim(),
-            " is not on file yet."
-          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.ink, lineHeight: 1.55 }, children: juris ? `We know ${zip.trim()} is in ${juris.state}, but not which office issues permits there.` : `${zip.trim()} is not on file yet.` }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginTop: 6 }, children: "Look it up and it is saved for everyone. If it falls in a county already on file, the building department comes with it." }),
           lookupErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Lookup failed", tone: "amber", children: lookupErr }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -21791,6 +21838,28 @@ Authority: ${c.cite}`;
                 "Website ",
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ExternalLink, { size: 12 })
               ] }) })
+            ] }),
+            !juris.verified && juris.inspector.source && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+              marginTop: 10,
+              background: "#FFF8E6",
+              border: "1px solid #F0DCA8",
+              borderRadius: 10,
+              padding: "10px 12px"
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#6B4E0E", lineHeight: 1.5 }, children: "Taken from the department's published contact page \u2014 nobody here has called it yet. Confirm it once and the whole company gets it." }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => onSaveDept(juris.zip, {
+                  office: juris.inspector.office,
+                  phone: juris.inspector.phone,
+                  address: juris.inspector.address,
+                  web: juris.inspector.web || "",
+                  note: juris.inspector.note || ""
+                }), children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Check, { size: 13 }),
+                  " I called this \u2014 confirm it"
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistLink, { href: juris.inspector.source, children: "Source page" })
+              ] })
             ] }),
             juris.inspector.checked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: [
               "Looked up ",
