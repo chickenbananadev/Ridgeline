@@ -9802,7 +9802,12 @@ function docShell(title, brand2, bodyHtml) {
   @page { size: letter; margin: 0.6in; }
   * { box-sizing: border-box; }
   body { font: 13px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color: #111827; margin: 0; padding: 22px; }
-  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;
+  /* These two are scoped to div on purpose. They set display:flex, and a
+     document that happened to reuse the name on a <tr> \u2014 the cap-out sheet
+     did, for its column header and its total rows \u2014 had those rows drop out
+     of the table grid entirely and render as loose boxes. Scoping by tag
+     keeps a class-name collision from silently destroying a table. */
+  div.head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;
           border-bottom: 3px solid ${brand2.primary}; padding-bottom: 14px; margin-bottom: 20px; }
   .co { font-size: 11.5px; color: #6B7280; line-height: 1.5; margin-top: 6px; white-space: pre-line; }
   .title { font-size: 21px; font-weight: 800; text-align: right; color: ${brand2.primary}; }
@@ -9814,8 +9819,8 @@ function docShell(title, brand2, bodyHtml) {
        color: #6B7280; border-bottom: 1.5px solid #E5E7EB; padding: 7px 6px; }
   td { padding: 8px 6px; border-bottom: 1px solid #F3F4F6; vertical-align: top; font-size: 12.5px; }
   td.r, th.r { text-align: right; white-space: nowrap; }
-  .tot { display: flex; justify-content: space-between; padding: 7px 6px; font-size: 13px; }
-  .tot.grand { font-weight: 800; font-size: 15px; border-top: 2px solid ${brand2.primary}; margin-top: 6px; padding-top: 10px; }
+  div.tot { display: flex; justify-content: space-between; padding: 7px 6px; font-size: 13px; }
+  div.tot.grand { font-weight: 800; font-size: 15px; border-top: 2px solid ${brand2.primary}; margin-top: 6px; padding-top: 10px; }
   .box { border: 1px solid #E5E7EB; border-radius: 9px; padding: 12px 14px; margin-top: 8px; }
   .muted { color: #6B7280; font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; }
   .sig { display: flex; gap: 26px; margin-top: 26px; page-break-inside: avoid; }
@@ -17767,19 +17772,21 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand: brand2 = 
   const printCapOut = () => {
     const money2 = (n) => money(num(n));
     const secRow = (title) => `<tr class="band"><td colspan="4">${esc(title)}</td></tr>`;
-    const line = (l) => `<tr><td>${esc(l.label)}</td><td class="r">${money2(l.amt)}</td><td class="muted">${esc(l.by ? (l.by + " " + (l.reimburse ? "reimbursement" : "")).trim() : "")}</td><td class="r">${l.reimburse ? l.status === "Needs paid" ? '<b style="color:#B3261E">NEEDS PAID</b>' : "Yes" : ""}</td></tr>`;
-    const totRow = (title, amt) => `<tr class="tot"><td><b>${esc(title)}</b></td><td class="r"><b>${money2(amt)}</b></td><td></td><td></td></tr>`;
-    const kv = (k, v, cls) => `<tr class="${cls || ""}"><td>${esc(k)}</td><td class="r">${esc(v)}</td><td colspan="2" class="muted"></td></tr>`;
+    const line = (l) => `<tr><td>${esc(l.label)}</td><td class="r">${money2(l.amt)}</td><td class="muted">${esc(l.by ? (l.by + " " + (l.reimburse ? "reimbursement" : "")).trim() : "")}</td><td>${l.reimburse ? l.status === "Needs paid" ? '<b style="color:#B3261E">NEEDS PAID</b>' : "Yes" : ""}</td></tr>`;
+    const totRow = (title, amt, desc) => `<tr class="captot"><td><b>${esc(title)}</b></td><td class="r"><b>${money2(amt)}</b></td><td class="muted">${esc(desc || "")}</td><td></td></tr>`;
+    const kv = (k, v, desc) => `<tr><td>${esc(k)}</td><td class="r">${esc(v)}</td><td class="muted">${esc(desc || "")}</td><td></td></tr>`;
     const rep = job.assignee || "";
     let html = `
       <div class="capband" style="background:#1F3A5F;color:#fff;padding:14px 16px;border-radius:6px 6px 0 0">
         <div style="font-size:20px;font-weight:800">CAP OUT SHEET</div>
         <div style="opacity:.85;font-size:12.5px;margin-top:3px">${esc(job.name)} | ${esc(job.address)}${job.invoiceNo ? " | Invoice #" + esc(job.invoiceNo) : ""} | Rep: ${esc(rep)}</div>
       </div>
-      <table class="cap"><tbody>
-        <tr class="head"><td><b>Line Item</b></td><td class="r"><b>Amount</b></td><td><b>Description</b></td><td class="r"><b>Reimbursement</b></td></tr>
+      <table class="cap">
+      <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
+      <tbody>
+        <tr class="caphead"><td><b>Line Item</b></td><td class="r"><b>Amount</b></td><td><b>Description</b></td><td><b>Reimbursement</b></td></tr>
         ${secRow("REVENUE")}
-        ${kv("Gross Revenue", money2(cap.contract))}
+        ${kv("Gross Revenue", money2(cap.contract), "Contract total")}
         ${totRow("Net Revenue", cap.contract)}
         ${secRow("MATERIAL COSTS")}
         ${fin.materials.map(line).join("")}
@@ -17792,19 +17799,19 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand: brand2 = 
         ${totRow("Total Other Costs", cap.other)}
         <tr class="band dark"><td><b>TOTAL COGS</b></td><td class="r"><b>${money2(cap.cogs)}</b></td><td class="muted">Material + Labor + Other</td><td></td></tr>
         ${secRow("PROFIT")}
-        ${kv("Gross Profit", money2(cap.gross))}
-        ${kv("Gross Profit Margin", cap.grossMargin.toFixed(2) + "%")}
+        ${kv("Gross Profit", money2(cap.gross), "Net revenue less all COGS")}
+        ${kv("Gross Profit Margin", cap.grossMargin.toFixed(2) + "%", "Gross profit \xF7 net revenue")}
         ${secRow("COMMISSION \u2014 " + st.label)}
-        ${kv("Commission Rate", (fin.commissionRate ?? 60) + "%")}
-        <tr class="tot"><td><b>Commission</b></td><td class="r"><b>${money2(cap.commission)}</b></td><td class="muted">${esc(cap.baseLabel)} \xD7 rate</td><td></td></tr>
-        ${kv("Net Profit (to company)", money2(cap.netCompany))}
+        ${kv("Commission Rate", (fin.commissionRate ?? 60) + "%", "% of " + cap.baseLabel.toLowerCase())}
+        <tr class="captot"><td><b>Commission</b></td><td class="r"><b>${money2(cap.commission)}</b></td><td class="muted">${esc(cap.baseLabel)} \xD7 rate</td><td></td></tr>
+        ${kv("Net Profit (to company)", money2(cap.netCompany), "Gross profit less commission")}
         ${secRow("PROFIT SPLIT")}
-        ${kv("Your Share of Gross Profit", cap.repPctGross.toFixed(2) + "%")}
-        ${kv("Company Share of Gross Profit", cap.coPctGross.toFixed(2) + "%")}
-        ${kv("Your Commission (% of Job)", cap.repPctJob.toFixed(2) + "%")}
-        ${kv("Company Profit (% of Job)", cap.coPctJob.toFixed(2) + "%")}
+        ${kv("Your Share of Gross Profit", cap.repPctGross.toFixed(2) + "%", "Your commission \xF7 gross profit")}
+        ${kv("Company Share of Gross Profit", cap.coPctGross.toFixed(2) + "%", "Company net profit \xF7 gross profit")}
+        ${kv("Your Commission (% of Job)", cap.repPctJob.toFixed(2) + "%", "Your commission \xF7 job total")}
+        ${kv("Company Profit (% of Job)", cap.coPctJob.toFixed(2) + "%", "Company net profit \xF7 job total")}
         ${secRow("REIMBURSEMENTS (out of pocket)")}
-        ${totRow("Total Reimbursements", cap.reimbTotal)}
+        ${totRow("Total Reimbursements", cap.reimbTotal, "All lines marked reimbursable, net of returns")}
         ${cap.needsPaidTotal > 0 ? `<tr><td style="color:#B3261E"><b>Still owed (Needs paid)</b></td><td class="r" style="color:#B3261E"><b>${money2(cap.needsPaidTotal)}</b></td><td class="muted">Vendors/reps not yet paid</td><td></td></tr>` : ""}
         ${cap.repShares.length > 1 ? `
         ${secRow("COMMISSION SPLIT")}
@@ -17820,15 +17827,26 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand: brand2 = 
         <div><div class="sigline"></div><div class="siglbl">Approved by / date</div></div>
       </div>
       <style>
-        table.cap{width:100%;border-collapse:collapse;font-size:12.5px}
-        table.cap td{border:1px solid #E2E6EB;padding:6px 9px;vertical-align:top}
-        table.cap tr.head td{background:#F2F4F7;font-size:11.5px}
+        /* A fixed grid, in the proportions of the company's own cap-out
+           spreadsheet: line item, amount, a wide description, reimbursement.
+           Without table-layout:fixed the description column sizes to its
+           longest unbroken line and pushes the whole sheet off the page. */
+        table.cap{width:100%;table-layout:fixed;border-collapse:collapse;font-size:12.5px}
+        table.cap col.c1{width:26%} table.cap col.c2{width:15%}
+        table.cap col.c3{width:37%} table.cap col.c4{width:22%}
+        table.cap td{border:1px solid #E2E6EB;padding:6px 9px;vertical-align:top;
+                     overflow-wrap:break-word;word-break:break-word}
+        table.cap tr.caphead td{background:#F2F4F7;font-size:11.5px}
         table.cap tr.band td{background:#2F5C9E;color:#fff;font-weight:800;font-size:11.5px}
         table.cap tr.band.dark td{background:#1F3A5F}
         table.cap tr.band.payout td{background:#4F7A34}
-        table.cap tr.tot td{background:#F7F9FB}
+        table.cap tr.captot td{background:#F7F9FB}
+        /* Numbers never wrap; prose always may. Both columns used to be .r,
+           which meant a long reimbursement note couldn't break and forced the
+           table wider than the page. */
         table.cap td.r{text-align:right;white-space:nowrap}
         table.cap td.muted{color:#667085}
+        table.cap tr{page-break-inside:avoid}
       </style>`;
     openDoc(`Cap out \u2014 ${job.name}`, brand2, html, toast);
   };

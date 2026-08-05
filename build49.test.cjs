@@ -129,5 +129,43 @@ ok(/\[j\.address, stage && stage\.name\]\.filter\(Boolean\)\.join\(" · "\)/.tes
   "the row shows the address and stage, so it reads as a job rather than a name");
 
 
+/* ---------- 7. The cap-out sheet renders as a table ---------- */
+/* It didn't. docShell styles .head and .tot as display:flex — they are the
+   document header block and the running-total lines — and the cap-out sheet
+   used those same names on its <tr> elements. Those rows dropped out of the
+   table grid and rendered as narrow boxes with the text stacking one letter
+   per line. Two guards: the shell's flex rules are scoped to div, and the
+   sheet's rows are namespaced. */
+const shellCss = src.slice(src.indexOf("function docShell"), src.indexOf("<body>"));
+ok(/div\.head \{ display: flex;/.test(shellCss), "the shell's .head flex rule is scoped to div");
+ok(/div\.tot \{ display: flex;/.test(shellCss), "the shell's .tot flex rule is scoped to div");
+ok(/div\.tot\.grand \{/.test(shellCss), "and so is its grand-total variant");
+/* The general form of the bug: any class the shell lays out as flex, used on
+   a table row anywhere in the app's printed documents. */
+const flexClasses = [...shellCss.matchAll(/(?:^|\s)(?:div\.)?\.?([a-z][\w-]*)(?:\.[\w-]+)? \{[^}]*display: flex/g)]
+  .map((m) => m[1]).filter((c) => !/^div$/.test(c));
+const rowClassUses = [...src.matchAll(/<tr class="([^"]+)"/g)].flatMap((m) => m[1].split(/\s+/));
+const collisions = rowClassUses.filter((c) => flexClasses.includes(c));
+ok(collisions.length === 0, "no table row reuses a class the document shell lays out as flex: " + collisions.join(", "));
+ok(/<tr class="caphead">/.test(src) && /<tr class="captot">/.test(src),
+  "the cap-out rows are namespaced so they can't collide again");
+ok(/table\.cap tr\.caphead td/.test(src) && /table\.cap tr\.captot td/.test(src),
+  "and the sheet's own CSS follows the rename");
+/* Fixed columns, in the proportions of the company's own spreadsheet, so a
+   long description wraps instead of pushing the sheet off the page. */
+ok(/table\.cap\{width:100%;table-layout:fixed/.test(src), "the cap-out table has a fixed column grid");
+ok(/<colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"><\/colgroup>/.test(src),
+  "with an explicit colgroup");
+ok(/table\.cap col\.c1\{width:26%\}/.test(src) && /table\.cap col\.c3\{width:37%\}/.test(src),
+  "line item, amount, a wide description, reimbursement");
+ok(/overflow-wrap:break-word/.test(src), "long cell content breaks rather than forcing the table wider");
+/* Every derived figure says how it was arrived at — a cap-out sheet is a
+   document that gets argued over. */
+ok(/const kv = \(k, v, desc\) =>/.test(src), "kv rows carry a description");
+ok(/"Gross profit ÷ net revenue"/.test(src) && /"Company net profit ÷ job total"/.test(src),
+  "the profit and split rows explain their maths");
+ok(/const totRow = \(title, amt, desc\) =>/.test(src), "so do the total rows");
+
+
 if (fails) { console.log("\nbuild 49: " + fails + " FAILED"); process.exit(1); }
 console.log("build 49 tests passed");
