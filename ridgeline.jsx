@@ -4024,7 +4024,7 @@ function focusScore(job) {
   let score = 0;
 
   // Staleness — the dominant factor. Deals die of silence, not "no".
-  const days = num(job.daysInStage);
+  const days = stageDays(job);
   if (days >= 21) { score += 40; reasons.push(`${days} days sitting in this stage`); }
   else if (days >= 14) { score += 28; reasons.push(`${days} days in stage`); }
   else if (days >= 7) { score += 14; reasons.push(`${days} days in stage`); }
@@ -4057,6 +4057,58 @@ function focusScore(job) {
      whole promise that the list justifies itself. */
   if (score === 0 || reasons.length === 0) return null;
   return { score, reasons: reasons.slice(0, 3) };
+}
+
+/* ==================================================================
+   EXCEPTIONS — what is actually broken right now
+
+   focusScore ranks what deserves attention. This is the harder-edged
+   sibling: not "who is worth a call" but "what has gone wrong". A job
+   past its stage clock, a job that entered a stage without meeting its
+   requirements, a roof scheduled with nobody to build it, money sitting
+   uncollected, an unhappy customer.
+
+   Everything here reads a field the app already maintains. An owner
+   should open the app and see this before any chart.
+================================================================== */
+function jobExceptions(job, ctx) {
+  const c = ctx || {};
+  const out = [];
+  const add = (id, tone, text, tab) => out.push({ id: `${job.id}:${id}`, jobId: job.id, jobName: job.name, address: job.address, tone, text, tab });
+  const done = ["s10", "s11", "s12"].includes(job.stageId);
+  const today = todayIso();
+
+  if (!done) {
+    const age = stageAge(job, c.stageRules);
+    if (age.sla && age.late) {
+      const stage = (c.stages || []).find((s) => s.id === job.stageId);
+      add("sla", "red", `${age.days} days in ${stage ? stage.name.toLowerCase() : "this stage"} — ${age.sla}-day target`, null);
+    }
+    const gate = stageGate(job, job.stageId, c.stageRules, c);
+    if (gate.failed.length) {
+      add("gate", "amber", `In this stage without: ${gate.failed.map((f) => f.label.toLowerCase()).join(", ")}`, null);
+    }
+    const late = (job.tasks || []).filter((t) => !t.done && t.due && t.due < today);
+    if (late.length) add("tasks", "red", `${late.length} overdue ${late.length === 1 ? "task" : "tasks"} — oldest: ${late[0].label}`, "tasks");
+    if (job.soldRequestedAt && !job.jobFolder) add("approval", "amber", `Waiting on the office to approve the sold job`, "handoff");
+    if (job.schedDate && job.schedDate >= today && !job.crewId) add("crew", "red", `Scheduled ${job.schedDate} with no crew assigned`, "workorder");
+  }
+  if (job.subInvoice && job.subInvoice.status === "needs_review") {
+    add("sub", "amber", "Subcontractor invoice needs review before it can be paid", "financials");
+  }
+  if (job.claimType === "Insurance" && claimMath(job).depOutstanding > 0 && ((job.claim || {}).depStatus || "held") !== "released") {
+    add("dep", "amber", `${money(claimMath(job).depOutstanding)} in recoverable depreciation not yet requested`, "claim");
+  }
+  if (reviewState(job).key === "recover") {
+    add("review", "red", `Rated ${(job.review || {}).rating}★ — call before asking for anything public`, "portal");
+  }
+  return out;
+}
+function exceptionFeed(jobs, ctx) {
+  const all = (jobs || []).flatMap((j) => jobExceptions(j, ctx));
+  /* Red before amber, because a roof with no crew tomorrow outranks a
+     supplement that has been sitting for a week. */
+  return all.sort((a, b) => (a.tone === b.tone ? 0 : a.tone === "red" ? -1 : 1));
 }
 
 function FocusList({ jobs, onOpenJob }) {
@@ -4097,10 +4149,22 @@ function FocusList({ jobs, onOpenJob }) {
   );
 }
 
-function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND,
+function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND,
   appointments = [], apptTypes = [], crews = [], setAppointments, setApptTypes, toast, onQueueMessage, onLog, users = [], mutJob, onToggleTask,
-  chatMsgs = [], onSendChat }) {
+  chatMsgs = [], onSendChat, stageRules = {}, currentUser = null, showMoney = true, isAdmin = true }) {
+  /* Scope. An owner wants the company; a rep wants their own book and is
+     actively hurt by a feed full of other people's problems. Reps land on
+     "Mine" and can look wider; admins land on the company. The prop is
+     shadowed rather than renamed at every use, so every card below —
+     exceptions, focus list, pipeline, money — is scoped by this one line. */
+  const isRep = !!currentUser && currentUser.role === "rep";
+  const [scope, setScope] = useState(isRep ? "mine" : "all");
+  const jobs = useMemo(() => {
+    if (scope !== "mine" || !currentUser) return allJobs;
+    return allJobs.filter((j) => j.assignee === currentUser.name);
+  }, [allJobs, scope, currentUser]);
   const [homeBoard, setHomeBoard] = useState("calendar");
+  const [showAllBlockers, setShowAllBlockers] = useState(false);
   const [quick, setQuick] = useState(null);        // "note" | "call" | "task"
   const [homeChat, setHomeChat] = useState("");
   const [quickJob, setQuickJob] = useState("");
@@ -4138,7 +4202,7 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
     return `${((h + 11) % 12) + 1}:${String(m || 0).padStart(2, "0")} ${ap}`;
   };
   const totalPipeline = jobs.filter((j) => !DEAD_STAGES.includes(j.stageId) && j.stageId !== "s10").reduce((s, j) => s + j.value, 0);
-  const stale = jobs.filter((j) => j.daysInStage >= 14 && !["s10","s11","s12"].includes(j.stageId));
+  const stale = jobs.filter((j) => stageDays(j) >= 14 && !["s10","s11","s12"].includes(j.stageId));
   const approvedPlus = jobs.filter((j) => WON_STAGES.includes(j.stageId));
   const signedValue = approvedPlus.reduce((s, j) => s + (j.contract.price || j.value), 0);
   const byStage = stages.map((s) => ({
@@ -4213,96 +4277,20 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         ))}
       </div>
 
-      {/* Pipeline at a glance — counts and dollars per stage, tap to filter the board */}
-      <Card style={{ marginTop: 16 }}>
-        {(() => {
-          const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
-          const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
-          const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
-          const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
-          /* Ring summary: five buckets of the twelve stages, each a
-             tappable letter that filters the board. Mirrors the at-a-glance
-             read Jacob wanted from his old dashboard. */
-          const RINGS = [
-            ["L", "Leads", "#F0B429", ["s1"]],
-            ["P", "Pipeline", "#F2711C", ["s2", "s3", "s4"]],
-            ["A", "Approved", "#63B54B", ["s5", "s6", "s7"]],
-            ["C", "Production", "#2BA4DE", ["s8", "s9"]],
-            ["I", "Invoicing", "#E0464B", ["s10"]],
-          ];
-          const ringData = RINGS.map(([letter, label, color, ids]) => ({
-            letter, label, color, ids,
-            count: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.count, 0),
-            value: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.value, 0),
-          }));
-          return (
-            <>
-              <div style={{
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-                paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${S.line}`,
-              }}>
-                <span style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>Current pipeline</span>
-                <span style={{ fontSize: 13, color: S.sub }}>Active jobs: {activeTotal}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-around", gap: 4, padding: "14px 0 16px", flexWrap: "wrap" }}>
-                {ringData.map((r) => (
-                  <button key={r.letter} onClick={() => onOpenStage && onOpenStage(r.ids[0])}
-                    aria-label={`${r.label}: ${r.count} jobs`}
-                    style={{
-                      border: "none", background: "none", cursor: "pointer", padding: "0 2px",
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 56,
-                    }}>
-                    <span style={{
-                      width: 46, height: 46, borderRadius: "50%", background: r.color,
-                      display: "grid", placeItems: "center", color: "#fff", fontSize: 21, fontWeight: 800,
-                    }}>{r.letter}</span>
-                    <span style={{ fontSize: 17, fontWeight: 800, color: r.count ? "#F2711C" : "#C7CBD1" }}>{r.count}</span>
-                    <span style={{ fontSize: 11.5, color: S.sub, whiteSpace: "nowrap" }}>
-                      {r.value > 0 ? money(r.value) : "—"}
-                    </span>
-                    <span style={{ fontSize: 10.5, color: S.sub, letterSpacing: ".02em" }}>{r.label}</span>
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => go("jobs")} style={{
-                ...linkBtn, display: "block", width: "100%", textAlign: "center",
-                padding: "6px 0 10px", fontSize: 13,
-              }}>Open board →</button>
-              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: S.sub, borderTop: `1px solid ${S.line}`, paddingTop: 12, marginBottom: 2 }}>
-                BY STAGE · {money(totalPipeline)}
-              </div>
-              {liveStages.map((st) => (
-                <button key={st.id} onClick={() => onOpenStage && onOpenStage(st.id)}
-                  style={{
-                    display: "block", width: "100%", textAlign: "left", border: "none", background: "none",
-                    cursor: "pointer", padding: "7px 0", borderTop: `1px solid ${S.line}`,
-                  }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                    <span style={{ fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {st.name}
-                    </span>
-                    <span style={{ fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }}>{st.value > 0 ? money(st.value) : ""}</span>
-                    <span style={{ fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }}>
-                      {st.count}
-                    </span>
-                  </div>
-                  <div style={{ height: 5, borderRadius: 99, background: S.soft, marginTop: 5, overflow: "hidden" }}>
-                    <div style={{
-                      width: `${(st.count / maxCount) * 100}%`, height: "100%", borderRadius: 99,
-                      background: st.count ? T.accent : "transparent",
-                    }} />
-                  </div>
-                </button>
-              ))}
-              {lost > 0 && (
-                <div style={{ fontSize: 12, color: S.sub, marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 9 }}>
-                  {lost} lost or unqualified — not counted above
-                </div>
-              )}
-            </>
-          );
-        })()}
-      </Card>
+      {/* Whose book this screen is showing. Reps default to their own. */}
+      {currentUser && (
+        <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
+          {[["mine", "Mine"], ["all", "Company"]].map(([id, label]) => (
+            <button key={id} onClick={() => setScope(id)} style={{
+              border: `1px solid ${scope === id ? T.accent : S.line}`,
+              background: scope === id ? T.accentSoft : S.card,
+              color: scope === id ? T.accent : S.sub,
+              borderRadius: 999, padding: "6px 14px", fontSize: 12.5, fontWeight: 700,
+              cursor: "pointer", fontFamily: "inherit",
+            }}>{label}</button>
+          ))}
+        </div>
+      )}
 
       {/* Today — the 6am answer: where everyone needs to be, what's overdue.
           Always rendered, including empty: a card that vanishes on a quiet
@@ -4379,6 +4367,57 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
           ))}
         </Card>
       )}
+
+      {/* Blockers — what is actually broken, before any chart. This is the
+          card an owner opens the app for: it is the only place that answers
+          "what will cost me money today" without reading six other screens. */}
+      {(() => {
+        const feed = exceptionFeed(jobs, { stages, stageRules, appointments });
+        const [reds, ambers] = [feed.filter((e) => e.tone === "red"), feed.filter((e) => e.tone === "amber")];
+        const show = showAllBlockers ? feed : feed.slice(0, 6);
+        return (
+          <Card style={{ marginTop: 16 }}>
+            <CardTitle right={
+              feed.length ? (
+                <span style={{ display: "flex", gap: 6 }}>
+                  {reds.length > 0 && <Chip tone="red">{reds.length}</Chip>}
+                  {ambers.length > 0 && <Chip tone="amber">{ambers.length}</Chip>}
+                </span>
+              ) : <Chip tone="green">Clear</Chip>
+            }>Blockers</CardTitle>
+            {!feed.length && (
+              <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+                Nothing is stuck. No overdue tasks, no roof scheduled without a crew,
+                no job sitting past its stage clock.
+              </div>
+            )}
+            {show.map((e) => (
+              <button key={e.id} onClick={() => onOpenJob(e.jobId, e.tab || undefined)} style={{
+                display: "flex", gap: 10, alignItems: "flex-start", width: "100%", textAlign: "left",
+                border: "none", background: "none", cursor: "pointer", padding: "9px 0",
+                borderTop: `1px solid ${S.line}`,
+              }}>
+                <span style={{ marginTop: 2, flexShrink: 0, color: e.tone === "red" ? "var(--rl-red-fg)" : "var(--rl-amber-fg)" }}>
+                  <AlertTriangle size={15} />
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }}>{e.jobName}</span>
+                  <span style={{ fontSize: 12, color: S.sub, display: "block", lineHeight: 1.45 }}>{e.text}</span>
+                </span>
+                <ChevronRight size={15} color="#C7CBD1" style={{ flexShrink: 0, marginTop: 3 }} />
+              </button>
+            ))}
+            {feed.length > 6 && (
+              <button onClick={() => setShowAllBlockers(!showAllBlockers)} style={{
+                ...linkBtn, display: "block", width: "100%", textAlign: "center", padding: "10px 0 2px", fontSize: 12.5,
+              }}>{showAllBlockers ? "Show less" : `Show all ${feed.length}`}</button>
+            )}
+          </Card>
+        );
+      })()}
+
+      {/* Team chat lives in the Inbox, not on the home page. */}
+      <FocusList jobs={jobs} onOpenJob={onOpenJob} />
 
       {/* Week ahead — the next seven days of appointments and crew
           assignments, so the calendar and the dispatch board are answered
@@ -4469,24 +4508,100 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         );
       })()}
 
-      {/* Recoverable depreciation waiting to be chased — the most common
-          unclaimed money on an insurance job. */}
-      {(() => {
-        const depJobs = jobs.filter((j) => j.claimType === "Insurance" && claimMath(j).depOutstanding > 0 && (j.claim?.depStatus || "held") !== "released");
-        if (!depJobs.length) return null;
-        const depTotal = depJobs.reduce((x, j) => x + claimMath(j).depOutstanding, 0);
-        return (
-          <Card style={{ marginTop: 12 }}>
-            <button onClick={() => onOpenJob(depJobs[0].id, "claim")} style={{
-              display: "block", width: "100%", textAlign: "left",
-              border: "1px solid #F0D9A8", background: "#FFF6E5", borderRadius: 9,
-              padding: "11px 13px", cursor: "pointer", fontSize: 13, color: S.ink, fontFamily: "inherit", lineHeight: 1.5,
-            }}>
-              <strong>{money(depTotal)}</strong> in recoverable depreciation across {depJobs.length} {depJobs.length === 1 ? "claim" : "claims"} — request release on the completed invoices.
-            </button>
-          </Card>
-        );
-      })()}
+      {/* Pipeline at a glance — counts and dollars per stage, tap to filter the board */}
+      <Card style={{ marginTop: 16 }}>
+        {(() => {
+          const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
+          const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
+          const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
+          const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
+          /* Ring summary: five buckets of the twelve stages, each a
+             tappable letter that filters the board. Mirrors the at-a-glance
+             read Jacob wanted from his old dashboard. */
+          const RINGS = [
+            ["L", "Leads", "#F0B429", ["s1"]],
+            ["P", "Pipeline", "#F2711C", ["s2", "s3", "s4"]],
+            ["A", "Approved", "#63B54B", ["s5", "s6", "s7"]],
+            ["C", "Production", "#2BA4DE", ["s8", "s9"]],
+            ["I", "Invoicing", "#E0464B", ["s10"]],
+          ];
+          const ringData = RINGS.map(([letter, label, color, ids]) => ({
+            letter, label, color, ids,
+            count: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.count, 0),
+            value: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.value, 0),
+          }));
+          return (
+            <>
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                paddingBottom: 12, marginBottom: 4, borderBottom: `1px solid ${S.line}`,
+              }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>Current pipeline</span>
+                <span style={{ fontSize: 13, color: S.sub }}>Active jobs: {activeTotal}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-around", gap: 4, padding: "14px 0 16px", flexWrap: "wrap" }}>
+                {ringData.map((r) => (
+                  <button key={r.letter} onClick={() => onOpenStage && onOpenStage(r.ids[0])}
+                    aria-label={`${r.label}: ${r.count} jobs`}
+                    style={{
+                      border: "none", background: "none", cursor: "pointer", padding: "0 2px",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 6, minWidth: 56,
+                    }}>
+                    <span style={{
+                      width: 46, height: 46, borderRadius: "50%", background: r.color,
+                      display: "grid", placeItems: "center", color: "#fff", fontSize: 21, fontWeight: 800,
+                    }}>{r.letter}</span>
+                    <span style={{ fontSize: 17, fontWeight: 800, color: r.count ? "#F2711C" : "#C7CBD1" }}>{r.count}</span>
+                    <span style={{ fontSize: 11.5, color: S.sub, whiteSpace: "nowrap" }}>
+                      {r.value > 0 ? money(r.value) : "—"}
+                    </span>
+                    <span style={{ fontSize: 10.5, color: S.sub, letterSpacing: ".02em" }}>{r.label}</span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => go("jobs")} style={{
+                ...linkBtn, display: "block", width: "100%", textAlign: "center",
+                padding: "6px 0 10px", fontSize: 13,
+              }}>Open board →</button>
+              <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: S.sub, borderTop: `1px solid ${S.line}`, paddingTop: 12, marginBottom: 2 }}>
+                BY STAGE · {money(totalPipeline)}
+              </div>
+              {liveStages.map((st) => (
+                <button key={st.id} onClick={() => onOpenStage && onOpenStage(st.id)}
+                  style={{
+                    display: "block", width: "100%", textAlign: "left", border: "none", background: "none",
+                    cursor: "pointer", padding: "7px 0", borderTop: `1px solid ${S.line}`,
+                  }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {st.name}
+                    </span>
+                    <span style={{ fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }}>{st.value > 0 ? money(st.value) : ""}</span>
+                    <span style={{ fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }}>
+                      {st.count}
+                    </span>
+                  </div>
+                  <div style={{ marginTop: 5, overflow: "hidden", height: 7, background: S.soft, borderRadius: 99 }}>
+                    <div style={{
+                      width: `${(st.count / maxCount) * 100}%`, height: "100%", borderRadius: 99,
+                      background: st.count ? T.accent : "transparent",
+                    }} />
+                  </div>
+                </button>
+              ))}
+              {lost > 0 && (
+                <div style={{ fontSize: 12, color: S.sub, marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 9 }}>
+                  {lost} lost or unqualified — not counted above
+                </div>
+              )}
+            </>
+          );
+        })()}
+      </Card>
+
+      {/* Recoverable depreciation used to have its own banner here. It is a
+          blocker like any other now, so it rides in the exception feed at the
+          top of the page instead of being a second place to look. */}
 
       {/* Calendar and dispatch are one tap away under their own screens; the
           home page stays focused on money and what needs attention rather
@@ -4519,22 +4634,23 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
         )}
       </Sheet>
 
-      {/* Team chat lives in the Inbox, not on the home page. */}
-      <FocusList jobs={jobs} onOpenJob={onOpenJob} />
-
       {/* Business at a glance — the money-forward company metrics a
-          ServiceTitan dashboard leads with. */}
+          ServiceTitan dashboard leads with. A crew seat sees no money at all;
+          a rep sees their own numbers, not the company's book. */}
+      {showMoney && (<>
       <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: S.sub, margin: "22px 4px 10px" }}>
-        Business at a glance
+        {isRep && scope === "mine" ? "Your numbers" : "Business at a glance"}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
         {[
           ["Sold", money(signedValue), `${wonCount} won`, T.accent],
           ["Avg sale", money(avgSale), "per won job", S.ink],
-          ["Collected", money(collected), "cash received", "#177245"],
           ["Pipeline", money(totalPipeline), "open value", S.ink],
-          ["A/R", money(arTotal), `${ar.length} open`, arTotal > 0 ? "#9A6B00" : S.ink],
-          ["Close rate", pct1(closeRate), `${wonCount}/${jobs.length}`, S.ink],
+          ...(isRep ? [] : [
+            ["Collected", money(collected), "cash received", "#177245"],
+            ["A/R", money(arTotal), `${ar.length} open`, arTotal > 0 ? "#9A6B00" : S.ink],
+            ["Close rate", pct1(closeRate), `${wonCount}/${jobs.length}`, S.ink],
+          ]),
         ].map(([l, v, sub, color]) => (
           <Card key={l} pad={13}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: S.sub }}>{l}</div>
@@ -4543,109 +4659,7 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
           </Card>
         ))}
       </div>
-      {stale.length > 0 && (
-        <button onClick={() => go("jobs")} style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", fontSize: 12.5, color: "#9A6B00", padding: "10px 4px 0" }}>
-          {stale.length} stale job{stale.length === 1 ? "" : "s"} — 14+ days untouched →
-        </button>
-      )}
-
-      {(subsReview > 0 || subsPay > 0) && (
-        <Card style={{ marginTop: 14 }}>
-          <CardTitle right={<button style={linkBtn} onClick={() => go("crewpay")}>Crew payouts →</button>}>Subcontractors</CardTitle>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {subsReview > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}><Chip tone="amber">{subsReview}</Chip> invoice{subsReview === 1 ? "" : "s"} to review</span>}
-            {subsPay > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}><Chip tone="blue">{subsPay}</Chip> to pay</span>}
-          </div>
-        </Card>
-      )}
-
-      {reviewJobs.length > 0 && (
-        <Card style={{ marginTop: 14 }}>
-          <CardTitle right={<button style={linkBtn} onClick={() => go("reviews")}>Manage →</button>}>Reviews</CardTitle>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: rev.recover || rev.notasked ? 10 : 0 }}>
-            {[["Posted", rev.posted, "green"], ["Rated", rev.rated, "amber"], ["Asked", rev.asked, "gray"], ["Not asked", rev.notasked, "blue"], ["Needs a call", rev.recover, "red"]]
-              .filter(([, n]) => n > 0).map(([l, n, tone]) => (
-                <span key={l} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}>
-                  <Chip tone={tone}>{n}</Chip> {l}
-                </span>
-              ))}
-          </div>
-          {rev.recover > 0 && (
-            <div style={{ fontSize: 12.5, color: "#B3261E", lineHeight: 1.5 }}>
-              {rev.recover} customer{rev.recover === 1 ? "" : "s"} rated you 3★ or below — call before asking for anything public.
-            </div>
-          )}
-          {rev.recover === 0 && rev.notasked > 0 && (
-            <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
-              {rev.notasked} sold/finished job{rev.notasked === 1 ? "" : "s"} not yet asked for a review.
-            </div>
-          )}
-        </Card>
-      )}
-
-      <Card style={{ marginTop: 14 }}>
-        <CardTitle right={
-          <button onClick={() => go("jobs")} style={{ border: "none", background: "none", color: T.accent, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-            Open board
-          </button>
-        }>Pipeline by stage</CardTitle>
-        {byStage.filter((s) => s.count > 0).map((s) => (
-          <div key={s.id} style={{ marginBottom: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 5 }}>
-              <span style={{ fontWeight: 600, color: S.ink }}>{s.name} · {s.count}</span>
-              <span style={{ color: S.sub }}>{money(s.value)}</span>
-            </div>
-            <div style={{ height: 7, background: S.soft, borderRadius: 99 }}>
-              <div style={{
-                height: 7, borderRadius: 99, background: T.accent,
-                width: `${Math.max(5, totalPipeline + signedValue ? (s.value / Math.max(totalPipeline, signedValue)) * 100 : 0)}%`,
-                maxWidth: "100%",
-              }} />
-            </div>
-          </div>
-        ))}
-      </Card>
-
-      <Card style={{ marginTop: 14 }}>
-        <CardTitle right={
-          <span style={{ display: "flex", gap: 6 }}>
-            <Btn kind="soft" small onClick={onQuickTask}><Plus size={12} /> Task</Btn>
-            <Btn kind="soft" small onClick={onNewLead}><Plus size={12} /> Lead</Btn>
-          </span>
-        }>Needs attention</CardTitle>
-        {stale.length === 0 && openTasks.length === 0 && (
-          <div style={{ fontSize: 14, color: S.sub }}>Nothing stale and no open tasks. Pipeline is moving.</div>
-        )}
-        {stale.map((j) => (
-          <button key={j.id} onClick={() => onOpenJob(j.id)} style={{
-            width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
-            border: "none", background: "none", cursor: "pointer", textAlign: "left",
-            padding: "11px 0", borderBottom: `1px solid ${S.line}`,
-          }}>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{j.name}</div>
-              <div style={{ fontSize: 12, color: S.sub }}>{j.address}</div>
-            </div>
-            <Chip tone="red">{j.daysInStage}d in stage</Chip>
-          </button>
-        ))}
-        {openTasks.slice(0, 5).map(({ job, t }) => (
-          <button key={job.id + t.id} onClick={() => onOpenJob(job.id)} style={{
-            width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
-            border: "none", background: "none", cursor: "pointer", textAlign: "left",
-            padding: "11px 0", borderBottom: `1px solid ${S.line}`,
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <Circle size={16} color="#C7CBD1" />
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: S.ink }}>{t.label}</div>
-                <div style={{ fontSize: 12, color: S.sub }}>{job.name}</div>
-              </div>
-            </div>
-            <ChevronRight size={16} color="#C7CBD1" />
-          </button>
-        ))}
-      </Card>
+      </>)}
 
       {(() => {
         /* Every client who has been sent a review request, and where
@@ -4678,6 +4692,11 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
                 <div style={{ fontSize: 11, color: S.sub }}>ready to ask</div>
               </div>
             </div>
+            {rev.recover > 0 && (
+              <div style={{ fontSize: 12.5, color: "#B3261E", lineHeight: 1.5, marginBottom: 10 }}>
+                {rev.recover} customer{rev.recover === 1 ? "" : "s"} rated you 3★ or below — call before asking for anything public.
+              </div>
+            )}
             {eligible.length > 0 && (
               <div style={{ fontSize: 11.5, fontWeight: 800, color: S.sub, letterSpacing: ".04em", margin: "4px 0 2px" }}>NOT YET ASKED</div>
             )}
@@ -4715,6 +4734,16 @@ function Dashboard({ jobs, stages, onOpenJob, userName, go, onNewLead, onQuickTa
           </Card>
         );
       })()}
+
+      {isAdmin && (subsReview > 0 || subsPay > 0) && (
+        <Card style={{ marginTop: 14 }}>
+          <CardTitle right={<button style={linkBtn} onClick={() => go("crewpay")}>Crew payouts →</button>}>Subcontractors</CardTitle>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {subsReview > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}><Chip tone="amber">{subsReview}</Chip> invoice{subsReview === 1 ? "" : "s"} to review</span>}
+            {subsPay > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}><Chip tone="blue">{subsPay}</Chip> to pay</span>}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
@@ -4753,7 +4782,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
     const wonIdx = order.indexOf("s5");
     const oddsFor = (sid) => { const i = order.indexOf(sid); if (i < 0 || wonIdx <= 0) return 0.3; return Math.max(0.1, Math.min(0.9, (i + 1) / (wonIdx + 1))); };
     const weightedPipeline = open.reduce((x, j) => x + num(j.value) * oddsFor(j.stageId), 0);
-    const avgAge = open.length ? open.reduce((x, j) => x + num(j.daysInStage), 0) / open.length : 0;
+    const avgAge = open.length ? open.reduce((x, j) => x + stageDays(j), 0) / open.length : 0;
     return {
       total: scoped.length, won: won.length, lost: lost.length, unq: unq.length,
       done: done.length, open: open.length,
@@ -5194,11 +5223,59 @@ function isoLocal(d) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 }
 function todayIso() { return isoLocal(new Date()); }
+/* How long a job has sat in its current stage.
+
+   This used to read job.daysInStage directly, which was dead data: the
+   field was only ever *written* — as literals in the demo jobs and as 0 on
+   import / stage move / lead creation — and nothing ever incremented it.
+   Every real customer therefore saw "0 days in stage" forever, silently
+   flattening focusScore's staleness weighting, the stale-jobs list, average
+   age, the stage-time sort and the red-after-10-days card.
+
+   The fix is to stamp the entry date (job.stageAt) once and derive the age
+   on read. Jobs saved before this change have no stageAt, so they fall back
+   to whatever daysInStage last held and start reporting truthfully the
+   moment they next move. We deliberately do not backfill stageAt at
+   hydration: touching every job on load would trip the debounced upsert and
+   rewrite the customer's whole table on first open. */
+function stageDays(job) {
+  if (!job) return 0;
+  if (job.stageAt) {
+    const ms = Date.parse(todayIso()) - Date.parse(String(job.stageAt).slice(0, 10));
+    return Math.max(0, Math.round(ms / 86400000));
+  }
+  return num(job.daysInStage);
+}
+/* Stage age as a board signal. Green while the job is comfortably inside its
+   stage SLA, neutral once it's past halfway, red once it's overdue. Stages
+   with no SLA configured keep the old behavior (red after 10 days) so nothing
+   changes for an org that never opens the workflow editor, and finished or
+   dead jobs are never colored — they aren't waiting on anyone. */
+function stageAge(job, rules) {
+  const days = stageDays(job);
+  const done = ["s10", "s11", "s12"].includes(job && job.stageId);
+  const sla = num(rules && job && rules[job.stageId] && rules[job.stageId].sla);
+  const limit = sla || 10;
+  if (done) return { days, sla, limit: 0, late: false, fresh: false, color: S.sub };
+  const late = days > limit;
+  const fresh = days <= Math.ceil(limit / 2);
+  return {
+    days, sla, limit, late, fresh,
+    color: late ? "var(--rl-red-fg)" : fresh ? "var(--rl-green-fg)" : S.sub,
+  };
+}
 /* The day before a date, in local terms — used to schedule reminders. */
 function dayBefore(iso) {
   if (!iso) return null;
   const d = new Date(iso + "T12:00:00");
   d.setDate(d.getDate() - 1);
+  return isoLocal(d);
+}
+/* N days after a date, in local terms — used to date seeded stage tasks. */
+function plusDays(iso, n) {
+  if (!iso) return null;
+  const d = new Date(iso + "T12:00:00");
+  d.setDate(d.getDate() + num(n));
   return isoLocal(d);
 }
 
@@ -6544,9 +6621,16 @@ const linkBtn = { border: "none", background: "none", color: T.accent, fontWeigh
 /* ================================================================
    WORKFLOW EDITOR — rename / reorder / add / remove stages
    ================================================================ */
-function WorkflowEditor({ open, onClose, stages, setStages }) {
+function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, setStageRules = () => {} }) {
   const [local, setLocal] = useState(stages);
-  useEffect(() => { if (open) setLocal(stages.map((s) => ({ ...s }))); }, [open]); // eslint-disable-line
+  const [rules, setRules] = useState(stageRules);
+  const [openRule, setOpenRule] = useState(null);
+  useEffect(() => {
+    if (!open) return;
+    setLocal(stages.map((s) => ({ ...s })));
+    setRules(JSON.parse(JSON.stringify(stageRules || {})));
+    setOpenRule(null);
+  }, [open]); // eslint-disable-line
   const rename = (id, name) => setLocal(local.map((s) => (s.id === id ? { ...s, name } : s)));
   const remove = (id) => setLocal(local.filter((s) => s.id !== id));
   const move = (i, dir) => {
@@ -6556,32 +6640,168 @@ function WorkflowEditor({ open, onClose, stages, setStages }) {
     [next[i], next[j]] = [next[j], next[i]];
     setLocal(next);
   };
+  const ruleOf = (id) => stageRuleFor(rules, id);
+  const patchRule = (id, patch) => setRules((prev) => ({ ...prev, [id]: { ...stageRuleFor(prev, id), ...patch } }));
+  const patchGate = (id, patch) => patchRule(id, { gate: { ...ruleOf(id).gate, ...patch } });
+  const applyRecipe = (id, recipe) => {
+    const cur = ruleOf(id);
+    const p = recipe.patch;
+    patchRule(id, {
+      ...(p.sla !== undefined ? { sla: p.sla } : {}),
+      ...(p.notify !== undefined ? { notify: p.notify } : {}),
+      ...(p.gate ? { gate: { ...cur.gate, ...p.gate } } : {}),
+      ...(p.tasks ? { tasks: [
+        ...cur.tasks,
+        ...p.tasks.filter((t) => !cur.tasks.some((x) => String(x.label).toLowerCase() === String(t.label).toLowerCase())),
+      ] } : {}),
+    });
+  };
+  /* How many stages a recipe is already live on — the number is what makes a
+     recipe feel like a company policy rather than a one-off toggle. */
+  const recipeUse = (recipe) => local.filter((s) => {
+    const r = ruleOf(s.id), p = recipe.patch;
+    if (p.notify !== undefined && r.notify !== p.notify) return false;
+    if (p.sla !== undefined && r.sla !== p.sla) return false;
+    if (p.gate && (r.gate.mode !== p.gate.mode || !(p.gate.checks || []).every((c) => (r.gate.checks || []).includes(c)))) return false;
+    if (p.tasks && !p.tasks.every((t) => r.tasks.some((x) => String(x.label).toLowerCase() === String(t.label).toLowerCase()))) return false;
+    return true;
+  }).length;
+
   return (
-    <Sheet open={open} onClose={onClose} title="Customize workflow"
+    <Sheet open={open} onClose={onClose} title="Customize workflow" tall
       footer={
         <div style={{ display: "flex", gap: 10 }}>
           <Btn kind="ghost" style={{ flex: 1 }} onClick={onClose}>Cancel</Btn>
-          <Btn style={{ flex: 1 }} disabled={local.length === 0} onClick={() => { setStages(local); onClose(); }}>Save workflow</Btn>
+          <Btn style={{ flex: 1 }} disabled={local.length === 0}
+            onClick={() => { setStages(local); setStageRules(rules); onClose(); }}>Save workflow</Btn>
         </div>
       }>
-      <div style={{ fontSize: 14, color: S.sub, marginBottom: 14 }}>
-        Rename, reorder, add, or remove pipeline stages. Jobs in a removed stage move to the first stage.
+      <div style={{ fontSize: 14, color: S.sub, marginBottom: 14, lineHeight: 1.5 }}>
+        Rename, reorder, add, or remove pipeline stages. Open <strong style={{ color: S.ink }}>Automate</strong> on
+        a stage to say how long a job should sit there, what has to be true before it can arrive,
+        and what work to hand the rep when it does.
       </div>
-      {local.map((s, i) => (
-        <div key={s.id} style={{
-          display: "flex", alignItems: "center", gap: 8, padding: "8px 0",
-          borderBottom: `1px solid ${S.line}`,
-        }}>
-          <GripVertical size={16} color="#C7CBD1" />
-          <input value={s.name} onChange={(e) => rename(s.id, e.target.value)}
-            style={{ ...inputStyle, padding: "9px 12px", flex: 1 }} />
-          <button onClick={() => move(i, -1)} style={arrowBtn} aria-label="Move up">↑</button>
-          <button onClick={() => move(i, 1)} style={arrowBtn} aria-label="Move down">↓</button>
-          <button onClick={() => remove(s.id)} style={{ border: "none", background: "none", cursor: "pointer", padding: 4 }}>
-            <Trash2 size={16} color="#B42318" />
-          </button>
-        </div>
-      ))}
+      {local.map((s, i) => {
+        const r = ruleOf(s.id);
+        const locked = LOCKED_STAGES.includes(s.id);
+        const isOpen = openRule === s.id;
+        const summary = [
+          r.sla ? `${r.sla}-day clock` : null,
+          r.gate.mode !== "off" && (r.gate.checks || []).length ? `${r.gate.mode === "block" ? "blocks" : "warns"} on ${r.gate.checks.length}` : null,
+          r.tasks.length ? `${r.tasks.length} ${r.tasks.length === 1 ? "task" : "tasks"}` : null,
+          r.notify ? "tells the homeowner" : null,
+        ].filter(Boolean).join(" · ");
+        return (
+          <div key={s.id} style={{ borderBottom: `1px solid ${S.line}`, padding: "8px 0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <GripVertical size={16} color="#C7CBD1" />
+              <input value={s.name} onChange={(e) => rename(s.id, e.target.value)}
+                style={{ ...inputStyle, padding: "9px 12px", flex: 1 }} />
+              <button onClick={() => move(i, -1)} style={arrowBtn} aria-label="Move up">↑</button>
+              <button onClick={() => move(i, 1)} style={arrowBtn} aria-label="Move down">↓</button>
+              {locked ? (
+                <span title="Reporting depends on this stage — rename it, but it can't be deleted."
+                  style={{ padding: 4, display: "inline-flex" }}>
+                  <Lock size={15} color={S.sub} />
+                </span>
+              ) : (
+                <button onClick={() => remove(s.id)} style={{ border: "none", background: "none", cursor: "pointer", padding: 4 }}>
+                  <Trash2 size={16} color="#B42318" />
+                </button>
+              )}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, paddingLeft: 24, marginTop: 6 }}>
+              <button onClick={() => setOpenRule(isOpen ? null : s.id)}
+                style={{
+                  border: `1px solid ${S.line}`, background: isOpen ? T.accentSoft : S.card, color: isOpen ? T.accent : S.sub,
+                  borderRadius: 999, padding: "5px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                }}>
+                <Zap size={12} style={{ verticalAlign: -2 }} /> Automate
+              </button>
+              <span style={{ fontSize: 12, color: S.sub }}>{summary || "Nothing automated yet"}</span>
+            </div>
+            {isOpen && (
+              <div style={{ background: S.soft, borderRadius: 12, padding: 12, marginTop: 9, marginLeft: 24 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: .4, marginBottom: 8 }}>ONE-TAP RECIPES</div>
+                {STAGE_RECIPES.map((rec) => {
+                  const n = recipeUse(rec);
+                  return (
+                    <div key={rec.id} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "7px 0" }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: S.ink }}>{rec.name}</div>
+                        <div style={{ fontSize: 12, color: S.sub, lineHeight: 1.45 }}>
+                          {rec.blurb}{n > 0 ? ` Applied to ${n} ${n === 1 ? "stage" : "stages"}.` : ""}
+                        </div>
+                      </div>
+                      <Btn small kind="soft" onClick={() => applyRecipe(s.id, rec)} style={{ flexShrink: 0 }}>Apply</Btn>
+                    </div>
+                  );
+                })}
+                <div style={{ fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: .4, margin: "14px 0 8px" }}>CUSTOMIZE</div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
+                  <span style={{ fontSize: 13, color: S.ink, flex: 1 }}>Flag a job after</span>
+                  <input type="number" min="0" value={r.sla || ""} placeholder="0"
+                    onChange={(e) => patchRule(s.id, { sla: num(e.target.value) })}
+                    style={{ ...inputStyle, padding: "7px 10px", width: 74, textAlign: "right" }} />
+                  <span style={{ fontSize: 13, color: S.sub }}>days</span>
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
+                  <span style={{ fontSize: 13, color: S.ink, flex: 1 }}>Unmet requirements</span>
+                  <select value={r.gate.mode} onChange={(e) => patchGate(s.id, { mode: e.target.value })}
+                    style={{ ...selStyle, padding: "7px 10px", width: 150 }}>
+                    <option value="off">Ignore</option>
+                    <option value="warn">Warn but allow</option>
+                    <option value="block">Block the move</option>
+                  </select>
+                </div>
+                {r.gate.mode !== "off" && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                    {Object.keys(STAGE_CHECKS).map((cid) => {
+                      const on = (r.gate.checks || []).includes(cid);
+                      return (
+                        <button key={cid}
+                          onClick={() => patchGate(s.id, {
+                            checks: on ? r.gate.checks.filter((c) => c !== cid) : [...(r.gate.checks || []), cid],
+                          })}
+                          style={{
+                            border: `1px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : S.card,
+                            color: on ? T.accent : S.sub, borderRadius: 999, padding: "5px 10px",
+                            fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                          }}>{STAGE_CHECKS[cid].label}</button>
+                      );
+                    })}
+                  </div>
+                )}
+                <label style={{ display: "flex", gap: 9, alignItems: "center", fontSize: 13, cursor: "pointer", marginBottom: 10 }}>
+                  <input type="checkbox" checked={!!r.notify} onChange={(e) => patchRule(s.id, { notify: e.target.checked })}
+                    style={{ width: 17, height: 17, accentColor: T.accent }} />
+                  <span>Queue a portal update to the homeowner on arrival</span>
+                </label>
+                <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 6 }}>
+                  Tasks handed to the rep when a job lands here:
+                </div>
+                {r.tasks.map((t, ti) => (
+                  <div key={ti} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                    <input value={t.label}
+                      onChange={(e) => patchRule(s.id, { tasks: r.tasks.map((x, k) => (k === ti ? { ...x, label: e.target.value } : x)) })}
+                      style={{ ...inputStyle, padding: "7px 10px", flex: 1 }} />
+                    <input type="number" min="0" value={t.dueIn === undefined ? "" : t.dueIn} placeholder="due"
+                      onChange={(e) => patchRule(s.id, { tasks: r.tasks.map((x, k) => (k === ti ? { ...x, dueIn: num(e.target.value) } : x)) })}
+                      style={{ ...inputStyle, padding: "7px 10px", width: 62, textAlign: "right" }} />
+                    <button onClick={() => patchRule(s.id, { tasks: r.tasks.filter((x, k) => k !== ti) })}
+                      style={{ border: "none", background: "none", cursor: "pointer", padding: 4 }}>
+                      <Trash2 size={15} color="#B42318" />
+                    </button>
+                  </div>
+                ))}
+                <Btn small kind="soft" onClick={() => patchRule(s.id, { tasks: [...r.tasks, { label: "", dueIn: 1 }] })}>
+                  <Plus size={13} /> Add task
+                </Btn>
+              </div>
+            )}
+          </div>
+        );
+      })}
       <Btn kind="soft" small style={{ marginTop: 14 }}
         onClick={() => setLocal([...local, { id: uid("s"), name: "New stage" }])}>
         <Plus size={14} /> Add stage
@@ -6700,7 +6920,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
 /* ================================================================
    JOB BOARD — kanban with drag between stages + tap-to-move
    ================================================================ */
-function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {} }) {
+function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {}, stageRules = {}, onBulkMoveStage = () => {} }) {
   const dragJob = useRef(null);
   const focusRef = useRef(null);
   useEffect(() => {
@@ -6734,7 +6954,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
     const s = filters.sort;
     if (s === "value-hi") out = [...out].sort((a, b) => b.value - a.value);
     else if (s === "value-lo") out = [...out].sort((a, b) => a.value - b.value);
-    else if (s === "stage-time") out = [...out].sort((a, b) => b.daysInStage - a.daysInStage);
+    else if (s === "stage-time") out = [...out].sort((a, b) => stageDays(b) - stageDays(a));
     else if (s === "name") out = [...out].sort((a, b) => a.name.localeCompare(b.name));
     else if (s === "address") out = [...out].sort((a, b) => a.address.localeCompare(b.address));
     return out;
@@ -6742,13 +6962,16 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
 
   const activeFilterCount = filters.assignees.length + filters.stages.length + filters.sources.length;
 
-  const JobCard = ({ job }) => (
+  const JobCard = ({ job }) => {
+    const age = stageAge(job, stageRules);
+    return (
     <div
       draggable
       onDragStart={() => (dragJob.current = job.id)}
       onClick={() => onOpenJob(job.id)}
       style={{
         background: S.card, border: `1px solid ${S.line}`, borderRadius: 12,
+        borderLeft: age.late ? "3px solid var(--rl-red-fg)" : `1px solid ${S.line}`,
         padding: 14, marginBottom: 10, cursor: "pointer",
       }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
@@ -6778,8 +7001,8 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
         display: "flex", justifyContent: "space-between", alignItems: "center",
         marginTop: 10, paddingTop: 10, borderTop: `1px solid ${S.line}`,
       }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: job.daysInStage > 10 ? "#B42318" : S.sub }}>
-          ● {job.daysInStage} days
+        <span style={{ fontSize: 12, fontWeight: 700, color: age.color }}>
+          ● {age.days} {age.days === 1 ? "day" : "days"}{age.late ? " — late" : ""}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 12, color: S.sub }}>{job.updated}</span>
@@ -6822,7 +7045,8 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   return (
     <div style={{ paddingBottom: 100 }}>
@@ -6871,7 +7095,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
             {bulkMenu === "stage" && (
               <div style={{ position: "absolute", top: "110%", left: 0, background: S.card, border: `1px solid ${S.line}`, borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,.15)", zIndex: 10, minWidth: 180, maxHeight: 260, overflowY: "auto" }}>
                 {stages.map((st) => (
-                  <button key={st.id} onClick={() => { selected.forEach((id) => onMoveStage(id, st.id)); clearSel(); }}
+                  <button key={st.id} onClick={() => { onBulkMoveStage([...selected], st.id); clearSel(); }}
                     style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", padding: "10px 14px", fontSize: 13.5, color: S.ink, cursor: "pointer", fontFamily: "inherit" }}>{st.name}</button>
                 ))}
               </div>
@@ -11004,31 +11228,228 @@ function claimMath(job) {
    The readiness checks below are what an owner actually looks for
    before letting a job through.
 ================================================================== */
-const HANDOFF_CHECKS = [
-  { id: "contract", label: "Signed contract on file",
+/* One registry of "is this piece of work actually done?" checks, keyed so a
+   stage rule can name the ones it cares about. Each entry is a predicate plus
+   the plain-English place to go and fix it — the same shape the sold→approval
+   gate has always used, now reusable for every stage transition. Adding a
+   check here makes it available to the workflow editor with no other change.
+
+   Every test reads a field the app already writes; none of these introduce
+   new data. */
+const STAGE_CHECKS = {
+  contract: { label: "Signed contract on file",
     test: (j) => !!(j.contract && j.contract.status === "Signed"),
     fix: "Contract section — send for signature or mark it signed." },
-  { id: "price", label: "Contract price set",
+  price: { label: "Contract price set",
     test: (j) => num(j.contract && j.contract.price) > 0 || num(j.fin && j.fin.contract) > 0,
     fix: "Contract or Financials — a job with no price cannot be capped out." },
-  { id: "deposit", label: "Deposit collected or waived",
+  deposit: { label: "Deposit collected or waived",
     test: (j) => num((j.payments || []).reduce((a, p) => a + num(p.amount), 0)) > 0 || !!j.depositWaived,
     fix: "Payments section — record the deposit, or tick waived on the approval." },
-  { id: "measure", label: "Measurements recorded",
+  measure: { label: "Measurements recorded",
     test: (j) => num(j.measurements && j.measurements.squares) > 0,
     fix: "Measurements section — import a report or key the squares." },
-  { id: "materials", label: "Material list built",
+  materials: { label: "Material list built",
     test: (j) => Array.isArray(j.materials) && j.materials.length > 0,
     fix: "Materials section — build the list so production can order." },
-  { id: "claim", label: "Claim approved by the carrier",
+  claim: { label: "Claim approved by the carrier",
     test: (j) => j.claimType !== "Insurance" || ["scope", "supplement", "scheduled", "invoiced", "closed"].includes((j.claim || {}).stage),
     fix: "Insurance claim section — the carrier has not approved a scope yet." },
-];
+  /* Available to stage rules, not used by the sold→approval gate. Checks
+     that need more than the job itself get it from ctx, which callers thread
+     through from app state (appointments live in their own collection). */
+  appt: { label: "Appointment on the calendar",
+    test: (j, ctx) => (((ctx && ctx.appointments) || []).some((a) => a.jobId === j.id)),
+    fix: "Calendar — book the inspection so the homeowner has a date." },
+  photos: { label: "Damage photos captured",
+    test: (j) => ((j.photos || []).length + (j.inspection && j.inspection.photos ? j.inspection.photos.length : 0)) > 0,
+    fix: "Photos section — a claim without photos is a claim you will lose." },
+  estimate: { label: "Estimate built and sent",
+    test: (j) => ["Sent", "Accepted", "Signed"].includes((j.estimate || {}).status),
+    fix: "Estimate section — build the options and send them to the homeowner." },
+  filed: { label: "Claim filed with the carrier",
+    test: (j) => j.claimType !== "Insurance" || !!((j.insurance || {}).claim || (j.claim || {}).claim),
+    fix: "Insurance section — record the carrier and claim number." },
+  crew: { label: "Crew assigned",
+    test: (j) => !!j.crewId,
+    fix: "Production section — assign the crew that is installing this roof." },
+  scheddate: { label: "Install date set",
+    test: (j) => !!j.schedDate,
+    fix: "Schedule — pick the install date so materials and crew line up." },
+  folder: { label: "Job folder approved",
+    test: (j) => !!j.jobFolder,
+    fix: "Handoff section — an admin has to approve the sold job first." },
+  paidfull: { label: "Balance collected in full",
+    test: (j) => { const p = paymentsSummary(j); return !p.contract || p.balance <= 0.01; },
+    fix: "Financials — there is still a balance owed on this job." },
+  reason: { label: "Reason recorded",
+    test: (j) => !!String(j.lostReason || "").trim(),
+    fix: "Say why this one went away — the move dialog will ask you." },
+};
 
-function handoffReadiness(job) {
-  const results = HANDOFF_CHECKS.map((c) => ({ ...c, ok: !!c.test(job) }));
+/* The sold→approval gate is now just a named subset of the registry, so it
+   and every other stage gate render through one checklist component. */
+const HANDOFF_CHECK_IDS = ["contract", "price", "deposit", "measure", "materials", "claim"];
+const HANDOFF_CHECKS = HANDOFF_CHECK_IDS.map((id) => ({ id, ...STAGE_CHECKS[id] }));
+
+function handoffReadiness(job, ctx) {
+  const results = HANDOFF_CHECKS.map((c) => ({ ...c, ok: !!c.test(job, ctx) }));
   const failed = results.filter((r) => !r.ok);
   return { results, failed, ready: failed.length === 0 };
+}
+
+/* ==================================================================
+   STAGE RULES — what each stage expects before and after entry
+
+   A stage is not a label, it is a container of work. A rule says: how
+   long a job should sit here before someone should care (sla), what
+   must be true to enter (gate), and what work to hand the rep once
+   they arrive (tasks).
+
+   Shipped defaults are deliberately conservative. Every gate is "warn",
+   never "block" — an upgrade that suddenly refuses to move live jobs
+   would look like the app is broken on day one. Blocking is opt-in from
+   the workflow editor, one stage at a time.
+================================================================== */
+const EMPTY_RULE = { sla: 0, gate: { mode: "off", checks: [] }, tasks: [], notify: false };
+const DEFAULT_STAGE_RULES = {
+  s1: { sla: 2, gate: { mode: "off", checks: [] },
+        tasks: [{ label: "Call the homeowner", dueIn: 0 }, { label: "Schedule inspection", dueIn: 1 }] },
+  s2: { sla: 5, gate: { mode: "warn", checks: ["appt"] },
+        tasks: [{ label: "Complete inspection", dueIn: 1 }, { label: "Document damage with photos", dueIn: 1 }] },
+  s3: { sla: 7, gate: { mode: "warn", checks: ["estimate"] },
+        tasks: [{ label: "Follow up on the estimate", dueIn: 2 }] },
+  s4: { sla: 10, gate: { mode: "warn", checks: ["filed", "photos"], when: "Insurance" },
+        tasks: [{ label: "Meet adjuster on site", dueIn: 3, when: "Insurance" }] },
+  s5: { sla: 5, gate: { mode: "warn", checks: ["contract", "price"] },
+        tasks: [{ label: "Collect deposit", dueIn: 2 }, { label: "Order materials", dueIn: 3 }] },
+  s6: { sla: 14, gate: { mode: "warn", checks: ["claim"], when: "Insurance" },
+        tasks: [{ label: "Submit supplement", dueIn: 2, when: "Insurance" }] },
+  s7: { sla: 7, gate: { mode: "warn", checks: ["deposit", "scheddate"] },
+        tasks: [{ label: "Confirm material delivery", dueIn: 1 }], notify: true },
+  s8: { sla: 7, gate: { mode: "warn", checks: ["folder", "crew", "scheddate"] },
+        tasks: [{ label: "Confirm crew and delivery", dueIn: 1 }, { label: "Complete installation", dueIn: 3 }], notify: true },
+  s9: { sla: 10, gate: { mode: "warn", checks: ["measure"] },
+        tasks: [{ label: "Send final invoice", dueIn: 1 }, { label: "Collect depreciation & deductible", dueIn: 5, when: "Insurance" }] },
+  s10: { sla: 0, gate: { mode: "warn", checks: ["paidfull"] },
+         tasks: [{ label: "Request review", dueIn: 1 }], notify: true },
+  s11: { sla: 0, gate: { mode: "warn", checks: ["reason"] }, tasks: [] },
+  s12: { sla: 0, gate: { mode: "warn", checks: ["reason"] }, tasks: [] },
+};
+/* Automation is shipped as a menu, never a blank canvas. Nobody opens a
+   workflow editor wanting to design a state machine; they want the four or
+   five plays every roofing company already runs. Each recipe is a patch over
+   the stage's rule, and "Customize" underneath is the escape hatch. */
+const STAGE_RECIPES = [
+  { id: "followup", name: "Put a follow-up clock on it",
+    blurb: "Flags the job after 3 days and drops a follow-up task on arrival.",
+    patch: { sla: 3, tasks: [{ label: "Follow up with the homeowner", dueIn: 2 }] } },
+  { id: "requirecontract", name: "Require a signed contract",
+    blurb: "Warns if the job arrives here with no signature or no price.",
+    patch: { gate: { mode: "warn", checks: ["contract", "price"] } } },
+  { id: "lockproduction", name: "Lock production until it's really ready",
+    blurb: "Blocks the move without an approved folder, a crew and an install date.",
+    patch: { gate: { mode: "block", checks: ["folder", "crew", "scheddate"] } } },
+  { id: "kickoff", name: "Production kickoff",
+    blurb: "Hands the rep the order-and-confirm work the day the job lands here.",
+    patch: { tasks: [{ label: "Order materials", dueIn: 1 }, { label: "Confirm crew and delivery", dueIn: 1 }] } },
+  { id: "adjuster", name: "Run the adjuster play",
+    blurb: "Insurance jobs only: claim filed and photos on file, then meet the adjuster.",
+    patch: { gate: { mode: "warn", checks: ["filed", "photos"], when: "Insurance" },
+             tasks: [{ label: "Meet adjuster on site", dueIn: 3, when: "Insurance" }] } },
+  { id: "tellhomeowner", name: "Tell the homeowner",
+    blurb: "Queues a portal update to the customer when a job reaches this stage.",
+    patch: { notify: true } },
+  { id: "requirereason", name: "Require a reason",
+    blurb: "Won't close the job out until someone says why — that's your loss report.",
+    patch: { gate: { mode: "block", checks: ["reason"] } } },
+];
+/* Stages that other parts of the app reason about by id — won, dead, and the
+   entry point. Renaming them is fine; deleting one silently re-homes every
+   completed job to stage one and there is no undo. */
+const LOCKED_STAGES = ["s1", "s10", "s11", "s12"];
+/* A rule may only apply to one job type — this is the cheap 80% of
+   "separate pipelines" without forking the stage list itself. */
+const ruleApplies = (item, job) => !item || !item.when || (job && job.claimType) === item.when;
+function stageRuleFor(rules, stageId) {
+  const r = (rules || {})[stageId];
+  if (!r) return EMPTY_RULE;
+  return { ...EMPTY_RULE, ...r, gate: { ...EMPTY_RULE.gate, ...(r.gate || {}) } };
+}
+/* Same {results, failed, ready} shape handoffReadiness returns, so one
+   checklist UI renders both. mode is carried through so the caller knows
+   whether an unmet gate should warn or actually stop the move. */
+function stageGate(job, stageId, rules, ctx) {
+  const rule = stageRuleFor(rules, stageId);
+  const g = rule.gate;
+  const on = !!job && g.mode !== "off" && ruleApplies(g, job);
+  const ids = on ? (g.checks || []).filter((id) => STAGE_CHECKS[id]) : [];
+  const results = ids.map((id) => ({ id, ...STAGE_CHECKS[id], ok: !!STAGE_CHECKS[id].test(job, ctx) }));
+  const failed = results.filter((r) => !r.ok);
+  return { mode: on ? g.mode : "off", results, failed, ready: failed.length === 0 };
+}
+
+/* What a blocked move looks like. It never just says "no": it lists exactly
+   what is missing and where to go fix each one, and — following the same rule
+   the sold→approval gate has always used — an admin can push it through, on
+   the record. If the stage wants a reason, this is where it gets asked for,
+   which is the only place a rep would ever think to type one. */
+function StageGateSheet({ prompt, onClose, onConfirm, isAdmin, currentUser }) {
+  const [why, setWhy] = useState("");
+  useEffect(() => { setWhy(""); }, [prompt && prompt.jobId, prompt && prompt.stageId]);
+  if (!prompt) return null;
+  const { gate, stageName, jobName } = prompt;
+  const wantsReason = gate.failed.some((f) => f.id === "reason");
+  const remaining = wantsReason && why.trim() ? gate.failed.filter((f) => f.id !== "reason") : gate.failed;
+  const clear = remaining.length === 0;
+  return (
+    <Sheet open onClose={onClose} title={`Not ready for ${stageName}`}>
+      <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.5, marginBottom: 12 }}>
+        {jobName} can’t move to <strong style={{ color: S.ink }}>{stageName}</strong> until
+        {gate.failed.length === 1 ? " this is" : " these are"} done.
+      </div>
+      {gate.results.map((c) => (
+        <div key={c.id} style={{
+          display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 0",
+          borderTop: `1px solid ${S.line}`,
+        }}>
+          <span style={{ marginTop: 1, color: c.ok ? "var(--rl-green-fg)" : "var(--rl-red-fg)" }}>
+            {c.ok ? <Check size={16} /> : <AlertTriangle size={16} />}
+          </span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{c.label}</div>
+            {!c.ok && <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2, lineHeight: 1.45 }}>{c.fix}</div>}
+          </div>
+        </div>
+      ))}
+      {wantsReason && (
+        <div style={{ marginTop: 12 }}>
+          <Field label="Reason">
+            <input style={inputStyle} value={why} onChange={(e) => setWhy(e.target.value)}
+              placeholder="Went with another contractor, price, no damage found…" />
+          </Field>
+        </div>
+      )}
+      {isAdmin && !clear && (
+        <div style={{ fontSize: 11.5, color: "#9A6B00", marginTop: 12, lineHeight: 1.5 }}>
+          {remaining.length} {remaining.length === 1 ? "requirement has" : "requirements have"} not been met.
+          Moving it anyway is allowed — it is recorded against your name.
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+        <Btn kind="ghost" style={{ flex: 1 }} onClick={onClose}>Not yet</Btn>
+        {(clear || isAdmin) && (
+          <Btn style={{ flex: 1 }}
+            onClick={() => onConfirm({
+              patch: wantsReason && why.trim() ? { lostReason: why.trim() } : null,
+              override: !clear ? ((currentUser || {}).name || "an admin") : null,
+            })}>
+            {clear ? `Move to ${stageName}` : "Move anyway"}
+          </Btn>
+        )}
+      </div>
+    </Sheet>
+  );
 }
 
 /* The folder is a snapshot, not a live view. Production should be
@@ -11072,7 +11493,10 @@ function TabHandoff({ job, mut, toast, isAdmin, currentUser, stages, onMoveStage
     /* Move into production once approved — the whole point of the gate
        is that the stage change and the folder happen together. */
     const prod = (stages || []).find((s) => /deposit paid|production/i.test(s.name));
-    if (prod && onMoveStage) onMoveStage(job.id, prod.id);
+    /* Forced on purpose: this approval *is* the review. Letting a stage gate
+       veto it would create the folder and leave the job behind — the failure
+       mode looks like the app quietly ignored the admin. */
+    if (prod && onMoveStage) onMoveStage(job.id, prod.id, { force: true });
     toast("Approved — job folder created and moved to production");
   };
 
@@ -20058,7 +20482,7 @@ function JobImport({ jobs, setJobs, stages, users, onBack, toast, currentUser })
       id: uid("j"), name: r.name, address: r.address, zip: r.zip, state: r.state,
       lat: null, lng: null,
       value: r.value, stageId: r.stageId, assignee: r.assignee, leadSource: r.leadSource,
-      daysInStage: 0, updated: "imported", claimType: "Unknown", schedDate: null,
+      daysInStage: 0, stageAt: todayIso(), updated: "imported", claimType: "Unknown", schedDate: null,
       phone: r.phone, email: r.email,
       consent: { sms: { granted: false, at: null, source: null }, email: { granted: false, at: null, source: null } },
       insurance: null, checklist: { ...BLANK_CHECKLIST }, measurements: { ...BLANK_MEASURE },
@@ -22293,6 +22717,7 @@ export default function SupremeCRM() {
   const [ccToken, setCcToken] = useState(null);
   const [brand, setBrand] = useState(DEFAULT_BRAND);
   const [stages, setStages] = useState(DEFAULT_STAGES);
+  const [stageRules, setStageRules] = useState(DEFAULT_STAGE_RULES);
   const [jobs, setJobs] = useState(() => (liveDb() ? [] : seedJobs));
   const [nav, setNav] = useState("home");        // home | jobs | inbox | more | sub-screens
   const [openJobId, setOpenJobId] = useState(null);
@@ -22394,9 +22819,9 @@ export default function SupremeCRM() {
   };
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
-    announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, docTemplates,
+    announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates,
     priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate,
     features, security, jurisContacts, learnedJuris, version: 1,
   });
@@ -22404,6 +22829,10 @@ export default function SupremeCRM() {
     if (d.announcements) setAnnouncements(d.announcements);
     if (d.calls) setCalls(d.calls);
     if (d.stages) setStages(d.stages);
+    /* Orgs saved before stage rules existed have no key — they keep the
+       shipped defaults, which are all "warn", so nothing they have in flight
+       is suddenly blocked by an upgrade. */
+    if (d.stageRules) setStageRules(d.stageRules);
     if (d.leadSources) setLeadSources(d.leadSources);
     if (d.apptTypes) setApptTypes(d.apptTypes);
     if (d.templates) setTemplates(d.templates);
@@ -22532,13 +22961,48 @@ export default function SupremeCRM() {
   /* Callable both ways: mutJob(id)(fn) and mutJob(id, fn). */
   const mutJob = (id, fn) => (fn ? applyJob(id, fn) : (f2) => applyJob(id, f2));
 
-  const moveStage = (jobId, stageId) => {
+  /* The one dialog every blocked move opens. Null when nothing is blocked. */
+  const [gatePrompt, setGatePrompt] = useState(null);
+
+  /* Every stage change in the app funnels through here, so this is where the
+     gate is enforced and where a stage's own work gets handed to the rep.
+
+     opts.force skips the gate (an admin override, or an approval flow that has
+     already had its own review). opts.patch merges extra fields onto the job —
+     the gate dialog uses it to save the reason it just asked for. Returns
+     whether the move actually happened so callers like bulk move can count. */
+  const moveStage = (jobId, stageId, opts = {}) => {
     const jb = jobs.find((x) => x.id === jobId);
     const stage = stages.find((x) => x.id === stageId);
-    const stageName = stage ? (stage.name || stage.label || "the next stage") : "";
+    if (!jb || !stage) return false;
+    const stageName = stage.name || stage.label || "the next stage";
+    const gate = stageGate(jb, stageId, stageRules, { appointments });
+    if (!opts.force && gate.mode === "block" && !gate.ready) {
+      if (!opts.silent) setGatePrompt({ jobId, stageId, stageName, jobName: jb.name, gate });
+      return false;
+    }
+    const rule = stageRuleFor(stageRules, stageId);
     setJobs((prev) => prev.map((j) => {
       if (j.id !== jobId) return j;
-      const next = { ...j, stageId, daysInStage: 0, updated: "just now" };
+      const next = { ...j, ...(opts.patch || {}), stageId, stageAt: todayIso(), daysInStage: 0, updated: "just now" };
+      /* Hand the rep this stage's work — once. stageSeeded remembers which
+         stages have already dealt their tasks, so bouncing a job back and
+         forth never piles up duplicates, and a label the rep already has
+         (however they added it) is never added twice. */
+      const seeded = { ...(j.stageSeeded || {}) };
+      if (!seeded[stageId]) {
+        const have = new Set((j.tasks || []).map((t) => String(t.label || "").toLowerCase()));
+        const add = (rule.tasks || [])
+          .filter((t) => ruleApplies(t, j) && !have.has(String(t.label || "").toLowerCase()));
+        if (add.length) {
+          next.tasks = [...(j.tasks || []), ...add.map((t) => ({
+            id: uid("t"), label: t.label, done: false, time: null, auto: true,
+            due: num(t.dueIn) >= 0 ? plusDays(todayIso(), t.dueIn) : null,
+          }))];
+        }
+        seeded[stageId] = todayIso();
+        next.stageSeeded = seeded;
+      }
       /* Production → Invoicing (s9): the sub's pay is temporary until confirmed
          after install, so this flags their invoice for review. Seed a draft if
          none exists; never downgrade an already-confirmed/paid invoice. */
@@ -22565,14 +23029,40 @@ export default function SupremeCRM() {
       }
       return next;
     }));
-    if (jb && stage) {
-      logAct({ kind: "stage", jobId, jobName: jb.name, text: `moved ${jb.name} to "${stageName}"` });
-      toast(`Moved to ${stageName}${jb.portal?.notifyStage ? " — customer update queued when consent is available" : ""}`);
-      if (stageId === "s9" && jb.crewId) {
-        const crew = crews.find((c) => c.id === jb.crewId);
-        logAct({ kind: "sub", jobId, jobName: jb.name, text: `sub invoice for ${crew ? crew.name : "the crew"} needs review before payment` });
+    logAct({ kind: "stage", jobId, jobName: jb.name, text: `moved ${jb.name} to "${stageName}"` });
+    if (!opts.silent) {
+      /* A warn gate never stops the move, but it should say what is missing —
+         silence here is how jobs reach production with no crew assigned. */
+      if (!gate.ready && gate.failed.length) {
+        toast(`Moved to ${stageName} — still missing: ${gate.failed.map((f) => f.label.toLowerCase()).join(", ")}`);
+      } else {
+        toast(`Moved to ${stageName}${jb.portal?.notifyStage ? " — customer update queued when consent is available" : ""}`);
       }
     }
+    if (!gate.ready && gate.failed.length) {
+      logAct({ kind: "stage", jobId, jobName: jb.name,
+        text: `${jb.name} entered "${stageName}" with ${gate.failed.length} unmet ${gate.failed.length === 1 ? "requirement" : "requirements"}` });
+    }
+    if (stageId === "s9" && jb.crewId) {
+      const crew = crews.find((c) => c.id === jb.crewId);
+      logAct({ kind: "sub", jobId, jobName: jb.name, text: `sub invoice for ${crew ? crew.name : "the crew"} needs review before payment` });
+    }
+    return true;
+  };
+
+  /* Bulk move can't just loop moveStage: the first blocked job would open the
+     gate dialog and every job after it would silently vanish into a dialog
+     that only knows about one of them. So move what passes, keep quiet about
+     each one, and report the split once. */
+  const bulkMoveStage = (ids, stageId) => {
+    const stage = stages.find((x) => x.id === stageId);
+    const stageName = stage ? (stage.name || stage.label || "the next stage") : "";
+    const list = [...ids];
+    const blocked = list.filter((id) => !moveStage(id, stageId, { silent: true }));
+    const moved = list.length - blocked.length;
+    if (!blocked.length) toast(`Moved ${moved} ${moved === 1 ? "job" : "jobs"} to ${stageName}`);
+    else if (!moved) toast(`None moved — ${blocked.length} ${blocked.length === 1 ? "job is" : "jobs are"} missing what ${stageName} requires`);
+    else toast(`${moved} of ${list.length} moved to ${stageName} — ${blocked.length} blocked`);
   };
 
   const applyRemovedStages = (nextStages) => {
@@ -22622,7 +23112,7 @@ export default function SupremeCRM() {
       zip: existingPropertyJob?.zip || f.zip.trim(), state: existingPropertyJob?.state || f.stateSel,
       lat: existingPropertyJob?.lat ?? f.lat ?? null, lng: existingPropertyJob?.lng ?? f.lng ?? null,
       value: 0, stageId: stages[0].id, assignee: f.assignee, leadSource: f.leadSource || "—",
-      daysInStage: 0, updated: "just now", claimType: f.claimType, schedDate: null,
+      daysInStage: 0, stageAt: todayIso(), updated: "just now", claimType: f.claimType, schedDate: null,
       phone: f.phone, email: f.email,
       consent: {
         sms: { granted: f.smsConsent, at: f.smsConsent ? at : null, source: f.smsConsent ? "New lead form" : null },
@@ -22807,6 +23297,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             setAppointments={setAppointments} setApptTypes={setApptTypes} toast={toast}
             onQueueMessage={(jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))}
             onLog={logAct} users={users} mutJob={mutJob}
+            stageRules={stageRules} currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             onToggleTask={(jobId, taskId) => mutJob(jobId, (j) => ({ ...j, tasks: j.tasks.map((x) => x.id === taskId ? { ...x, done: !x.done, doneAt: !x.done ? new Date().toISOString().slice(0, 16).replace("T", " ") : null } : x) }))}
             chatMsgs={chatMsgs}
             onSendChat={(text) => {
@@ -22824,6 +23315,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onQuickAction={(jobId) => setQuickJobId(jobId)}
           focusStage={boardStage} onClearFocus={() => setBoardStage(null)}
           view={boardView} setView={setBoardView}
+          stageRules={stageRules} onBulkMoveStage={bulkMoveStage}
           onBulkUpdate={(ids, patch) => setJobs((prev) => prev.map((j) => ids.includes(j.id) ? { ...j, ...patch } : j))} />
       ) : nav === "inbox" ? (
         <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)}
@@ -23046,7 +23538,19 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       <FiltersSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} stages={stages}
         filters={filters} setFilters={setFilters} />
       <WorkflowEditor open={workflowOpen} onClose={() => setWorkflowOpen(false)} stages={stages}
-        setStages={applyRemovedStages} />
+        setStages={applyRemovedStages} stageRules={stageRules} setStageRules={setStageRules} />
+      <StageGateSheet prompt={gatePrompt} isAdmin={isAdmin} currentUser={liveUser}
+        onClose={() => setGatePrompt(null)}
+        onConfirm={({ patch, override }) => {
+          const p = gatePrompt;
+          setGatePrompt(null);
+          if (!p) return;
+          moveStage(p.jobId, p.stageId, { force: true, patch });
+          if (override) {
+            logAct({ kind: "stage", jobId: p.jobId, jobName: p.jobName,
+              text: `${override} moved ${p.jobName} to "${p.stageName}" without meeting its requirements` });
+          }
+        }} />
       <Toast msg={toastMsg} />
     </div>
   );

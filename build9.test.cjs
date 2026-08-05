@@ -36,10 +36,15 @@ ok(src.includes("const [jobOpenTab, setJobOpenTab]"), "deep-link tab state exist
 ok(src.includes('onOpenJob(job.id, "tasks")'), "home tasks open the Tasks tab");
 ok(src.includes("openTab = null, features = {}"), "JobDetail accepts a starting tab");
 
-/* --- home ordering: pipeline reads before today --- */
+/* --- home ordering: what has to be done reads before the charts ---
+   Reversed deliberately in the workflow round. An owner opening the app
+   needs today, then what is broken, then what is at risk — the pipeline
+   chart is context, not a call to action, so it now sits below them. */
 const pipeIdx = src.indexOf("Pipeline at a glance");
 const todayIdx = src.indexOf("Today — the 6am answer");
-ok(pipeIdx > 0 && todayIdx > 0 && pipeIdx < todayIdx, "pipeline card renders above Today");
+const blockIdx = src.indexOf("Blockers — what is actually broken");
+ok(todayIdx > 0 && blockIdx > todayIdx, "Blockers renders directly below Today");
+ok(pipeIdx > 0 && pipeIdx > blockIdx, "pipeline chart renders below the actionable cards");
 
 if (fails) { console.log("\nbuild 9: " + fails + " FAILED"); process.exit(1); }
 console.log("build 9 tests passed");

@@ -45,7 +45,9 @@ ok(src.includes("const contactDupes"), "phone/email duplicate detection");
 
 /* B5 — depreciation */
 ok(src.includes("const setDepStatus") && /depStatus/.test(src), "depreciation release status");
-ok(src.includes("recoverable depreciation across"), "dashboard depreciation nudge");
+/* The standalone dashboard banner became an exception-feed row in the
+   workflow round — same nudge, one place to look instead of two. */
+ok(/in recoverable depreciation not yet requested/.test(src), "held depreciation surfaces as a blocker");
 
 if (fails) { console.log("\nbuild 44: " + fails + " FAILED"); process.exit(1); }
 console.log("build 44 tests passed");

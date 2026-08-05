@@ -4831,7 +4831,7 @@ function focusScore(job) {
   if (DEAD_STAGES.includes(job.stageId) || job.stageId === "s10") return null;
   const reasons = [];
   let score = 0;
-  const days = num(job.daysInStage);
+  const days = stageDays(job);
   if (days >= 21) {
     score += 40;
     reasons.push(`${days} days sitting in this stage`);
@@ -4881,6 +4881,42 @@ function focusScore(job) {
   if (score === 0 || reasons.length === 0) return null;
   return { score, reasons: reasons.slice(0, 3) };
 }
+function jobExceptions(job, ctx) {
+  const c = ctx || {};
+  const out = [];
+  const add = (id, tone, text, tab) => out.push({ id: `${job.id}:${id}`, jobId: job.id, jobName: job.name, address: job.address, tone, text, tab });
+  const done = ["s10", "s11", "s12"].includes(job.stageId);
+  const today = todayIso();
+  if (!done) {
+    const age = stageAge(job, c.stageRules);
+    if (age.sla && age.late) {
+      const stage = (c.stages || []).find((s) => s.id === job.stageId);
+      add("sla", "red", `${age.days} days in ${stage ? stage.name.toLowerCase() : "this stage"} \u2014 ${age.sla}-day target`, null);
+    }
+    const gate = stageGate(job, job.stageId, c.stageRules, c);
+    if (gate.failed.length) {
+      add("gate", "amber", `In this stage without: ${gate.failed.map((f) => f.label.toLowerCase()).join(", ")}`, null);
+    }
+    const late = (job.tasks || []).filter((t) => !t.done && t.due && t.due < today);
+    if (late.length) add("tasks", "red", `${late.length} overdue ${late.length === 1 ? "task" : "tasks"} \u2014 oldest: ${late[0].label}`, "tasks");
+    if (job.soldRequestedAt && !job.jobFolder) add("approval", "amber", `Waiting on the office to approve the sold job`, "handoff");
+    if (job.schedDate && job.schedDate >= today && !job.crewId) add("crew", "red", `Scheduled ${job.schedDate} with no crew assigned`, "workorder");
+  }
+  if (job.subInvoice && job.subInvoice.status === "needs_review") {
+    add("sub", "amber", "Subcontractor invoice needs review before it can be paid", "financials");
+  }
+  if (job.claimType === "Insurance" && claimMath(job).depOutstanding > 0 && ((job.claim || {}).depStatus || "held") !== "released") {
+    add("dep", "amber", `${money(claimMath(job).depOutstanding)} in recoverable depreciation not yet requested`, "claim");
+  }
+  if (reviewState(job).key === "recover") {
+    add("review", "red", `Rated ${(job.review || {}).rating}\u2605 \u2014 call before asking for anything public`, "portal");
+  }
+  return out;
+}
+function exceptionFeed(jobs, ctx) {
+  const all = (jobs || []).flatMap((j) => jobExceptions(j, ctx));
+  return all.sort((a, b) => a.tone === b.tone ? 0 : a.tone === "red" ? -1 : 1);
+}
 function FocusList({ jobs, onOpenJob }) {
   const ranked = jobs.map((j) => ({ j, f: focusScore(j) })).filter((x) => x.f).sort((a, b) => b.f.score - a.f.score).slice(0, 5);
   if (ranked.length === 0) return null;
@@ -4922,7 +4958,7 @@ function FocusList({ jobs, onOpenJob }) {
   ] });
 }
 function Dashboard({
-  jobs,
+  jobs: allJobs,
   stages,
   onOpenJob,
   userName,
@@ -4943,9 +4979,20 @@ function Dashboard({
   mutJob,
   onToggleTask,
   chatMsgs = [],
-  onSendChat
+  onSendChat,
+  stageRules = {},
+  currentUser = null,
+  showMoney = true,
+  isAdmin = true
 }) {
+  const isRep = !!currentUser && currentUser.role === "rep";
+  const [scope, setScope] = (0, import_react.useState)(isRep ? "mine" : "all");
+  const jobs = (0, import_react.useMemo)(() => {
+    if (scope !== "mine" || !currentUser) return allJobs;
+    return allJobs.filter((j) => j.assignee === currentUser.name);
+  }, [allJobs, scope, currentUser]);
   const [homeBoard, setHomeBoard] = (0, import_react.useState)("calendar");
+  const [showAllBlockers, setShowAllBlockers] = (0, import_react.useState)(false);
   const [quick, setQuick] = (0, import_react.useState)(null);
   const [homeChat, setHomeChat] = (0, import_react.useState)("");
   const [quickJob, setQuickJob] = (0, import_react.useState)("");
@@ -4984,7 +5031,7 @@ function Dashboard({
     return `${(h + 11) % 12 + 1}:${String(m || 0).padStart(2, "0")} ${ap}`;
   };
   const totalPipeline = jobs.filter((j) => !DEAD_STAGES.includes(j.stageId) && j.stageId !== "s10").reduce((s, j) => s + j.value, 0);
-  const stale = jobs.filter((j) => j.daysInStage >= 14 && !["s10", "s11", "s12"].includes(j.stageId));
+  const stale = jobs.filter((j) => stageDays(j) >= 14 && !["s10", "s11", "s12"].includes(j.stageId));
   const approvedPlus = jobs.filter((j) => WON_STAGES.includes(j.stageId));
   const signedValue = approvedPlus.reduce((s, j) => s + (j.contract.price || j.value), 0);
   const byStage = stages.map((s) => ({
@@ -5051,124 +5098,17 @@ function Dashboard({
       " ",
       label
     ] }, label)) }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 16 }, children: (() => {
-      const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
-      const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
-      const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
-      const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
-      const RINGS = [
-        ["L", "Leads", "#F0B429", ["s1"]],
-        ["P", "Pipeline", "#F2711C", ["s2", "s3", "s4"]],
-        ["A", "Approved", "#63B54B", ["s5", "s6", "s7"]],
-        ["C", "Production", "#2BA4DE", ["s8", "s9"]],
-        ["I", "Invoicing", "#E0464B", ["s10"]]
-      ];
-      const ringData = RINGS.map(([letter, label, color, ids]) => ({
-        letter,
-        label,
-        color,
-        ids,
-        count: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.count, 0),
-        value: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.value, 0)
-      }));
-      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          paddingBottom: 12,
-          marginBottom: 4,
-          borderBottom: `1px solid ${S.line}`
-        }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: "Current pipeline" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13, color: S.sub }, children: [
-            "Active jobs: ",
-            activeTotal
-          ] })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", justifyContent: "space-around", gap: 4, padding: "14px 0 16px", flexWrap: "wrap" }, children: ringData.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-          "button",
-          {
-            onClick: () => onOpenStage && onOpenStage(r.ids[0]),
-            "aria-label": `${r.label}: ${r.count} jobs`,
-            style: {
-              border: "none",
-              background: "none",
-              cursor: "pointer",
-              padding: "0 2px",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 6,
-              minWidth: 56
-            },
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
-                width: 46,
-                height: 46,
-                borderRadius: "50%",
-                background: r.color,
-                display: "grid",
-                placeItems: "center",
-                color: "#fff",
-                fontSize: 21,
-                fontWeight: 800
-              }, children: r.letter }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 17, fontWeight: 800, color: r.count ? "#F2711C" : "#C7CBD1" }, children: r.count }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub, whiteSpace: "nowrap" }, children: r.value > 0 ? money(r.value) : "\u2014" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 10.5, color: S.sub, letterSpacing: ".02em" }, children: r.label })
-            ]
-          },
-          r.letter
-        )) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => go("jobs"), style: {
-          ...linkBtn,
-          display: "block",
-          width: "100%",
-          textAlign: "center",
-          padding: "6px 0 10px",
-          fontSize: 13
-        }, children: "Open board \u2192" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: S.sub, borderTop: `1px solid ${S.line}`, paddingTop: 12, marginBottom: 2 }, children: [
-          "BY STAGE \xB7 ",
-          money(totalPipeline)
-        ] }),
-        liveStages.map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-          "button",
-          {
-            onClick: () => onOpenStage && onOpenStage(st.id),
-            style: {
-              display: "block",
-              width: "100%",
-              textAlign: "left",
-              border: "none",
-              background: "none",
-              cursor: "pointer",
-              padding: "7px 0",
-              borderTop: `1px solid ${S.line}`
-            },
-            children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: st.name }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }, children: st.value > 0 ? money(st.value) : "" }),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }, children: st.count })
-              ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 5, borderRadius: 99, background: S.soft, marginTop: 5, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
-                width: `${st.count / maxCount * 100}%`,
-                height: "100%",
-                borderRadius: 99,
-                background: st.count ? T.accent : "transparent"
-              } }) })
-            ]
-          },
-          st.id
-        )),
-        lost > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 9 }, children: [
-          lost,
-          " lost or unqualified \u2014 not counted above"
-        ] })
-      ] });
-    })() }),
+    currentUser && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginTop: 12 }, children: [["mine", "Mine"], ["all", "Company"]].map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setScope(id), style: {
+      border: `1px solid ${scope === id ? T.accent : S.line}`,
+      background: scope === id ? T.accentSoft : S.card,
+      color: scope === id ? T.accent : S.sub,
+      borderRadius: 999,
+      padding: "6px 14px",
+      fontSize: 12.5,
+      fontWeight: 700,
+      cursor: "pointer",
+      fontFamily: "inherit"
+    }, children: label }, id)) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("calendar"), children: "Calendar \u2192" }), children: "Today" }),
       !todaysAppts.length && !todaysCrews.length && !overdue.length && !dueToday.length && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, paddingBottom: 2 }, children: "Nothing on the books for today. Add an appointment from the calendar, or schedule a roof from a job's Production tab." }),
@@ -5264,6 +5204,46 @@ function Dashboard({
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 14, color: "#C7CBD1" })
       ] }, t.id))
     ] }),
+    (() => {
+      const feed = exceptionFeed(jobs, { stages, stageRules, appointments });
+      const [reds, ambers] = [feed.filter((e) => e.tone === "red"), feed.filter((e) => e.tone === "amber")];
+      const show = showAllBlockers ? feed : feed.slice(0, 6);
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: feed.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", gap: 6 }, children: [
+          reds.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "red", children: reds.length }),
+          ambers.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: ambers.length })
+        ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Clear" }), children: "Blockers" }),
+        !feed.length && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: "Nothing is stuck. No overdue tasks, no roof scheduled without a crew, no job sitting past its stage clock." }),
+        show.map((e) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(e.jobId, e.tab || void 0), style: {
+          display: "flex",
+          gap: 10,
+          alignItems: "flex-start",
+          width: "100%",
+          textAlign: "left",
+          border: "none",
+          background: "none",
+          cursor: "pointer",
+          padding: "9px 0",
+          borderTop: `1px solid ${S.line}`
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { marginTop: 2, flexShrink: 0, color: e.tone === "red" ? "var(--rl-red-fg)" : "var(--rl-amber-fg)" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.AlertTriangle, { size: 15 }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink, display: "block" }, children: e.jobName }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub, display: "block", lineHeight: 1.45 }, children: e.text })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 15, color: "#C7CBD1", style: { flexShrink: 0, marginTop: 3 } })
+        ] }, e.id)),
+        feed.length > 6 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setShowAllBlockers(!showAllBlockers), style: {
+          ...linkBtn,
+          display: "block",
+          width: "100%",
+          textAlign: "center",
+          padding: "10px 0 2px",
+          fontSize: 12.5
+        }, children: showAllBlockers ? "Show less" : `Show all ${feed.length}` })
+      ] });
+    })(),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FocusList, { jobs, onOpenJob }),
     (() => {
       const days = [];
       for (let i = 0; i < 7; i++) {
@@ -5373,32 +5353,124 @@ function Dashboard({
         ] })
       ] });
     })(),
-    (() => {
-      const depJobs = jobs.filter((j) => j.claimType === "Insurance" && claimMath(j).depOutstanding > 0 && (j.claim?.depStatus || "held") !== "released");
-      if (!depJobs.length) return null;
-      const depTotal = depJobs.reduce((x, j) => x + claimMath(j).depOutstanding, 0);
-      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(depJobs[0].id, "claim"), style: {
-        display: "block",
-        width: "100%",
-        textAlign: "left",
-        border: "1px solid #F0D9A8",
-        background: "#FFF6E5",
-        borderRadius: 9,
-        padding: "11px 13px",
-        cursor: "pointer",
-        fontSize: 13,
-        color: S.ink,
-        fontFamily: "inherit",
-        lineHeight: 1.5
-      }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { children: money(depTotal) }),
-        " in recoverable depreciation across ",
-        depJobs.length,
-        " ",
-        depJobs.length === 1 ? "claim" : "claims",
-        " \u2014 request release on the completed invoices."
-      ] }) });
-    })(),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 16 }, children: (() => {
+      const liveStages = byStage.filter((st) => !DEAD_STAGES.includes(st.id));
+      const maxCount = Math.max(1, ...liveStages.map((st) => st.count));
+      const activeTotal = liveStages.reduce((a, st) => a + st.count, 0);
+      const lost = byStage.filter((st) => DEAD_STAGES.includes(st.id)).reduce((a, st) => a + st.count, 0);
+      const RINGS = [
+        ["L", "Leads", "#F0B429", ["s1"]],
+        ["P", "Pipeline", "#F2711C", ["s2", "s3", "s4"]],
+        ["A", "Approved", "#63B54B", ["s5", "s6", "s7"]],
+        ["C", "Production", "#2BA4DE", ["s8", "s9"]],
+        ["I", "Invoicing", "#E0464B", ["s10"]]
+      ];
+      const ringData = RINGS.map(([letter, label, color, ids]) => ({
+        letter,
+        label,
+        color,
+        ids,
+        count: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.count, 0),
+        value: byStage.filter((st) => ids.includes(st.id)).reduce((a, st) => a + st.value, 0)
+      }));
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          paddingBottom: 12,
+          marginBottom: 4,
+          borderBottom: `1px solid ${S.line}`
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: "Current pipeline" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13, color: S.sub }, children: [
+            "Active jobs: ",
+            activeTotal
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", justifyContent: "space-around", gap: 4, padding: "14px 0 16px", flexWrap: "wrap" }, children: ringData.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          "button",
+          {
+            onClick: () => onOpenStage && onOpenStage(r.ids[0]),
+            "aria-label": `${r.label}: ${r.count} jobs`,
+            style: {
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              padding: "0 2px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 6,
+              minWidth: 56
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+                width: 46,
+                height: 46,
+                borderRadius: "50%",
+                background: r.color,
+                display: "grid",
+                placeItems: "center",
+                color: "#fff",
+                fontSize: 21,
+                fontWeight: 800
+              }, children: r.letter }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 17, fontWeight: 800, color: r.count ? "#F2711C" : "#C7CBD1" }, children: r.count }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub, whiteSpace: "nowrap" }, children: r.value > 0 ? money(r.value) : "\u2014" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 10.5, color: S.sub, letterSpacing: ".02em" }, children: r.label })
+            ]
+          },
+          r.letter
+        )) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => go("jobs"), style: {
+          ...linkBtn,
+          display: "block",
+          width: "100%",
+          textAlign: "center",
+          padding: "6px 0 10px",
+          fontSize: 13
+        }, children: "Open board \u2192" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, fontWeight: 800, letterSpacing: ".06em", color: S.sub, borderTop: `1px solid ${S.line}`, paddingTop: 12, marginBottom: 2 }, children: [
+          "BY STAGE \xB7 ",
+          money(totalPipeline)
+        ] }),
+        liveStages.map((st) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          "button",
+          {
+            onClick: () => onOpenStage && onOpenStage(st.id),
+            style: {
+              display: "block",
+              width: "100%",
+              textAlign: "left",
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              padding: "7px 0",
+              borderTop: `1px solid ${S.line}`
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, color: S.ink, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: st.name }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12.5, color: S.sub, whiteSpace: "nowrap" }, children: st.value > 0 ? money(st.value) : "" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 800, color: st.count ? S.ink : "#C7CBD1", minWidth: 26, textAlign: "right" }, children: st.count })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 5, overflow: "hidden", height: 7, background: S.soft, borderRadius: 99 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+                width: `${st.count / maxCount * 100}%`,
+                height: "100%",
+                borderRadius: 99,
+                background: st.count ? T.accent : "transparent"
+              } }) })
+            ]
+          },
+          st.id
+        )),
+        lost > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 10, borderTop: `1px solid ${S.line}`, paddingTop: 9 }, children: [
+          lost,
+          " lost or unqualified \u2014 not counted above"
+        ] })
+      ] });
+    })() }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
       Sheet,
       {
@@ -5434,135 +5506,22 @@ function Dashboard({
         ]
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FocusList, { jobs, onOpenJob }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: S.sub, margin: "22px 4px 10px" }, children: "Business at a glance" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }, children: [
-      ["Sold", money(signedValue), `${wonCount} won`, T.accent],
-      ["Avg sale", money(avgSale), "per won job", S.ink],
-      ["Collected", money(collected), "cash received", "#177245"],
-      ["Pipeline", money(totalPipeline), "open value", S.ink],
-      ["A/R", money(arTotal), `${ar.length} open`, arTotal > 0 ? "#9A6B00" : S.ink],
-      ["Close rate", pct1(closeRate), `${wonCount}/${jobs.length}`, S.ink]
-    ].map(([l, v, sub, color]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 13, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: S.sub }, children: l }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, color, marginTop: 5, fontVariantNumeric: "tabular-nums", overflow: "hidden", textOverflow: "ellipsis" }, children: v }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub, marginTop: 2 }, children: sub })
-    ] }, l)) }),
-    stale.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => go("jobs"), style: { display: "block", width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", fontSize: 12.5, color: "#9A6B00", padding: "10px 4px 0" }, children: [
-      stale.length,
-      " stale job",
-      stale.length === 1 ? "" : "s",
-      " \u2014 14+ days untouched \u2192"
-    ] }),
-    (subsReview > 0 || subsPay > 0) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("crewpay"), children: "Crew payouts \u2192" }), children: "Subcontractors" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
-        subsReview > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: subsReview }),
-          " invoice",
-          subsReview === 1 ? "" : "s",
-          " to review"
-        ] }),
-        subsPay > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: subsPay }),
-          " to pay"
-        ] })
-      ] })
-    ] }),
-    reviewJobs.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("reviews"), children: "Manage \u2192" }), children: "Reviews" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: rev.recover || rev.notasked ? 10 : 0 }, children: [["Posted", rev.posted, "green"], ["Rated", rev.rated, "amber"], ["Asked", rev.asked, "gray"], ["Not asked", rev.notasked, "blue"], ["Needs a call", rev.recover, "red"]].filter(([, n]) => n > 0).map(([l, n, tone]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone, children: n }),
-        " ",
-        l
-      ] }, l)) }),
-      rev.recover > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: "#B3261E", lineHeight: 1.5 }, children: [
-        rev.recover,
-        " customer",
-        rev.recover === 1 ? "" : "s",
-        " rated you 3\u2605 or below \u2014 call before asking for anything public."
-      ] }),
-      rev.recover === 0 && rev.notasked > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: [
-        rev.notasked,
-        " sold/finished job",
-        rev.notasked === 1 ? "" : "s",
-        " not yet asked for a review."
-      ] })
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => go("jobs"), style: { border: "none", background: "none", color: T.accent, fontWeight: 700, fontSize: 13, cursor: "pointer" }, children: "Open board" }), children: "Pipeline by stage" }),
-      byStage.filter((s) => s.count > 0).map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 5 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontWeight: 600, color: S.ink }, children: [
-            s.name,
-            " \xB7 ",
-            s.count
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub }, children: money(s.value) })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 7, background: S.soft, borderRadius: 99 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
-          height: 7,
-          borderRadius: 99,
-          background: T.accent,
-          width: `${Math.max(5, totalPipeline + signedValue ? s.value / Math.max(totalPipeline, signedValue) * 100 : 0)}%`,
-          maxWidth: "100%"
-        } }) })
-      ] }, s.id))
-    ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", gap: 6 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: onQuickTask, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 12 }),
-          " Task"
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: onNewLead, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 12 }),
-          " Lead"
-        ] })
-      ] }), children: "Needs attention" }),
-      stale.length === 0 && openTasks.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub }, children: "Nothing stale and no open tasks. Pipeline is moving." }),
-      stale.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: {
-        width: "100%",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        border: "none",
-        background: "none",
-        cursor: "pointer",
-        textAlign: "left",
-        padding: "11px 0",
-        borderBottom: `1px solid ${S.line}`
-      }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, color: S.ink }, children: j.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: j.address })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "red", children: [
-          j.daysInStage,
-          "d in stage"
-        ] })
-      ] }, j.id)),
-      openTasks.slice(0, 5).map(({ job, t }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(job.id), style: {
-        width: "100%",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        border: "none",
-        background: "none",
-        cursor: "pointer",
-        textAlign: "left",
-        padding: "11px 0",
-        borderBottom: `1px solid ${S.line}`
-      }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Circle, { size: 16, color: "#C7CBD1" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 600, color: S.ink }, children: t.label }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: job.name })
-          ] })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 16, color: "#C7CBD1" })
-      ] }, job.id + t.id))
+    showMoney && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: S.sub, margin: "22px 4px 10px" }, children: isRep && scope === "mine" ? "Your numbers" : "Business at a glance" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }, children: [
+        ["Sold", money(signedValue), `${wonCount} won`, T.accent],
+        ["Avg sale", money(avgSale), "per won job", S.ink],
+        ["Pipeline", money(totalPipeline), "open value", S.ink],
+        ...isRep ? [] : [
+          ["Collected", money(collected), "cash received", "#177245"],
+          ["A/R", money(arTotal), `${ar.length} open`, arTotal > 0 ? "#9A6B00" : S.ink],
+          ["Close rate", pct1(closeRate), `${wonCount}/${jobs.length}`, S.ink]
+        ]
+      ].map(([l, v, sub, color]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 13, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: S.sub }, children: l }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, color, marginTop: 5, fontVariantNumeric: "tabular-nums", overflow: "hidden", textOverflow: "ellipsis" }, children: v }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub, marginTop: 2 }, children: sub })
+      ] }, l)) })
     ] }),
     (() => {
       const tracked = jobs.filter((j) => j.review && (j.review.sent || j.review.posted)).map((j) => ({ j, r: j.review })).sort((a, b) => Number(a.r.posted) - Number(b.r.posted));
@@ -5588,6 +5547,12 @@ function Dashboard({
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub }, children: "ready to ask" })
           ] })
         ] }),
+        rev.recover > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: "#B3261E", lineHeight: 1.5, marginBottom: 10 }, children: [
+          rev.recover,
+          " customer",
+          rev.recover === 1 ? "" : "s",
+          " rated you 3\u2605 or below \u2014 call before asking for anything public."
+        ] }),
         eligible.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 800, color: S.sub, letterSpacing: ".04em", margin: "4px 0 2px" }, children: "NOT YET ASKED" }),
         eligible.slice(0, 3).map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: { display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer", padding: "8px 0", borderTop: `1px solid ${S.line}` }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
@@ -5611,7 +5576,22 @@ function Dashboard({
         }),
         tracked.length === 0 && eligible.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "No review activity yet. When a job is marked complete it will appear here to request a Google review." })
       ] });
-    })()
+    })(),
+    isAdmin && (subsReview > 0 || subsPay > 0) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: linkBtn, onClick: () => go("crewpay"), children: "Crew payouts \u2192" }), children: "Subcontractors" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+        subsReview > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: subsReview }),
+          " invoice",
+          subsReview === 1 ? "" : "s",
+          " to review"
+        ] }),
+        subsPay > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: subsPay }),
+          " to pay"
+        ] })
+      ] })
+    ] })
   ] });
 }
 function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [] }) {
@@ -5646,7 +5626,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
       return Math.max(0.1, Math.min(0.9, (i + 1) / (wonIdx + 1)));
     };
     const weightedPipeline = open.reduce((x, j) => x + num(j.value) * oddsFor(j.stageId), 0);
-    const avgAge = open.length ? open.reduce((x, j) => x + num(j.daysInStage), 0) / open.length : 0;
+    const avgAge = open.length ? open.reduce((x, j) => x + stageDays(j), 0) / open.length : 0;
     return {
       total: scoped.length,
       won: won.length,
@@ -6082,10 +6062,41 @@ function isoLocal(d) {
 function todayIso() {
   return isoLocal(/* @__PURE__ */ new Date());
 }
+function stageDays(job) {
+  if (!job) return 0;
+  if (job.stageAt) {
+    const ms = Date.parse(todayIso()) - Date.parse(String(job.stageAt).slice(0, 10));
+    return Math.max(0, Math.round(ms / 864e5));
+  }
+  return num(job.daysInStage);
+}
+function stageAge(job, rules) {
+  const days = stageDays(job);
+  const done = ["s10", "s11", "s12"].includes(job && job.stageId);
+  const sla = num(rules && job && rules[job.stageId] && rules[job.stageId].sla);
+  const limit = sla || 10;
+  if (done) return { days, sla, limit: 0, late: false, fresh: false, color: S.sub };
+  const late = days > limit;
+  const fresh = days <= Math.ceil(limit / 2);
+  return {
+    days,
+    sla,
+    limit,
+    late,
+    fresh,
+    color: late ? "var(--rl-red-fg)" : fresh ? "var(--rl-green-fg)" : S.sub
+  };
+}
 function dayBefore(iso) {
   if (!iso) return null;
   const d = /* @__PURE__ */ new Date(iso + "T12:00:00");
   d.setDate(d.getDate() - 1);
+  return isoLocal(d);
+}
+function plusDays(iso, n) {
+  if (!iso) return null;
+  const d = /* @__PURE__ */ new Date(iso + "T12:00:00");
+  d.setDate(d.getDate() + num(n));
   return isoLocal(d);
 }
 function fmtClock(t) {
@@ -7625,10 +7636,16 @@ function FiltersSheet({ open, onClose, stages, filters, setFilters }) {
   );
 }
 var linkBtn = { border: "none", background: "none", color: T.accent, fontWeight: 700, fontSize: 13, cursor: "pointer", padding: 0 };
-function WorkflowEditor({ open, onClose, stages, setStages }) {
+function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, setStageRules = () => {
+} }) {
   const [local, setLocal] = (0, import_react.useState)(stages);
+  const [rules, setRules] = (0, import_react.useState)(stageRules);
+  const [openRule, setOpenRule] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
-    if (open) setLocal(stages.map((s) => ({ ...s })));
+    if (!open) return;
+    setLocal(stages.map((s) => ({ ...s })));
+    setRules(JSON.parse(JSON.stringify(stageRules || {})));
+    setOpenRule(null);
   }, [open]);
   const rename = (id, name) => setLocal(local.map((s) => s.id === id ? { ...s, name } : s));
   const remove = (id) => setLocal(local.filter((s) => s.id !== id));
@@ -7639,41 +7656,235 @@ function WorkflowEditor({ open, onClose, stages, setStages }) {
     [next[i], next[j]] = [next[j], next[i]];
     setLocal(next);
   };
+  const ruleOf = (id) => stageRuleFor(rules, id);
+  const patchRule = (id, patch) => setRules((prev) => ({ ...prev, [id]: { ...stageRuleFor(prev, id), ...patch } }));
+  const patchGate = (id, patch) => patchRule(id, { gate: { ...ruleOf(id).gate, ...patch } });
+  const applyRecipe = (id, recipe) => {
+    const cur = ruleOf(id);
+    const p = recipe.patch;
+    patchRule(id, {
+      ...p.sla !== void 0 ? { sla: p.sla } : {},
+      ...p.notify !== void 0 ? { notify: p.notify } : {},
+      ...p.gate ? { gate: { ...cur.gate, ...p.gate } } : {},
+      ...p.tasks ? { tasks: [
+        ...cur.tasks,
+        ...p.tasks.filter((t) => !cur.tasks.some((x) => String(x.label).toLowerCase() === String(t.label).toLowerCase()))
+      ] } : {}
+    });
+  };
+  const recipeUse = (recipe) => local.filter((s) => {
+    const r = ruleOf(s.id), p = recipe.patch;
+    if (p.notify !== void 0 && r.notify !== p.notify) return false;
+    if (p.sla !== void 0 && r.sla !== p.sla) return false;
+    if (p.gate && (r.gate.mode !== p.gate.mode || !(p.gate.checks || []).every((c) => (r.gate.checks || []).includes(c)))) return false;
+    if (p.tasks && !p.tasks.every((t) => r.tasks.some((x) => String(x.label).toLowerCase() === String(t.label).toLowerCase()))) return false;
+    return true;
+  }).length;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
     Sheet,
     {
       open,
       onClose,
       title: "Customize workflow",
+      tall: true,
       footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: onClose, children: "Cancel" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 1 }, disabled: local.length === 0, onClick: () => {
-          setStages(local);
-          onClose();
-        }, children: "Save workflow" })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Btn,
+          {
+            style: { flex: 1 },
+            disabled: local.length === 0,
+            onClick: () => {
+              setStages(local);
+              setStageRules(rules);
+              onClose();
+            },
+            children: "Save workflow"
+          }
+        )
       ] }),
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, marginBottom: 14 }, children: "Rename, reorder, add, or remove pipeline stages. Jobs in a removed stage move to the first stage." }),
-        local.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "8px 0",
-          borderBottom: `1px solid ${S.line}`
-        }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.GripVertical, { size: 16, color: "#C7CBD1" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "input",
-            {
-              value: s.name,
-              onChange: (e) => rename(s.id, e.target.value),
-              style: { ...inputStyle, padding: "9px 12px", flex: 1 }
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => move(i, -1), style: arrowBtn, "aria-label": "Move up", children: "\u2191" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => move(i, 1), style: arrowBtn, "aria-label": "Move down", children: "\u2193" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => remove(s.id), style: { border: "none", background: "none", cursor: "pointer", padding: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 16, color: "#B42318" }) })
-        ] }, s.id)),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14, color: S.sub, marginBottom: 14, lineHeight: 1.5 }, children: [
+          "Rename, reorder, add, or remove pipeline stages. Open ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { style: { color: S.ink }, children: "Automate" }),
+          " on a stage to say how long a job should sit there, what has to be true before it can arrive, and what work to hand the rep when it does."
+        ] }),
+        local.map((s, i) => {
+          const r = ruleOf(s.id);
+          const locked = LOCKED_STAGES.includes(s.id);
+          const isOpen = openRule === s.id;
+          const summary = [
+            r.sla ? `${r.sla}-day clock` : null,
+            r.gate.mode !== "off" && (r.gate.checks || []).length ? `${r.gate.mode === "block" ? "blocks" : "warns"} on ${r.gate.checks.length}` : null,
+            r.tasks.length ? `${r.tasks.length} ${r.tasks.length === 1 ? "task" : "tasks"}` : null,
+            r.notify ? "tells the homeowner" : null
+          ].filter(Boolean).join(" \xB7 ");
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderBottom: `1px solid ${S.line}`, padding: "8px 0" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.GripVertical, { size: 16, color: "#C7CBD1" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "input",
+                {
+                  value: s.name,
+                  onChange: (e) => rename(s.id, e.target.value),
+                  style: { ...inputStyle, padding: "9px 12px", flex: 1 }
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => move(i, -1), style: arrowBtn, "aria-label": "Move up", children: "\u2191" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => move(i, 1), style: arrowBtn, "aria-label": "Move down", children: "\u2193" }),
+              locked ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "span",
+                {
+                  title: "Reporting depends on this stage \u2014 rename it, but it can't be deleted.",
+                  style: { padding: 4, display: "inline-flex" },
+                  children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Lock, { size: 15, color: S.sub })
+                }
+              ) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => remove(s.id), style: { border: "none", background: "none", cursor: "pointer", padding: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 16, color: "#B42318" }) })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, paddingLeft: 24, marginTop: 6 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                "button",
+                {
+                  onClick: () => setOpenRule(isOpen ? null : s.id),
+                  style: {
+                    border: `1px solid ${S.line}`,
+                    background: isOpen ? T.accentSoft : S.card,
+                    color: isOpen ? T.accent : S.sub,
+                    borderRadius: 999,
+                    padding: "5px 11px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    fontFamily: "inherit"
+                  },
+                  children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Zap, { size: 12, style: { verticalAlign: -2 } }),
+                    " Automate"
+                  ]
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub }, children: summary || "Nothing automated yet" })
+            ] }),
+            isOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.soft, borderRadius: 12, padding: 12, marginTop: 9, marginLeft: 24 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: 0.4, marginBottom: 8 }, children: "ONE-TAP RECIPES" }),
+              STAGE_RECIPES.map((rec) => {
+                const n = recipeUse(rec);
+                return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", padding: "7px 0" }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1 }, children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.ink }, children: rec.name }),
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, lineHeight: 1.45 }, children: [
+                      rec.blurb,
+                      n > 0 ? ` Applied to ${n} ${n === 1 ? "stage" : "stages"}.` : ""
+                    ] })
+                  ] }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "soft", onClick: () => applyRecipe(s.id, rec), style: { flexShrink: 0 }, children: "Apply" })
+                ] }, rec.id);
+              }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 800, color: S.sub, letterSpacing: 0.4, margin: "14px 0 8px" }, children: "CUSTOMIZE" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.ink, flex: 1 }, children: "Flag a job after" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    type: "number",
+                    min: "0",
+                    value: r.sla || "",
+                    placeholder: "0",
+                    onChange: (e) => patchRule(s.id, { sla: num(e.target.value) }),
+                    style: { ...inputStyle, padding: "7px 10px", width: 74, textAlign: "right" }
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.sub }, children: "days" })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.ink, flex: 1 }, children: "Unmet requirements" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                  "select",
+                  {
+                    value: r.gate.mode,
+                    onChange: (e) => patchGate(s.id, { mode: e.target.value }),
+                    style: { ...selStyle, padding: "7px 10px", width: 150 },
+                    children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "off", children: "Ignore" }),
+                      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "warn", children: "Warn but allow" }),
+                      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "block", children: "Block the move" })
+                    ]
+                  }
+                )
+              ] }),
+              r.gate.mode !== "off" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }, children: Object.keys(STAGE_CHECKS).map((cid) => {
+                const on = (r.gate.checks || []).includes(cid);
+                return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "button",
+                  {
+                    onClick: () => patchGate(s.id, {
+                      checks: on ? r.gate.checks.filter((c) => c !== cid) : [...r.gate.checks || [], cid]
+                    }),
+                    style: {
+                      border: `1px solid ${on ? T.accent : S.line}`,
+                      background: on ? T.accentSoft : S.card,
+                      color: on ? T.accent : S.sub,
+                      borderRadius: 999,
+                      padding: "5px 10px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      fontFamily: "inherit"
+                    },
+                    children: STAGE_CHECKS[cid].label
+                  },
+                  cid
+                );
+              }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 9, alignItems: "center", fontSize: 13, cursor: "pointer", marginBottom: 10 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    type: "checkbox",
+                    checked: !!r.notify,
+                    onChange: (e) => patchRule(s.id, { notify: e.target.checked }),
+                    style: { width: 17, height: 17, accentColor: T.accent }
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Queue a portal update to the homeowner on arrival" })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 6 }, children: "Tasks handed to the rep when a job lands here:" }),
+              r.tasks.map((t, ti) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    value: t.label,
+                    onChange: (e) => patchRule(s.id, { tasks: r.tasks.map((x, k) => k === ti ? { ...x, label: e.target.value } : x) }),
+                    style: { ...inputStyle, padding: "7px 10px", flex: 1 }
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    type: "number",
+                    min: "0",
+                    value: t.dueIn === void 0 ? "" : t.dueIn,
+                    placeholder: "due",
+                    onChange: (e) => patchRule(s.id, { tasks: r.tasks.map((x, k) => k === ti ? { ...x, dueIn: num(e.target.value) } : x) }),
+                    style: { ...inputStyle, padding: "7px 10px", width: 62, textAlign: "right" }
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "button",
+                  {
+                    onClick: () => patchRule(s.id, { tasks: r.tasks.filter((x, k) => k !== ti) }),
+                    style: { border: "none", background: "none", cursor: "pointer", padding: 4 },
+                    children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" })
+                  }
+                )
+              ] }, ti)),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", onClick: () => patchRule(s.id, { tasks: [...r.tasks, { label: "", dueIn: 1 }] }), children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+                " Add task"
+              ] })
+            ] })
+          ] }, s.id);
+        }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
           Btn,
           {
@@ -7853,6 +8064,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
   ] });
 }
 function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {
+}, stageRules = {}, onBulkMoveStage = () => {
 } }) {
   const dragJob = (0, import_react.useRef)(null);
   const focusRef = (0, import_react.useRef)(null);
@@ -7902,154 +8114,160 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
     const s = filters.sort;
     if (s === "value-hi") out = [...out].sort((a, b) => b.value - a.value);
     else if (s === "value-lo") out = [...out].sort((a, b) => a.value - b.value);
-    else if (s === "stage-time") out = [...out].sort((a, b) => b.daysInStage - a.daysInStage);
+    else if (s === "stage-time") out = [...out].sort((a, b) => stageDays(b) - stageDays(a));
     else if (s === "name") out = [...out].sort((a, b) => a.name.localeCompare(b.name));
     else if (s === "address") out = [...out].sort((a, b) => a.address.localeCompare(b.address));
     return out;
   }, [jobs, filters, q]);
   const activeFilterCount = filters.assignees.length + filters.stages.length + filters.sources.length;
-  const JobCard = ({ job }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-    "div",
-    {
-      draggable: true,
-      onDragStart: () => dragJob.current = job.id,
-      onClick: () => onOpenJob(job.id),
-      style: {
-        background: S.card,
-        border: `1px solid ${S.line}`,
-        borderRadius: 12,
-        padding: 14,
-        marginBottom: 10,
-        cursor: "pointer"
-      },
-      children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 8 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700, color: S.ink }, children: job.name }),
-          job.value > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, color: S.ink, whiteSpace: "nowrap" }, children: money(job.value) })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 3 }, children: job.address }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: job.claimType === "Insurance" ? "blue" : "gray", children: job.claimType === "Unknown" ? "TBD" : job.claimType }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "slate", children: job.state }),
-          job.priority && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: job.priority === "Urgent" ? "red" : job.priority === "High" ? "amber" : "gray", children: job.priority }),
-          job.leadQuality > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "inline-flex", gap: 2 }, children: [1, 2, 3, 4, 5].map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
-            width: 7,
-            height: 7,
-            borderRadius: 2,
-            background: job.leadQuality >= n ? T.accent : S.line
-          } }, n)) }),
-          (job.tags || []).slice(0, 2).map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: t }, t))
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginTop: 10,
-          paddingTop: 10,
-          borderTop: `1px solid ${S.line}`
-        }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 12, fontWeight: 700, color: job.daysInStage > 10 ? "#B42318" : S.sub }, children: [
-            "\u25CF ",
-            job.daysInStage,
-            " days"
+  const JobCard = ({ job }) => {
+    const age = stageAge(job, stageRules);
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+      "div",
+      {
+        draggable: true,
+        onDragStart: () => dragJob.current = job.id,
+        onClick: () => onOpenJob(job.id),
+        style: {
+          background: S.card,
+          border: `1px solid ${S.line}`,
+          borderRadius: 12,
+          borderLeft: age.late ? "3px solid var(--rl-red-fg)" : `1px solid ${S.line}`,
+          padding: 14,
+          marginBottom: 10,
+          cursor: "pointer"
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700, color: S.ink }, children: job.name }),
+            job.value > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, color: S.ink, whiteSpace: "nowrap" }, children: money(job.value) })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub }, children: job.updated }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
-              width: 26,
-              height: 26,
-              borderRadius: 999,
-              background: "#EEF1F4",
-              display: "grid",
-              placeItems: "center",
-              fontSize: 11,
-              fontWeight: 700,
-              color: S.sub
-            }, children: job.assignee.split(" ").map((w) => w[0]).join("") })
-          ] })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 7, marginTop: 10 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-            "button",
-            {
-              onClick: (e) => {
-                e.stopPropagation();
-                onQuickAction(job.id);
-              },
-              style: {
-                flex: 1,
-                border: `1px solid ${S.line}`,
-                background: T.accentSoft,
-                borderRadius: 8,
-                padding: "7px 0",
-                fontSize: 13,
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 3 }, children: job.address }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap", alignItems: "center" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: job.claimType === "Insurance" ? "blue" : "gray", children: job.claimType === "Unknown" ? "TBD" : job.claimType }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "slate", children: job.state }),
+            job.priority && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: job.priority === "Urgent" ? "red" : job.priority === "High" ? "amber" : "gray", children: job.priority }),
+            job.leadQuality > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "inline-flex", gap: 2 }, children: [1, 2, 3, 4, 5].map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+              width: 7,
+              height: 7,
+              borderRadius: 2,
+              background: job.leadQuality >= n ? T.accent : S.line
+            } }, n)) }),
+            (job.tags || []).slice(0, 2).map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: t }, t))
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginTop: 10,
+            paddingTop: 10,
+            borderTop: `1px solid ${S.line}`
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 12, fontWeight: 700, color: age.color }, children: [
+              "\u25CF ",
+              age.days,
+              " ",
+              age.days === 1 ? "day" : "days",
+              age.late ? " \u2014 late" : ""
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub }, children: job.updated }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+                width: 26,
+                height: 26,
+                borderRadius: 999,
+                background: "#EEF1F4",
+                display: "grid",
+                placeItems: "center",
+                fontSize: 11,
                 fontWeight: 700,
-                color: T.accent,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6
-              },
-              children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
-                " Quick add"
-              ]
-            }
-          ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                color: S.sub
+              }, children: job.assignee.split(" ").map((w) => w[0]).join("") })
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 7, marginTop: 10 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+              "button",
+              {
+                onClick: (e) => {
+                  e.stopPropagation();
+                  onQuickAction(job.id);
+                },
+                style: {
+                  flex: 1,
+                  border: `1px solid ${S.line}`,
+                  background: T.accentSoft,
+                  borderRadius: 8,
+                  padding: "7px 0",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: T.accent,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6
+                },
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+                  " Quick add"
+                ]
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+              "button",
+              {
+                onClick: (e) => {
+                  e.stopPropagation();
+                  setMoveMenuFor(moveMenuFor === job.id ? null : job.id);
+                },
+                style: {
+                  flex: 1,
+                  border: `1px solid ${S.line}`,
+                  background: S.card,
+                  borderRadius: 8,
+                  padding: "7px 0",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: S.sub,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6
+                },
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ArrowUpDown, { size: 13 }),
+                  " Move"
+                ]
+              }
+            )
+          ] }),
+          moveMenuFor === job.id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }, onClick: (e) => e.stopPropagation(), children: stages.filter((s) => s.id !== job.stageId).map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             "button",
             {
-              onClick: (e) => {
-                e.stopPropagation();
-                setMoveMenuFor(moveMenuFor === job.id ? null : job.id);
+              onClick: () => {
+                onMoveStage(job.id, s.id);
+                setMoveMenuFor(null);
               },
               style: {
-                flex: 1,
                 border: `1px solid ${S.line}`,
                 background: S.card,
-                borderRadius: 8,
-                padding: "7px 0",
-                fontSize: 13,
+                borderRadius: 999,
+                padding: "6px 10px",
+                fontSize: 12,
                 fontWeight: 600,
-                color: S.sub,
                 cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6
+                color: S.ink
               },
-              children: [
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ArrowUpDown, { size: 13 }),
-                " Move"
-              ]
-            }
-          )
-        ] }),
-        moveMenuFor === job.id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }, onClick: (e) => e.stopPropagation(), children: stages.filter((s) => s.id !== job.stageId).map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "button",
-          {
-            onClick: () => {
-              onMoveStage(job.id, s.id);
-              setMoveMenuFor(null);
+              children: s.name
             },
-            style: {
-              border: `1px solid ${S.line}`,
-              background: S.card,
-              borderRadius: 999,
-              padding: "6px 10px",
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: "pointer",
-              color: S.ink
-            },
-            children: s.name
-          },
-          s.id
-        )) })
-      ]
-    }
-  );
+            s.id
+          )) })
+        ]
+      }
+    );
+  };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { paddingBottom: 100 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "18px 16px 0", background: S.card }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
@@ -8125,7 +8343,7 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
           "button",
           {
             onClick: () => {
-              selected.forEach((id) => onMoveStage(id, st.id));
+              onBulkMoveStage([...selected], st.id);
               clearSel();
             },
             style: { display: "block", width: "100%", textAlign: "left", border: "none", background: "none", padding: "10px 14px", fontSize: 13.5, color: S.ink, cursor: "pointer", fontFamily: "inherit" },
@@ -12383,48 +12601,279 @@ function claimMath(job) {
     flags
   };
 }
-var HANDOFF_CHECKS = [
-  {
-    id: "contract",
+var STAGE_CHECKS = {
+  contract: {
     label: "Signed contract on file",
     test: (j) => !!(j.contract && j.contract.status === "Signed"),
     fix: "Contract section \u2014 send for signature or mark it signed."
   },
-  {
-    id: "price",
+  price: {
     label: "Contract price set",
     test: (j) => num(j.contract && j.contract.price) > 0 || num(j.fin && j.fin.contract) > 0,
     fix: "Contract or Financials \u2014 a job with no price cannot be capped out."
   },
-  {
-    id: "deposit",
+  deposit: {
     label: "Deposit collected or waived",
     test: (j) => num((j.payments || []).reduce((a, p) => a + num(p.amount), 0)) > 0 || !!j.depositWaived,
     fix: "Payments section \u2014 record the deposit, or tick waived on the approval."
   },
-  {
-    id: "measure",
+  measure: {
     label: "Measurements recorded",
     test: (j) => num(j.measurements && j.measurements.squares) > 0,
     fix: "Measurements section \u2014 import a report or key the squares."
   },
-  {
-    id: "materials",
+  materials: {
     label: "Material list built",
     test: (j) => Array.isArray(j.materials) && j.materials.length > 0,
     fix: "Materials section \u2014 build the list so production can order."
   },
-  {
-    id: "claim",
+  claim: {
     label: "Claim approved by the carrier",
     test: (j) => j.claimType !== "Insurance" || ["scope", "supplement", "scheduled", "invoiced", "closed"].includes((j.claim || {}).stage),
     fix: "Insurance claim section \u2014 the carrier has not approved a scope yet."
+  },
+  /* Available to stage rules, not used by the sold→approval gate. Checks
+     that need more than the job itself get it from ctx, which callers thread
+     through from app state (appointments live in their own collection). */
+  appt: {
+    label: "Appointment on the calendar",
+    test: (j, ctx) => (ctx && ctx.appointments || []).some((a) => a.jobId === j.id),
+    fix: "Calendar \u2014 book the inspection so the homeowner has a date."
+  },
+  photos: {
+    label: "Damage photos captured",
+    test: (j) => (j.photos || []).length + (j.inspection && j.inspection.photos ? j.inspection.photos.length : 0) > 0,
+    fix: "Photos section \u2014 a claim without photos is a claim you will lose."
+  },
+  estimate: {
+    label: "Estimate built and sent",
+    test: (j) => ["Sent", "Accepted", "Signed"].includes((j.estimate || {}).status),
+    fix: "Estimate section \u2014 build the options and send them to the homeowner."
+  },
+  filed: {
+    label: "Claim filed with the carrier",
+    test: (j) => j.claimType !== "Insurance" || !!((j.insurance || {}).claim || (j.claim || {}).claim),
+    fix: "Insurance section \u2014 record the carrier and claim number."
+  },
+  crew: {
+    label: "Crew assigned",
+    test: (j) => !!j.crewId,
+    fix: "Production section \u2014 assign the crew that is installing this roof."
+  },
+  scheddate: {
+    label: "Install date set",
+    test: (j) => !!j.schedDate,
+    fix: "Schedule \u2014 pick the install date so materials and crew line up."
+  },
+  folder: {
+    label: "Job folder approved",
+    test: (j) => !!j.jobFolder,
+    fix: "Handoff section \u2014 an admin has to approve the sold job first."
+  },
+  paidfull: {
+    label: "Balance collected in full",
+    test: (j) => {
+      const p = paymentsSummary(j);
+      return !p.contract || p.balance <= 0.01;
+    },
+    fix: "Financials \u2014 there is still a balance owed on this job."
+  },
+  reason: {
+    label: "Reason recorded",
+    test: (j) => !!String(j.lostReason || "").trim(),
+    fix: "Say why this one went away \u2014 the move dialog will ask you."
   }
-];
-function handoffReadiness(job) {
-  const results = HANDOFF_CHECKS.map((c) => ({ ...c, ok: !!c.test(job) }));
+};
+var HANDOFF_CHECK_IDS = ["contract", "price", "deposit", "measure", "materials", "claim"];
+var HANDOFF_CHECKS = HANDOFF_CHECK_IDS.map((id) => ({ id, ...STAGE_CHECKS[id] }));
+function handoffReadiness(job, ctx) {
+  const results = HANDOFF_CHECKS.map((c) => ({ ...c, ok: !!c.test(job, ctx) }));
   const failed = results.filter((r) => !r.ok);
   return { results, failed, ready: failed.length === 0 };
+}
+var EMPTY_RULE = { sla: 0, gate: { mode: "off", checks: [] }, tasks: [], notify: false };
+var DEFAULT_STAGE_RULES = {
+  s1: {
+    sla: 2,
+    gate: { mode: "off", checks: [] },
+    tasks: [{ label: "Call the homeowner", dueIn: 0 }, { label: "Schedule inspection", dueIn: 1 }]
+  },
+  s2: {
+    sla: 5,
+    gate: { mode: "warn", checks: ["appt"] },
+    tasks: [{ label: "Complete inspection", dueIn: 1 }, { label: "Document damage with photos", dueIn: 1 }]
+  },
+  s3: {
+    sla: 7,
+    gate: { mode: "warn", checks: ["estimate"] },
+    tasks: [{ label: "Follow up on the estimate", dueIn: 2 }]
+  },
+  s4: {
+    sla: 10,
+    gate: { mode: "warn", checks: ["filed", "photos"], when: "Insurance" },
+    tasks: [{ label: "Meet adjuster on site", dueIn: 3, when: "Insurance" }]
+  },
+  s5: {
+    sla: 5,
+    gate: { mode: "warn", checks: ["contract", "price"] },
+    tasks: [{ label: "Collect deposit", dueIn: 2 }, { label: "Order materials", dueIn: 3 }]
+  },
+  s6: {
+    sla: 14,
+    gate: { mode: "warn", checks: ["claim"], when: "Insurance" },
+    tasks: [{ label: "Submit supplement", dueIn: 2, when: "Insurance" }]
+  },
+  s7: {
+    sla: 7,
+    gate: { mode: "warn", checks: ["deposit", "scheddate"] },
+    tasks: [{ label: "Confirm material delivery", dueIn: 1 }],
+    notify: true
+  },
+  s8: {
+    sla: 7,
+    gate: { mode: "warn", checks: ["folder", "crew", "scheddate"] },
+    tasks: [{ label: "Confirm crew and delivery", dueIn: 1 }, { label: "Complete installation", dueIn: 3 }],
+    notify: true
+  },
+  s9: {
+    sla: 10,
+    gate: { mode: "warn", checks: ["measure"] },
+    tasks: [{ label: "Send final invoice", dueIn: 1 }, { label: "Collect depreciation & deductible", dueIn: 5, when: "Insurance" }]
+  },
+  s10: {
+    sla: 0,
+    gate: { mode: "warn", checks: ["paidfull"] },
+    tasks: [{ label: "Request review", dueIn: 1 }],
+    notify: true
+  },
+  s11: { sla: 0, gate: { mode: "warn", checks: ["reason"] }, tasks: [] },
+  s12: { sla: 0, gate: { mode: "warn", checks: ["reason"] }, tasks: [] }
+};
+var STAGE_RECIPES = [
+  {
+    id: "followup",
+    name: "Put a follow-up clock on it",
+    blurb: "Flags the job after 3 days and drops a follow-up task on arrival.",
+    patch: { sla: 3, tasks: [{ label: "Follow up with the homeowner", dueIn: 2 }] }
+  },
+  {
+    id: "requirecontract",
+    name: "Require a signed contract",
+    blurb: "Warns if the job arrives here with no signature or no price.",
+    patch: { gate: { mode: "warn", checks: ["contract", "price"] } }
+  },
+  {
+    id: "lockproduction",
+    name: "Lock production until it's really ready",
+    blurb: "Blocks the move without an approved folder, a crew and an install date.",
+    patch: { gate: { mode: "block", checks: ["folder", "crew", "scheddate"] } }
+  },
+  {
+    id: "kickoff",
+    name: "Production kickoff",
+    blurb: "Hands the rep the order-and-confirm work the day the job lands here.",
+    patch: { tasks: [{ label: "Order materials", dueIn: 1 }, { label: "Confirm crew and delivery", dueIn: 1 }] }
+  },
+  {
+    id: "adjuster",
+    name: "Run the adjuster play",
+    blurb: "Insurance jobs only: claim filed and photos on file, then meet the adjuster.",
+    patch: {
+      gate: { mode: "warn", checks: ["filed", "photos"], when: "Insurance" },
+      tasks: [{ label: "Meet adjuster on site", dueIn: 3, when: "Insurance" }]
+    }
+  },
+  {
+    id: "tellhomeowner",
+    name: "Tell the homeowner",
+    blurb: "Queues a portal update to the customer when a job reaches this stage.",
+    patch: { notify: true }
+  },
+  {
+    id: "requirereason",
+    name: "Require a reason",
+    blurb: "Won't close the job out until someone says why \u2014 that's your loss report.",
+    patch: { gate: { mode: "block", checks: ["reason"] } }
+  }
+];
+var LOCKED_STAGES = ["s1", "s10", "s11", "s12"];
+var ruleApplies = (item, job) => !item || !item.when || (job && job.claimType) === item.when;
+function stageRuleFor(rules, stageId) {
+  const r = (rules || {})[stageId];
+  if (!r) return EMPTY_RULE;
+  return { ...EMPTY_RULE, ...r, gate: { ...EMPTY_RULE.gate, ...r.gate || {} } };
+}
+function stageGate(job, stageId, rules, ctx) {
+  const rule = stageRuleFor(rules, stageId);
+  const g = rule.gate;
+  const on = !!job && g.mode !== "off" && ruleApplies(g, job);
+  const ids = on ? (g.checks || []).filter((id) => STAGE_CHECKS[id]) : [];
+  const results = ids.map((id) => ({ id, ...STAGE_CHECKS[id], ok: !!STAGE_CHECKS[id].test(job, ctx) }));
+  const failed = results.filter((r) => !r.ok);
+  return { mode: on ? g.mode : "off", results, failed, ready: failed.length === 0 };
+}
+function StageGateSheet({ prompt, onClose, onConfirm, isAdmin, currentUser }) {
+  const [why, setWhy] = (0, import_react.useState)("");
+  (0, import_react.useEffect)(() => {
+    setWhy("");
+  }, [prompt && prompt.jobId, prompt && prompt.stageId]);
+  if (!prompt) return null;
+  const { gate, stageName, jobName } = prompt;
+  const wantsReason = gate.failed.some((f) => f.id === "reason");
+  const remaining = wantsReason && why.trim() ? gate.failed.filter((f) => f.id !== "reason") : gate.failed;
+  const clear = remaining.length === 0;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open: true, onClose, title: `Not ready for ${stageName}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.5, marginBottom: 12 }, children: [
+      jobName,
+      " can\u2019t move to ",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { style: { color: S.ink }, children: stageName }),
+      " until",
+      gate.failed.length === 1 ? " this is" : " these are",
+      " done."
+    ] }),
+    gate.results.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+      display: "flex",
+      gap: 10,
+      alignItems: "flex-start",
+      padding: "10px 0",
+      borderTop: `1px solid ${S.line}`
+    }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { marginTop: 1, color: c.ok ? "var(--rl-green-fg)" : "var(--rl-red-fg)" }, children: c.ok ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Check, { size: 16 }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.AlertTriangle, { size: 16 }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: c.label }),
+        !c.ok && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 2, lineHeight: 1.45 }, children: c.fix })
+      ] })
+    ] }, c.id)),
+    wantsReason && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Reason", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "input",
+      {
+        style: inputStyle,
+        value: why,
+        onChange: (e) => setWhy(e.target.value),
+        placeholder: "Went with another contractor, price, no damage found\u2026"
+      }
+    ) }) }),
+    isAdmin && !clear && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: "#9A6B00", marginTop: 12, lineHeight: 1.5 }, children: [
+      remaining.length,
+      " ",
+      remaining.length === 1 ? "requirement has" : "requirements have",
+      " not been met. Moving it anyway is allowed \u2014 it is recorded against your name."
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: onClose, children: "Not yet" }),
+      (clear || isAdmin) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        Btn,
+        {
+          style: { flex: 1 },
+          onClick: () => onConfirm({
+            patch: wantsReason && why.trim() ? { lostReason: why.trim() } : null,
+            override: !clear ? (currentUser || {}).name || "an admin" : null
+          }),
+          children: clear ? `Move to ${stageName}` : "Move anyway"
+        }
+      )
+    ] })
+  ] });
 }
 function buildJobFolder(job, approver) {
   return {
@@ -12462,7 +12911,7 @@ function TabHandoff({ job, mut, toast, isAdmin, currentUser, stages, onMoveStage
     const built = buildJobFolder(job, (currentUser || {}).name || "Admin");
     mut((j) => ({ ...j, jobFolder: built, approvedAt: built.at, approvedBy: built.by, soldRejectedAt: null }));
     const prod = (stages || []).find((s) => /deposit paid|production/i.test(s.name));
-    if (prod && onMoveStage) onMoveStage(job.id, prod.id);
+    if (prod && onMoveStage) onMoveStage(job.id, prod.id, { force: true });
     toast("Approved \u2014 job folder created and moved to production");
   };
   const reject = () => {
@@ -22244,6 +22693,7 @@ function JobImport({ jobs, setJobs, stages, users, onBack, toast, currentUser })
       assignee: r.assignee,
       leadSource: r.leadSource,
       daysInStage: 0,
+      stageAt: todayIso(),
       updated: "imported",
       claimType: "Unknown",
       schedDate: null,
@@ -24477,6 +24927,7 @@ function SupremeCRM() {
   const [ccToken, setCcToken] = (0, import_react.useState)(null);
   const [brand2, setBrand] = (0, import_react.useState)(DEFAULT_BRAND);
   const [stages, setStages] = (0, import_react.useState)(DEFAULT_STAGES);
+  const [stageRules, setStageRules] = (0, import_react.useState)(DEFAULT_STAGE_RULES);
   const [jobs, setJobs] = (0, import_react.useState)(() => liveDb() ? [] : seedJobs);
   const [nav, setNav] = (0, import_react.useState)("home");
   const [openJobId, setOpenJobId] = (0, import_react.useState)(null);
@@ -24574,11 +25025,12 @@ function SupremeCRM() {
       setNav("home");
     }
   };
-  const orgDeps = [announcements, calls, stages, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
     announcements,
     calls,
     stages,
+    stageRules,
     leadSources,
     apptTypes,
     templates,
@@ -24601,6 +25053,7 @@ function SupremeCRM() {
     if (d.announcements) setAnnouncements(d.announcements);
     if (d.calls) setCalls(d.calls);
     if (d.stages) setStages(d.stages);
+    if (d.stageRules) setStageRules(d.stageRules);
     if (d.leadSources) setLeadSources(d.leadSources);
     if (d.apptTypes) setApptTypes(d.apptTypes);
     if (d.templates) setTemplates(d.templates);
@@ -24726,13 +25179,38 @@ function SupremeCRM() {
   }, [currentUser && currentUser.id]);
   const applyJob = (id, fn) => setJobs((prev) => prev.map((j) => j.id === id ? { ...fn(j), updated: "just now", touchedAt: Date.now() } : j));
   const mutJob = (id, fn) => fn ? applyJob(id, fn) : (f2) => applyJob(id, f2);
-  const moveStage = (jobId, stageId) => {
+  const [gatePrompt, setGatePrompt] = (0, import_react.useState)(null);
+  const moveStage = (jobId, stageId, opts = {}) => {
     const jb = jobs.find((x) => x.id === jobId);
     const stage = stages.find((x) => x.id === stageId);
-    const stageName = stage ? stage.name || stage.label || "the next stage" : "";
+    if (!jb || !stage) return false;
+    const stageName = stage.name || stage.label || "the next stage";
+    const gate = stageGate(jb, stageId, stageRules, { appointments });
+    if (!opts.force && gate.mode === "block" && !gate.ready) {
+      if (!opts.silent) setGatePrompt({ jobId, stageId, stageName, jobName: jb.name, gate });
+      return false;
+    }
+    const rule = stageRuleFor(stageRules, stageId);
     setJobs((prev) => prev.map((j) => {
       if (j.id !== jobId) return j;
-      const next = { ...j, stageId, daysInStage: 0, updated: "just now" };
+      const next = { ...j, ...opts.patch || {}, stageId, stageAt: todayIso(), daysInStage: 0, updated: "just now" };
+      const seeded = { ...j.stageSeeded || {} };
+      if (!seeded[stageId]) {
+        const have = new Set((j.tasks || []).map((t) => String(t.label || "").toLowerCase()));
+        const add = (rule.tasks || []).filter((t) => ruleApplies(t, j) && !have.has(String(t.label || "").toLowerCase()));
+        if (add.length) {
+          next.tasks = [...j.tasks || [], ...add.map((t) => ({
+            id: uid("t"),
+            label: t.label,
+            done: false,
+            time: null,
+            auto: true,
+            due: num(t.dueIn) >= 0 ? plusDays(todayIso(), t.dueIn) : null
+          }))];
+        }
+        seeded[stageId] = todayIso();
+        next.stageSeeded = seeded;
+      }
       if (stageId === "s9" && next.crewId) {
         const crew = crews.find((c) => c.id === next.crewId);
         if (crew) {
@@ -24760,14 +25238,37 @@ function SupremeCRM() {
       }
       return next;
     }));
-    if (jb && stage) {
-      logAct({ kind: "stage", jobId, jobName: jb.name, text: `moved ${jb.name} to "${stageName}"` });
-      toast(`Moved to ${stageName}${jb.portal?.notifyStage ? " \u2014 customer update queued when consent is available" : ""}`);
-      if (stageId === "s9" && jb.crewId) {
-        const crew = crews.find((c) => c.id === jb.crewId);
-        logAct({ kind: "sub", jobId, jobName: jb.name, text: `sub invoice for ${crew ? crew.name : "the crew"} needs review before payment` });
+    logAct({ kind: "stage", jobId, jobName: jb.name, text: `moved ${jb.name} to "${stageName}"` });
+    if (!opts.silent) {
+      if (!gate.ready && gate.failed.length) {
+        toast(`Moved to ${stageName} \u2014 still missing: ${gate.failed.map((f) => f.label.toLowerCase()).join(", ")}`);
+      } else {
+        toast(`Moved to ${stageName}${jb.portal?.notifyStage ? " \u2014 customer update queued when consent is available" : ""}`);
       }
     }
+    if (!gate.ready && gate.failed.length) {
+      logAct({
+        kind: "stage",
+        jobId,
+        jobName: jb.name,
+        text: `${jb.name} entered "${stageName}" with ${gate.failed.length} unmet ${gate.failed.length === 1 ? "requirement" : "requirements"}`
+      });
+    }
+    if (stageId === "s9" && jb.crewId) {
+      const crew = crews.find((c) => c.id === jb.crewId);
+      logAct({ kind: "sub", jobId, jobName: jb.name, text: `sub invoice for ${crew ? crew.name : "the crew"} needs review before payment` });
+    }
+    return true;
+  };
+  const bulkMoveStage = (ids, stageId) => {
+    const stage = stages.find((x) => x.id === stageId);
+    const stageName = stage ? stage.name || stage.label || "the next stage" : "";
+    const list = [...ids];
+    const blocked = list.filter((id) => !moveStage(id, stageId, { silent: true }));
+    const moved = list.length - blocked.length;
+    if (!blocked.length) toast(`Moved ${moved} ${moved === 1 ? "job" : "jobs"} to ${stageName}`);
+    else if (!moved) toast(`None moved \u2014 ${blocked.length} ${blocked.length === 1 ? "job is" : "jobs are"} missing what ${stageName} requires`);
+    else toast(`${moved} of ${list.length} moved to ${stageName} \u2014 ${blocked.length} blocked`);
   };
   const applyRemovedStages = (nextStages) => {
     const ids = new Set(nextStages.map((s) => s.id));
@@ -24827,6 +25328,7 @@ function SupremeCRM() {
       assignee: f.assignee,
       leadSource: f.leadSource || "\u2014",
       daysInStage: 0,
+      stageAt: todayIso(),
       updated: "just now",
       claimType: f.claimType,
       schedDate: null,
@@ -25101,6 +25603,10 @@ function SupremeCRM() {
           onLog: logAct,
           users,
           mutJob,
+          stageRules,
+          currentUser: liveUser,
+          showMoney,
+          isAdmin,
           onToggleTask: (jobId, taskId) => mutJob(jobId, (j) => ({ ...j, tasks: j.tasks.map((x) => x.id === taskId ? { ...x, done: !x.done, doneAt: !x.done ? (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ") : null } : x) })),
           chatMsgs,
           onSendChat: (text) => {
@@ -25136,6 +25642,8 @@ function SupremeCRM() {
         onClearFocus: () => setBoardStage(null),
         view: boardView,
         setView: setBoardView,
+        stageRules,
+        onBulkMoveStage: bulkMoveStage,
         onBulkUpdate: (ids, patch) => setJobs((prev) => prev.map((j) => ids.includes(j.id) ? { ...j, ...patch } : j))
       }
     ) : nav === "inbox" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -25652,7 +26160,32 @@ function SupremeCRM() {
         open: workflowOpen,
         onClose: () => setWorkflowOpen(false),
         stages,
-        setStages: applyRemovedStages
+        setStages: applyRemovedStages,
+        stageRules,
+        setStageRules
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      StageGateSheet,
+      {
+        prompt: gatePrompt,
+        isAdmin,
+        currentUser: liveUser,
+        onClose: () => setGatePrompt(null),
+        onConfirm: ({ patch, override }) => {
+          const p = gatePrompt;
+          setGatePrompt(null);
+          if (!p) return;
+          moveStage(p.jobId, p.stageId, { force: true, patch });
+          if (override) {
+            logAct({
+              kind: "stage",
+              jobId: p.jobId,
+              jobName: p.jobName,
+              text: `${override} moved ${p.jobName} to "${p.stageName}" without meeting its requirements`
+            });
+          }
+        }
       }
     ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Toast, { msg: toastMsg })
