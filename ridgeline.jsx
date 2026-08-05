@@ -89,7 +89,11 @@ const JURISDICTIONS = {
     adoption: "Statewide residential code",
     permit: "Roofing permit required for full replacement; verify with the building department.",
     inspector: { office: "Forest Park Building Department", phone: "(513) 555-0100 — sample, verify", address: "1201 W Kemper Rd, Forest Park, OH" },
-    verified: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: "Jul 2026", by: "Office" },
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false, needsContact: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
   },
   "45410": {
     zip: "45410", city: "Dayton", county: "Montgomery County", state: "OH",
@@ -97,7 +101,11 @@ const JURISDICTIONS = {
     adoption: "Statewide residential code",
     permit: "Permit required; verify regional building services handling for residential.",
     inspector: { office: "City of Dayton — Building Inspection", phone: "(937) 555-0100 — sample, verify", address: "371 W 2nd St, Dayton, OH" },
-    verified: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: "Jul 2026", by: "Office" },
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false, needsContact: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
   },
   "45056": {
     zip: "45056", city: "Oxford", county: "Butler County", state: "OH",
@@ -105,7 +113,11 @@ const JURISDICTIONS = {
     adoption: "Statewide residential code",
     permit: "Roofing permit required for tear-off and re-roof.",
     inspector: { office: "Butler County Building Department", phone: "(513) 555-0100 — sample, verify", address: "130 High St, Hamilton, OH" },
-    verified: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: "Jul 2026", by: "Office" },
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false, needsContact: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
   },
   "43235": {
     zip: "43235", city: "Columbus", county: "Franklin County", state: "OH",
@@ -113,7 +125,11 @@ const JURISDICTIONS = {
     adoption: "Statewide residential code",
     permit: "City of Columbus permit required for re-roofing.",
     inspector: { office: "Columbus Building & Zoning Services", phone: "(614) 555-0100 — sample, verify", address: "111 N Front St, Columbus, OH" },
-    verified: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: "Jul 2026", by: "Office" },
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false, needsContact: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
   },
   "41179": {
     zip: "41179", city: "Vanceburg", county: "Lewis County", state: "KY",
@@ -1780,7 +1796,12 @@ const ZIP_PREFIX_STATE = [
   { lo: 10, hi: 27, state: "MA" }, { lo: 28, hi: 29, state: "RI" }, { lo: 30, hi: 38, state: "NH" },
   { lo: 39, hi: 49, state: "ME" }, { lo: 50, hi: 59, state: "VT" }, { lo: 60, hi: 69, state: "CT" },
   { lo: 70, hi: 89, state: "NJ" }, { lo: 100, hi: 149, state: "NY" }, { lo: 150, hi: 196, state: "PA" },
-  { lo: 197, hi: 199, state: "DE" }, { lo: 200, hi: 205, state: "DC" }, { lo: 206, hi: 219, state: "MD" },
+  { lo: 197, hi: 199, state: "DE" },
+  /* 201 is Virginia (Loudoun County — Ashburn, Sterling, Herndon, Leesburg),
+     not DC. It sat inside the 200-205 DC block and silently resolved several
+     hundred thousand homes to the DC construction codes. */
+  { lo: 200, hi: 200, state: "DC" }, { lo: 201, hi: 201, state: "VA" }, { lo: 202, hi: 205, state: "DC" },
+  { lo: 206, hi: 219, state: "MD" },
   { lo: 220, hi: 246, state: "VA" }, { lo: 247, hi: 268, state: "WV" }, { lo: 270, hi: 289, state: "NC" },
   { lo: 290, hi: 299, state: "SC" }, { lo: 300, hi: 319, state: "GA" }, { lo: 320, hi: 349, state: "FL" },
   { lo: 350, hi: 369, state: "AL" }, { lo: 370, hi: 385, state: "TN" }, { lo: 386, hi: 397, state: "MS" },
@@ -2008,8 +2029,11 @@ const KY_COUNTY_ZIPS = {
    County KY has no residential building inspector at all. Getting
    this wrong sends a rep to the wrong counter.
 ------------------------------------------------------------------- */
+/* Keyed "STATE:County". County names repeat across states — Warren exists
+   in fourteen of them — so a bare-name key returned an Ohio department for a
+   New Jersey zip, complete with an Ohio address and a tap-to-call button. */
 const COUNTY_DEPARTMENTS = {
-  "Montgomery County": {
+  "OH:Montgomery County": {
     office: "Montgomery County Building Regulations",
     phone: "9372254622", address: "371 W Second St, Dayton, OH 45402",
     web: "https://www.selectmcohio.com/building",
@@ -2017,7 +2041,7 @@ const COUNTY_DEPARTMENTS = {
     except: "Some cities run their own building or zoning office. Confirm the address is county-served before applying.",
     checked: "Jul 2026",
   },
-  "Greene County": {
+  "OH:Greene County": {
     office: "Greene County Department of Building Regulation",
     phone: "9375627420", address: "667 Dayton-Xenia Rd, Xenia, OH 45385",
     web: "https://www.greenecountyohio.gov/139/Building-Regulation",
@@ -2025,7 +2049,7 @@ const COUNTY_DEPARTMENTS = {
     except: "Does NOT cover Fairborn, Xenia, Bowersville, Clifton, Cedarville or Yellow Springs — each runs its own. Xenia Building Division: 1(937)372-6389.",
     checked: "Jul 2026",
   },
-  "Warren County": {
+  "OH:Warren County": {
     office: "Warren County Building & Zoning",
     phone: "5136951290", address: "406 Justice Drive, Room 167, Lebanon, OH 45036",
     web: "https://www.warrencountyohio.gov",
@@ -2033,7 +2057,7 @@ const COUNTY_DEPARTMENTS = {
     except: "Springboro and some villages run their own building or zoning office. Confirm jurisdiction first.",
     checked: "Jul 2026",
   },
-  "Butler County": {
+  "OH:Butler County": {
     office: "Butler County Building & Zoning (Dept. of Development)",
     phone: "5138873205", address: "130 High Street, Hamilton, OH 45011",
     web: "https://www.bcohio.gov",
@@ -2041,7 +2065,7 @@ const COUNTY_DEPARTMENTS = {
     except: "Cities run their own. City of Hamilton building department: 1(513)785-7360, building@hamilton-oh.gov. Fairfield and Oxford also separate.",
     checked: "Jul 2026",
   },
-  "Hamilton County": {
+  "OH:Hamilton County": {
     office: "Hamilton County Planning + Development, Buildings + Inspections",
     phone: "5139464550", address: "138 East Court Street, Room 801, Cincinnati, OH 45202",
     web: "https://www.hamiltoncountyohio.gov/government/departments/planning_and_development/buildings_and_inspections/index.php",
@@ -2049,7 +2073,7 @@ const COUNTY_DEPARTMENTS = {
     except: "The City of Cincinnati runs its own Permit Center and is NOT county-served. Electrical permits and inspections go through Inspection Bureau Inc, not the county.",
     checked: "Jul 2026",
   },
-  "Clermont County": {
+  "OH:Clermont County": {
     office: "Clermont County Permit Central / Building Inspection",
     phone: "5137327213", address: "2275 Bauer Road, Batavia, OH 45103",
     web: "http://building.clermontcountyohio.gov",
@@ -2057,7 +2081,7 @@ const COUNTY_DEPARTMENTS = {
     except: "Also handles COMMERCIAL work in Brown County — but not residential there, and not Russellville or Hamersville.",
     checked: "Jul 2026",
   },
-  "Brown County": {
+  "OH:Brown County": {
     office: "Brown County — confirm the issuing authority for the address",
     phone: "", address: "",
     web: "http://building.clermontcountyohio.gov",
@@ -2066,7 +2090,7 @@ const COUNTY_DEPARTMENTS = {
     checked: "Jul 2026",
   },
   /* ---------- Kentucky ---------- */
-  "Mason County": {
+  "KY:Mason County": {
     office: "City of Maysville / Mason County Codes Department",
     phone: "6065642525", address: "216 Bridge Street, Maysville, KY 41056",
     web: "https://www.cityofmaysvilleky.gov/departments/codes_department/index.php",
@@ -2074,7 +2098,7 @@ const COUNTY_DEPARTMENTS = {
     except: "The Mason County Fiscal Court adopted the building code in 2006 and the same office serves both city and county. Ask whether the address is inside Maysville city limits — the permit form asks.",
     checked: "Jul 2026",
   },
-  "Lewis County": {
+  "KY:Lewis County": {
     office: "No local building inspector",
     phone: "", address: "",
     web: "https://dhbc.ky.gov",
@@ -2082,7 +2106,7 @@ const COUNTY_DEPARTMENTS = {
     except: "Do not assume no inspector means no requirements — the KRC still applies, and the county clerk (1(606)796-3062, 112 2nd Street, Vanceburg) can point you at whoever handles zoning.",
     checked: "Jul 2026",
   },
-  "Kenton County": {
+  "KY:Kenton County": {
     office: "Planning and Development Services of Kenton County (PDS)",
     phone: "8599572408", address: "1840 Simon Kenton Way, Suite 3400, Covington, KY 41011",
     web: "https://www.pdskc.org/services/one-stop-shop/building-permits/",
@@ -2090,7 +2114,7 @@ const COUNTY_DEPARTMENTS = {
     except: "Some cities keep their own local building inspector — Erlanger, for example. PDS can tell you which applies.",
     checked: "Jul 2026",
   },
-  "Campbell County": {
+  "KY:Campbell County": {
     office: "Campbell County Planning, Zoning & Building Inspections",
     phone: "8592923880", address: "Campbell County, KY",
     web: "https://campbellcountyky.gov",
@@ -2106,14 +2130,23 @@ const COUNTY_DEPARTMENTS = {
    in the same state. */
 function buildMarketJurisdictions() {
   const out = {};
-  const add = (zip, city, county, state) => {
-    const dept = COUNTY_DEPARTMENTS[county] || null;
+  const add = (zip, city, county, state, suffixed) => {
+    /* County names repeat across states — there are Warren, Montgomery,
+       Hamilton and Greene counties in a dozen states each — so the
+       department table is keyed by state and county together. Keying on
+       the bare name returned an Ohio department for a New Jersey zip. */
+    const dept = COUNTY_DEPARTMENTS[`${state}:${county}`] || null;
     /* Keys ending in a letter are disambiguators for towns sharing a
        ZIP with another entry; strip them for the real key. */
     const z = zip.replace(/[a-z]$/, "");
-    if (out[z]) return;
+    /* A suffixed key must never displace a real one. "41042b" (Taylor Mill)
+       was inserted before Boone County's real "41042" (Florence) and the
+       first-wins guard then discarded Florence — sending that rep to the
+       wrong county's building department. Real keys always win. */
+    if (out[z] && !(out[z].suffixed && !suffixed)) return;
     const d = STATE_DEFAULTS[state];
     out[z] = {
+      suffixed: !!suffixed,
       zip: z, city, county, state,
       codeName: d.codeName, codeEdition: d.codeEdition,
       adoption: d.adoption, permit: d.permit,
@@ -2126,9 +2159,9 @@ function buildMarketJurisdictions() {
     };
   };
   Object.entries(OH_COUNTY_ZIPS).forEach(([county, zips]) =>
-    Object.entries(zips).forEach(([z, city]) => add(z, city, county, "OH")));
+    Object.entries(zips).forEach(([z, city]) => add(z, city, county, "OH", /[a-z]$/.test(z))));
   Object.entries(KY_COUNTY_ZIPS).forEach(([county, zips]) =>
-    Object.entries(zips).forEach(([z, city]) => add(z, city, county, "KY")));
+    Object.entries(zips).forEach(([z, city]) => add(z, city, county, "KY", /[a-z]$/.test(z))));
   return out;
 }
 const MARKET_JURISDICTIONS = buildMarketJurisdictions();
@@ -2198,6 +2231,10 @@ function resolveJurisdiction(zip) {
     zip: z, city: "", county: "", state: st,
     codeName: d.codeName, codeEdition: d.codeEdition, adoption: d.adoption, permit: d.permit,
     inspector: { office: "Local building department — not yet on file", phone: "", address: "" },
+    /* Without this the card rendered as a populated record with a blank
+       phone and hid the "find the building department" links — from the
+       one group of users who have no other way to get them. */
+    needsContact: true,
     verified: false, sources: d.sources, verifiedDetail: { date: null, by: null },
     precision: "state",
   };
@@ -2325,7 +2362,7 @@ async function geoLookupZip(zip) {
     const county = rawCounty && !/county$/i.test(rawCounty) ? `${rawCounty} County` : rawCounty;
     return {
       zip: z, city: r.city || r.town || r.village || "", county, state,
-      dept: COUNTY_DEPARTMENTS[county] || null,
+      dept: COUNTY_DEPARTMENTS[`${state}:${county}`] || null,
       /* Ohio/Kentucky/Illinois have a validated code library; everywhere else
          we still resolve the state's adopted code, just flagged to verify. */
       curated: !!STATE_DEFAULTS[state],
@@ -2417,6 +2454,19 @@ const money = (n) =>
 const money0 = (n) =>
   (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
 const pct1 = (n) => `${n.toFixed(2)}%`;
+/* Message delivery status. A send that hard-failed stores its reason in
+   the status string ("Failed — Gmail rejected the message: …"); showing
+   that as an amber "Queued" chip told the user it was still on its way
+   when nothing was ever going to retry it. */
+function msgFailed(status) { return /^failed/i.test(String(status || "")); }
+function msgTone(status, sentTone = "green") {
+  if (status === "Sent") return sentTone;
+  return msgFailed(status) ? "red" : "amber";
+}
+function msgLabel(status) {
+  if (status === "Sent") return "Sent";
+  return msgFailed(status) ? "Failed" : "Queued";
+}
 /* Read a number back out of anything money() (or a person) might have
    written: "$24,850.00", "24850", "1,500". parseFloat stops at the "$",
    so num() alone turns a formatted figure into a silent zero. */
@@ -2644,9 +2694,12 @@ function codeNameForState(st) {
 }
 function citeFor(state, topic) {
   if (CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic]) return CODE_PROVISIONS[state][topic];
-  /* Any state without a curated set gets the IRC base cite, labeled with the
-     state's adopted code so the rep knows where to verify the exact number. */
-  const base = IRC_BASE[topic] || CODE_PROVISIONS.OH[topic];
+  /* No IRC base cite for this topic means we genuinely do not know it. The
+     old code reached into CODE_PROVISIONS.OH here and then labelled the
+     result with the local adopted code — an Ohio section number dressed up
+     as a Texas one. Say nothing instead. */
+  const base = IRC_BASE[topic];
+  if (!base) return { cite: "", note: "No code citation on file for this item — verify locally before citing it.", verified: false, missing: true };
   const adopt = STATE_CODE_ADOPTION[state];
   const label = adopt ? adopt.code : "the locally adopted IRC";
   /* Keep `cite` to the short IRC section so it fits the badge; the
@@ -6441,7 +6494,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
   const contacts = useMemo(() => buildContactDirectory(jobs), [jobs]);
   const blank = {
     contactMode: "new", existingContactId: "", existingPropertyId: "",
-    first: "", last: "", phone: "", email: "", street: "", city: "", stateSel: "OH", zip: "",
+    first: "", last: "", phone: "", email: "", street: "", city: "", stateSel: "", zip: "",
     lat: null, lng: null,
     leadSource: "", assignee: TEAM[0], claimType: "Insurance",
     roofTypes: [], roofAge: "", layers: "", workRequested: [], reasonForCalling: "",
@@ -6490,7 +6543,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
       ...f,
       contactMode: "existing", existingContactId: contact.id, existingPropertyId: "",
       first: contact.first, last: contact.last, phone: contact.phone || "", email: contact.email || "",
-      street: "", city: "", stateSel: "OH", zip: "", lat: null, lng: null,
+      street: "", city: "", stateSel: "", zip: "", lat: null, lng: null,
       smsConsent: contact.jobs.some((j) => j.consent?.sms?.granted),
       emailConsent: contact.jobs.some((j) => j.consent?.email?.granted),
     });
@@ -6498,18 +6551,30 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
   const selectProperty = (id) => {
     const property = existingContact?.properties.find((p) => p.id === id);
     if (!property) {
-      setF({ ...f, existingPropertyId: "", street: "", city: "", stateSel: "OH", zip: "", lat: null, lng: null });
+      setF({ ...f, existingPropertyId: "", street: "", city: "", stateSel: "", zip: "", lat: null, lng: null });
       return;
     }
     setF({
       ...f, existingPropertyId: property.id,
       street: property.street || property.address, city: property.city || "",
-      stateSel: property.state || "OH", zip: property.zip || "",
+      stateSel: property.state || "", zip: property.zip || "",
       lat: property.lat ?? null, lng: property.lng ?? null, propertyUse: property.use || f.propertyUse,
     });
   };
   const juris = jurisdictionForZip(f.zip);
-  const canCreate = f.first.trim() && f.last.trim() && f.street.trim() && f.zip.trim();
+  /* State selects the building code, the supplement cites and the legal
+     text on the contract, so a job carrying the wrong one is a job whose
+     paperwork is wrong. It used to default to "OH", which meant a rep who
+     typed a zip instead of picking an autocomplete suggestion silently
+     created an Ohio job anywhere in the country. Now it is derived from
+     the zip — the app already has a nationwide ZIP3 table — and only has
+     to be picked by hand when the zip doesn't resolve. */
+  const setZip = (e) => {
+    const zip = e.target.value;
+    const derived = stateForZip(zip);
+    setF((prev) => ({ ...prev, zip, stateSel: derived || prev.stateSel }));
+  };
+  const canCreate = f.first.trim() && f.last.trim() && f.street.trim() && f.zip.trim() && f.stateSel;
 
   /* Duplicate address guard. A property already selected from this
      customer's own list is an intentional repeat project, not a
@@ -6640,10 +6705,11 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
         <Field label="City"><input style={inputStyle} value={f.city} onChange={set("city")} /></Field>
         <Field label="State">
           <select style={selStyle} value={f.stateSel} onChange={set("stateSel")}>
+            <option value="">State…</option>
             {US_STATES.map(([ab]) => <option key={ab} value={ab}>{ab}</option>)}
           </select>
         </Field>
-        <Field label="Zip *"><input data-testid="lead-zip" style={inputStyle} value={f.zip} onChange={set("zip")} /></Field>
+        <Field label="Zip *"><input data-testid="lead-zip" style={inputStyle} value={f.zip} onChange={setZip} /></Field>
       </div>
       {juris && (
         <div style={{ background: T.accentSoft, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
@@ -10369,7 +10435,14 @@ function buildPortalSnapshot(job, brand, token, users = []) {
               { label: "Contract price", value: money(num(con.price)) },
             ],
             total: num(con.price),
-            terms: "By signing you enter into a binding agreement for the work described, at the price shown. You may cancel within three business days under Ohio Revised Code Chapter 1345 without penalty.",
+            /* This used to cite Ohio Revised Code Chapter 1345 by name, to
+               every homeowner in every state, directly above the signature
+               pad — and no tenant could edit it. The cancellation right is
+               real nearly everywhere but its statutory basis and notice
+               requirements are not Ohio's outside Ohio, so the sentence now
+               points at the signed agreement, which carries the notice that
+               actually applies, rather than naming the wrong statute. */
+            terms: "By signing you enter into a binding agreement for the work described, at the price shown. Your signed agreement sets out your right to cancel and the notice period that applies where the property is located.",
             snapshot: { number: con.number, price: con.price, address: job.address },
           });
         }
@@ -15154,7 +15227,11 @@ function supplementFindings(job) {
   const text = items.map((i) => String(i.desc || "").toLowerCase()).join(" \n ");
   const has = (re) => re.test(text);
   const n = (x) => num(x);
-  const state = (jurisdictionForZip(job.zip) || {}).state || "OH";
+  /* An unresolved zip used to fall back to "OH", which put Residential Code
+     of Ohio section numbers on a supplement anywhere in the country. A wrong
+     cite is what gets a supplement denied, so carry the unknown through and
+     let citeFor say it has nothing on file. */
+  const state = (jurisdictionForZip(job.zip) || {}).state || (job.state || "");
   const out = [];
   /* opts: { topic, line } — topic maps to the state code library (citeFor),
      line is a ready-to-add estimate row so the finding is one tap to fix. */
@@ -17056,7 +17133,7 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
                 <span style={{ fontSize: 13, fontWeight: 700, color: S.ink }}>{m.audience}</span>
                 <span style={{ fontSize: 12, color: S.sub, overflow: "hidden", textOverflow: "ellipsis" }}>{m.to}</span>
               </div>
-              <Chip tone={m.status === "Sent" ? "green" : "amber"}>{m.status === "Sent" ? "Sent" : "Queued"}</Chip>
+              <Chip tone={msgTone(m.status)}>{msgLabel(m.status)}</Chip>
             </div>
             {m.subject && <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 6 }}>{m.subject}</div>}
             <div style={{ fontSize: 13, color: S.sub, marginTop: 4, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.body}</div>
@@ -23232,7 +23309,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
                 <select style={{ ...selStyle, width: 92, padding: "9px 8px" }} value={l.state || ""}
                   onChange={(e) => setF((p2) => ({ ...p2, lines: (p2.lines || []).map((x, k) => k === i ? { ...x, state: e.target.value } : x) }))}>
                   <option value="">State</option>
-                  {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  {US_STATES.map(([ab, name]) => <option key={ab} value={ab}>{name}</option>)}
                 </select>
                 <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} inputMode="tel" placeholder="Phone" value={l.phone || ""}
                   onChange={(e) => setF((p2) => ({ ...p2, lines: (p2.lines || []).map((x, k) => k === i ? { ...x, phone: formatPhone(e.target.value) } : x) }))} />
@@ -24546,7 +24623,7 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
               </div>
               <span style={{ display: "flex", gap: 5, flexShrink: 0 }}>
                 {msg.viewed && <Chip tone="green">Viewed</Chip>}
-                <Chip tone={msg.status === "Sent" ? "blue" : "amber"}>{msg.status === "Sent" ? "Sent" : "Queued"}</Chip>
+                <Chip tone={msgTone(msg.status, "blue")}>{msgLabel(msg.status)}</Chip>
               </span>
             </div>
             {msg.subject && <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 5 }}>{msg.subject}</div>}

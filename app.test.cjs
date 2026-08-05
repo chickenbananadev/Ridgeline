@@ -89,9 +89,14 @@ var JURISDICTIONS = {
     adoption: "Statewide residential code",
     permit: "Roofing permit required for full replacement; verify with the building department.",
     inspector: { office: "Forest Park Building Department", phone: "(513) 555-0100 \u2014 sample, verify", address: "1201 W Kemper Rd, Forest Park, OH" },
-    verified: true,
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false,
+    needsContact: true,
     sources: ["RCO", "OAC3901"],
-    verifiedDetail: { date: "Jul 2026", by: "Office" }
+    verifiedDetail: { date: null, by: null }
   },
   "45410": {
     zip: "45410",
@@ -103,9 +108,14 @@ var JURISDICTIONS = {
     adoption: "Statewide residential code",
     permit: "Permit required; verify regional building services handling for residential.",
     inspector: { office: "City of Dayton \u2014 Building Inspection", phone: "(937) 555-0100 \u2014 sample, verify", address: "371 W 2nd St, Dayton, OH" },
-    verified: true,
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false,
+    needsContact: true,
     sources: ["RCO", "OAC3901"],
-    verifiedDetail: { date: "Jul 2026", by: "Office" }
+    verifiedDetail: { date: null, by: null }
   },
   "45056": {
     zip: "45056",
@@ -117,9 +127,14 @@ var JURISDICTIONS = {
     adoption: "Statewide residential code",
     permit: "Roofing permit required for tear-off and re-roof.",
     inspector: { office: "Butler County Building Department", phone: "(513) 555-0100 \u2014 sample, verify", address: "130 High St, Hamilton, OH" },
-    verified: true,
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false,
+    needsContact: true,
     sources: ["RCO", "OAC3901"],
-    verifiedDetail: { date: "Jul 2026", by: "Office" }
+    verifiedDetail: { date: null, by: null }
   },
   "43235": {
     zip: "43235",
@@ -131,9 +146,14 @@ var JURISDICTIONS = {
     adoption: "Statewide residential code",
     permit: "City of Columbus permit required for re-roofing.",
     inspector: { office: "Columbus Building & Zoning Services", phone: "(614) 555-0100 \u2014 sample, verify", address: "111 N Front St, Columbus, OH" },
-    verified: true,
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false,
+    needsContact: true,
     sources: ["RCO", "OAC3901"],
-    verifiedDetail: { date: "Jul 2026", by: "Office" }
+    verifiedDetail: { date: null, by: null }
   },
   "41179": {
     zip: "41179",
@@ -2316,7 +2336,12 @@ var ZIP_PREFIX_STATE = [
   { lo: 100, hi: 149, state: "NY" },
   { lo: 150, hi: 196, state: "PA" },
   { lo: 197, hi: 199, state: "DE" },
-  { lo: 200, hi: 205, state: "DC" },
+  /* 201 is Virginia (Loudoun County — Ashburn, Sterling, Herndon, Leesburg),
+     not DC. It sat inside the 200-205 DC block and silently resolved several
+     hundred thousand homes to the DC construction codes. */
+  { lo: 200, hi: 200, state: "DC" },
+  { lo: 201, hi: 201, state: "VA" },
+  { lo: 202, hi: 205, state: "DC" },
   { lo: 206, hi: 219, state: "MD" },
   { lo: 220, hi: 246, state: "VA" },
   { lo: 247, hi: 268, state: "WV" },
@@ -2717,7 +2742,7 @@ var KY_COUNTY_ZIPS = {
   "Grant County": { "41097": "Williamstown", "41030": "Crittenden" }
 };
 var COUNTY_DEPARTMENTS = {
-  "Montgomery County": {
+  "OH:Montgomery County": {
     office: "Montgomery County Building Regulations",
     phone: "9372254622",
     address: "371 W Second St, Dayton, OH 45402",
@@ -2726,7 +2751,7 @@ var COUNTY_DEPARTMENTS = {
     except: "Some cities run their own building or zoning office. Confirm the address is county-served before applying.",
     checked: "Jul 2026"
   },
-  "Greene County": {
+  "OH:Greene County": {
     office: "Greene County Department of Building Regulation",
     phone: "9375627420",
     address: "667 Dayton-Xenia Rd, Xenia, OH 45385",
@@ -2735,7 +2760,7 @@ var COUNTY_DEPARTMENTS = {
     except: "Does NOT cover Fairborn, Xenia, Bowersville, Clifton, Cedarville or Yellow Springs \u2014 each runs its own. Xenia Building Division: 1(937)372-6389.",
     checked: "Jul 2026"
   },
-  "Warren County": {
+  "OH:Warren County": {
     office: "Warren County Building & Zoning",
     phone: "5136951290",
     address: "406 Justice Drive, Room 167, Lebanon, OH 45036",
@@ -2744,7 +2769,7 @@ var COUNTY_DEPARTMENTS = {
     except: "Springboro and some villages run their own building or zoning office. Confirm jurisdiction first.",
     checked: "Jul 2026"
   },
-  "Butler County": {
+  "OH:Butler County": {
     office: "Butler County Building & Zoning (Dept. of Development)",
     phone: "5138873205",
     address: "130 High Street, Hamilton, OH 45011",
@@ -2753,7 +2778,7 @@ var COUNTY_DEPARTMENTS = {
     except: "Cities run their own. City of Hamilton building department: 1(513)785-7360, building@hamilton-oh.gov. Fairfield and Oxford also separate.",
     checked: "Jul 2026"
   },
-  "Hamilton County": {
+  "OH:Hamilton County": {
     office: "Hamilton County Planning + Development, Buildings + Inspections",
     phone: "5139464550",
     address: "138 East Court Street, Room 801, Cincinnati, OH 45202",
@@ -2762,7 +2787,7 @@ var COUNTY_DEPARTMENTS = {
     except: "The City of Cincinnati runs its own Permit Center and is NOT county-served. Electrical permits and inspections go through Inspection Bureau Inc, not the county.",
     checked: "Jul 2026"
   },
-  "Clermont County": {
+  "OH:Clermont County": {
     office: "Clermont County Permit Central / Building Inspection",
     phone: "5137327213",
     address: "2275 Bauer Road, Batavia, OH 45103",
@@ -2771,7 +2796,7 @@ var COUNTY_DEPARTMENTS = {
     except: "Also handles COMMERCIAL work in Brown County \u2014 but not residential there, and not Russellville or Hamersville.",
     checked: "Jul 2026"
   },
-  "Brown County": {
+  "OH:Brown County": {
     office: "Brown County \u2014 confirm the issuing authority for the address",
     phone: "",
     address: "",
@@ -2781,7 +2806,7 @@ var COUNTY_DEPARTMENTS = {
     checked: "Jul 2026"
   },
   /* ---------- Kentucky ---------- */
-  "Mason County": {
+  "KY:Mason County": {
     office: "City of Maysville / Mason County Codes Department",
     phone: "6065642525",
     address: "216 Bridge Street, Maysville, KY 41056",
@@ -2790,7 +2815,7 @@ var COUNTY_DEPARTMENTS = {
     except: "The Mason County Fiscal Court adopted the building code in 2006 and the same office serves both city and county. Ask whether the address is inside Maysville city limits \u2014 the permit form asks.",
     checked: "Jul 2026"
   },
-  "Lewis County": {
+  "KY:Lewis County": {
     office: "No local building inspector",
     phone: "",
     address: "",
@@ -2799,7 +2824,7 @@ var COUNTY_DEPARTMENTS = {
     except: "Do not assume no inspector means no requirements \u2014 the KRC still applies, and the county clerk (1(606)796-3062, 112 2nd Street, Vanceburg) can point you at whoever handles zoning.",
     checked: "Jul 2026"
   },
-  "Kenton County": {
+  "KY:Kenton County": {
     office: "Planning and Development Services of Kenton County (PDS)",
     phone: "8599572408",
     address: "1840 Simon Kenton Way, Suite 3400, Covington, KY 41011",
@@ -2808,7 +2833,7 @@ var COUNTY_DEPARTMENTS = {
     except: "Some cities keep their own local building inspector \u2014 Erlanger, for example. PDS can tell you which applies.",
     checked: "Jul 2026"
   },
-  "Campbell County": {
+  "KY:Campbell County": {
     office: "Campbell County Planning, Zoning & Building Inspections",
     phone: "8592923880",
     address: "Campbell County, KY",
@@ -2820,12 +2845,13 @@ var COUNTY_DEPARTMENTS = {
 };
 function buildMarketJurisdictions() {
   const out = {};
-  const add = (zip, city, county, state) => {
-    const dept = COUNTY_DEPARTMENTS[county] || null;
+  const add = (zip, city, county, state, suffixed) => {
+    const dept = COUNTY_DEPARTMENTS[`${state}:${county}`] || null;
     const z = zip.replace(/[a-z]$/, "");
-    if (out[z]) return;
+    if (out[z] && !(out[z].suffixed && !suffixed)) return;
     const d = STATE_DEFAULTS[state];
     out[z] = {
+      suffixed: !!suffixed,
       zip: z,
       city,
       county,
@@ -2849,8 +2875,8 @@ function buildMarketJurisdictions() {
       verifiedDetail: { date: null, by: null }
     };
   };
-  Object.entries(OH_COUNTY_ZIPS).forEach(([county, zips]) => Object.entries(zips).forEach(([z, city]) => add(z, city, county, "OH")));
-  Object.entries(KY_COUNTY_ZIPS).forEach(([county, zips]) => Object.entries(zips).forEach(([z, city]) => add(z, city, county, "KY")));
+  Object.entries(OH_COUNTY_ZIPS).forEach(([county, zips]) => Object.entries(zips).forEach(([z, city]) => add(z, city, county, "OH", /[a-z]$/.test(z))));
+  Object.entries(KY_COUNTY_ZIPS).forEach(([county, zips]) => Object.entries(zips).forEach(([z, city]) => add(z, city, county, "KY", /[a-z]$/.test(z))));
   return out;
 }
 var MARKET_JURISDICTIONS = buildMarketJurisdictions();
@@ -2928,6 +2954,10 @@ function resolveJurisdiction(zip) {
     adoption: d.adoption,
     permit: d.permit,
     inspector: { office: "Local building department \u2014 not yet on file", phone: "", address: "" },
+    /* Without this the card rendered as a populated record with a blank
+       phone and hid the "find the building department" links — from the
+       one group of users who have no other way to get them. */
+    needsContact: true,
     verified: false,
     sources: d.sources,
     verifiedDetail: { date: null, by: null },
@@ -3037,7 +3067,7 @@ async function geoLookupZip(zip) {
       city: r.city || r.town || r.village || "",
       county,
       state,
-      dept: COUNTY_DEPARTMENTS[county] || null,
+      dept: COUNTY_DEPARTMENTS[`${state}:${county}`] || null,
       /* Ohio/Kentucky/Illinois have a validated code library; everywhere else
          we still resolve the state's adopted code, just flagged to verify. */
       curated: !!STATE_DEFAULTS[state]
@@ -3144,6 +3174,17 @@ var fmtStamp = (iso) => {
 var money = (n) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 var money0 = (n) => (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
 var pct1 = (n) => `${n.toFixed(2)}%`;
+function msgFailed(status) {
+  return /^failed/i.test(String(status || ""));
+}
+function msgTone(status, sentTone = "green") {
+  if (status === "Sent") return sentTone;
+  return msgFailed(status) ? "red" : "amber";
+}
+function msgLabel(status) {
+  if (status === "Sent") return "Sent";
+  return msgFailed(status) ? "Failed" : "Queued";
+}
 var moneyNum = (v) => num(String(v == null ? "" : v).replace(/[^0-9.-]/g, ""));
 function fmtPhone(v) {
   const d = String(v || "").replace(/\D/g, "");
@@ -3368,7 +3409,8 @@ function codeNameForState(st) {
 }
 function citeFor(state, topic) {
   if (CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic]) return CODE_PROVISIONS[state][topic];
-  const base = IRC_BASE[topic] || CODE_PROVISIONS.OH[topic];
+  const base = IRC_BASE[topic];
+  if (!base) return { cite: "", note: "No code citation on file for this item \u2014 verify locally before citing it.", verified: false, missing: true };
   const adopt = STATE_CODE_ADOPTION[state];
   const label = adopt ? adopt.code : "the locally adopted IRC";
   const verifyLine = `Per ${label}; verify edition${adopt && adopt.local ? " & local adoption" : ""}.`;
@@ -7402,7 +7444,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
     email: "",
     street: "",
     city: "",
-    stateSel: "OH",
+    stateSel: "",
     zip: "",
     lat: null,
     lng: null,
@@ -7483,7 +7525,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
       email: contact.email || "",
       street: "",
       city: "",
-      stateSel: "OH",
+      stateSel: "",
       zip: "",
       lat: null,
       lng: null,
@@ -7494,7 +7536,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
   const selectProperty = (id) => {
     const property = existingContact?.properties.find((p) => p.id === id);
     if (!property) {
-      setF({ ...f, existingPropertyId: "", street: "", city: "", stateSel: "OH", zip: "", lat: null, lng: null });
+      setF({ ...f, existingPropertyId: "", street: "", city: "", stateSel: "", zip: "", lat: null, lng: null });
       return;
     }
     setF({
@@ -7502,7 +7544,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
       existingPropertyId: property.id,
       street: property.street || property.address,
       city: property.city || "",
-      stateSel: property.state || "OH",
+      stateSel: property.state || "",
       zip: property.zip || "",
       lat: property.lat ?? null,
       lng: property.lng ?? null,
@@ -7510,7 +7552,12 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
     });
   };
   const juris = jurisdictionForZip(f.zip);
-  const canCreate = f.first.trim() && f.last.trim() && f.street.trim() && f.zip.trim();
+  const setZip = (e) => {
+    const zip = e.target.value;
+    const derived = stateForZip(zip);
+    setF((prev) => ({ ...prev, zip, stateSel: derived || prev.stateSel }));
+  };
+  const canCreate = f.first.trim() && f.last.trim() && f.street.trim() && f.zip.trim() && f.stateSel;
   const typedFp = addrFingerprint([f.street, f.city, f.zip].filter(Boolean).join(" "));
   const dupes = !f.existingPropertyId && typedFp.length > 6 ? jobs.filter((j) => {
     const fp = addrFingerprint([j.property?.street || j.address, j.property?.city, j.property?.zip || j.zip].filter(Boolean).join(" "));
@@ -7653,8 +7700,11 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
         ) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "City", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.city, onChange: set("city") }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "State", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: f.stateSel, onChange: set("stateSel"), children: US_STATES.map(([ab]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: ab, children: ab }, ab)) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Zip *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { "data-testid": "lead-zip", style: inputStyle, value: f.zip, onChange: set("zip") }) })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "State", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: f.stateSel, onChange: set("stateSel"), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "State\u2026" }),
+            US_STATES.map(([ab]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: ab, children: ab }, ab))
+          ] }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Zip *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { "data-testid": "lead-zip", style: inputStyle, value: f.zip, onChange: setZip }) })
         ] }),
         juris && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: T.accentSoft, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, fontWeight: 700, color: T.primary }, children: [
@@ -11628,7 +11678,14 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
               { label: "Contract price", value: money(num(con.price)) }
             ],
             total: num(con.price),
-            terms: "By signing you enter into a binding agreement for the work described, at the price shown. You may cancel within three business days under Ohio Revised Code Chapter 1345 without penalty.",
+            /* This used to cite Ohio Revised Code Chapter 1345 by name, to
+               every homeowner in every state, directly above the signature
+               pad — and no tenant could edit it. The cancellation right is
+               real nearly everywhere but its statutory basis and notice
+               requirements are not Ohio's outside Ohio, so the sentence now
+               points at the signed agreement, which carries the notice that
+               actually applies, rather than naming the wrong statute. */
+            terms: "By signing you enter into a binding agreement for the work described, at the price shown. Your signed agreement sets out your right to cancel and the notice period that applies where the property is located.",
             snapshot: { number: con.number, price: con.price, address: job.address }
           });
         }
@@ -16317,7 +16374,7 @@ function supplementFindings(job) {
   const text = items.map((i) => String(i.desc || "").toLowerCase()).join(" \n ");
   const has = (re) => re.test(text);
   const n = (x) => num(x);
-  const state = (jurisdictionForZip(job.zip) || {}).state || "OH";
+  const state = (jurisdictionForZip(job.zip) || {}).state || (job.state || "");
   const out = [];
   const add = (sev, title, why, opts = {}) => {
     const prov = opts.topic ? citeFor(state, opts.topic) : null;
@@ -18574,7 +18631,7 @@ function TabMessages({ job, mut, toast, brand: brand2, templates, crews, integra
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, fontWeight: 700, color: S.ink }, children: m.audience }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub, overflow: "hidden", textOverflow: "ellipsis" }, children: m.to })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: m.status === "Sent" ? "green" : "amber", children: m.status === "Sent" ? "Sent" : "Queued" })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: msgTone(m.status), children: msgLabel(m.status) })
         ] }),
         m.subject && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, marginTop: 6 }, children: m.subject }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 4, whiteSpace: "pre-wrap", lineHeight: 1.5 }, children: m.body }),
@@ -25222,7 +25279,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand:
                   onChange: (e) => setF((p2) => ({ ...p2, lines: (p2.lines || []).map((x, k) => k === i ? { ...x, state: e.target.value } : x) })),
                   children: [
                     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "State" }),
-                    US_STATES.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: s, children: s }, s))
+                    US_STATES.map(([ab, name]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: ab, children: name }, ab))
                   ]
                 }
               ),
@@ -26591,7 +26648,7 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", gap: 5, flexShrink: 0 }, children: [
             msg.viewed && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Viewed" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: msg.status === "Sent" ? "blue" : "amber", children: msg.status === "Sent" ? "Sent" : "Queued" })
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: msgTone(msg.status, "blue"), children: msgLabel(msg.status) })
           ] })
         ] }),
         msg.subject && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, marginTop: 5 }, children: msg.subject }),
