@@ -133,7 +133,11 @@ ok(/function assistantJobContext\(job\)/.test(src), "the assistant can answer fo
 const ctx = src.slice(src.indexOf("function assistantJobContext"), src.indexOf("function ClaimAssistant"));
 ok(!/job\.name|job\.address|job\.phone|job\.email/.test(ctx),
   "the job context carries the roof, not the customer's file");
-ok(/function ClaimAssistant\(\{ job = null \}\)/.test(src), "ClaimAssistant takes the open job (it took no props at all)");
+/* Prefix match, not the whole signature: the component has since gained a
+   defaultState prop for the no-job instance, and pinning every parameter here
+   just means this line has to be edited each time one is added. What is being
+   asserted is that it takes the open job at all — it originally took nothing. */
+ok(/function ClaimAssistant\(\{ job = null[,)]/.test(src), "ClaimAssistant takes the open job (it took no props at all)");
 ok(/case "assistant": return <ClaimAssistant job=\{job\} \/>;/.test(src), "the assistant is reachable from inside a job");
 /* A job section only renders if its id is in JOB_TABS too — the render
    filter derives the allowed set from there, so adding it to JOB_SECTIONS

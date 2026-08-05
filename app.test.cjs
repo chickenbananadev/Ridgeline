@@ -88,10 +88,22 @@ var JURISDICTIONS = {
     codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "Roofing permit required for full replacement; verify with the building department.",
-    inspector: { office: "Forest Park Building Department", phone: "(513) 555-0100 \u2014 sample, verify", address: "1201 W Kemper Rd, Forest Park, OH" },
-    verified: true,
+    inspector: {
+      office: "Forest Park Building Department",
+      phone: "5135955264",
+      address: "1201 W Kemper Rd, Forest Park, OH 45240",
+      email: "bldgdept@forestpark.org",
+      web: "https://www.forestpark.org/government/building/index.php",
+      source: "https://www.forestpark.org/government/building/contact_the_building_department.php"
+    },
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false,
+    needsContact: false,
     sources: ["RCO", "OAC3901"],
-    verifiedDetail: { date: "Jul 2026", by: "Office" }
+    verifiedDetail: { date: null, by: null }
   },
   "45410": {
     zip: "45410",
@@ -102,10 +114,22 @@ var JURISDICTIONS = {
     codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "Permit required; verify regional building services handling for residential.",
-    inspector: { office: "City of Dayton \u2014 Building Inspection", phone: "(937) 555-0100 \u2014 sample, verify", address: "371 W 2nd St, Dayton, OH" },
-    verified: true,
+    inspector: {
+      office: "City of Dayton \u2014 Division of Building Inspection",
+      phone: "9373333980",
+      address: "371 W Second St, 2nd floor (One Stop Center), Dayton, OH 45402",
+      web: "https://www.daytonohio.gov/190/Building-Inspection",
+      note: "Permit status and plan-submittal questions: 1(937)333-3883.",
+      source: "https://www.daytonohio.gov/650/Building-Inspection-Directory"
+    },
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false,
+    needsContact: false,
     sources: ["RCO", "OAC3901"],
-    verifiedDetail: { date: "Jul 2026", by: "Office" }
+    verifiedDetail: { date: null, by: null }
   },
   "45056": {
     zip: "45056",
@@ -116,10 +140,23 @@ var JURISDICTIONS = {
     codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "Roofing permit required for tear-off and re-roof.",
-    inspector: { office: "Butler County Building Department", phone: "(513) 555-0100 \u2014 sample, verify", address: "130 High St, Hamilton, OH" },
-    verified: true,
+    inspector: {
+      office: "City of Oxford \u2014 Community Development",
+      phone: "5135245204",
+      address: "15 S College Ave, Oxford, OH 45056",
+      email: "commdev@cityofoxford.org",
+      web: "https://www.cityofoxford.org/government/departments/community_development/construction_and_development/building_and_zoning_permits.php",
+      note: "Oxford runs its own building and zoning office \u2014 Butler County does not serve this address.",
+      source: "https://www.cityofoxford.org/departments/community_development/building_zoning_permit.php"
+    },
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false,
+    needsContact: false,
     sources: ["RCO", "OAC3901"],
-    verifiedDetail: { date: "Jul 2026", by: "Office" }
+    verifiedDetail: { date: null, by: null }
   },
   "43235": {
     zip: "43235",
@@ -130,10 +167,22 @@ var JURISDICTIONS = {
     codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "City of Columbus permit required for re-roofing.",
-    inspector: { office: "Columbus Building & Zoning Services", phone: "(614) 555-0100 \u2014 sample, verify", address: "111 N Front St, Columbus, OH" },
-    verified: true,
+    inspector: {
+      office: "City of Columbus \u2014 Building & Zoning Services",
+      phone: "6146457433",
+      address: "111 N Front St, Columbus, OH 43215",
+      web: "https://www.columbus.gov/Business-Development/Building-Zoning-Services",
+      note: "Counter hours 9:00-4:00 weekdays.",
+      source: "https://www.columbus.gov/files/sharedassets/city/v/7/building-and-zoning/bzs-contact-sheet-2026.pdf"
+    },
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false,
+    needsContact: false,
     sources: ["RCO", "OAC3901"],
-    verifiedDetail: { date: "Jul 2026", by: "Office" }
+    verifiedDetail: { date: null, by: null }
   },
   "41179": {
     zip: "41179",
@@ -144,7 +193,14 @@ var JURISDICTIONS = {
     codeEdition: "Current KRC \u2014 verify edition",
     adoption: "Statewide residential code",
     permit: "Verify permit handling with the county building official before tear-off.",
-    inspector: { office: "Lewis County Building Official", phone: "(606) 555-0100 \u2014 sample, verify", address: "Vanceburg, KY" },
+    inspector: {
+      office: "No local building inspector \u2014 Lewis County",
+      phone: "6067963062",
+      address: "County Clerk, 112 2nd St, Vanceburg, KY 41179",
+      web: "https://dhbc.ky.gov",
+      note: "Kentucky DHBC lists no local building inspector for Lewis County. The Kentucky Residential Code still applies; commercial work goes to the state department. The clerk\u2019s number above is the starting point for zoning, not a building official.",
+      source: "https://dhbc.ky.gov/Documents/Lewis%20County.pdf"
+    },
     verified: false,
     sources: ["KYDHBC", "ICC"],
     verifiedDetail: { date: null, by: null }
@@ -158,7 +214,14 @@ var JURISDICTIONS = {
     codeEdition: "Current KRC \u2014 verify edition",
     adoption: "Statewide residential code",
     permit: "Verify with the Maysville building official before tear-off.",
-    inspector: { office: "City of Maysville Building Inspector", phone: "(606) 555-0100 \u2014 sample, verify", address: "216 Bridge St, Maysville, KY" },
+    inspector: {
+      office: "City of Maysville / Mason County Codes Department",
+      phone: "6065642525",
+      address: "216 Bridge St, Maysville, KY 41056",
+      web: "https://www.cityofmaysvilleky.gov/departments/codes_department/index.php",
+      note: "Codes Officer 1(606)564-2504. Inspector in the office Mon, Tue, Wed, Fri 8:00-11:00am.",
+      source: "https://www.cityofmaysvilleky.gov/departments/codes_department/index.php"
+    },
     verified: false,
     sources: ["KYDHBC", "ICC"],
     verifiedDetail: { date: null, by: null }
@@ -172,7 +235,14 @@ var JURISDICTIONS = {
     codeEdition: "Locally adopted IRC \u2014 verify edition & amendments",
     adoption: "Illinois has no statewide residential code; adoption is municipal.",
     permit: "City roofing permit required; local amendments apply.",
-    inspector: { office: "Crystal Lake Community Development", phone: "(815) 555-0100 \u2014 sample, verify", address: "100 W Woodstock St, Crystal Lake, IL" },
+    inspector: {
+      office: "City of Crystal Lake \u2014 Community Development, Building Division",
+      phone: "8153563605",
+      address: "100 W Woodstock St, Crystal Lake, IL 60014",
+      web: "https://www.crystallake.org/your-government/departments/community-development/building",
+      note: "Building, electrical and plumbing permits. City Hall main line 1(815)459-2020.",
+      source: "https://www.crystallake.org/your-government/departments/community-development/building"
+    },
     verified: false,
     sources: ["MUNICODE", "ICC"],
     verifiedDetail: { date: null, by: null }
@@ -186,7 +256,9 @@ var CODE_PROVISIONS = {
     underlayment: { cite: "RCO R905.1.1", note: "Double-layer underlayment (or self-adhering membrane) on slopes 2:12 up to 4:12.", verified: true },
     ventilation: { cite: "RCO R806.2", note: "Default required ratio is 1/150. The 1/300 exception applies only with a balanced system \u2014 40 to 50 percent of net free area in the upper portion, balance at the eaves.", verified: true },
     fastening: { cite: "RCO R905.2.5", note: "4 nails per shingle minimum; 6-nail where manufacturer or wind zone requires.", verified: true },
-    decking: { cite: "RCO R803 / R908.3", note: "Sheathing must be structurally sound; recover over unsound decking prohibited.", verified: true }
+    decking: { cite: "RCO R803 / R908.3", note: "Sheathing must be structurally sound; recover over unsound decking prohibited.", verified: true },
+    flashing: { cite: "RCO R905.2.8.4", note: "Base and step flashing at walls and roof-to-wall intersections; flashing cannot be reused after tear-off.", verified: true },
+    kickout: { cite: "RCO R703.4", note: "Kickout / diverter flashing required where a roof edge terminates against a wall.", verified: true }
   },
   KY: {
     iceBarrier: { cite: "KRC R905.1.2 \u2014 verify edition", note: "Ice barrier to 24 in. inside exterior wall line (IRC-based; confirm KY amendments).", verified: false },
@@ -195,7 +267,9 @@ var CODE_PROVISIONS = {
     underlayment: { cite: "KRC R905.1.1 \u2014 verify edition", note: "Low-slope double underlayment 2:12\u20134:12 (confirm KY amendments).", verified: false },
     ventilation: { cite: "KRC R806.2 \u2014 verify edition", note: "Balanced attic ventilation (confirm KY amendments).", verified: false },
     fastening: { cite: "KRC R905.2.5 \u2014 verify edition", note: "Fastening per code minimum and manufacturer spec (confirm).", verified: false },
-    decking: { cite: "KRC R803 \u2014 verify edition", note: "Structurally sound sheathing required (confirm).", verified: false }
+    decking: { cite: "KRC R803 \u2014 verify edition", note: "Structurally sound sheathing required (confirm).", verified: false },
+    flashing: { cite: "KRC R905.2.8.4 \u2014 verify edition", note: "Step and base flashing at wall intersections (confirm KY amendments).", verified: false },
+    kickout: { cite: "KRC R703.4 \u2014 verify edition", note: "Kickout flashing at roof-to-wall terminations (confirm KY amendments).", verified: false }
   },
   IL: {
     iceBarrier: { cite: "Adopted IRC R905.1.2 \u2014 verify municipality", note: "Ice barrier per the locally adopted IRC edition \u2014 Illinois adoption is municipal.", verified: false },
@@ -204,7 +278,9 @@ var CODE_PROVISIONS = {
     underlayment: { cite: "Adopted IRC R905.1.1 \u2014 verify municipality", note: "Low-slope underlayment per local adopted edition.", verified: false },
     ventilation: { cite: "Adopted IRC R806.2 \u2014 verify municipality", note: "Ventilation per local adopted edition.", verified: false },
     fastening: { cite: "Adopted IRC R905.2.5 \u2014 verify municipality", note: "Fastening per local adopted edition and manufacturer spec.", verified: false },
-    decking: { cite: "Adopted IRC R803 \u2014 verify municipality", note: "Sheathing requirements per local adopted edition.", verified: false }
+    decking: { cite: "Adopted IRC R803 \u2014 verify municipality", note: "Sheathing requirements per local adopted edition.", verified: false },
+    flashing: { cite: "Adopted IRC R905.2.8.4 \u2014 verify municipality", note: "Step and base flashing per local adopted edition.", verified: false },
+    kickout: { cite: "Adopted IRC R703.4 \u2014 verify municipality", note: "Kickout flashing per local adopted edition.", verified: false }
   }
 };
 var PROVISION_TOPICS = [
@@ -570,7 +646,7 @@ var KB_CODES = [
     title: "Ice barrier at eaves",
     cite: "IRC R905.1.2",
     src: "ICC",
-    body: "In areas with a history of ice forming along eaves, an ice barrier of two layers of cemented underlayment or a self-adhering polymer-modified bitumen sheet must extend from the lowest edge to at least 24 inches inside the exterior wall line. Ohio, Kentucky and Illinois all sit in jurisdictions where this is commonly required.",
+    body: "In areas with a history of ice forming along eaves, an ice barrier of two layers of cemented underlayment or a self-adhering polymer-modified bitumen sheet must extend from the lowest edge to at least 24 inches inside the exterior wall line. Whether it applies to a given roof is set by the local jurisdiction, which decides where ice forming along eaves has a history \u2014 so check the adopted code for the property's own jurisdiction before scoping it.",
     supplement: "Ice and water shield is required from the eave to 24 inches inside the exterior wall line. Carrier scope omits it entirely / includes only ___ LF."
   },
   {
@@ -800,7 +876,7 @@ var KB_TERMS = [
   ["Betterment", "", "A carrier's term for an improvement over pre-loss condition, which they generally do not owe. Code requirements are not betterment \u2014 they are Ordinance and Law."],
   ["Matching", "", "The obligation to produce a reasonably comparable appearance when a partial repair would leave a mismatch. The basis of most full-slope and full-roof arguments."],
   ["Mortgagee clause", "", "Names the lender on the claim cheque. Requires endorsement and often a lender inspection before funds release \u2014 the most common reason a paid claim still has not funded."],
-  ["Public adjuster", "", "Licensed to negotiate coverage and settlement on the insured's behalf. In Ohio this is ORC Chapter 3951, and a contractor cannot act as the public adjuster on the same loss."],
+  ["Public adjuster", "", "Licensed by the state to negotiate coverage and settlement on the insured's behalf. Licensing is state law and the statute differs everywhere; in most states a contractor may not act as the public adjuster on a loss it is also repairing. Check the property state's insurance department before referring one."],
   ["Appraisal clause", "", "A policy provision for resolving disputes over the amount of loss, not over coverage. Each side appoints an appraiser, and the two select an umpire. Slower than negotiation but binding on amount."],
   ["Date of loss", "", "The date the damage occurred, not the date it was noticed or reported. Carriers use it to test policy period, deadlines and whether the storm event matches."],
   ["Proof of loss", "", "A sworn statement of the claim amount, sometimes demanded by the carrier with a deadline. Missing the deadline can prejudice the claim; treat any request for one as urgent."],
@@ -930,7 +1006,7 @@ var CLAIM_SCENARIOS = [
       "For an aged roof that also has hail impact, granule loss at impact sites (fractured mat under the impact) is diagnostic of storm damage. Photograph in raking light.",
       "Brittleness test on a cool day is more reliable than on hot; document date and temperature.",
       "Request the carrier's engineer report if damage is denied on that basis.",
-      "Where the carrier blames installation or age rather than the storm, Ohio applies efficient proximate cause: if the covered peril was the predominant cause, the loss is covered even with contributing factors. Pin the storm date with NWS wind data and NOAA hail reports, and document neighboring properties."
+      "Where the carrier blames installation or age rather than the storm, the argument is causation: that the covered peril was the predominant cause, so the loss is covered even with contributing factors. Which causation rule governs is state law \u2014 many states apply efficient proximate cause, others enforce anti-concurrent-causation wording in the policy \u2014 so confirm the property state's rule before you make the argument. Either way, pin the storm date with NWS wind data and NOAA hail reports, and document neighboring properties."
     ]
   },
   {
@@ -1342,6 +1418,225 @@ var IRC_DEEP = [
     body: "Roof recover is prohibited where the existing roof has two or more applications of any type of covering, where the existing covering is water-soaked or deteriorated, or where the existing covering is slate, clay, cement or asbestos-cement tile. Any of these requires a complete tear-off."
   }
 ];
+var NAIC_DIRECTORY = "https://content.naic.org/state-insurance-departments";
+var STATE_REGULATORS = {
+  OH: {
+    name: "Ohio Department of Insurance \u2014 Consumer Services Division",
+    address: "50 W. Town Street, Third Floor, Suite 300\nColumbus, OH 43215",
+    phone: "1-800-686-1526",
+    url: "https://insurance.ohio.gov",
+    confidence: "verified",
+    asOf: "Jul 2026"
+  }
+};
+function renderLetter(tpl, state) {
+  const used = [];
+  let body = String(tpl.body || "");
+  body = body.replace(/\{CITE:(\w+)\}/g, (_m, topic) => {
+    const f = asFact(citeFor(state, topic));
+    used.push({ token: topic, fact: f });
+    return f.value || `[code citation for ${topic} \u2014 not on file, confirm locally]`;
+  });
+  body = body.replace(/\{CODE_NAME\}/g, () => state ? codeNameForState(state) : "the adopted building code");
+  body = body.replace(/\{MATCHING_RULE\}/g, () => {
+    const f = state === "OH" ? fact(
+      "OAC 3901-1-54(I)(1)(b) requires that replacement items be of like kind and quality with reasonably comparable appearance.",
+      { srcId: "OAC3901", confidence: "verified", asOf: "Jul 2026" }
+    ) : fact("", { note: "No matching regulation on file for this state \u2014 argue from the policy's like-kind-and-quality language.", confidence: "unknown" });
+    used.push({ token: "matching", fact: f });
+    return f.value || "The policy provides for replacement with like kind and quality, which a visible line between new and existing slopes does not satisfy.";
+  });
+  body = body.replace(/\{APPRAISAL_AUTHORITY\}/g, () => {
+    const f = state === "OH" ? fact("Schwartz v. Standard Fire Insurance Co. (Ohio 2008)", { confidence: "verified", asOf: "Jul 2026" }) : fact("", { note: "No appraisal authority on file for this state.", confidence: "unknown" });
+    used.push({ token: "appraisal", fact: f });
+    return f.value ? ` This is consistent with ${f.value}.` : "";
+  });
+  body = body.replace(/\{REGULATOR_BLOCK\}/g, () => {
+    const f = regulatorFor(state);
+    used.push({ token: "regulator", fact: f });
+    return f.value ? `${f.value}
+${f.note || ""}`.trim() : "[your state's department of insurance \u2014 address it before sending]";
+  });
+  const blocking = used.filter((u) => !printable(u.fact));
+  return { body, used, blocking, ready: blocking.length === 0 };
+}
+var NAAG_DIRECTORY = "https://www.naag.org/find-my-ag/";
+var NASCLA_DIRECTORY = "https://www.nascla.org/page/licensing_boards";
+var LEGAL_AUTHORITIES = {
+  ag: { name: "State attorney general \u2014 consumer protection division", url: NAAG_DIRECTORY },
+  doi: { name: "State department of insurance", url: NAIC_DIRECTORY },
+  lic: { name: "State contractor licensing board", url: NASCLA_DIRECTORY }
+};
+var LEGAL_FIELDS = [
+  {
+    key: "choiceOfLaw",
+    label: "Governing law",
+    authority: "ag",
+    binding: true,
+    help: "Which state's law the agreement is written under. Reciting the wrong one is the defect that started this."
+  },
+  {
+    key: "rescission",
+    label: "Right to cancel",
+    authority: "ag",
+    binding: true,
+    help: "How long the owner has to cancel, and whether the clock runs in business or calendar days."
+  },
+  {
+    key: "noticeOfCancellation",
+    label: "Notice of Cancellation",
+    authority: "ag",
+    binding: true,
+    help: "Whether a separate cancellation notice must be handed over, in how many copies, and at what type size."
+  },
+  {
+    key: "insuranceRescission",
+    label: "Insurance-restoration cancellation",
+    authority: "doi",
+    binding: true,
+    help: "Several states give a separate right to cancel once the carrier denies the claim. Where one exists it must be in the contract."
+  },
+  {
+    key: "deductibleNotice",
+    label: "Deductible-rebate notice",
+    authority: "doi",
+    binding: true,
+    help: "The statutory notice that the insured is responsible for the deductible and it cannot be waived or absorbed."
+  },
+  {
+    key: "financeCharge",
+    label: "Finance-charge ceiling",
+    authority: "ag",
+    binding: true,
+    help: "The maximum late charge on an unpaid balance. The supplied terms assert 1.5% per month, which exceeds the cap in some states."
+  },
+  {
+    key: "downPayment",
+    label: "Down-payment cap",
+    authority: "ag",
+    binding: true,
+    help: "The most that may be collected before work starts. The supplied terms say half down."
+  },
+  {
+    key: "cancellationFee",
+    label: "Cancellation-fee limit",
+    authority: "ag",
+    binding: true,
+    help: "Whether a liquidated-damages fee on late cancellation is enforceable, and at what ceiling. The supplied terms assert 15% of the insurance proceeds."
+  },
+  {
+    key: "warrantyFloor",
+    label: "Workmanship warranty floor",
+    authority: "ag",
+    binding: true,
+    help: "Any statutory minimum the written warranty has to meet."
+  },
+  {
+    key: "licenceOnContract",
+    label: "Licence number on the contract",
+    authority: "lic",
+    binding: true,
+    help: "Where a licence number must be printed on the agreement, omitting it can void the contract or bar a lien."
+  },
+  {
+    key: "licensing",
+    label: "Licence or registration required",
+    authority: "lic",
+    binding: false,
+    help: "Whether roofing work needs a state licence, a registration, or neither \u2014 and who issues it."
+  },
+  {
+    key: "consumerIndemnity",
+    label: "Consumer indemnity permissible",
+    authority: "ag",
+    binding: false,
+    help: "The supplied terms have the homeowner indemnify the company. Several states will not enforce that against a consumer."
+  },
+  {
+    key: "aob",
+    label: "Assignment of benefits",
+    authority: "doi",
+    binding: false,
+    help: "Whether an AOB is permitted, restricted, or prohibited for residential property claims."
+  }
+];
+var LEGAL_FIELD_KEYS = LEGAL_FIELDS.map((f) => f.key);
+var BINDING_LEGAL_FIELDS = LEGAL_FIELDS.filter((f) => f.binding).map((f) => f.key);
+var LEGAL_PACK_SEED = {
+  OH: {
+    choiceOfLaw: { value: "Ohio", note: "The property is in Ohio, so Ohio law governs the agreement.", srcId: "ORC1345" },
+    rescission: {
+      value: "Three (3) business days from the date of the transaction",
+      note: "Ohio's Home Solicitation Sales Act. Confirm the current text and whether this sale is within its scope before relying on it.",
+      srcId: "ORC1345"
+    }
+  }
+};
+function legalPackFor(state, overrides = {}) {
+  const st = String(state || "").toUpperCase();
+  const seed = LEGAL_PACK_SEED[st] || {};
+  const conf = overrides && overrides[st] || {};
+  const pack = {};
+  LEGAL_FIELDS.forEach((f) => {
+    const auth = LEGAL_AUTHORITIES[f.authority];
+    const c = conf[f.key];
+    if (c && c.value) {
+      pack[f.key] = fact(c.value, {
+        note: c.note || "",
+        sourceUrl: c.sourceUrl || auth.url,
+        sourceName: c.sourceName || auth.name,
+        asOf: c.at || null,
+        verifiedBy: c.by || null,
+        confidence: "verified"
+      });
+      return;
+    }
+    const s = seed[f.key];
+    if (s) {
+      const src = s.srcId ? SOURCES[s.srcId] : null;
+      pack[f.key] = fact(s.value, {
+        note: s.note || "",
+        srcId: s.srcId || "",
+        sourceUrl: src && src.url || auth.url,
+        sourceName: src && src.name || auth.name,
+        confidence: "derived"
+      });
+      return;
+    }
+    pack[f.key] = fact("", {
+      note: st ? `Not established for ${st}. ${auth.name} is the body that settles this \u2014 check it and confirm here.` : "Pick the property's state.",
+      sourceUrl: auth.url,
+      sourceName: auth.name,
+      confidence: "unknown"
+    });
+  });
+  return pack;
+}
+function legalPackGaps(state, overrides = {}) {
+  const pack = legalPackFor(state, overrides);
+  return LEGAL_FIELDS.filter((f) => f.binding && !printable(pack[f.key]));
+}
+function legalPackReady(state, overrides = {}) {
+  return !!String(state || "").trim() && legalPackGaps(state, overrides).length === 0;
+}
+function regulatorFor(state) {
+  const r = STATE_REGULATORS[state];
+  if (r) {
+    return fact(r.name, {
+      note: r.address,
+      sourceUrl: r.url,
+      sourceName: r.name,
+      asOf: r.asOf,
+      confidence: r.confidence
+    });
+  }
+  return fact("", {
+    note: state ? `No department of insurance on file for ${state}. Find it in the NAIC directory before sending.` : "Pick a state to address this complaint.",
+    sourceUrl: NAIC_DIRECTORY,
+    sourceName: "NAIC \u2014 state insurance departments",
+    confidence: "unknown"
+  });
+}
 var LETTER_TEMPLATES = [
   {
     id: "lt-supp",
@@ -1352,19 +1647,19 @@ var LETTER_TEMPLATES = [
 RE: Claim #[claim] \xB7 Insured: [name] \xB7 Date of loss: [date]
 Property: [address]
 
-We are the contractor of record on the above claim. Having reviewed the loss summary dated [date], we have identified the following items that were omitted or under-scoped. Each is required by the Residential Code of Ohio, by the manufacturer's published installation instructions, or by the loss settlement terms of the policy.
+We are the contractor of record on the above claim. Having reviewed the loss summary dated [date], we have identified the following items that were omitted or under-scoped. Each is required by {CODE_NAME}, by the manufacturer's published installation instructions, or by the loss settlement terms of the policy.
 
-1. Drip edge, full perimeter \u2014 RCO R905.2.8.5. [LF] at [$].
-2. Ice barrier at eaves and valleys \u2014 RCO R905.1.2. Ohio sits in IECC Climate Zones 4A and 5A; this applies statewide. [SQ] at [$].
-3. Step flashing, remove and replace \u2014 RCO R905.2.8.4. Flashing cannot be reused after tear-off. [LF] at [$].
-4. Kickout flashing \u2014 RCO R703.4. [EA] at [$].
-5. Decking replacement where existing sheathing does not provide an adequate base \u2014 RCO R908.6. [SF] at [$].
-6. Ventilation brought to the code-required ratio \u2014 RCO R806.2. [detail] at [$].
+1. Drip edge, full perimeter \u2014 {CITE:dripEdge}. [LF] at [$].
+2. Ice barrier at eaves and valleys \u2014 {CITE:iceBarrier}. [SQ] at [$].
+3. Step flashing, remove and replace \u2014 {CITE:flashing}. Flashing cannot be reused after tear-off. [LF] at [$].
+4. Kickout flashing \u2014 {CITE:kickout}. [EA] at [$].
+5. Decking replacement where existing sheathing does not provide an adequate base \u2014 {CITE:decking}. [SF] at [$].
+6. Ventilation brought to the code-required ratio \u2014 {CITE:ventilation}. [detail] at [$].
 7. Permit and inspection fee. [$].
 8. Disposal. [$].
 9. Overhead and profit, where the loss requires coordination of multiple trades.
 
-Please update the loss summary to reflect these items and reissue payment within the timeframe set by OAC 3901-1-54. Supporting photographs and measurements are attached.
+Please update the loss summary to reflect these items and reissue payment within the timeframe your state's claim-handling rules allow. Supporting photographs and measurements are attached.
 
 [Rep name] \u2014 [Company] \u2014 [Phone]`
   },
@@ -1384,7 +1679,7 @@ The current authorization covers [x] slope(s). We respectfully request authoriza
 
 3. Partial replacement does not meet the policy's settlement standard. The policy provides for replacement with like kind and quality. A visible line between new and existing slopes does not satisfy that standard.
 
-4. OAC 3901-1-54(I)(1)(b) requires that replacement items be of like kind and quality with reasonably comparable appearance. If the carrier intends to maintain the partial position, OAC 3901-1-54(I)(2) requires a written explanation of the provision relied upon. We request that explanation in writing.
+4. {MATCHING_RULE} If the carrier intends to maintain the partial position, we request a written explanation of the policy provision relied upon.
 
 We request re-inspection within fourteen days. If the partial position is maintained, we will advise the insured of their right to invoke the policy's appraisal clause.
 
@@ -1422,7 +1717,7 @@ Pursuant to the appraisal provision of the policy, the insured demands appraisal
 
 The insured names [appraiser name, address] as their competent and disinterested appraiser.
 
-Please name the carrier's appraiser within the period required by the policy. The two appraisers will then select an umpire. An award agreed by any two of the three will be binding as to the amount of loss, consistent with Schwartz v. Standard Fire Insurance Co. (Ohio 2008).
+Please name the carrier's appraiser within the period required by the policy. The two appraisers will then select an umpire. An award agreed by any two of the three will be binding as to the amount of loss, as provided by the policy's appraisal clause.{APPRAISAL_AUTHORITY}
 
 [Insured name / Rep name] \u2014 [Company] \u2014 [Phone]`
   },
@@ -1431,15 +1726,13 @@ Please name the carrier's appraiser within the period required by the policy. Th
     title: "Department of Insurance complaint",
     when: "The carrier has missed handling deadlines or refused a written explanation. Escalates the file and creates a regulatory record.",
     body: `[Date]
-Ohio Department of Insurance \u2014 Consumer Services Division
-50 W. Town Street, Third Floor, Suite 300
-Columbus, OH 43215
+{REGULATOR_BLOCK}
 
 RE: Claim complaint \xB7 Insured: [name] \xB7 Carrier: [carrier] \xB7 Claim #[claim] \xB7 Date of loss: [date]
 
 The insured submits this complaint regarding the handling of the above claim.
 
-1. [Select: failure to acknowledge within 15 days per OAC 3901-1-54 / failure to complete investigation within 21 days / refusal to provide the written matching explanation required by OAC 3901-1-54(I)(2) / scope omitting code-required items / other].
+1. [Select: failure to acknowledge the claim within the period your state's claim-handling rules require / failure to complete the investigation within that period / refusal to provide a written explanation of the provision relied upon / scope omitting code-required items / other].
 
 2. The carrier has been given written notice regarding [drip edge / ice barrier / step flashing / kickout / decking / ventilation / matching] and has not updated the scope.
 
@@ -1856,7 +2149,12 @@ var DEFAULT_PORTAL_SETTINGS = {
   contact: true,
   requests: true,
   sign: true,
-  review: true
+  review: true,
+  /* The certificate of completion is the homeowner's document as much as
+     the carrier's — they need it to chase their own depreciation cheque.
+     On by default, and independent of `documents`, which governs files
+     the office chose to upload. */
+  certificate: true
 };
 var PORTAL_SECTION_KEY = {
   tracker: "tracker",
@@ -2302,7 +2600,21 @@ var seedJobs = [
     crewId: "c1",
     messages: [],
     workOrder: { number: "WO-014", sentAt: "Jul 17, 8:02 AM", status: "Sent", notes: "Dumpster on the north side of the drive. Dog in the back yard \u2014 keep the gate shut." },
-    review: { sent: true, clicked: true, posted: true }
+    review: { sent: true, clicked: true, posted: true },
+    /* A finished job that still owes something — the case the punch list
+       exists for, and the one that puts a red row on the home screen. */
+    punch: [{
+      id: "pn1",
+      label: "Gutter apron short at the NE corner",
+      note: "Roughly 6 ft. Material is on the truck.",
+      done: false,
+      at: "Jul 21, 4:15 PM",
+      by: "Stephen Klein",
+      doneAt: null,
+      doneBy: null,
+      due: null,
+      photo: null
+    }]
   }
 ];
 var ZIP_PREFIX_STATE = [
@@ -2316,7 +2628,12 @@ var ZIP_PREFIX_STATE = [
   { lo: 100, hi: 149, state: "NY" },
   { lo: 150, hi: 196, state: "PA" },
   { lo: 197, hi: 199, state: "DE" },
-  { lo: 200, hi: 205, state: "DC" },
+  /* 201 is Virginia (Loudoun County — Ashburn, Sterling, Herndon, Leesburg),
+     not DC. It sat inside the 200-205 DC block and silently resolved several
+     hundred thousand homes to the DC construction codes. */
+  { lo: 200, hi: 200, state: "DC" },
+  { lo: 201, hi: 201, state: "VA" },
+  { lo: 202, hi: 205, state: "DC" },
   { lo: 206, hi: 219, state: "MD" },
   { lo: 220, hi: 246, state: "VA" },
   { lo: 247, hi: 268, state: "WV" },
@@ -2413,6 +2730,10 @@ var US_STATES = [
   ["WI", "Wisconsin"],
   ["WY", "Wyoming"]
 ];
+function stateName(ab) {
+  const hit = US_STATES.find(([a]) => a === String(ab || "").toUpperCase());
+  return hit ? hit[1] : "";
+}
 var STATE_CODE_ADOPTION = {
   AL: { code: "Alabama Residential Code (IRC-based)" },
   AK: { code: "IRC as adopted locally", local: true },
@@ -2473,7 +2794,9 @@ var IRC_BASE = {
   underlayment: { cite: "IRC R905.1.1", note: "Double-layer underlayment (or self-adhering membrane) on slopes 2:12 up to 4:12." },
   ventilation: { cite: "IRC R806.2", note: "Default 1/150 net free ventilating area; the 1/300 exception applies only with a balanced system." },
   fastening: { cite: "IRC R905.2.5", note: "4 nails per shingle minimum; 6-nail where the manufacturer or wind zone requires." },
-  decking: { cite: "IRC R803 / R908.3", note: "Sheathing must be structurally sound; recover over unsound decking prohibited." }
+  decking: { cite: "IRC R803 / R908.3", note: "Sheathing must be structurally sound; recover over unsound decking prohibited." },
+  flashing: { cite: "IRC R905.2.8.4", note: "Base and step flashing at walls and roof-to-wall intersections." },
+  kickout: { cite: "IRC R703.4", note: "Kickout / diverter flashing where a roof edge terminates against a wall." }
 };
 var STATE_DEFAULTS = {
   OH: {
@@ -2717,7 +3040,7 @@ var KY_COUNTY_ZIPS = {
   "Grant County": { "41097": "Williamstown", "41030": "Crittenden" }
 };
 var COUNTY_DEPARTMENTS = {
-  "Montgomery County": {
+  "OH:Montgomery County": {
     office: "Montgomery County Building Regulations",
     phone: "9372254622",
     address: "371 W Second St, Dayton, OH 45402",
@@ -2726,7 +3049,7 @@ var COUNTY_DEPARTMENTS = {
     except: "Some cities run their own building or zoning office. Confirm the address is county-served before applying.",
     checked: "Jul 2026"
   },
-  "Greene County": {
+  "OH:Greene County": {
     office: "Greene County Department of Building Regulation",
     phone: "9375627420",
     address: "667 Dayton-Xenia Rd, Xenia, OH 45385",
@@ -2735,7 +3058,7 @@ var COUNTY_DEPARTMENTS = {
     except: "Does NOT cover Fairborn, Xenia, Bowersville, Clifton, Cedarville or Yellow Springs \u2014 each runs its own. Xenia Building Division: 1(937)372-6389.",
     checked: "Jul 2026"
   },
-  "Warren County": {
+  "OH:Warren County": {
     office: "Warren County Building & Zoning",
     phone: "5136951290",
     address: "406 Justice Drive, Room 167, Lebanon, OH 45036",
@@ -2744,7 +3067,7 @@ var COUNTY_DEPARTMENTS = {
     except: "Springboro and some villages run their own building or zoning office. Confirm jurisdiction first.",
     checked: "Jul 2026"
   },
-  "Butler County": {
+  "OH:Butler County": {
     office: "Butler County Building & Zoning (Dept. of Development)",
     phone: "5138873205",
     address: "130 High Street, Hamilton, OH 45011",
@@ -2753,7 +3076,7 @@ var COUNTY_DEPARTMENTS = {
     except: "Cities run their own. City of Hamilton building department: 1(513)785-7360, building@hamilton-oh.gov. Fairfield and Oxford also separate.",
     checked: "Jul 2026"
   },
-  "Hamilton County": {
+  "OH:Hamilton County": {
     office: "Hamilton County Planning + Development, Buildings + Inspections",
     phone: "5139464550",
     address: "138 East Court Street, Room 801, Cincinnati, OH 45202",
@@ -2762,7 +3085,7 @@ var COUNTY_DEPARTMENTS = {
     except: "The City of Cincinnati runs its own Permit Center and is NOT county-served. Electrical permits and inspections go through Inspection Bureau Inc, not the county.",
     checked: "Jul 2026"
   },
-  "Clermont County": {
+  "OH:Clermont County": {
     office: "Clermont County Permit Central / Building Inspection",
     phone: "5137327213",
     address: "2275 Bauer Road, Batavia, OH 45103",
@@ -2771,7 +3094,7 @@ var COUNTY_DEPARTMENTS = {
     except: "Also handles COMMERCIAL work in Brown County \u2014 but not residential there, and not Russellville or Hamersville.",
     checked: "Jul 2026"
   },
-  "Brown County": {
+  "OH:Brown County": {
     office: "Brown County \u2014 confirm the issuing authority for the address",
     phone: "",
     address: "",
@@ -2781,7 +3104,7 @@ var COUNTY_DEPARTMENTS = {
     checked: "Jul 2026"
   },
   /* ---------- Kentucky ---------- */
-  "Mason County": {
+  "KY:Mason County": {
     office: "City of Maysville / Mason County Codes Department",
     phone: "6065642525",
     address: "216 Bridge Street, Maysville, KY 41056",
@@ -2790,7 +3113,7 @@ var COUNTY_DEPARTMENTS = {
     except: "The Mason County Fiscal Court adopted the building code in 2006 and the same office serves both city and county. Ask whether the address is inside Maysville city limits \u2014 the permit form asks.",
     checked: "Jul 2026"
   },
-  "Lewis County": {
+  "KY:Lewis County": {
     office: "No local building inspector",
     phone: "",
     address: "",
@@ -2799,7 +3122,7 @@ var COUNTY_DEPARTMENTS = {
     except: "Do not assume no inspector means no requirements \u2014 the KRC still applies, and the county clerk (1(606)796-3062, 112 2nd Street, Vanceburg) can point you at whoever handles zoning.",
     checked: "Jul 2026"
   },
-  "Kenton County": {
+  "KY:Kenton County": {
     office: "Planning and Development Services of Kenton County (PDS)",
     phone: "8599572408",
     address: "1840 Simon Kenton Way, Suite 3400, Covington, KY 41011",
@@ -2808,7 +3131,7 @@ var COUNTY_DEPARTMENTS = {
     except: "Some cities keep their own local building inspector \u2014 Erlanger, for example. PDS can tell you which applies.",
     checked: "Jul 2026"
   },
-  "Campbell County": {
+  "KY:Campbell County": {
     office: "Campbell County Planning, Zoning & Building Inspections",
     phone: "8592923880",
     address: "Campbell County, KY",
@@ -2820,12 +3143,13 @@ var COUNTY_DEPARTMENTS = {
 };
 function buildMarketJurisdictions() {
   const out = {};
-  const add = (zip, city, county, state) => {
-    const dept = COUNTY_DEPARTMENTS[county] || null;
+  const add = (zip, city, county, state, suffixed) => {
+    const dept = COUNTY_DEPARTMENTS[`${state}:${county}`] || null;
     const z = zip.replace(/[a-z]$/, "");
-    if (out[z]) return;
+    if (out[z] && !(out[z].suffixed && !suffixed)) return;
     const d = STATE_DEFAULTS[state];
     out[z] = {
+      suffixed: !!suffixed,
       zip: z,
       city,
       county,
@@ -2849,8 +3173,8 @@ function buildMarketJurisdictions() {
       verifiedDetail: { date: null, by: null }
     };
   };
-  Object.entries(OH_COUNTY_ZIPS).forEach(([county, zips]) => Object.entries(zips).forEach(([z, city]) => add(z, city, county, "OH")));
-  Object.entries(KY_COUNTY_ZIPS).forEach(([county, zips]) => Object.entries(zips).forEach(([z, city]) => add(z, city, county, "KY")));
+  Object.entries(OH_COUNTY_ZIPS).forEach(([county, zips]) => Object.entries(zips).forEach(([z, city]) => add(z, city, county, "OH", /[a-z]$/.test(z))));
+  Object.entries(KY_COUNTY_ZIPS).forEach(([county, zips]) => Object.entries(zips).forEach(([z, city]) => add(z, city, county, "KY", /[a-z]$/.test(z))));
   return out;
 }
 var MARKET_JURISDICTIONS = buildMarketJurisdictions();
@@ -2863,6 +3187,19 @@ function stateForZip(zip) {
 var JURIS_OVERRIDES = {};
 function setJurisOverrides(map) {
   JURIS_OVERRIDES = map || {};
+}
+var LEGAL_OVERRIDES = {};
+function setLegalOverrides(map) {
+  LEGAL_OVERRIDES = map || {};
+}
+function legalPack(state) {
+  return legalPackFor(state, LEGAL_OVERRIDES);
+}
+function legalGaps(state) {
+  return legalPackGaps(state, LEGAL_OVERRIDES);
+}
+function legalReady(state) {
+  return legalPackReady(state, LEGAL_OVERRIDES);
 }
 var LEARNED_JURISDICTIONS = {};
 function setLearnedJurisdictions(map) {
@@ -2928,6 +3265,10 @@ function resolveJurisdiction(zip) {
     adoption: d.adoption,
     permit: d.permit,
     inspector: { office: "Local building department \u2014 not yet on file", phone: "", address: "" },
+    /* Without this the card rendered as a populated record with a blank
+       phone and hid the "find the building department" links — from the
+       one group of users who have no other way to get them. */
+    needsContact: true,
     verified: false,
     sources: d.sources,
     verifiedDetail: { date: null, by: null },
@@ -3037,7 +3378,7 @@ async function geoLookupZip(zip) {
       city: r.city || r.town || r.village || "",
       county,
       state,
-      dept: COUNTY_DEPARTMENTS[county] || null,
+      dept: COUNTY_DEPARTMENTS[`${state}:${county}`] || null,
       /* Ohio/Kentucky/Illinois have a validated code library; everywhere else
          we still resolve the state's adopted code, just flagged to verify. */
       curated: !!STATE_DEFAULTS[state]
@@ -3144,6 +3485,58 @@ var fmtStamp = (iso) => {
 var money = (n) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 var money0 = (n) => (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
 var pct1 = (n) => `${n.toFixed(2)}%`;
+var FACT_TIERS = ["unknown", "seeded", "derived", "verified"];
+function fact(value, opts = {}) {
+  return {
+    value: value == null ? "" : value,
+    note: opts.note || "",
+    sourceUrl: opts.sourceUrl || "",
+    sourceName: opts.sourceName || "",
+    srcId: opts.srcId || "",
+    asOf: opts.asOf || null,
+    verifiedBy: opts.verifiedBy || null,
+    confidence: FACT_TIERS.includes(opts.confidence) ? opts.confidence : value ? "seeded" : "unknown"
+  };
+}
+function asFact(x) {
+  if (!x) return fact("");
+  if (x.confidence) return x.value != null ? x : { ...x, value: x.cite != null ? x.cite : "" };
+  if (x.missing) return fact("", { note: x.note, confidence: "unknown" });
+  return fact(x.cite != null ? x.cite : x.value, {
+    note: x.note,
+    srcId: x.srcId || x.src,
+    sourceUrl: x.sourceUrl || x.source,
+    asOf: x.asOf || x.verifiedDetail && x.verifiedDetail.date || x.checked || null,
+    verifiedBy: x.verifiedBy || x.verifiedDetail && x.verifiedDetail.by || null,
+    confidence: x.verified ? "verified" : x.cite || x.value ? "derived" : "unknown"
+  });
+}
+function printable(x) {
+  const f = asFact(x);
+  return f.confidence === "verified" && !!String(f.value || "").trim();
+}
+function factTone(x) {
+  const c = asFact(x).confidence;
+  return c === "verified" ? "green" : c === "derived" ? "blue" : c === "seeded" ? "amber" : "gray";
+}
+var FACT_LABEL = {
+  verified: "Verified",
+  derived: "Verify locally",
+  seeded: "Unconfirmed",
+  unknown: "Not on file"
+};
+function msgFailed(status) {
+  return /^failed/i.test(String(status || ""));
+}
+function msgTone(status, sentTone = "green") {
+  if (status === "Sent") return sentTone;
+  return msgFailed(status) ? "red" : "amber";
+}
+function msgLabel(status) {
+  if (status === "Sent") return "Sent";
+  return msgFailed(status) ? "Failed" : "Queued";
+}
+var moneyNum = (v) => num(String(v == null ? "" : v).replace(/[^0-9.-]/g, ""));
 function fmtPhone(v) {
   const d = String(v || "").replace(/\D/g, "");
   if (d.length === 10) return `1(${d.slice(0, 3)})${d.slice(3, 6)}-${d.slice(6)}`;
@@ -3366,12 +3759,33 @@ function codeNameForState(st) {
   return STATE_DEFAULTS[st] && STATE_DEFAULTS[st].codeName || STATE_CODE_ADOPTION[st] && STATE_CODE_ADOPTION[st].code || "Adopted IRC \u2014 verify locally";
 }
 function citeFor(state, topic) {
-  if (CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic]) return CODE_PROVISIONS[state][topic];
-  const base = IRC_BASE[topic] || CODE_PROVISIONS.OH[topic];
+  const curated = CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic];
+  if (curated) {
+    return { ...curated, state, confidence: curated.verified ? "verified" : "derived" };
+  }
+  const base = IRC_BASE[topic];
+  if (!base) {
+    return {
+      cite: "",
+      value: "",
+      state,
+      note: "No code citation on file for this item \u2014 verify locally before citing it.",
+      verified: false,
+      missing: true,
+      confidence: "unknown"
+    };
+  }
   const adopt = STATE_CODE_ADOPTION[state];
   const label = adopt ? adopt.code : "the locally adopted IRC";
   const verifyLine = `Per ${label}; verify edition${adopt && adopt.local ? " & local adoption" : ""}.`;
-  return { cite: base.cite, note: base.note ? `${base.note} ${verifyLine}` : verifyLine, verified: false };
+  return {
+    cite: base.cite,
+    value: base.cite,
+    state,
+    note: base.note ? `${base.note} ${verifyLine}` : verifyLine,
+    verified: false,
+    confidence: "derived"
+  };
 }
 function generateRoofingMaterials(m) {
   if (!num(m.squares)) return null;
@@ -3418,6 +3832,16 @@ function subCodeFor(text) {
   if (/steep|pitch/.test(s)) return "steep_per_square";
   return null;
 }
+var SUB_RATE_LABELS = {
+  per_square: "Install (per square)",
+  steep_per_square: "Steep charge (per square)",
+  tearoff_per_square: "Tear-off (per square, per extra layer)",
+  story_2: "2-story adder",
+  story_3: "3+ story adder",
+  chimney_small: "Chimney \u2014 small",
+  chimney_medium: "Chimney \u2014 medium",
+  chimney_large: "Chimney \u2014 large"
+};
 function subRate(crew, code) {
   const row = (crew && crew.rateCard || []).find((r) => r.code === code);
   return row ? num(row.price) : 0;
@@ -3465,6 +3889,8 @@ function buildSubInvoiceDraft(job, crew) {
   if (wo.steep) add("Shingle Installation", "Steep charge", sq, "SQ", subRate(crew, "steep_per_square"));
   const layers = parseInt(wo.layers || (job.checklist || {}).layers, 10) || 1;
   if (layers > 1) add("Shingle Installation", `Additional layer removal (${layers - 1})`, sq * (layers - 1), "SQ", subRate(crew, "tearoff_per_square"));
+  if (wo.stories === "2") add("Access", "2-story adder", 1, "job", subRate(crew, "story_2"));
+  if (wo.stories === "3+") add("Access", "3+ story adder", 1, "job", subRate(crew, "story_3"));
   const chim = (wo.chimney || {}).size;
   if (chim && chim !== "none") add("Chimney Flashing", `Chimney flashing (${chim})`, 1, "job", subRate(crew, `chimney_${chim}`));
   inv.lines = lines;
@@ -3618,6 +4044,42 @@ var inputStyle = {
   fontFamily: "inherit"
 };
 var selStyle = { ...inputStyle, appearance: "auto" };
+function MoneyInput({ value, onChange, disabled, style, placeholder = "$0.00", ...rest }) {
+  const [editing, setEditing] = (0, import_react.useState)(false);
+  const [raw, setRaw] = (0, import_react.useState)("");
+  const blank = value === "" || value === null || value === void 0;
+  const shown = editing ? raw : blank ? "" : money(moneyNum(value));
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    "input",
+    {
+      ...rest,
+      style: { textAlign: "right", fontVariantNumeric: "tabular-nums", ...style },
+      inputMode: "decimal",
+      disabled,
+      placeholder,
+      value: shown,
+      onFocus: (e) => {
+        setRaw(blank ? "" : String(moneyNum(value)));
+        setEditing(true);
+        const el = e.target;
+        setTimeout(() => {
+          try {
+            el.select();
+          } catch (err) {
+          }
+        }, 0);
+      },
+      onChange: (e) => {
+        setRaw(e.target.value);
+        onChange(e.target.value);
+      },
+      onBlur: () => {
+        setEditing(false);
+        onChange(String(raw).trim() === "" ? "" : String(moneyNum(raw)));
+      }
+    }
+  );
+}
 var dateInputStyle = {
   ...inputStyle,
   WebkitAppearance: "none",
@@ -3679,6 +4141,28 @@ function SourceLink({ srcId }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ExternalLink, { size: 13 }),
     " ",
     s.name
+  ] });
+}
+function Cited({ fact: f, compact = false, style }) {
+  const x = asFact(f);
+  const tone = factTone(x);
+  if (!x.value) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: FACT_LABEL.unknown }),
+      x.note && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: x.note }),
+      x.srcId ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SourceLink, { srcId: x.srcId }) : null,
+      !x.srcId && x.sourceUrl ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistLink, { href: x.sourceUrl, children: x.sourceName || "Where to check" }) : null
+    ] });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", ...style }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone, children: x.value }),
+    !compact && x.confidence !== "verified" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11, fontWeight: 700, color: tone === "blue" ? T.accent : "#92600A" }, children: FACT_LABEL[x.confidence] }),
+    !compact && x.confidence === "verified" && x.asOf && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11, color: S.sub }, children: [
+      "Verified ",
+      x.asOf,
+      x.verifiedBy ? ` \xB7 ${x.verifiedBy}` : ""
+    ] }),
+    !compact && x.srcId ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SourceLink, { srcId: x.srcId }) : null
   ] });
 }
 function municodeUrl(state, city) {
@@ -5100,6 +5584,16 @@ function jobExceptions(job, ctx) {
     if (job.soldRequestedAt && !job.jobFolder) add("approval", "amber", `Waiting on the office to approve the sold job`, "handoff");
     if (job.schedDate && job.schedDate >= today && !job.crewId) add("crew", "red", `Scheduled ${job.schedDate} with no crew assigned`, "workorder");
   }
+  const punch = openPunch(job);
+  if (punch.length) {
+    const late = punch.filter((p) => p.due && p.due < today);
+    add(
+      "punch",
+      punchTone(job),
+      done ? `${punch.length} punch ${punch.length === 1 ? "item" : "items"} still open \u2014 job marked ${(c.stages || []).find((s) => s.id === job.stageId) ? (c.stages || []).find((s) => s.id === job.stageId).name.toLowerCase() : "closed"}` : late.length ? `${late.length} punch ${late.length === 1 ? "item" : "items"} past due \u2014 oldest: ${late[0].label}` : `${punch.length} punch ${punch.length === 1 ? "item" : "items"} open \u2014 ${punch[0].label}`,
+      "punchlist"
+    );
+  }
   if (job.subInvoice && job.subInvoice.status === "needs_review") {
     add("sub", "amber", "Subcontractor invoice needs review before it can be paid", "financials");
   }
@@ -6477,7 +6971,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     } else {
       setAppointments([...appointments, { ...payload, id: uid("ap") }]);
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `scheduled ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
-      toast(notified ? `Appointment added \u2014 ${notified === "sms" ? "text" : "email"} queued for the customer` : "Appointment added");
+      toast(notified ? `Appointment added \u2014 ${notified === "sms" ? "text" : "email"} ready to send from the Inbox` : "Appointment added");
     }
     setAdding(false);
     setEditingId(null);
@@ -6523,7 +7017,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   const queueReminder = () => {
     const j = jobs.find((x) => x.id === f.jobId);
     const ch = queueFor(j, f, "reminder");
-    if (ch) toast(`${ch === "sms" ? "Text" : "Email"} reminder queued \u2014 see it in the Inbox`);
+    if (ch) toast(`${ch === "sms" ? "Text" : "Email"} reminder drafted \u2014 send it from the Inbox`);
   };
   const addType = () => {
     const v = newType.trim();
@@ -7355,6 +7849,10 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject, currentUser, onDelete
 }
 function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LEAD_SOURCES, users = [], jobs = [], seed = null }) {
   const contacts = (0, import_react.useMemo)(() => buildContactDirectory(jobs), [jobs]);
+  const roster = (0, import_react.useMemo)(() => {
+    const names = (users || []).filter((u) => u.active !== false).map((u) => u.name).filter(Boolean);
+    return names.length ? names : TEAM;
+  }, [users]);
   const blank = {
     contactMode: "new",
     existingContactId: "",
@@ -7365,12 +7863,12 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
     email: "",
     street: "",
     city: "",
-    stateSel: "OH",
+    stateSel: "",
     zip: "",
     lat: null,
     lng: null,
     leadSource: "",
-    assignee: TEAM[0],
+    assignee: "",
     claimType: "Insurance",
     roofTypes: [],
     roofAge: "",
@@ -7397,6 +7895,9 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
     notes: ""
   };
   const [f, setF] = (0, import_react.useState)(blank);
+  (0, import_react.useEffect)(() => {
+    if (open && !f.assignee && roster.length) setF((prev) => ({ ...prev, assignee: roster[0] }));
+  }, [open, roster, f.assignee]);
   (0, import_react.useEffect)(() => {
     if (!open) return;
     const selected = seed?.contactId ? contacts.find((c) => c.id === seed.contactId) : null;
@@ -7446,7 +7947,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
       email: contact.email || "",
       street: "",
       city: "",
-      stateSel: "OH",
+      stateSel: "",
       zip: "",
       lat: null,
       lng: null,
@@ -7457,7 +7958,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
   const selectProperty = (id) => {
     const property = existingContact?.properties.find((p) => p.id === id);
     if (!property) {
-      setF({ ...f, existingPropertyId: "", street: "", city: "", stateSel: "OH", zip: "", lat: null, lng: null });
+      setF({ ...f, existingPropertyId: "", street: "", city: "", stateSel: "", zip: "", lat: null, lng: null });
       return;
     }
     setF({
@@ -7465,7 +7966,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
       existingPropertyId: property.id,
       street: property.street || property.address,
       city: property.city || "",
-      stateSel: property.state || "OH",
+      stateSel: property.state || "",
       zip: property.zip || "",
       lat: property.lat ?? null,
       lng: property.lng ?? null,
@@ -7473,7 +7974,12 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
     });
   };
   const juris = jurisdictionForZip(f.zip);
-  const canCreate = f.first.trim() && f.last.trim() && f.street.trim() && f.zip.trim();
+  const setZip = (e) => {
+    const zip = e.target.value;
+    const derived = stateForZip(zip);
+    setF((prev) => ({ ...prev, zip, stateSel: derived || prev.stateSel }));
+  };
+  const canCreate = f.first.trim() && f.last.trim() && f.street.trim() && f.zip.trim() && f.stateSel;
   const typedFp = addrFingerprint([f.street, f.city, f.zip].filter(Boolean).join(" "));
   const dupes = !f.existingPropertyId && typedFp.length > 6 ? jobs.filter((j) => {
     const fp = addrFingerprint([j.property?.street || j.address, j.property?.city, j.property?.zip || j.zip].filter(Boolean).join(" "));
@@ -7616,8 +8122,11 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
         ) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 12 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "City", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.city, onChange: set("city") }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "State", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: f.stateSel, onChange: set("stateSel"), children: US_STATES.map(([ab]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: ab, children: ab }, ab)) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Zip *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { "data-testid": "lead-zip", style: inputStyle, value: f.zip, onChange: set("zip") }) })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "State", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: f.stateSel, onChange: set("stateSel"), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "State\u2026" }),
+            US_STATES.map(([ab]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: ab, children: ab }, ab))
+          ] }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Zip *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { "data-testid": "lead-zip", style: inputStyle, value: f.zip, onChange: setZip }) })
         ] }),
         juris && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: T.accentSoft, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, fontWeight: 700, color: T.primary }, children: [
@@ -7650,7 +8159,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "\u2014 select \u2014" }),
             leadSources.map((l) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: l }, l))
           ] }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Assign to", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: f.assignee, onChange: set("assignee"), children: TEAM.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: t }, t)) }) })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Assign to", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: f.assignee, onChange: set("assignee"), children: roster.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: t }, t)) }) })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Claim type *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: ["Insurance", "Retail", "Commercial", "Unknown"].map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setF({ ...f, claimType: c }), style: {
           border: `1.5px solid ${f.claimType === c ? T.accent : S.line}`,
@@ -7727,7 +8236,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
     }
   );
 }
-function FiltersSheet({ open, onClose, stages, filters, setFilters }) {
+function FiltersSheet({ open, onClose, stages, filters, setFilters, assignees = [], leadSources = LEAD_SOURCES }) {
   const [local, setLocal] = (0, import_react.useState)(filters);
   (0, import_react.useEffect)(() => {
     if (open) setLocal(filters);
@@ -7815,9 +8324,9 @@ function FiltersSheet({ open, onClose, stages, filters, setFilters }) {
           Section,
           {
             title: "Assignees & job owner",
-            onAll: () => setLocal({ ...local, assignees: [...TEAM] }),
+            onAll: () => setLocal({ ...local, assignees: [...assignees] }),
             onNone: () => setLocal({ ...local, assignees: [] }),
-            children: TEAM.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CheckRow, { checked: local.assignees.includes(t), label: t, onClick: () => toggle("assignees", t) }, t))
+            children: assignees.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CheckRow, { checked: local.assignees.includes(t), label: t, onClick: () => toggle("assignees", t) }, t))
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -7833,9 +8342,9 @@ function FiltersSheet({ open, onClose, stages, filters, setFilters }) {
           Section,
           {
             title: "Lead sources",
-            onAll: () => setLocal({ ...local, sources: [...LEAD_SOURCES] }),
+            onAll: () => setLocal({ ...local, sources: [...leadSources] }),
             onNone: () => setLocal({ ...local, sources: [] }),
-            children: LEAD_SOURCES.map((l) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CheckRow, { checked: local.sources.includes(l), label: l, onClick: () => toggle("sources", l) }, l))
+            children: leadSources.map((l) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CheckRow, { checked: local.sources.includes(l), label: l, onClick: () => toggle("sources", l) }, l))
           }
         )
       ]
@@ -8729,7 +9238,9 @@ var JOB_TABS = [
   ["files", "Files"],
   ["assistant", "Ask the assistant"],
   ["portal", "Portal"],
-  ["claim", "Insurance claim"]
+  ["claim", "Insurance claim"],
+  ["certificate", "Certificate of completion"],
+  ["punchlist", "Punch list"]
 ];
 var JOB_SECTIONS = [
   // Inspect
@@ -8746,9 +9257,11 @@ var JOB_SECTIONS = [
   ["report", "Report", import_lucide_react.ScrollText, "Sell"],
   // Claim (insurance jobs only — gated in the render filter)
   ["claim", "Insurance claim", import_lucide_react.Shield, "Claim"],
+  ["certificate", "Certificate of completion", import_lucide_react.Award, "Claim"],
   // Build
   ["workorder", "Work order", import_lucide_react.ClipboardList, "Build"],
   ["handoff", "Sold & handoff", import_lucide_react.Share2, "Build"],
+  ["punchlist", "Punch list", import_lucide_react.ClipboardCheck, "Build"],
   ["tasks", "Tasks", import_lucide_react.CheckCircle2, "Build"],
   ["files", "Attachments", import_lucide_react.Layers, "Build"],
   ["assistant", "Ask the assistant", import_lucide_react.MessageCircle, "Build"],
@@ -9045,7 +9558,8 @@ function JobDetail({
                   activity,
                   users,
                   isAdmin,
-                  onOpenCodeLookup
+                  onOpenCodeLookup,
+                  integrations
                 }
               );
             case "claim":
@@ -9128,7 +9642,7 @@ function JobDetail({
             case "photos":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPhotos, { job, mut, toast, ccToken });
             case "financials":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancialsCombined, { job, mut, toast, isAdmin, currentUser, brand: brand2, integrations });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancialsCombined, { job, mut, toast, isAdmin, currentUser, brand: brand2, integrations, onLog });
             case "workorder":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                 TabWorkOrder,
@@ -9145,8 +9659,22 @@ function JobDetail({
               );
             case "tasks":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabTasks, { job, mut, toast });
+            case "punchlist":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPunchList, { job, mut, toast, currentUser });
             case "files":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFiles, { job, mut, toast });
+            case "certificate":
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                TabCertificate,
+                {
+                  job,
+                  brand: brand2,
+                  mut,
+                  toast,
+                  currentUser,
+                  integrations
+                }
+              );
             case "assistant":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimAssistant, { job });
             case "portal":
@@ -9169,11 +9697,18 @@ function JobDetail({
         const relevant = JOB_SECTIONS.filter(([id]) => {
           if (!featureOn(features, id)) return false;
           if (id === "claim") return job.claimType === "Insurance";
+          if (id === "certificate") return job.claimType === "Insurance";
           if (id === "handoff" || id === "changeorders") return true;
           return allowed.has(id);
         });
         const HINTS = {
-          claim: "Carrier money and supplements"
+          claim: "Carrier money and supplements",
+          punchlist: "What this roof still owes"
+        };
+        const sectionBadge = (sid) => {
+          if (sid !== "punchlist") return null;
+          const n = openPunch(job).length;
+          return n ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: punchTone(job) || "amber", children: n }) : null;
         };
         const rows = [];
         let lastGroup = null;
@@ -9222,6 +9757,7 @@ function JobDetail({
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 15.5, fontWeight: 800, color: S.ink }, children: label }),
                 HINTS[id] && !isOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 11.5, color: S.sub, marginTop: 1 }, children: HINTS[id] })
               ] }),
+              sectionBadge(id),
               isOpen ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronUp, { size: 17, color: S.sub }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronDown, { size: 17, color: S.sub })
             ] }),
             isOpen && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "2px 13px 15px", borderTop: `1px solid ${S.line}` }, children: render(id) })
@@ -9278,7 +9814,7 @@ function JobDetail({
 }
 function TabOverview({ job, juris, mut, toast, reviewSettings, brand: brand2, currentUser = { name: "Team" }, onLog = () => {
 }, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false, onOpenCodeLookup = () => {
-} }) {
+}, integrations = {} }) {
   const notes = job.notes || [];
   const [noteTxt, setNoteTxt] = (0, import_react.useState)("");
   const [noteVisible, setNoteVisible] = (0, import_react.useState)(false);
@@ -9616,7 +10152,7 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand: brand2, cu
         ] }) })
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EnRouteCard, { job, mut, toast, currentUser }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EnRouteCard, { job, mut, toast, currentUser, integrations }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       ForecastStrip,
       {
@@ -10629,6 +11165,158 @@ function proposalCss(brand2) {
   @media print { body { padding-bottom: 24px; } }
   </style>`;
 }
+var PERILS = ["Wind", "Hail", "Wind & Hail", "Fire", "Water", "Tree impact", "Other"];
+function longDate(iso) {
+  const s = String(iso || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}/.test(s)) return s;
+  const d = /* @__PURE__ */ new Date(s.slice(0, 10) + "T12:00:00");
+  if (isNaN(d.getTime())) return s;
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+function certificateFor(job, brand2) {
+  const c = job.certificate || {};
+  const ins = job.insurance || {};
+  const claim = job.claim || {};
+  const pay = paymentsSummary(job);
+  const rcv = num(pay.contract) || num(claim.rcv) || 0;
+  const deductible = c.deductible !== void 0 && c.deductible !== "" ? moneyNum(c.deductible) : moneyNum(ins.deductible);
+  return {
+    owner: c.owner || job.name || "",
+    address: c.address || job.address || "",
+    carrier: c.carrier || ins.carrier || "",
+    claimNo: c.claimNo || ins.claim || "",
+    policyNo: c.policyNo || ins.policy || "",
+    typeOfLoss: c.typeOfLoss || claim.typeOfLoss || "",
+    dateOfLoss: c.dateOfLoss || claim.dateOfLoss || "",
+    adjuster: c.adjuster || ins.adjusterName || "",
+    completedAt: c.completedAt || job.completedAt || "",
+    manager: c.manager || job.assignee || "",
+    rcv,
+    deductible,
+    net: Math.max(0, rcv - deductible),
+    /* Free text under the money block. The sample names the carrier's
+       price list and estimate date; those are not on the job file, so
+       the default says what is true and the rep can paste the rest. */
+    note: c.note !== void 0 ? c.note : "",
+    /* Who signs for the company. The contract's countersignature is the
+       right default — the same person already stood behind this job. */
+    signedBy: c.signedBy || job.assignee || "",
+    scope: c.scope || `${titleish(projectNoun(job))} \u2014 Insurance Restoration`
+  };
+}
+function titleish(s) {
+  const map = { roofing: "Residential Roof Replacement", siding: "Residential Siding Replacement", gutter: "Gutter Replacement", window: "Window Replacement", exterior: "Residential Exterior Restoration" };
+  return map[String(s || "").toLowerCase()] || "Residential Roof Replacement";
+}
+function certificateGaps(job, brand2) {
+  const a = certificateFor(job, brand2);
+  const out = [];
+  if (!a.completedAt) out.push("the date the work was completed");
+  if (!a.claimNo) out.push("the claim number");
+  if (!a.carrier) out.push("the insurance carrier");
+  if (!a.rcv) out.push("a contract price");
+  if (!a.owner) out.push("the property owner's name");
+  if (!a.address) out.push("the property address");
+  return out;
+}
+function certificateReady(job, brand2) {
+  return certificateGaps(job, brand2).length === 0;
+}
+function certificateCss(brand2) {
+  const ink = "#111", sub = "#666", rule = "#bbb", band = "#f2f2f2";
+  return `<style>
+@page { size: letter; margin: 0.62in 0.62in 0.55in; }
+.cert { font-family: Helvetica, Arial, sans-serif; color: ${ink}; font-size: 9pt; line-height: 1.42; }
+.certh { text-align: center; margin-bottom: 13pt; }
+.certh1 { font-size: 17.5pt; font-weight: 700; letter-spacing: .01em; margin: 0 0 4pt; }
+.certh2 { font-size: 8.5pt; color: ${ink}; margin: 0 0 5pt; }
+.certh3 { font-size: 7.6pt; color: ${sub}; margin: 0; }
+.certband { background: ${band}; font-size: 9.5pt; font-weight: 700; padding: 3pt 6pt; margin: 0 0 3pt; }
+.certgrid { width: 100%; border-collapse: collapse; margin-bottom: 11pt; }
+.certgrid td { border-bottom: 1px solid ${rule}; padding: 3pt 6pt 3pt 0; vertical-align: top; }
+.certgrid td.k { font-size: 8pt; font-weight: 700; width: 17%; }
+.certgrid td.v { font-size: 9pt; width: 33%; padding-right: 14pt; }
+.certmoney { width: 100%; border-collapse: collapse; margin-bottom: 6pt; }
+.certmoney td { border-bottom: 1px solid ${rule}; padding: 3.5pt 6pt 3.5pt 0; font-size: 9pt; }
+.certmoney td.r { text-align: right; white-space: nowrap; }
+.certmoney tr.certtot td { font-weight: 700; }
+.certnote { font-size: 7.6pt; color: ${sub}; line-height: 1.45; margin: 0 0 11pt; }
+.certp { font-size: 8.4pt; line-height: 1.5; margin: 0 0 14pt; }
+.certsig { width: 100%; border-collapse: collapse; }
+.certsig td { vertical-align: bottom; padding-top: 3pt; }
+.certsig tr.gap td { padding-top: 20pt; }
+.certsig td.d { width: 34%; padding-left: 18pt; }
+.certink { font-family: 'Snell Roundhand', 'Apple Chancery', 'Segoe Script', cursive; font-size: 15pt; }
+.certline { border-bottom: 1px solid ${ink}; height: 13pt; }
+.certcap { font-size: 7.6pt; color: ${ink}; padding-top: 3pt; border-top: 1px solid ${rule}; }
+.certfoot { position: fixed; bottom: 0; left: 0; right: 0; font-size: 7pt; color: ${sub};
+  display: flex; justify-content: space-between; border-top: 1px solid ${rule}; padding-top: 3pt; }
+@media print { .certfoot { position: fixed; } }
+</style>`;
+}
+function certificateDocHtml(job, brand2) {
+  const a = certificateFor(job, brand2);
+  const co = [brand2.company, brand2.address, brand2.phone, brand2.email].filter(Boolean).map(esc).join(" &nbsp;|&nbsp; ");
+  const row = (k1, v1, k2, v2) => `<tr>
+    <td class="k">${esc(k1)}</td><td class="v">${esc(v1) || "&nbsp;"}</td>
+    <td class="k">${esc(k2)}</td><td class="v">${esc(v2) || "&nbsp;"}</td></tr>`;
+  const done = longDate(a.completedAt);
+  return `<div class="cert">
+  <div class="certh">
+    <div class="certh1">CERTIFICATE OF COMPLETION</div>
+    <div class="certh2">${esc(a.scope)}</div>
+    <div class="certh3">${co}</div>
+  </div>
+
+  <div class="certband">PROJECT INFORMATION</div>
+  <table class="certgrid">
+    ${row("PROPERTY OWNER", a.owner, "PROPERTY ADDRESS", a.address)}
+    ${row("INSURANCE CARRIER", a.carrier, "CLAIM NUMBER", a.claimNo)}
+    ${row("POLICY NUMBER", a.policyNo, "TYPE OF LOSS", a.typeOfLoss)}
+    ${row("DATE OF LOSS", longDate(a.dateOfLoss), "ADJUSTER / ESTIMATOR", a.adjuster)}
+    ${row("WORK COMPLETED", done, "PROJECT MANAGER", a.manager)}
+  </table>
+
+  <div class="certband">CONTRACT PRICE &amp; SETTLEMENT SUMMARY</div>
+  <table class="certmoney">
+    <tr><td>Replacement Cost Value (Total Contract Price)</td><td class="r">${money(a.rcv)}</td></tr>
+    <tr><td>Less Insured's Deductible</td><td class="r">(${money(a.deductible)})</td></tr>
+    <tr class="certtot"><td>Net Claim / Insurance Proceeds</td><td class="r">${money(a.net)}</td></tr>
+  </table>
+  ${a.note ? `<p class="certnote">${esc(a.note)}</p>` : `<p class="certnote">Amounts per the signed contract for this project, including any approved change orders. Recoverable depreciation and supplements are billed per that contract.</p>`}
+
+  <div class="certband">CERTIFICATION</div>
+  <p class="certp">${esc(brand2.company || "The Company")} certifies that all work described above was completed on
+  ${esc(done || "____________")} at ${esc(a.address)} in a good and workmanlike manner, in accordance with the
+  approved insurance scope, manufacturer instructions, and applicable building code. All debris was removed and the
+  site left in clean condition. The undersigned property owner has inspected the work and accepts it as complete and
+  satisfactory.</p>
+
+  <table class="certsig">
+    <tr>
+      <td><div class="certink">${esc(a.signedBy)}</div></td>
+      <td class="d"><div class="certink">${esc(done)}</div></td>
+    </tr>
+    <tr>
+      <td class="certcap">${esc(a.signedBy)} &mdash; ${esc(brand2.company || "")}</td>
+      <td class="d certcap">Date</td>
+    </tr>
+    <tr class="gap">
+      <td><div class="certline"></div></td>
+      <td class="d"><div class="certline"></div></td>
+    </tr>
+    <tr>
+      <td class="certcap">${esc(a.owner)} &mdash; Property Owner</td>
+      <td class="d certcap">Date</td>
+    </tr>
+  </table>
+</div>
+<div class="certfoot">
+  <span>${esc(brand2.company || "")} &nbsp;|&nbsp; Certificate of Completion${a.owner ? " &nbsp;|&nbsp; " + esc(a.owner) : ""}${a.claimNo ? " &nbsp;|&nbsp; Claim " + esc(a.claimNo) : ""}</span>
+  <span>Page 1</span>
+</div>
+${certificateCss(brand2)}`;
+}
 function invoiceDocHtml(job, brand2) {
   const pay = paymentsSummary(job);
   const est = job.estimate;
@@ -10646,7 +11334,18 @@ function invoiceDocHtml(job, brand2) {
     </div>
   </div>`;
   out += `<h2>Work performed</h2>` + lineTable(est && est.items || []);
-  const contractPrice = job.contract && job.contract.price || estimateTotal(est);
+  const approvedCos = (Array.isArray(job.changeOrders) ? job.changeOrders : []).filter((c) => c.status === "Approved");
+  const coApproved = approvedCos.reduce((a2, c) => a2 + coTotal(c), 0);
+  if (approvedCos.length) {
+    const coLines = approvedCos.flatMap((c) => (c.lines || []).map((l) => ({
+      desc: `${c.title || "Change order"} \u2014 ${l.label || ""}`.trim(),
+      qty: l.qty,
+      unit: l.unit,
+      price: l.price
+    })));
+    out += `<h2>Approved change orders</h2>` + lineTable(coLines.length ? coLines : approvedCos.map((c) => ({ desc: c.title || "Change order", qty: 1, unit: "", price: coTotal(c) })));
+  }
+  const contractPrice = (job.contract && job.contract.price || estimateTotal(est)) + coApproved;
   out += `<div class="tot"><span>Contract total</span><span>${money(contractPrice)}</span></div>`;
   out += `<div class="tot"><span>Payments received</span><span>\u2212${money(pay.received)}</span></div>`;
   out += `<div class="tot grand"><span>Balance due</span><span>${money(contractPrice - pay.received)}</span></div>`;
@@ -10820,8 +11519,8 @@ var AGREEMENT_HOA_LINE = "Property Owner to obtain required authorization from H
 var AGREEMENT_DECK_POLICY = "State building codes require that any damaged or deteriorated roof decking discovered during the tear off process be replaced to ensure a nail fastened surface. Most insurance carriers consider deck replacement a maintenance item and may not include it in your claim. The Property Owner agrees to a rate of $%RATE% per sheet for all necessary labor and materials.";
 var AGREEMENT_TERMS_PARA = "By signing this Agreement the Property Owner authorizes {company} to pursue the Property Owner\u2019s best interest for a project replacement or repair at a \u201Cprice agreeable\u201D to the insurance company and {company} with no additional cost to the Property Owner except the deductible. When \u201Cprice agreeable\u201D is determined it shall become the final contract price and Property Owner authorizes {company} to obtain labor and material in accordance with the \u201Cprice agreeable\u201D and the specification set out herein and on the reverse side hereof.";
 var AGREEMENT_READ_PARA = "Property Owner(s) acknowledges that they have read the front and reverse of this Agreement, understands its terms, has received a completed, signed, and dated copy, and was orally advised of the right to cancel this transaction.";
-var AGREEMENT_CANCEL_PARA = "You, the Property Owner, may cancel this transaction at any time prior to midnight of the third business day after the date of this transaction.";
-var AGREEMENT_TERMS_INTRO = "This contract and any agreement made pursuant thereto (the \u201CAgreement\u201D) is between {company} (the \u201CCompany\u201D) and the customer(s) named herein on th reverse side. This Agreement is subject to all appropriate law, regulations and ordinances in the State of Ohio and Kentucky and these terms and conditions.";
+var AGREEMENT_CANCEL_PARA = "You, the Property Owner, may cancel this transaction at any time prior to midnight of {rescission} after the date of this transaction.";
+var AGREEMENT_TERMS_INTRO = "This contract and any agreement made pursuant thereto (the \u201CAgreement\u201D) is between {company} (the \u201CCompany\u201D) and the customer(s) named herein on th reverse side. This Agreement is subject to all appropriate law, regulations and ordinances in {state} and these terms and conditions.";
 var AGREEMENT_TERMS = [
   "This Agreement is composed of this page, the reverse (or front page) side of this page, the Pre-Start Checklist, the Scope of work Attachment if applicable, and all other documents referenced in or incorporated into this Agreement.",
   "Each Agreement is subject to approval of our credit department and office without exception. This Agreement and all applicable warranties shall not be assigned except by or with the written permission of the Company.",
@@ -10843,7 +11542,13 @@ var AGREEMENT_TERMS = [
   "Pay per Trade Policy: Customer agrees to pay in full at the completion of each trade on the project. The company reserves the right to collect payment in full per trade prior to beginning on the next trade.",
   "Company Retainage Policy: Customer agrees to pay in full at the completion of each trade on the project. The company reserves the right to collect payment in full per trade prior to beginning the next trade.",
   "The Company\u2019s failure to enforce any right under this Agreement shall not be construed as a waiver of any subsequent right to enforce the same or any other right, term or condition.",
-  "You, the consumer, may cancel this transaction at any time prior to midnight of the 3rd business day after the date of this transaction."
+  /* The cancellation window is state law, not a company term — three
+     business days is Ohio's, and stating it on a contract in a state
+     with a different window misstates the owner's rights on the one
+     clause that exists to protect them. {rescission} resolves through
+     the state's legal pack, and the agreement will not go out for
+     signature until somebody has confirmed what it resolves to. */
+  "You, the consumer, may cancel this transaction at any time prior to midnight of {rescission} after the date of this transaction."
 ];
 var AGREEMENT_DIAGRAM_DEFAULT = "/reference-diagram.jpg";
 function agreementDiagram(brand2) {
@@ -10853,8 +11558,35 @@ function agreementTermsFor(brand2) {
   const custom = brand2 && Array.isArray(brand2.agreementTerms) && brand2.agreementTerms.length ? brand2.agreementTerms : AGREEMENT_TERMS;
   return custom;
 }
-function agreementFill(text, brand2) {
-  return String(text || "").replace(/\{company\}/g, brand2 && brand2.company || "the Company");
+var LEGAL_TOKENS = { state: "choiceOfLaw", rescission: "rescission" };
+function agreementFillLegal(text, brand2, state) {
+  const pack = legalPack(state);
+  const unresolved = [];
+  let out = String(text || "").replace(/\{company\}/g, brand2 && brand2.company || "the Company");
+  out = out.replace(/\{(\w+)\}/g, (m, key) => {
+    const field = LEGAL_TOKENS[key];
+    if (!field) return m;
+    const f = pack[field];
+    if (printable(f)) return f.value;
+    const spec = LEGAL_FIELDS.find((x) => x.key === field);
+    unresolved.push({ token: key, field, label: spec && spec.label || field, fact: f });
+    return `[${spec && spec.label || field} for ${state || "this state"} \u2014 not confirmed]`;
+  });
+  return { text: out, unresolved };
+}
+function agreementFill(text, brand2, state) {
+  return agreementFillLegal(text, brand2, state).text;
+}
+var LEGAL_PACK_VERSION = 1;
+function renderedLegalText(job) {
+  const st = job && job.state || "";
+  const pack = legalPack(st);
+  return LEGAL_FIELDS.filter((f) => f.binding).map((f) => `${f.label}: ${printable(pack[f.key]) ? pack[f.key].value : "[not confirmed]"}`).join("\n");
+}
+function agreementBlockers(job) {
+  const st = job && job.state || "";
+  if (!st) return [{ key: "state", label: "Property state", note: "The job has no state, so no legal pack applies." }];
+  return legalGaps(st);
 }
 function agreementPrefill(job, brand2) {
   const ins = job.insurance || {};
@@ -10880,18 +11612,23 @@ function agreementPrefill(job, brand2) {
     carrier: ins.carrier || "",
     claimNumber: ins.claim || "",
     dateOfLoss: cl.dateOfLoss || "",
-    outOfPocket: ins.deductible ? money0(num(ins.deductible)) : "",
+    outOfPocket: ins.deductible ? money(num(ins.deductible)) : "",
     agreementDate: todayIso(),
     projectAddress: "",
     tearoffLayers: layers,
-    finalPrice: price ? money0(price) : "",
-    deductible: ins.deductible ? money0(num(ins.deductible)) : "",
-    deposit: deposit ? money0(deposit) : "",
+    finalPrice: price ? String(price) : "",
+    deductible: ins.deductible ? String(num(ins.deductible)) : "",
+    deposit: deposit ? String(deposit) : "",
     balance: ""
   };
 }
 function agreementFor(job, brand2) {
   return { ...agreementPrefill(job, brand2), ...job.agreement || {} };
+}
+function agMoney(v) {
+  const t = String(v == null ? "" : v).trim();
+  if (!t) return "";
+  return /^\$?\s*-?[\d,]+(\.\d+)?$/.test(t) ? money(moneyNum(t)) : t;
 }
 function agBlank(v, w) {
   return `<span class="agbl" style="min-width:${Math.round(w)}px">${esc(v || "")}</span>`;
@@ -10931,12 +11668,13 @@ function agFieldHtml(f, a) {
 function agreementDocHtml(job, brand2) {
   const a = agreementFor(job, brand2);
   const con = job.contract || {};
+  const st = job.state || "";
   const left = AGREEMENT_SPEC.filter((s) => s.col === "L");
   const right = AGREEMENT_SPEC.filter((s) => s.col === "R");
   const mark = brand2.logo ? `<img class="aglogo" src="${brand2.logo}" alt="${esc(brand2.company)}">` : `<div class="agmark">${esc(brand2.company)}</div>`;
-  const price = num(String(a.finalPrice).replace(/[^0-9.]/g, ""));
-  const dep = num(String(a.deposit).replace(/[^0-9.]/g, ""));
-  const balance = String(a.balance || "").trim() || (price ? money0(price - dep) : "");
+  const price = moneyNum(a.finalPrice);
+  const dep = moneyNum(a.deposit);
+  const balance = String(a.balance || "").trim() ? agMoney(a.balance) : price ? money(price - dep) : "";
   const sigCell = (img, who, role) => `<div class="agsigbox">
     <div class="agsigwho">${esc(who)}</div>
     <div class="agsigline">${img ? `<img src="${img}" alt="">` : ""}</div>
@@ -10986,7 +11724,7 @@ function agreementDocHtml(job, brand2) {
 
   <div class="agterm">
     <p><b>Defective Decking and Plywood Policy</b>&nbsp; ${AGREEMENT_DECK_POLICY.split("%RATE%").map(esc).join(agBlank(a.deckRate, 70))}</p>
-    <p><b>Terms</b>&nbsp; ${esc(agreementFill(AGREEMENT_TERMS_PARA, brand2))}</p>
+    <p><b>Terms</b>&nbsp; ${esc(agreementFill(AGREEMENT_TERMS_PARA, brand2, st))}</p>
     <p>${esc(AGREEMENT_READ_PARA)}</p>
   </div>
 
@@ -10994,13 +11732,13 @@ function agreementDocHtml(job, brand2) {
     <div class="agprice">
       <div class="agpricet">AGREEMENT PRICE</div>
       <div class="agpriceb">
-        ${AGREEMENT_PRICE_ROWS.map((r) => `<div class="agprow"><span>${esc(r.label)}</span>${agBlank(a[r.k], 160)}</div>`).join("")}
+        ${AGREEMENT_PRICE_ROWS.map((r) => `<div class="agprow"><span>${esc(r.label)}</span>${agBlank(agMoney(a[r.k]), 160)}</div>`).join("")}
         <div class="agprow grand"><span>BALANCE DUE ON COMPLETION</span>${agBlank(balance, 160)}</div>
       </div>
     </div>
     <div class="agbox tint agcancel">
       <div class="agboxt">RIGHT TO CANCEL</div>
-      <div class="agcanp">${esc(AGREEMENT_CANCEL_PARA)}</div>
+      <div class="agcanp">${esc(agreementFill(AGREEMENT_CANCEL_PARA, brand2, st))}</div>
       <div class="aginit">INITIALS ${agBlank(a.cancelInit, 70)}</div>
     </div>
   </div>
@@ -11015,8 +11753,8 @@ function agreementDocHtml(job, brand2) {
 <section class="agpage agrev">
   <div class="agrevlogo">${mark}</div>
   <h1 class="agrevh">TERMS AND CONDITIONS</h1>
-  <p class="agrevi">${esc(agreementFill(brand2.agreementIntro || AGREEMENT_TERMS_INTRO, brand2))}</p>
-  <ol class="agrevo">${agreementTermsFor(brand2).map((c) => `<li>${esc(agreementFill(c, brand2))}</li>`).join("")}</ol>
+  <p class="agrevi">${esc(agreementFill(brand2.agreementIntro || AGREEMENT_TERMS_INTRO, brand2, st))}</p>
+  <ol class="agrevo">${agreementTermsFor(brand2).map((c) => `<li>${esc(agreementFill(c, brand2, st))}</li>`).join("")}</ol>
 </section>
 <div class="agfoot">${esc(brand2.company)} &bull; Construction Agreement${a.customerName ? " &bull; " + esc(a.customerName) : ""}</div>
 ${agreementCss(brand2)}`;
@@ -11527,9 +12265,30 @@ function projectNoun(job) {
   if (has("window")) return "window";
   return "roofing";
 }
+function portalDocuments(job, brand2, portal) {
+  const out = portal.documents ? (job.files || []).filter((file) => file.shared).map((file) => ({
+    name: file.name,
+    category: file.cat,
+    date: file.at,
+    url: file.url || null
+  })) : [];
+  const cert = job.certificate || {};
+  if (portal.certificate !== false && cert.shared !== false && certificateReady(job, brand2)) {
+    const a = certificateFor(job, brand2);
+    out.unshift({
+      name: "Certificate of Completion",
+      category: "Insurance",
+      date: longDate(a.completedAt),
+      url: null,
+      html: certificateDocHtml(job, brand2)
+    });
+  }
+  return out;
+}
 function buildPortalSnapshot(job, brand2, token, users = []) {
   const portal = { ...DEFAULT_PORTAL_SETTINGS, ...job.portal || {} };
   const pay = paymentsSummary(job);
+  const portalDocs = portalDocuments(job, brand2, portal);
   return {
     token,
     job_id: job.id,
@@ -11545,7 +12304,7 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
       address: job.address,
       projectType: projectNoun(job),
       stageLabel: job.stageLabel || "",
-      order: portalOrderOf(portal).filter((sid) => portalSectionOn(portal, sid)),
+      order: portalOrderOf(portal).filter((sid) => sid === "documents" ? portalDocs.length > 0 : portalSectionOn(portal, sid)),
       /* Rep block: a per-job override wins over the assigned seat, so a
          different face can be put in front of a customer without
          reassigning the job. */
@@ -11574,7 +12333,7 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
           });
         }
         const con = job.contract;
-        if (con && con.price && con.status !== "Signed" && portal.contract) {
+        if (con && con.price && con.status !== "Signed" && portal.contract && legalReady(job.state)) {
           out.push({
             type: "contract",
             id: con.number || "con",
@@ -11586,8 +12345,27 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
               { label: "Contract price", value: money(num(con.price)) }
             ],
             total: num(con.price),
-            terms: "By signing you enter into a binding agreement for the work described, at the price shown. You may cancel within three business days under Ohio Revised Code Chapter 1345 without penalty.",
-            snapshot: { number: con.number, price: con.price, address: job.address }
+            /* This used to cite Ohio Revised Code Chapter 1345 by name, to
+               every homeowner in every state, directly above the signature
+               pad — and no tenant could edit it. The cancellation right is
+               real nearly everywhere but its statutory basis and notice
+               requirements are not Ohio's outside Ohio, so the sentence now
+               points at the signed agreement, which carries the notice that
+               actually applies, rather than naming the wrong statute. */
+            terms: "By signing you enter into a binding agreement for the work described, at the price shown. Your signed agreement sets out your right to cancel and the notice period that applies where the property is located.",
+            /* The rendered legal text travels with the signature, not just
+               a reference to the pack. Editing a state's pack later must
+               not retroactively change what a past signature appears to
+               have covered — the hash has to bind to the words the
+               homeowner actually read. */
+            snapshot: {
+              number: con.number,
+              price: con.price,
+              address: job.address,
+              legalPackState: job.state || "",
+              legalPackVersion: LEGAL_PACK_VERSION,
+              renderedLegalText: renderedLegalText(job)
+            }
           });
         }
         (job.changeOrders || []).filter((c) => c.status === "Sent").forEach((c) => {
@@ -11631,12 +12409,7 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
       portal,
       notes: (job.notes || []).filter((n) => n.customerVisible).map((n) => ({ at: n.at, text: n.text })),
       photos: portal.photos ? (job.photos || []).filter((ph) => ph.shared).map((ph) => ({ url: ph.url || ph.dataUrl, label: ph.label || "" })) : [],
-      documents: portal.documents ? (job.files || []).filter((file) => file.shared).map((file) => ({
-        name: file.name,
-        category: file.cat,
-        date: file.at,
-        url: file.url || null
-      })) : [],
+      documents: portalDocs,
       estimate: portal.estimate ? (() => {
         const est = job.estimate;
         const tiers = (est.tiers || []).map((t) => ({
@@ -12470,7 +13243,16 @@ function PublicPortal({ token }) {
                   file.date ? ` \xB7 ${file.date}` : ""
                 ] })
               ] }),
-              file.url && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: file.url, target: "_blank", rel: "noreferrer", style: { color: prim, fontSize: 12.5, fontWeight: 700 }, children: "Open" })
+              file.url && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: file.url, target: "_blank", rel: "noreferrer", style: { color: prim, fontSize: 12.5, fontWeight: 700 }, children: "Open" }),
+              !file.url && file.html && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "button",
+                {
+                  onClick: () => openDoc(file.name, { company: d.company, logo: d.logo, primary: d.primary, phone: d.phone, email: d.email }, file.html, () => {
+                  }, { bare: true }),
+                  style: { border: "none", background: "none", cursor: "pointer", color: prim, fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", padding: 0 },
+                  children: "View"
+                }
+              )
             ] }, `${file.name}-${index}`))
           ] })
         ) : null;
@@ -13200,21 +13982,26 @@ function EnRouteCard({ job, mut, toast, currentUser, integrations = {} }) {
     const mins = etaRemaining(s) ?? s.etaMin;
     const first = String(job.name || "").split(" ")[0];
     const body = `Hi ${first}, ${s.by || "your crew"} is on the way to ${job.address} \u2014 about ${mins} minutes out, arriving around ${etaClock((/* @__PURE__ */ new Date()).toISOString(), mins)}.`;
+    const out = await deliverToCustomer(job, { prefer: "sms", subject: "On our way", body }, integrations, currentUser);
     mut((j) => ({
       ...j,
-      enroute: { ...j.enroute || s, sharedAt: (/* @__PURE__ */ new Date()).toISOString() },
+      /* sharedAt drives the portal's live ETA card and the "customer
+         notified" line, so it is only stamped on an actual delivery. */
+      enroute: { ...j.enroute || s, sharedAt: out.delivered ? (/* @__PURE__ */ new Date()).toISOString() : (j.enroute || s).sharedAt || null },
       messages: [...j.messages || [], {
         id: uid("m"),
-        kind: j.consent?.sms?.granted ? "sms" : "email",
+        kind: out.kind,
         audience: "Customer",
-        to: j.consent?.sms?.granted ? j.phone || j.name : j.email || j.name,
-        subject: j.consent?.sms?.granted ? "" : "On our way",
+        to: out.to,
+        subject: out.kind === "sms" ? "" : "On our way",
         body,
-        status: "Queued",
+        status: out.status,
         at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ")
       }]
     }));
-    toast && toast("ETA sent to the customer \u2014 it's live in their portal too");
+    if (!toast) return;
+    if (out.delivered) toast(`ETA sent to the customer${job.portalToken ? " \u2014 it's live in their portal too" : ""}`);
+    else toast(out.status);
   };
   const arrive = () => {
     mut((j) => ({ ...j, enroute: { ...j.enroute || {}, active: false, arrivedAt: (/* @__PURE__ */ new Date()).toISOString() } }));
@@ -13265,6 +14052,50 @@ function EnRouteCard({ job, mut, toast, currentUser, integrations = {} }) {
       ] })
     ] })
   ] });
+}
+function downscaleImageFile(file, maxW = 1600, quality = 0.82) {
+  return new Promise((resolve) => {
+    if (!file || !String(file.type || "").startsWith("image/")) {
+      resolve(file);
+      return;
+    }
+    const done = (f) => resolve(f || file);
+    try {
+      const r = new FileReader();
+      r.onerror = () => done(null);
+      r.onload = () => {
+        const img = new Image();
+        img.onerror = () => done(null);
+        img.onload = () => {
+          try {
+            const scale = Math.min(1, maxW / (img.width || maxW));
+            if (scale >= 1 && file.size < 900 * 1024) {
+              done(null);
+              return;
+            }
+            const c = document.createElement("canvas");
+            c.width = Math.max(1, Math.round((img.width || maxW) * scale));
+            c.height = Math.max(1, Math.round((img.height || maxW) * scale));
+            c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+            c.toBlob((blob) => {
+              if (!blob || blob.size >= file.size) {
+                done(null);
+                return;
+              }
+              const name = String(file.name || "photo").replace(/\.[^.]+$/, "") + ".jpg";
+              done(new File([blob], name, { type: "image/jpeg" }));
+            }, "image/jpeg", quality);
+          } catch (e) {
+            done(null);
+          }
+        };
+        img.src = String(r.result);
+      };
+      r.readAsDataURL(file);
+    } catch (e) {
+      done(null);
+    }
+  });
 }
 function imageToDataUrl(file, maxW = 1e3, quality = 0.72) {
   return new Promise((resolve) => {
@@ -14349,6 +15180,15 @@ var STAGE_CHECKS = {
     },
     fix: "Financials \u2014 there is still a balance owed on this job."
   },
+  /* Warns rather than blocks by default, per the shipped s10 rule. An
+     office that wants a hard stop can flip it in the workflow editor —
+     the check picker iterates STAGE_CHECKS, so it appears there with no
+     further wiring. */
+  punchclear: {
+    label: "Punch list cleared",
+    test: (j) => !(j.punch || []).some((p) => !p.done),
+    fix: "Punch list \u2014 close what's been fixed, or delete anything raised in error."
+  },
   reason: {
     label: "Reason recorded",
     test: (j) => !!String(j.lostReason || "").trim(),
@@ -14413,7 +15253,7 @@ var DEFAULT_STAGE_RULES = {
   },
   s10: {
     sla: 0,
-    gate: { mode: "warn", checks: ["paidfull"] },
+    gate: { mode: "warn", checks: ["paidfull", "punchclear"] },
     tasks: [{ label: "Request review", dueIn: 1 }],
     notify: true
   },
@@ -14907,15 +15747,12 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand: brand2, showMone
                     }
                   ),
                   /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.sub }, children: "\xD7" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.sub }, children: "$" }),
                   /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                    "input",
+                    MoneyInput,
                     {
-                      style: { ...inputStyle, flex: 1, textAlign: "right", padding: "8px 10px" },
-                      inputMode: "decimal",
+                      style: { ...inputStyle, flex: 1, padding: "8px 10px" },
                       value: l.price,
-                      placeholder: "0.00",
-                      onChange: (e) => editLine(c.id, l.id, "price", e.target.value)
+                      onChange: (v) => editLine(c.id, l.id, "price", v)
                     }
                   )
                 ] }),
@@ -15453,6 +16290,7 @@ function TabClaim({ job, mut, toast, brand: brand2 }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Policy number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: ins.policy || "", onChange: (e) => setIns("policy")(e.target.value) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date of loss", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: c.dateOfLoss || "", onChange: (e) => set("dateOfLoss")(e.target.value) }) })
       ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Type of loss", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: PERILS, value: c.typeOfLoss || "", onPick: set("typeOfLoss") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Adjuster", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: ins.adjusterName || "", onChange: (e) => setIns("adjusterName")(e.target.value) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Adjuster phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "tel", value: ins.adjusterPhone || "", onChange: (e) => setIns("adjusterPhone")(e.target.value) }) }),
@@ -15489,12 +16327,12 @@ function TabClaim({ job, mut, toast, brand: brand2 }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Settlement" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "RCV (total scope)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.rcv || "", onChange: (e) => set("rcv")(e.target.value), placeholder: "0.00" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "ACV (first cheque)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.acv || "", onChange: (e) => set("acv")(e.target.value), placeholder: "0.00" }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "RCV (total scope)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: c.rcv || "", onChange: set("rcv") }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "ACV (first cheque)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: c.acv || "", onChange: set("acv") }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deductible", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.deductible || ins.deductible || "", onChange: (e) => set("deductible")(e.target.value), placeholder: "0.00" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Non-recoverable", hint: "Never paid.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.nonRecoverable || "", onChange: (e) => set("nonRecoverable")(e.target.value), placeholder: "0.00" }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deductible", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: c.deductible || ins.deductible || "", onChange: set("deductible") }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Non-recoverable", hint: "Never paid.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: c.nonRecoverable || "", onChange: set("nonRecoverable") }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.soft, borderRadius: 10, padding: "11px 13px", marginTop: 4 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Carrier holds back", v: money(m.heldBack) }),
@@ -15518,14 +16356,12 @@ function TabClaim({ job, mut, toast, brand: brand2 }) {
               onChange: (e) => editSup(sp.id, "desc", e.target.value)
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "input",
+            MoneyInput,
             {
-              style: { ...inputStyle, width: 92, textAlign: "right", padding: "9px 11px" },
-              inputMode: "decimal",
+              style: { ...inputStyle, width: 104, padding: "9px 11px" },
               value: sp.amount,
-              onChange: (e) => editSup(sp.id, "amount", e.target.value)
+              onChange: (v) => editSup(sp.id, "amount", v)
             }
           ),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => delSup(sp.id), style: { border: "none", background: "none", cursor: "pointer", lineHeight: 0 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
@@ -15554,10 +16390,10 @@ function TabClaim({ job, mut, toast, brand: brand2 }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Money received" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "ACV cheque", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.acvReceived || "", onChange: (e) => set("acvReceived")(e.target.value), placeholder: "0.00" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Depreciation cheque", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.depReceived || "", onChange: (e) => set("depReceived")(e.target.value), placeholder: "0.00" }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "ACV cheque", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: c.acvReceived || "", onChange: set("acvReceived") }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Depreciation cheque", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: c.depReceived || "", onChange: set("depReceived") }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deductible collected", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.deductibleCollected || "", onChange: (e) => set("deductibleCollected")(e.target.value), placeholder: "0.00" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deductible collected", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: c.deductibleCollected || "", onChange: set("deductibleCollected") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.soft, borderRadius: 10, padding: "11px 13px", marginTop: 4 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Claim value (RCV + approved supplements)", v: money(m.claimValue) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Collected", v: money(m.collected) }),
@@ -15599,8 +16435,9 @@ function TabVentilation({ job, mut, toast }) {
   const m = ventMath(v);
   const n1 = (x) => Math.round(x).toLocaleString();
   const supplementText = () => {
-    const cite = "IRC / RCO R806.2";
-    return `Attic ventilation \u2014 ${n1(m.area)} sq ft ventilated area. Per ${cite}, required net free area at 1/${m.effectiveRatio} is ${n1(m.effectiveRequired)} in\xB2. Existing system provides ${n1(m.totalIn2)} in\xB2 (${n1(m.exhaustIn2)} in\xB2 exhaust, ${n1(m.intakeIn2)} in\xB2 intake). ` + (m.meets ? `System meets the required ratio.` : `System is short by ${n1(m.shortfall)} in\xB2. Reinstalling the existing non-compliant system on the new roof would violate code. Requested scope: ${m.needExhaustUnits} ${m.findEx.per === "ft" ? "LF" : "ea"} ${m.findEx.label} and ${m.needIntakeUnits} ${m.findIn.per === "ft" ? "LF" : "ea"} ${m.findIn.label}, plus baffles at each rafter bay where required. Ordinance & Law coverage applies where included in the policy.`) + (m.starved ? ` Note: intake is below exhaust, which starves the system and voids major shingle warranties regardless of total area.` : "");
+    const vf = asFact(citeFor(job.state || "", "ventilation"));
+    const per = printable(vf) && vf.value ? `Per ${vf.value}, required` : "Required";
+    return `Attic ventilation \u2014 ${n1(m.area)} sq ft ventilated area. ${per} net free area at 1/${m.effectiveRatio} is ${n1(m.effectiveRequired)} in\xB2. Existing system provides ${n1(m.totalIn2)} in\xB2 (${n1(m.exhaustIn2)} in\xB2 exhaust, ${n1(m.intakeIn2)} in\xB2 intake). ` + (m.meets ? `System meets the required ratio.` : `System is short by ${n1(m.shortfall)} in\xB2. Reinstalling the existing non-compliant system on the new roof would violate code. Requested scope: ${m.needExhaustUnits} ${m.findEx.per === "ft" ? "LF" : "ea"} ${m.findEx.label} and ${m.needIntakeUnits} ${m.findIn.per === "ft" ? "LF" : "ea"} ${m.findIn.label}, plus baffles at each rafter bay where required. Ordinance & Law coverage applies where included in the policy.`) + (m.starved ? ` Note: intake is below exhaust, which starves the system and voids major shingle warranties regardless of total area.` : "");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
@@ -16280,7 +17117,7 @@ function supplementFindings(job) {
   const text = items.map((i) => String(i.desc || "").toLowerCase()).join(" \n ");
   const has = (re) => re.test(text);
   const n = (x) => num(x);
-  const state = (jurisdictionForZip(job.zip) || {}).state || "OH";
+  const state = (jurisdictionForZip(job.zip) || {}).state || (job.state || "");
   const out = [];
   const add = (sev, title, why, opts = {}) => {
     const prov = opts.topic ? citeFor(state, opts.topic) : null;
@@ -16341,7 +17178,7 @@ function supplementFindings(job) {
       "MODERATE",
       "Kickout / diverter flashing",
       "Wall-to-roof intersections need a kickout diverter at the eave end to keep runoff out of the wall \u2014 commonly omitted and code-required.",
-      { cite: "IRC R703.4", line: { desc: "Kickout / diverter flashing", qty: 2, unit: "EA" } }
+      { topic: "kickout", line: { desc: "Kickout / diverter flashing", qty: 2, unit: "EA" } }
     );
   if (!has(/underlayment|synthetic|felt/i))
     add(
@@ -16456,11 +17293,21 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
   };
   const addAsSupplement = (f) => {
     if (!mut) return;
-    const cite = f.cite ? ` [${f.cite}]` : "";
-    const row = { id: uid("sup"), desc: `${f.title}${cite}`, amount: "", status: "Draft", at: nowStamp() };
+    const cf = asFact(f);
+    const cite = printable(cf) && cf.value ? ` [${cf.value}]` : "";
+    const row = {
+      id: uid("sup"),
+      desc: `${f.title}${cite}`,
+      amount: "",
+      status: "Draft",
+      at: nowStamp(),
+      cite: cf.value || "",
+      citeConfidence: cf.confidence,
+      citeState: f.state || ""
+    };
     mut((j) => ({ ...j, claim: { ...j.claim || {}, supplements: [...(j.claim || {}).supplements || [], row] } }));
     setDone((d) => ({ ...d, [f.title]: "supplement" }));
-    toast && toast(`Added "${f.title}" to the claim supplements`);
+    toast && toast(printable(cf) || !cf.value ? `Added "${f.title}" to the claim supplements` : `Added "${f.title}" \u2014 the code cite was left off because it is not verified for this state`);
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 12 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: found.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Clear" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: found.some((f) => f.sev === "HIGH") ? "red" : "amber", children: found.length }), children: "Supplement check" }),
@@ -16475,7 +17322,7 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: f.title }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 2 }, children: f.why }),
-            f.cite && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 5 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: f.verified ? "blue" : "amber", children: f.cite }) })
+            f.cite && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 5 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: f, compact: true }) })
           ] })
         ] }),
         !locked && mut && (done[f.title] || f.line || isClaim) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, marginTop: 8, marginLeft: 0, flexWrap: "wrap" }, children: done[f.title] ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: done[f.title] === "estimate" ? "\u2713 Added to estimate" : "\u2713 Added as supplement" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -16574,13 +17421,12 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub }, children: "\xD7" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
+          MoneyInput,
           {
-            style: { ...inputStyle, width: 92, textAlign: "right" },
+            style: { ...inputStyle, width: 104 },
             value: it.price,
             disabled: locked,
-            inputMode: "decimal",
-            onChange: (e) => setItem(it.id, "price", e.target.value)
+            onChange: (v) => setItem(it.id, "price", v)
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginLeft: "auto", fontWeight: 800, fontSize: 14 }, children: money(num(it.qty) * num(it.price)) })
@@ -16588,14 +17434,13 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginTop: 6, flexWrap: "wrap" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: "Cost" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
+          MoneyInput,
           {
-            style: { ...inputStyle, width: 84, textAlign: "right", padding: "7px 9px", fontSize: 13 },
+            style: { ...inputStyle, width: 96, padding: "7px 9px", fontSize: 13 },
             value: it.cost ?? "",
             disabled: locked,
-            inputMode: "decimal",
             placeholder: "\u2014",
-            onChange: (e) => setItem(it.id, "cost", e.target.value)
+            onChange: (v) => setItem(it.id, "cost", v)
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: "Margin" }),
@@ -17486,15 +18331,13 @@ function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], s
               ")"
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "input",
+            MoneyInput,
             {
-              style: { ...inputStyle, width: 82, textAlign: "right", opacity: on ? 1 : 0.55 },
+              style: { ...inputStyle, width: 96, opacity: on ? 1 : 0.55 },
               value: c.price,
               disabled: locked,
-              inputMode: "decimal",
-              onChange: (e) => setConcealed(c.id, "price", e.target.value)
+              onChange: (v) => setConcealed(c.id, "price", v)
             }
           ),
           !locked && c.custom && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeConcealed(c.id), style: { border: "none", background: "none", cursor: "pointer" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
@@ -17604,25 +18447,23 @@ function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], s
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: "Price" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "input",
+              MoneyInput,
               {
-                style: { ...inputStyle, width: 100, textAlign: "right" },
+                style: { ...inputStyle, width: 108 },
                 value: u.price,
                 disabled: locked,
-                inputMode: "decimal",
-                onChange: (e) => setUpgrade(u.id, "price", e.target.value)
+                onChange: (v) => setUpgrade(u.id, "price", v)
               }
             ),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub, marginLeft: 8 }, children: "Cost" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "input",
+              MoneyInput,
               {
-                style: { ...inputStyle, width: 92, textAlign: "right", fontSize: 13 },
+                style: { ...inputStyle, width: 100, fontSize: 13 },
                 value: u.cost ?? "",
                 disabled: locked,
-                inputMode: "decimal",
                 placeholder: "\u2014",
-                onChange: (e) => setUpgrade(u.id, "cost", e.target.value)
+                onChange: (v) => setUpgrade(u.id, "cost", v)
               }
             ),
             !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeUpgrade(u.id), style: { border: "none", background: "none", cursor: "pointer", marginLeft: "auto" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
@@ -17764,8 +18605,8 @@ function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
       )
     );
   };
-  const price = num(String(a.finalPrice).replace(/[^0-9.]/g, ""));
-  const dep = num(String(a.deposit).replace(/[^0-9.]/g, ""));
+  const price = moneyNum(a.finalPrice);
+  const dep = moneyNum(a.deposit);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: repull, children: "Re-read job file" }), children: "Construction agreement" }),
@@ -17843,19 +18684,27 @@ function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Agreement price" }),
-      AGREEMENT_PRICE_ROWS.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: r.label, children: txt(r.k) }, r.k)),
+      AGREEMENT_PRICE_ROWS.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: r.label, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        MoneyInput,
+        {
+          style: inputStyle,
+          value: a[r.k] || "",
+          disabled: locked,
+          onChange: (v) => set(r.k, v)
+        }
+      ) }, r.k)),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         Field,
         {
           label: "Balance due on completion",
-          hint: price ? `Leave blank to print ${money0(price - dep)} \u2014 the contract price less the deposit.` : "Leave blank to print the contract price less the deposit.",
+          hint: price ? `Leave blank to print ${money(price - dep)} \u2014 the contract price less the deposit.` : "Leave blank to print the contract price less the deposit.",
           children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             "input",
             {
               style: inputStyle,
               value: a.balance || "",
               disabled: locked,
-              placeholder: price ? money0(price - dep) : "",
+              placeholder: price ? money(price - dep) : "",
               onChange: (e) => set("balance", e.target.value)
             }
           )
@@ -17902,6 +18751,7 @@ function TabContract({ job, brand: brand2, setBrand = () => {
     r.readAsDataURL(file);
   };
   const removeAttachment = (id) => setCon({ attachments: (con.attachments || []).filter((a) => a.id !== id) });
+  const blockers = agreementBlockers(job);
   const estTotal = estimateTotal(job.estimate);
   const depositMode = con.depositMode || "pct";
   const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
@@ -17915,7 +18765,7 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       placeItems: "center",
       background: "#FAFBFC",
       overflow: "hidden"
-    }, children: value ? value === "signed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontFamily: "cursive", fontSize: 22 }, children: label === "Client" ? job.name : "Supreme Building Group" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: value, alt: `${label} signature`, style: { maxHeight: 66 } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", onClick: onSign, disabled: locked, children: [
+    }, children: value ? value === "signed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontFamily: "cursive", fontSize: 22 }, children: label === "Client" ? job.name : "Supreme Building Group" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: value, alt: `${label} signature`, style: { maxHeight: 66 } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", onClick: onSign, disabled: locked || blockers.length > 0, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.PenLine, { size: 13 }),
       " Sign here"
     ] }) }),
@@ -17986,15 +18836,13 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Price & payment schedule" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, fontSize: 14 }, children: "Contract price" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub }, children: "$" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
+          MoneyInput,
           {
-            style: { ...inputStyle, width: 130, textAlign: "right" },
+            style: { ...inputStyle, width: 150 },
             value: con.price,
             disabled: locked,
-            inputMode: "decimal",
-            onChange: (e) => setCon({ price: num(e.target.value) })
+            onChange: (v) => setCon({ price: num(v) })
           }
         )
       ] }),
@@ -18048,19 +18896,15 @@ function TabContract({ job, brand: brand2, setBrand = () => {
               ]
             }
           ),
-          depositMode === "fixed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub }, children: "$" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "input",
-              {
-                style: { ...inputStyle, width: 110, textAlign: "right" },
-                value: con.depositFixed ?? "",
-                disabled: locked,
-                inputMode: "decimal",
-                onChange: (e) => setCon({ depositFixed: num(e.target.value) })
-              }
-            )
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          depositMode === "fixed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            MoneyInput,
+            {
+              style: { ...inputStyle, width: 130 },
+              value: con.depositFixed ?? "",
+              disabled: locked,
+              onChange: (v) => setCon({ depositFixed: num(v) })
+            }
+          ) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
               "input",
               {
@@ -18168,11 +19012,21 @@ function TabContract({ job, brand: brand2, setBrand = () => {
     ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Signatures" }),
+      !locked && blockers.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { tone: "amber", label: `Not ready to sign in ${stateName(job.state) || "an unknown state"}`, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { lineHeight: 1.55 }, children: [
+        "This contract states rights that are set by state law, and nobody has confirmed them for ",
+        stateName(job.state) || "this property's state",
+        " yet. Until they are confirmed the agreement prints a labelled placeholder wherever one of those clauses belongs, and it cannot be signed or sent.",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8 }, children: blockers.map((b) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, marginTop: 3 }, children: [
+          "\u2022 ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: b.label }),
+          b.help ? ` \u2014 ${b.help}` : ""
+        ] }, b.key)) })
+      ] }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 14, flexWrap: "wrap" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SigLine, { label: "Client", value: con.clientSig, onSign: () => setSigFor("client") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SigLine, { label: `${brand2.company} representative`, value: con.contractorSig, onSign: () => setSigFor("contractor") })
       ] }),
-      con.clientSig && con.contractorSig && !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "green", style: { marginTop: 14, width: "100%" }, onClick: () => {
+      con.clientSig && con.contractorSig && !locked && blockers.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "green", style: { marginTop: 14, width: "100%" }, onClick: () => {
         setCon({ status: "Signed", signedAt: nowStamp() });
         toast("Contract executed and locked");
       }, children: [
@@ -18190,13 +19044,18 @@ function TabContract({ job, brand: brand2, setBrand = () => {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
         " PDF"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => sendClientEmail(job, mut, currentUser, integrations, toast, {
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", disabled: blockers.length > 0, onClick: () => sendClientEmail(job, mut, currentUser, integrations, toast, {
         subject: `Your contract is ready \u2014 ${brand2.company}`,
         body: `Hi ${job.name}, your contract for ${job.address} is ready to review and sign. Reply to this email with any questions.`
       }), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }),
         " Email to client"
       ] })
+    ] }),
+    blockers.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: [
+      "Printing the draft still works so you can see exactly which clauses are unfilled. Confirm ",
+      stateName(job.state) || "the state",
+      "'s contract law under More \u2192 Insurance & resources \u2192 Coverage by state to unlock signing and sending."
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       SignaturePad,
@@ -18402,6 +19261,40 @@ async function sendClientEmail(job, mut, currentUser, integrations, toast, { sub
   record("Queued \u2014 no provider connected");
   toast("Saved to thread \u2014 connect your Gmail to deliver");
 }
+async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, integrations, currentUser) {
+  const consent = job.consent || {};
+  const smsOk = !!(consent.sms && consent.sms.granted) && !!job.phone;
+  const emailOk = !!(consent.email && consent.email.granted) && !!job.email;
+  const kind = prefer === "sms" && smsOk ? "sms" : prefer === "email" && emailOk ? "email" : smsOk ? "sms" : emailOk ? "email" : null;
+  if (!kind) {
+    const why = consent.sms && consent.sms.granted || consent.email && consent.email.granted ? "Not sent \u2014 no contact details on file" : "Not sent \u2014 no messaging consent on file";
+    return { kind: prefer, to: "", status: why, delivered: false };
+  }
+  const to = kind === "sms" ? job.phone : job.email;
+  const auth = AUTH();
+  const notSetUp = (m) => /not configured|Function not found|Failed to send a request|non-2xx|isn't connected/i.test(m);
+  if (kind === "sms") {
+    if (!(auth && auth.sendSms)) return { kind, to, status: "Queued \u2014 no provider connected", delivered: false };
+    try {
+      await auth.sendSms({ to, body, jobId: job.id });
+      return { kind, to, status: "Sent", delivered: true };
+    } catch (e) {
+      const m = e && e.message || "Could not send";
+      return { kind, to, status: notSetUp(m) ? "Queued \u2014 texting not set up yet" : `Failed \u2014 ${m}`, delivered: false };
+    }
+  }
+  const myGmail = (integrations && integrations.gmailByUser || {})[currentUser && currentUser.id] || { connected: false };
+  if (!(myGmail.connected && auth && auth.sendGmail)) {
+    return { kind, to, status: "Queued \u2014 no provider connected", delivered: false };
+  }
+  try {
+    await auth.sendGmail({ to, subject, body });
+    return { kind, to, status: "Sent", delivered: true };
+  } catch (e) {
+    const m = e && e.message || "Could not send";
+    return { kind, to, status: notSetUp(m) ? "Queued \u2014 email not set up yet" : `Failed \u2014 ${m}`, delivered: false };
+  }
+}
 function TabMessages({ job, mut, toast, brand: brand2, templates, crews, integrations, currentUser, users }) {
   const [compose, setCompose] = (0, import_react.useState)(null);
   const [to, setTo] = (0, import_react.useState)("Customer");
@@ -18541,7 +19434,7 @@ function TabMessages({ job, mut, toast, brand: brand2, templates, crews, integra
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, fontWeight: 700, color: S.ink }, children: m.audience }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub, overflow: "hidden", textOverflow: "ellipsis" }, children: m.to })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: m.status === "Sent" ? "green" : "amber", children: m.status === "Sent" ? "Sent" : "Queued" })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: msgTone(m.status), children: msgLabel(m.status) })
         ] }),
         m.subject && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, marginTop: 6 }, children: m.subject }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 4, whiteSpace: "pre-wrap", lineHeight: 1.5 }, children: m.body }),
@@ -18706,6 +19599,8 @@ function TabPhotos({ job, mut, toast, ccToken }) {
   const [geo, setGeo] = (0, import_react.useState)(null);
   const [locating, setLocating] = (0, import_react.useState)(false);
   const [geoErr, setGeoErr] = (0, import_react.useState)("");
+  const [uploading, setUploading] = (0, import_react.useState)(false);
+  const [upErr, setUpErr] = (0, import_react.useState)("");
   const fileRef = (0, import_react.useRef)(null);
   const pendingLabel = (0, import_react.useRef)("");
   const getFix = async () => {
@@ -18725,13 +19620,24 @@ function TabPhotos({ job, mut, toast, ccToken }) {
     return r;
   };
   const addPhoto = async (label, file) => {
+    setUploading(true);
+    setUpErr("");
     let fix = geo;
     if (!fix) {
       const r = await getFix();
       fix = r.ok ? r : null;
     }
     const iso = (/* @__PURE__ */ new Date()).toISOString();
-    const url = file ? URL.createObjectURL(file) : null;
+    let up = null;
+    try {
+      const small = await downscaleImageFile(file);
+      up = await uploadJobFile(job.id, small);
+    } catch (e) {
+      setUploading(false);
+      setUpErr(e && e.message || "Couldn't save that photo.");
+      return;
+    }
+    setUploading(false);
     mut((j) => ({
       ...j,
       photos: [...j.photos, {
@@ -18739,7 +19645,12 @@ function TabPhotos({ job, mut, toast, ccToken }) {
         label,
         at: fmtStamp(iso),
         iso,
-        url,
+        url: up.url,
+        storage: up.storage,
+        storageKey: up.key,
+        size: up.size,
+        mime: up.mime,
+        shared: false,
         fileName: file ? file.name : null,
         lat: fix ? fix.lat : null,
         lng: fix ? fix.lng : null,
@@ -18749,6 +19660,7 @@ function TabPhotos({ job, mut, toast, ccToken }) {
     }));
     toast(fix ? "Photo stamped with time + location" : "Photo saved \u2014 no location fix");
   };
+  const toggleShared = (id) => mut((j) => ({ ...j, photos: j.photos.map((x) => x.id === id ? { ...x, shared: !x.shared } : x) }));
   const pickFile = (label) => {
     pendingLabel.current = label;
     fileRef.current && fileRef.current.click();
@@ -18861,6 +19773,13 @@ function TabPhotos({ job, mut, toast, ccToken }) {
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: job.photos.length }), children: "Photo album" }),
+      uploading && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10 }, children: "Saving photo \u2014 getting a location fix\u2026" }),
+      upErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Photo not saved", tone: "red", children: upErr }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: [
+        "Tap ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Share" }),
+        " on a photo to put it in the customer's portal album and the proposal's findings section."
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: job.photos.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 12, overflow: "hidden" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 96, background: "#EEF1F4", display: "grid", placeItems: "center", overflow: "hidden" }, children: p.url ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: p.url, alt: p.label, style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Image, { size: 24, color: "#9CA3AF" }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "8px 10px" }, children: [
@@ -18879,7 +19798,25 @@ function TabPhotos({ job, mut, toast, ccToken }) {
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 10 }),
             " ",
             fmtCoord(p.lat, p.lng)
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: "#92600A", marginTop: 5 }, children: "No location" })
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: "#92600A", marginTop: 5 }, children: "No location" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => toggleShared(p.id), style: {
+            marginTop: 7,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            border: `1px solid ${p.shared ? T.accent : S.line}`,
+            background: p.shared ? T.accentSoft : S.card,
+            color: p.shared ? T.accent : S.sub,
+            borderRadius: 999,
+            padding: "4px 10px",
+            fontSize: 10.5,
+            fontWeight: 700,
+            cursor: "pointer"
+          }, children: [
+            p.shared ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Check, { size: 10 }) : null,
+            " ",
+            p.shared ? "Shared" : "Share"
+          ] })
         ] })
       ] }, p.id)) }),
       job.photos.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub }, children: "No photos yet." }),
@@ -18910,14 +19847,12 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
             onChange: (e) => onEdit(l.id, "label", e.target.value)
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
+          MoneyInput,
           {
-            style: { ...inputStyle, width: 96, textAlign: "right", padding: "9px 11px" },
+            style: { ...inputStyle, width: 110, padding: "9px 11px" },
             value: l.amt,
-            inputMode: "decimal",
-            onChange: (e) => onEdit(l.id, "amt", e.target.value)
+            onChange: (v) => onEdit(l.id, "amt", v)
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onDelete(l.id), style: { border: "none", background: "none", cursor: "pointer" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
@@ -18963,7 +19898,8 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
     ] })
   ] });
 }
-function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand: brand2, integrations = {} }) {
+function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand: brand2, integrations = {}, onLog = () => {
+} }) {
   const [sub, setSub] = (0, import_react.useState)("costs");
   const SUBS = [["costs", "Costs & profit"], ["payments", "Payments"], ["invoice", "Invoice"]];
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -18980,7 +19916,7 @@ function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand: b
       fontFamily: "inherit"
     }, children: label }, id)) }),
     sub === "costs" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancials, { job, mut, toast, isAdmin, currentUser, brand: brand2 }),
-    sub === "payments" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPayments, { job, mut, toast }),
+    sub === "payments" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPayments, { job, mut, toast, onLog }),
     sub === "invoice" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabInvoice, { job, brand: brand2, mut, toast, currentUser, integrations })
   ] });
 }
@@ -19251,12 +20187,11 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand: brand2 = 
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
+          MoneyInput,
           {
-            style: { ...inputStyle, width: 86, textAlign: "right", padding: "9px 11px" },
+            style: { ...inputStyle, width: 100, padding: "9px 11px" },
             value: r.amt,
-            inputMode: "decimal",
-            onChange: (e) => mut((j) => ({ ...j, fin: { ...j.fin, reimbursements: j.fin.reimbursements.map((x) => x.id === r.id ? { ...x, amt: num(e.target.value) } : x) } }))
+            onChange: (v) => mut((j) => ({ ...j, fin: { ...j.fin, reimbursements: j.fin.reimbursements.map((x) => x.id === r.id ? { ...x, amt: num(v) } : x) } }))
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -19309,7 +20244,8 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand: brand2 = 
     ] })
   ] });
 }
-function TabPayments({ job, mut, toast }) {
+function TabPayments({ job, mut, toast, onLog = () => {
+} }) {
   const [editPay, setEditPay] = (0, import_react.useState)(null);
   const [ef2, setEf2] = (0, import_react.useState)(null);
   const checkRef = (0, import_react.useRef)(null);
@@ -19318,12 +20254,35 @@ function TabPayments({ job, mut, toast }) {
     setEf2({ ...p2 });
   };
   const savePayEdit = () => {
+    const before = (job.payments || []).find((x) => x.id === editPay);
     mut((j) => ({ ...j, payments: j.payments.map((x) => x.id === editPay ? { ...x, ...ef2, amt: num(ef2.amt) } : x) }));
+    if (before) {
+      const changes = [];
+      if (num(before.amt) !== num(ef2.amt)) changes.push(`amount ${money(num(before.amt))} \u2192 ${money(num(ef2.amt))}`);
+      if ((before.date || "") !== (ef2.date || "")) changes.push(`date ${before.date || "\u2014"} \u2192 ${ef2.date || "\u2014"}`);
+      if ((before.method || "") !== (ef2.method || "")) changes.push(`method ${before.method || "\u2014"} \u2192 ${ef2.method || "\u2014"}`);
+      if ((before.ref || "") !== (ef2.ref || "")) changes.push(`reference ${before.ref || "\u2014"} \u2192 ${ef2.ref || "\u2014"}`);
+      onLog({
+        kind: "payment",
+        jobId: job.id,
+        jobName: job.name,
+        text: changes.length ? `edited a payment \u2014 ${changes.join("; ")}` : "edited a payment (no values changed)"
+      });
+    }
     setEditPay(null);
     toast("Payment updated");
   };
   const deletePay = () => {
+    const before = (job.payments || []).find((x) => x.id === editPay);
     mut((j) => ({ ...j, payments: j.payments.filter((x) => x.id !== editPay) }));
+    if (before) {
+      onLog({
+        kind: "payment",
+        jobId: job.id,
+        jobName: job.name,
+        text: `removed a ${money(num(before.amt))} payment${before.date ? ` dated ${before.date}` : ""}${before.method ? ` (${before.method})` : ""}`
+      });
+    }
     setEditPay(null);
     toast("Payment removed");
   };
@@ -19367,13 +20326,12 @@ function TabPayments({ job, mut, toast }) {
           onChange: (e) => setForm({ ...form, label: e.target.value })
         }
       ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Amount ($)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "input",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Amount", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        MoneyInput,
         {
           style: inputStyle,
           value: form.amt,
-          inputMode: "decimal",
-          onChange: (e) => setForm({ ...form, amt: e.target.value })
+          onChange: (v) => setForm({ ...form, amt: v })
         }
       ) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%" }, disabled: !form.label.trim() || !num(form.amt), onClick: () => {
@@ -19414,12 +20372,11 @@ function TabPayments({ job, mut, toast }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 12, lineHeight: 1.5 }, children: "Corrections are fine \u2014 every edit is written to the activity feed with the old values, so the record stays honest." }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Amount", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "input",
+              MoneyInput,
               {
                 style: inputStyle,
                 value: ef2.amt,
-                inputMode: "decimal",
-                onChange: (e) => setEf2({ ...ef2, amt: e.target.value })
+                onChange: (v) => setEf2({ ...ef2, amt: v })
               }
             ) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -19448,6 +20405,153 @@ function TabPayments({ job, mut, toast }) {
         ] })
       }
     )
+  ] });
+}
+function TabCertificate({ job, brand: brand2, mut, toast, currentUser = null, integrations = {} }) {
+  const a = certificateFor(job, brand2);
+  const gaps = certificateGaps(job, brand2);
+  const ready = gaps.length === 0;
+  const cert = job.certificate || {};
+  const set = (k) => (v) => mut((j) => ({ ...j, certificate: { ...j.certificate || {}, [k]: v } }));
+  const shared = cert.shared !== false;
+  const completed = job.stageId === "s10";
+  const docTitle = `Certificate of Completion \u2014 ${job.name}`;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: ready ? "green" : "amber", children: ready ? "Ready" : `${gaps.length} missing` }), children: "Certificate of completion" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55 }, children: [
+        "The document the carrier wants before it releases recoverable depreciation. It builds itself from this job \u2014 the completion date is stamped when the job moves to ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Job completed" }),
+        ", and the rest comes off the claim and the contract. Correct anything below and it changes on the certificate."
+      ] }),
+      !completed && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "This job is not marked completed yet", children: [
+        "You can still print a draft, but the completion date is stamped when the job reaches ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Job completed" }),
+        ". A certificate dated before the work finished is worse than a late one."
+      ] }),
+      !ready && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Not ready to send", children: [
+        "The certificate is missing ",
+        gaps.join(", "),
+        ". Fill those in below, or on the Insurance claim screen where the carrier details live."
+      ] }),
+      openPunch(job).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: `${openPunch(job).length} punch ${openPunch(job).length === 1 ? "item is" : "items are"} still open`, children: [
+        "This certificate states the work was completed in a good and workmanlike manner and that the owner accepts it as complete. Closing out the punch list first is the honest order to do this in.",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 6 }, children: [
+          openPunch(job).slice(0, 3).map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, marginTop: 2 }, children: [
+            "\u2022 ",
+            p.label
+          ] }, p.id)),
+          openPunch(job).length > 3 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, marginTop: 2, color: S.sub }, children: [
+            "\u2026and ",
+            openPunch(job).length - 3,
+            " more on the Punch list."
+          ] })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Project information" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Property owner", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.owner, onChange: (e) => set("owner")(e.target.value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Work completed", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: a.completedAt, onChange: (e) => set("completedAt")(e.target.value) }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Property address", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.address, onChange: (e) => set("address")(e.target.value) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Insurance carrier", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.carrier, onChange: (e) => set("carrier")(e.target.value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Claim number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.claimNo, onChange: (e) => set("claimNo")(e.target.value) }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Policy number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.policyNo, onChange: (e) => set("policyNo")(e.target.value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Type of loss", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.typeOfLoss, placeholder: "Wind", onChange: (e) => set("typeOfLoss")(e.target.value) }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date of loss", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: a.dateOfLoss, onChange: (e) => set("dateOfLoss")(e.target.value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Adjuster / estimator", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.adjuster, onChange: (e) => set("adjuster")(e.target.value) }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Project manager", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.manager, onChange: (e) => set("manager")(e.target.value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Signed for the company by", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: a.signedBy, onChange: (e) => set("signedBy")(e.target.value) }) })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Contract price & settlement" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Stated as a total, not a line-item schedule \u2014 the contract price including approved change orders, less the deductible. An itemised certificate that disagrees with the carrier's own estimate line for line starts an argument on a document whose only job is to close the claim." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Replacement Cost Value (total contract price)", v: money(a.rcv) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Insured's deductible", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        MoneyInput,
+        {
+          style: inputStyle,
+          value: cert.deductible !== void 0 ? cert.deductible : (job.insurance || {}).deductible || "",
+          onChange: set("deductible")
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Net claim / insurance proceeds", v: money(a.net), strong: true }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        Field,
+        {
+          label: "Note under the settlement block",
+          hint: "Optional. Paste the carrier's price list and estimate date here if the adjuster wants them cited.",
+          children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "textarea",
+            {
+              style: { ...inputStyle, minHeight: 62, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.5 },
+              value: a.note,
+              placeholder: "Amounts per the approved [carrier] estimate (Price List ______, completed __/__/____).",
+              onChange: (e) => set("note")(e.target.value)
+            }
+          )
+        }
+      )
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Where it goes" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 10, alignItems: "center", padding: "9px 0", fontSize: 13.5, cursor: "pointer" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: shared,
+            onChange: (e) => set("shared")(e.target.checked),
+            style: { width: 18, height: 18, accentColor: T.accent }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontWeight: 600 }, children: "Show it in the customer portal" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: "Filed under Documents, alongside anything else you have shared. It is the homeowner's certificate \u2014 they need it as much as the carrier does." })
+        ] })
+      ] }),
+      shared && !ready && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: "It will not appear in the portal until it is complete \u2014 a homeowner should not be shown a certificate with blanks in it." })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+        Btn,
+        {
+          kind: "ghost",
+          style: { flex: 1 },
+          onClick: () => openDoc(docTitle, brand2, certificateDocHtml(job, brand2), toast, { bare: true }),
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
+            " PDF"
+          ]
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+        Btn,
+        {
+          style: { flex: 1 },
+          disabled: !ready,
+          onClick: () => sendClientEmail(job, mut, currentUser, integrations, toast, {
+            subject: `Certificate of completion \u2014 ${job.address}`,
+            body: `Hi ${(job.name || "").split(" ")[0]}, attached is the certificate of completion for the work at ${job.address}, finished ${longDate(a.completedAt)}. Your carrier will usually want a copy of this before releasing the recoverable depreciation on claim ${a.claimNo}. It is also in your customer portal under Documents.`
+          }),
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }),
+            " Email it"
+          ]
+        }
+      )
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: ready ? "Print it for a wet signature from the homeowner, or email it as it stands. The owner's signature line is left blank on purpose." : "Printing a draft works so you can see what is still blank. Emailing is off until it is complete." })
   ] });
 }
 function TabInvoice({ job, brand: brand2, mut, toast, currentUser = null, integrations = {} }) {
@@ -19632,7 +20736,7 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand: brand2 }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 72, textAlign: "right" }, value: l.qty, inputMode: "decimal", onChange: (e) => setLine(l.id, "qty", e.target.value) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 62 }, value: l.unit, onChange: (e) => setLine(l.id, "unit", e.target.value) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub }, children: "\xD7" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 92, textAlign: "right" }, value: l.price, inputMode: "decimal", onChange: (e) => setLine(l.id, "price", e.target.value) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: { ...inputStyle, width: 104 }, value: l.price, onChange: (v) => setLine(l.id, "price", v) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { marginLeft: "auto", fontWeight: 800, fontVariantNumeric: "tabular-nums" }, children: money(num(l.qty) * num(l.price)) })
       ] })
     ] }, l.id)),
@@ -20057,6 +21161,192 @@ function TaskRow({ t, today, onToggle }) {
       ]
     }
   );
+}
+function openPunch(job) {
+  return (job.punch || []).filter((p) => !p.done);
+}
+function punchTone(job) {
+  const open = openPunch(job);
+  if (!open.length) return null;
+  const done = ["s10", "s11", "s12"].includes(job.stageId);
+  const late = open.some((p) => p.due && p.due < todayIso());
+  return done || late ? "red" : "amber";
+}
+function PunchRow({ p, today, onToggle, onDelete }) {
+  const late = !p.done && p.due && p.due < today;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "flex-start", gap: 11, padding: "11px 0", borderBottom: `1px solid ${S.line}` }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "button",
+      {
+        onClick: onToggle,
+        "aria-label": p.done ? "Reopen" : "Mark fixed",
+        style: { border: "none", background: "none", cursor: "pointer", padding: 0, marginTop: 1, touchAction: "manipulation" },
+        children: p.done ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 20, color: "#177245" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Circle, { size: 20, color: "#C7CBD1" })
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, color: p.done ? S.sub : S.ink, textDecoration: p.done ? "line-through" : "none", lineHeight: 1.35 }, children: p.label }),
+      p.note && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.45, marginTop: 3 }, children: p.note }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 5 }, children: [
+        p.due && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: p.done ? "gray" : late ? "red" : "blue", children: [
+          late ? "Overdue \xB7 " : "Due ",
+          p.due
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 11.5, color: S.sub }, children: [
+          "Raised by ",
+          p.by || "\u2014",
+          p.at ? ` \xB7 ${p.at}` : "",
+          p.done && p.doneAt ? ` \xB7 fixed ${p.doneAt}${p.doneBy ? ` by ${p.doneBy}` : ""}` : ""
+        ] })
+      ] }),
+      p.photo && p.photo.url && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: p.photo.url, target: "_blank", rel: "noreferrer", style: { display: "inline-block", marginTop: 7 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: p.photo.url, alt: p.label, style: { maxHeight: 96, borderRadius: 8, border: `1px solid ${S.line}` } }) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "button",
+      {
+        onClick: onDelete,
+        "aria-label": "Delete this item",
+        style: { border: "none", background: "none", cursor: "pointer", padding: 2, flexShrink: 0 },
+        children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" })
+      }
+    )
+  ] });
+}
+function TabPunchList({ job, mut, toast, currentUser = null }) {
+  const [txt, setTxt] = (0, import_react.useState)("");
+  const [note, setNote] = (0, import_react.useState)("");
+  const [due, setDue] = (0, import_react.useState)("");
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const [err, setErr] = (0, import_react.useState)("");
+  const fileRef = (0, import_react.useRef)(null);
+  const pendingPhoto = (0, import_react.useRef)(null);
+  const today = todayIso();
+  const who = currentUser && currentUser.name || job.assignee || "\u2014";
+  const items = job.punch || [];
+  const open = items.filter((p) => !p.done);
+  const fixed = items.filter((p) => p.done);
+  const add = (photo = null) => {
+    const label = txt.trim();
+    if (!label) return;
+    mut((j) => ({ ...j, punch: [...j.punch || [], {
+      id: uid("pn"),
+      label,
+      note: note.trim(),
+      done: false,
+      at: nowStamp(),
+      by: who,
+      doneAt: null,
+      doneBy: null,
+      due: due || null,
+      photo
+    }] }));
+    setTxt("");
+    setNote("");
+    setDue("");
+    toast("Added to the punch list");
+  };
+  const toggle = (p) => mut((j) => ({ ...j, punch: (j.punch || []).map((x) => x.id === p.id ? { ...x, done: !x.done, doneAt: !x.done ? nowStamp() : null, doneBy: !x.done ? who : null } : x) }));
+  const remove = (p) => mut((j) => ({ ...j, punch: (j.punch || []).filter((x) => x.id !== p.id) }));
+  const onFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setBusy(true);
+    setErr("");
+    let up = null;
+    try {
+      up = await uploadJobFile(job.id, await downscaleImageFile(file));
+    } catch (ex) {
+      setBusy(false);
+      setErr(ex && ex.message || "Couldn't save that photo.");
+      return;
+    }
+    setBusy(false);
+    add({ url: up.url, storage: up.storage, storageKey: up.key, size: up.size, mime: up.mime });
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "input",
+      {
+        ref: fileRef,
+        type: "file",
+        accept: "image/*",
+        capture: "environment",
+        onChange: onFile,
+        style: { display: "none" }
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: open.length ? punchTone(job) || "amber" : "green", children: open.length ? `${open.length} open` : "Clear" }), children: "Punch list" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: [
+        "What the crew still owes on this roof. Internal \u2014 the homeowner never sees this list. Open items show on the home screen until they are closed, and warn when the job is moved to ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Job completed" }),
+        " or a certificate is issued, but they never block anything."
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 14 }, children: [
+        "OPEN (",
+        open.length,
+        ")"
+      ] }),
+      open.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, padding: "10px 0" }, children: "Nothing outstanding." }),
+      open.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PunchRow, { p, today, onToggle: () => toggle(p), onDelete: () => remove(p) }, p.id)),
+      fixed.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 16 }, children: [
+          "FIXED (",
+          fixed.length,
+          ")"
+        ] }),
+        fixed.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PunchRow, { p, today, onToggle: () => toggle(p), onDelete: () => remove(p) }, p.id))
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Add an item" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "What needs fixing", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: inputStyle,
+          value: txt,
+          placeholder: "Gutter apron short at the NE corner",
+          onChange: (e) => setTxt(e.target.value),
+          onKeyDown: (e) => {
+            if (e.key === "Enter" && txt.trim()) add();
+          }
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Detail (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "textarea",
+        {
+          style: { ...inputStyle, minHeight: 54, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.5 },
+          value: note,
+          placeholder: "Roughly 6 ft short. Material is on the truck.",
+          onChange: (e) => setNote(e.target.value)
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Needed by (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: due, onChange: (e) => setDue(e.target.value) }) }),
+      err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginBottom: 8 }, children: err }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { flex: 1 }, disabled: !txt.trim() || busy, onClick: () => add(), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 15 }),
+          " Add"
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          Btn,
+          {
+            kind: "soft",
+            style: { flex: 1 },
+            disabled: !txt.trim() || busy,
+            onClick: () => fileRef.current && fileRef.current.click(),
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Camera, { size: 15 }),
+              " ",
+              busy ? "Saving\u2026" : "Add with photo"
+            ]
+          }
+        )
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 7, lineHeight: 1.45 }, children: "A photo makes it obvious what you meant three weeks later, and settles it with the crew." })
+    ] })
+  ] });
 }
 function TabTasks({ job, mut, toast }) {
   const [txt, setTxt] = (0, import_react.useState)("");
@@ -20706,12 +21996,13 @@ function ShingleFinder() {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Verify before it goes in writing", children: "Dimensions and dates here are a field reference compiled from manufacturer data and industry sources. Before attaching any of it to a supplement, confirm against the manufacturer's own current literature or their tech services line \u2014 their document is the evidence, this screen is the shortcut to finding it." })
   ] });
 }
-function LetterTemplates() {
+function LetterTemplates({ state: stateProp = "" }) {
   const [open, setOpen] = (0, import_react.useState)(null);
   const [copied, setCopied] = (0, import_react.useState)(null);
-  const copy = async (t) => {
+  const [state, setState] = (0, import_react.useState)(stateProp || "");
+  const copy = async (t, body) => {
     try {
-      await navigator.clipboard.writeText(t.body);
+      await navigator.clipboard.writeText(body);
       setCopied(t.id);
       setTimeout(() => setCopied(null), 1800);
     } catch {
@@ -20721,39 +22012,58 @@ function LetterTemplates() {
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }, children: "Put it in writing. Verbal approvals and denials disappear when a claim gets contested \u2014 written ones do not. Copy a template, fill the bracketed fields, send it from your work email so there's a timestamp." }),
-    LETTER_TEMPLATES.map((t, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: i ? 12 : 0 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: t.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 4 }, children: t.when })
-      ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => setOpen(open === t.id ? null : t.id), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Eye, { size: 13 }),
-          " ",
-          open === t.id ? "Hide" : "Read"
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginBottom: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Where is the property?", hint: "Code sections, the matching rule and the regulator's address all resolve from this.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: state, onChange: (e) => setState(e.target.value), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Select a state\u2026" }),
+      US_STATES.map(([ab, name]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: ab, children: name }, ab))
+    ] }) }) }),
+    LETTER_TEMPLATES.map((t, i) => {
+      const r = renderLetter(t, state);
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: i ? 12 : 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: t.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 4 }, children: t.when })
+        ] }) }),
+        r.used.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }, children: r.used.map((u, k) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: u.fact, compact: true }, k)) }),
+        !r.ready && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: state ? `Not ready to send in ${state}` : "Pick a state first", tone: "amber", children: [
+          r.blocking.length,
+          " of the references in this letter ",
+          r.blocking.length === 1 ? "is" : "are",
+          " not verified for ",
+          state || "the selected state",
+          ". Sending an unchecked citation to an adjuster is what gets the rest of the letter dismissed \u2014 confirm ",
+          r.blocking.length === 1 ? "it" : "them",
+          " first.",
+          r.blocking.some((b) => b.fact.sourceUrl) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 6 }, children: r.blocking.filter((b) => b.fact.sourceUrl).map((b, k) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistLink, { href: b.fact.sourceUrl, children: b.fact.sourceName || "Where to check" }, k)) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, style: { flex: 1 }, onClick: () => copy(t), children: copied === t.id ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Check, { size: 13 }),
-          " Copied"
-        ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Copy, { size: 13 }),
-          " Copy"
-        ] }) })
-      ] }),
-      open === t.id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { style: {
-        whiteSpace: "pre-wrap",
-        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-        fontSize: 12.5,
-        lineHeight: 1.6,
-        color: S.ink,
-        background: "#FAFBFC",
-        border: `1px solid ${S.line}`,
-        borderRadius: 10,
-        padding: 13,
-        marginTop: 12,
-        overflowX: "auto"
-      }, children: t.body })
-    ] }, t.id)),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => setOpen(open === t.id ? null : t.id), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Eye, { size: 13 }),
+            " ",
+            open === t.id ? "Hide" : "Read"
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, style: { flex: 1 }, disabled: !r.ready, onClick: () => copy(t, r.body), children: copied === t.id ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Check, { size: 13 }),
+            " Copied"
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Copy, { size: 13 }),
+            " Copy"
+          ] }) })
+        ] }),
+        open === t.id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("pre", { style: {
+          whiteSpace: "pre-wrap",
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+          fontSize: 12.5,
+          lineHeight: 1.6,
+          color: S.ink,
+          background: "#FAFBFC",
+          border: `1px solid ${S.line}`,
+          borderRadius: 10,
+          padding: 13,
+          marginTop: 12,
+          overflowX: "auto"
+        }, children: r.body })
+      ] }, t.id);
+    }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Before sending", children: "Replace every bracketed field \u2014 an unfilled placeholder in front of an adjuster costs credibility on the whole letter. Attach the photos, measurements, and manufacturer bulletin you reference. Keep a copy in the job's Files tab." })
   ] });
 }
@@ -20826,24 +22136,28 @@ function ManufacturerSpecs() {
   ] });
 }
 var CLAIM_STOPWORDS = new Set("the a an of to in on for is are do does how what when should i my me we our you your can could with and or if it this that at as be by from about".split(" "));
+var LAW_STATING_TAGS = /* @__PURE__ */ new Set(["Code", "Policy", "Playbook", "Supplement"]);
+function ohIfCited(parts) {
+  return /\b(RCO|OAC|O\.A\.C|R\.C\.|ORC)\b/.test((parts || []).join(" ")) ? "OH" : null;
+}
 function buildClaimCorpus() {
   const items = [];
-  (KB_CODES || []).forEach((c) => items.push({ title: c.title, body: `${c.body} ${c.supplement || ""}`, cite: c.cite, source: "Code", tag: "Code" }));
+  (KB_CODES || []).forEach((c) => items.push({ title: c.title, body: `${c.body} ${c.supplement || ""}`, cite: c.cite, source: "Code", tag: "Code", state: ohIfCited([c.cite, c.body, c.supplement]) }));
   (KB_TERMS || []).forEach(([term, expand, def]) => items.push({ title: `${term}${expand ? ` \u2014 ${expand}` : ""}`, body: def, source: "Glossary", tag: "Term" }));
-  (CLAIM_SCENARIOS || []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook" }));
-  (typeof MORE_SCENARIOS !== "undefined" ? MORE_SCENARIOS : []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook" }));
+  (CLAIM_SCENARIOS || []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook", state: ohIfCited(s.answer) }));
+  (typeof MORE_SCENARIOS !== "undefined" ? MORE_SCENARIOS : []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook", state: ohIfCited(s.answer) }));
   (typeof CARRIER_PATTERNS !== "undefined" ? CARRIER_PATTERNS : []).forEach((c) => items.push({ title: c.title, body: `${c.pattern || ""} ${(c.answer || []).join(" ")}`, source: "Carrier patterns", tag: "Carrier" }));
-  (SUPPLEMENT_TEMPLATES || []).forEach((t) => items.push({ title: t.title, body: `${t.scenario || ""} ${t.wording || ""}`, source: "Supplement template", tag: "Supplement" }));
+  (SUPPLEMENT_TEMPLATES || []).forEach((t) => items.push({ title: t.title, topic: t.topic, body: `${t.scenario || ""} ${String(t.wording || "").replace(/\{CITE\}/g, "the code section adopted in this state")}`, source: "Supplement template", tag: "Supplement" }));
   (typeof POLICY_CARDS !== "undefined" ? POLICY_CARDS : []).forEach((c) => items.push({ title: c.title, body: `${c.body || ""} ${c.callout && c.callout.text || ""}`, source: "Policy provisions", tag: "Policy" }));
   (typeof INSTALL_SPECS !== "undefined" ? INSTALL_SPECS : []).forEach((s) => items.push({ title: `${s.mfr} \u2014 ${s.topic}`, body: s.spec, cite: s.cite, source: "Manufacturer install spec", tag: "Manufacturer" }));
   (typeof NRCA_PRACTICE !== "undefined" ? NRCA_PRACTICE : []).forEach((n) => items.push({ title: `NRCA \u2014 ${n.topic}`, body: n.body, cite: n.cite, source: "NRCA best practice", tag: "NRCA" }));
   (typeof IRC_DEEP !== "undefined" ? IRC_DEEP : []).forEach((c) => items.push({ title: `${c.topic}`, body: c.body, cite: c.cite, source: "Building code (IRC)", tag: "Code" }));
   (typeof IRC_BASE !== "undefined" ? IRC_BASE : {}) && Object.entries(IRC_BASE || {}).forEach(([k, v]) => items.push({ title: k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()), body: v.note, cite: v.cite, source: "Building code (IRC)", tag: "Code" }));
-  (typeof PROVISION_TOPICS !== "undefined" ? PROVISION_TOPICS : []).forEach((p) => items.push({ title: p.topic, body: p.note, cite: p.oh, source: "Code provisions", tag: "Code" }));
+  (typeof PROVISION_TOPICS !== "undefined" ? PROVISION_TOPICS : []).forEach((p) => items.push({ title: p.topic, body: p.note, cite: p.oh, source: "Code provisions", tag: "Code", state: "OH" }));
   Object.entries(typeof CODE_PROVISIONS !== "undefined" ? CODE_PROVISIONS : {}).forEach(([st, topics]) => {
     Object.entries(topics || {}).forEach(([k, v]) => {
       if (!v || !v.note) return;
-      items.push({ title: `${st} \u2014 ${k.replace(/([A-Z])/g, " $1").toLowerCase().trim()}`, body: v.note, cite: v.cite, source: `Building code (${st})`, tag: "Code" });
+      items.push({ title: `${st} \u2014 ${k.replace(/([A-Z])/g, " $1").toLowerCase().trim()}`, body: v.note, cite: v.cite, source: `Building code (${st})`, tag: "Code", state: st });
     });
   });
   (typeof MFR_SPECS !== "undefined" ? MFR_SPECS : []).forEach((m) => items.push({
@@ -20858,10 +22172,10 @@ function buildClaimCorpus() {
     source: "Shingle database",
     tag: "Manufacturer"
   }));
-  (typeof SUPPLEMENT_TRIGGERS !== "undefined" ? SUPPLEMENT_TRIGGERS : []).forEach(([label, cite]) => items.push({ title: label, body: `Commonly omitted from a carrier's scope and supportable on code grounds.`, cite, source: "Supplement trigger", tag: "Supplement" }));
-  (typeof LETTER_TEMPLATES !== "undefined" ? LETTER_TEMPLATES : []).forEach((t) => items.push({ title: `Letter \u2014 ${t.title}`, body: `${t.when || ""} ${t.body || ""}`, source: "Letter template", tag: "Letter" }));
-  (typeof LAW_ITEMS !== "undefined" ? LAW_ITEMS : []).forEach((l) => items.push({ title: l.title, body: l.body, source: "Regulation", tag: "Policy" }));
-  (typeof KEY_CONTACTS !== "undefined" ? KEY_CONTACTS : []).forEach(([name, phone, web]) => items.push({ title: name, body: `Technical services / consumer line. ${[phone, web].filter(Boolean).join("  \xB7  ")}`, source: "Contacts", tag: "Term" }));
+  (typeof SUPPLEMENT_TRIGGERS !== "undefined" ? SUPPLEMENT_TRIGGERS : []).forEach(([label, cite]) => items.push({ title: label, body: `Commonly omitted from a carrier's scope and supportable on code grounds.`, cite, source: "Supplement trigger", tag: "Supplement", state: ohIfCited([cite]) }));
+  (typeof LETTER_TEMPLATES !== "undefined" ? LETTER_TEMPLATES : []).forEach((t) => items.push({ title: `Letter \u2014 ${t.title}`, body: `${t.when || ""} ${String(t.body || "").replace(/\{[A-Z_:a-zA-Z]+\}/g, "the applicable citation")}`, source: "Letter template", tag: "Letter", state: null }));
+  (typeof LAW_ITEMS !== "undefined" ? LAW_ITEMS : []).forEach((l) => items.push({ title: l.title, body: l.body, source: "Regulation", tag: "Policy", state: "OH" }));
+  (typeof KEY_CONTACTS !== "undefined" ? KEY_CONTACTS : []).forEach(([name, phone, web]) => items.push({ title: name, body: `Technical services / consumer line. ${[phone, web].filter(Boolean).join("  \xB7  ")}`, source: "Contacts", tag: "Term", state: /\bOhio\b/.test(name) ? "OH" : null }));
   (typeof SIDING_MATCHING !== "undefined" ? [SIDING_MATCHING] : []).forEach((s) => items.push({ title: "Vinyl siding \u2014 the matching reality", body: `${(s.points || []).join(" ")} ${s.argument || ""}`, source: "Claim playbook", tag: "Playbook" }));
   (typeof VENT_EXHAUST !== "undefined" ? VENT_EXHAUST : []).forEach((v) => items.push({ title: `Exhaust vent \u2014 ${v.name || v[0]}`, body: JSON.stringify(v).replace(/["{}]/g, " "), source: "Ventilation", tag: "Term" }));
   (typeof VENT_INTAKE !== "undefined" ? VENT_INTAKE : []).forEach((v) => items.push({ title: `Intake vent \u2014 ${v.name || v[0]}`, body: JSON.stringify(v).replace(/["{}]/g, " "), source: "Ventilation", tag: "Term" }));
@@ -20873,7 +22187,7 @@ function claimCorpus() {
   if (!_claimCorpus) _claimCorpus = buildClaimCorpus();
   return _claimCorpus;
 }
-function answerClaim(q, limit = 4) {
+function answerClaim(q, limit = 4, state = "") {
   const raw = String(q || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !CLAIM_STOPWORDS.has(w));
   if (!raw.length) return [];
   const stem = (w) => w.replace(/ies$/, "y").replace(/(sses|ches|shes|xes)$/, (m) => m.slice(0, -2)).replace(/s$/, "");
@@ -20889,7 +22203,16 @@ function answerClaim(q, limit = 4) {
     });
     score += covered * covered * 2;
     return { it, score };
-  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map((x) => x.it);
+  }).filter((x) => {
+    if (x.score <= 0) return false;
+    const rs = x.it.state;
+    if (!rs || !state || rs === state) return true;
+    return !LAW_STATING_TAGS.has(x.it.tag);
+  }).map((x) => {
+    const rs = x.it.state;
+    const off = rs && state && rs !== state;
+    return off ? { ...x, score: x.score * 0.2 } : x;
+  }).sort((a, b) => b.score - a.score).slice(0, limit).map((x) => x.it);
 }
 function assistantJobContext(job) {
   if (!job) return null;
@@ -20908,8 +22231,12 @@ function assistantJobContext(job) {
     scheduled: !!job.schedDate
   };
 }
-function ClaimAssistant({ job = null }) {
+function ClaimAssistant({ job = null, defaultState = "" }) {
   const auth = AUTH();
+  const [askState, setAskState] = (0, import_react.useState)(job && job.state || defaultState || "");
+  (0, import_react.useEffect)(() => {
+    if (job && job.state) setAskState(job.state);
+  }, [job && job.state]);
   const jobSuggestions = job ? [
     "What's missing on this roof before it goes to production?",
     job.claimType === "Insurance" ? "What should I be supplementing for on this claim?" : "What does code require on a replacement here?"
@@ -20931,8 +22258,8 @@ function ClaimAssistant({ job = null }) {
   const ask = async (text) => {
     const question = (text || "").trim();
     if (!question || busy) return;
-    const hits = answerClaim(question, 4);
-    const grounding = answerClaim(question, 12);
+    const hits = answerClaim(question, 4, askState);
+    const grounding = answerClaim(question, 12, askState);
     setQ("");
     setMsgs((m) => [...m, { role: "user", text: question }, {
       role: "bot",
@@ -20949,7 +22276,17 @@ function ClaimAssistant({ job = null }) {
     try {
       answer = await auth.askAssistant({
         question,
-        records: grounding.map((h) => ({ title: h.title, body: h.body, cite: h.cite || "", source: h.source })),
+        /* `state` travels with each record so the model can be told which
+           jurisdiction a citation belongs to. Without it the prompt's
+           "use the citation verbatim" rule had nothing to weigh against
+           its "code varies by jurisdiction" rule. */
+        records: grounding.map((h) => ({
+          title: h.title,
+          body: h.body,
+          cite: h.cite || "",
+          source: h.source,
+          state: h.state || "national"
+        })),
         job: useJob ? assistantJobContext(job) : null
       });
     } catch {
@@ -20969,6 +22306,22 @@ function ClaimAssistant({ job = null }) {
         " sources"
       ] }), children: "Roofing assistant" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: "Ask a claim, code, manufacturer, or adjuster question in plain words. Answers are grounded in this app's own library \u2014 building code, manufacturer install specs and warranty terms, NRCA best practice, policy provisions, carrier patterns and the claim playbook \u2014 with every source shown so you can verify before you quote it." }),
+      !job && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        Field,
+        {
+          label: "Which state is the property in?",
+          hint: "Code sections and insurance regulation are state law. Without this the assistant answers from every state at once.",
+          children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: askState, onChange: (e) => setAskState(e.target.value), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "All states \u2014 nothing filtered" }),
+            US_STATES.map(([ab, name]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: ab, children: name }, ab))
+          ] })
+        }
+      ),
+      job && job.state && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 8 }, children: [
+        "Answering for ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: job.state }),
+        " \u2014 records that state another state's law are filtered out."
+      ] }),
       job && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 9, alignItems: "center", fontSize: 13, cursor: "pointer", marginTop: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "input",
@@ -21000,7 +22353,14 @@ function ClaimAssistant({ job = null }) {
         (m.hits || []).map((h, j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 8 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 5 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: tone[h.tag] || "gray", children: h.source }),
-            h.cite && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, fontWeight: 700, color: T.accent }, children: h.cite })
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: h.state ? "slate" : "gray", children: h.state || "Applies nationally" }),
+            !h.cite && h.topic && askState && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: asFact(citeFor(askState, h.topic)), compact: true }),
+            h.cite && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: fact(h.cite, {
+              /* Only real code sections read as authority here. The
+                 corpus also carries "NRCA Roofing Manual" and
+                 "Manufacturer instructions" in this same field. */
+              confidence: /^(IRC|RCO|OAC|R\.C\.)\s/.test(String(h.cite)) ? "derived" : "seeded"
+            }), compact: true })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 800, color: S.ink, lineHeight: 1.35 }, children: h.title }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginTop: 5 }, children: h.body.length > 320 ? h.body.slice(0, 320).trim() + "\u2026" : h.body })
@@ -21025,13 +22385,167 @@ function ClaimAssistant({ job = null }) {
     ] })
   ] });
 }
+function CoverageByState({ jobs = [], stateFacts = {}, onConfirm, onClear, toast = () => {
+} }) {
+  const active = (0, import_react.useMemo)(() => {
+    const set = /* @__PURE__ */ new Set();
+    (jobs || []).forEach((j) => {
+      if (j && j.state) set.add(j.state);
+    });
+    Object.keys(stateFacts || {}).forEach((s) => set.add(s));
+    return [...set].sort();
+  }, [jobs, stateFacts]);
+  const [sel, setSel] = (0, import_react.useState)(active[0] || "");
+  (0, import_react.useEffect)(() => {
+    if (!sel && active.length) setSel(active[0]);
+  }, [active.length]);
+  const [draft, setDraft] = (0, import_react.useState)({});
+  const [openField, setOpenField] = (0, import_react.useState)(null);
+  (0, import_react.useEffect)(() => {
+    setDraft({});
+    setOpenField(null);
+  }, [sel]);
+  const pack = legalPackFor(sel, stateFacts);
+  const gaps = legalPackGaps(sel, stateFacts);
+  const ready = legalPackReady(sel, stateFacts);
+  const jobCount = (jobs || []).filter((j) => j && j.state === sel).length;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }, children: "A contract states rights that are set by the state the property is in. This is where those get confirmed. Until a state's binding fields are confirmed, its contracts print a labelled placeholder where the clause belongs and cannot be signed or sent \u2014 which is the point: the app does not know your states' law and will not pretend to." }),
+    !active.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: "No jobs with a state on file yet. A state appears here as soon as there is a job in it." }) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 14 }, children: active.map((st) => {
+        const on = st === sel;
+        const good = legalPackReady(st, stateFacts);
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setSel(st), style: {
+          border: `1px solid ${on ? T.accent : S.line}`,
+          background: on ? T.accentSoft : S.card,
+          color: on ? T.accent : S.ink,
+          borderRadius: 999,
+          padding: "7px 14px",
+          fontSize: 13,
+          fontWeight: 700,
+          cursor: "pointer",
+          fontFamily: "inherit",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6
+        }, children: [
+          stateName(st) || st,
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+            width: 8,
+            height: 8,
+            borderRadius: 99,
+            background: good ? "var(--rl-green-fg)" : "var(--rl-amber-fg)"
+          } })
+        ] }, st);
+      }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: ready ? "green" : "amber", children: ready ? "Contracts can be signed" : `${gaps.length} to confirm` }), children: stateName(sel) || sel }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: [
+          jobCount,
+          " ",
+          jobCount === 1 ? "job" : "jobs",
+          " on file.",
+          ready ? " Every binding field has been confirmed, so agreements here render and sign normally." : " Agreements in this state are blocked from signing until the fields marked below are confirmed."
+        ] })
+      ] }),
+      LEGAL_FIELDS.map((f) => {
+        const cur = pack[f.key];
+        const conf = ((stateFacts || {})[sel] || {})[f.key];
+        const open = openField === f.key;
+        const val = draft[f.key] !== void 0 ? draft[f.key] : conf ? conf.value : cur.value;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 10 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 180 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14.5, fontWeight: 800, color: S.ink, lineHeight: 1.3 }, children: [
+              f.label,
+              f.binding && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--rl-amber-fg)", marginLeft: 6, fontSize: 11.5, fontWeight: 800 }, children: "BINDING" })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 3 }, children: f.help })
+          ] }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: cur, style: { marginTop: 8 } }),
+          cur.value && cur.note && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 6 }, children: cur.note }),
+          cur.value && cur.sourceUrl && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            "a",
+            {
+              href: cur.sourceUrl,
+              target: "_blank",
+              rel: "noreferrer",
+              style: { display: "inline-block", fontSize: 12.5, fontWeight: 700, color: T.accent, textDecoration: "none", marginTop: 6 },
+              children: [
+                cur.sourceName || "Open the source",
+                " \u2192"
+              ]
+            }
+          ),
+          conf && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 6 }, children: [
+            "Confirmed by ",
+            conf.by,
+            " on ",
+            conf.at,
+            "."
+          ] }),
+          !open ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => setOpenField(f.key), children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.PenLine, { size: 13 }),
+              " ",
+              conf ? "Update" : "Confirm for " + (stateName(sel) || sel)
+            ] }),
+            conf && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => onClear(sel, f.key), children: "Withdraw" })
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 10 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              Field,
+              {
+                label: `What ${stateName(sel) || sel} requires`,
+                hint: "Write it as it should read to a homeowner. This text goes into the contract wherever this clause belongs.",
+                children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "textarea",
+                  {
+                    style: { ...inputStyle, minHeight: 72, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.55 },
+                    value: val,
+                    onChange: (e) => setDraft({ ...draft, [f.key]: e.target.value })
+                  }
+                )
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, lineHeight: 1.5, marginBottom: 8 }, children: "Confirming records your name and today's date against this field. Only confirm what you have actually read at the source \u2014 the whole gate is worthless if it is clicked through." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                Btn,
+                {
+                  kind: "green",
+                  small: true,
+                  disabled: !String(val || "").trim(),
+                  onClick: () => {
+                    onConfirm(sel, f.key, { value: String(val).trim(), sourceUrl: cur.sourceUrl, sourceName: cur.sourceName });
+                    setOpenField(null);
+                    setDraft({ ...draft, [f.key]: void 0 });
+                  },
+                  children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 14 }),
+                    " I've read the source \u2014 confirm"
+                  ]
+                }
+              ),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => {
+                setOpenField(null);
+                setDraft({ ...draft, [f.key]: void 0 });
+              }, children: "Cancel" })
+            ] })
+          ] })
+        ] }, f.key);
+      }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, lineHeight: 1.5, marginTop: 14 }, children: "This is a record of what your office has checked. It is not legal advice, and confirming a field here does not make it correct \u2014 it records that a named person read the source on a date." })
+    ] })
+  ] });
+}
 function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
 }, onSaveJurisdiction = () => {
+}, stateFacts = {}, onConfirmLegal = () => {
+}, onClearLegal = () => {
 }, seed = null, onConsumeSeed = () => {
 } }) {
   const [tab, setTab] = (0, import_react.useState)(seed && seed.tab ? seed.tab : seed && seed.zip ? "codes" : "clients");
   const [zip, setZip] = (0, import_react.useState)(seed ? seed.zip || "" : "");
-  const [tplState, setTplState] = (0, import_react.useState)("OH");
+  const [tplState, setTplState] = (0, import_react.useState)("");
   const [openTpl, setOpenTpl] = (0, import_react.useState)(null);
   const [resourcePage, setResourcePage] = (0, import_react.useState)(null);
   const [lookingUp, setLookingUp] = (0, import_react.useState)(false);
@@ -21051,7 +22565,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
   }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["coverage", "Coverage"], ["resources", "Resources"]];
   const kbHits = (() => {
     const q = kbQ.trim().toLowerCase();
     if (!q) return null;
@@ -21085,7 +22599,17 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
       background: tab === id ? T.primary : S.card,
       color: tab === id ? "#fff" : S.ink
     }, children: label }, id)) }),
-    tab === "ask" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimAssistant, {}),
+    tab === "ask" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimAssistant, { defaultState: tplState }),
+    tab === "coverage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      CoverageByState,
+      {
+        jobs,
+        stateFacts,
+        toast,
+        onConfirm: onConfirmLegal,
+        onClear: onClearLegal
+      }
+    ),
     tab === "storm" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StormScout, { toast }),
     tab === "search" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -21209,9 +22733,12 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
                   small: true,
                   style: { width: "100%", marginTop: 9 },
                   onClick: () => {
-                    const t = `${c.supplement}
+                    const kf = asFact({ cite: c.cite, verified: /^IRC\s/.test(String(c.cite || "")) });
+                    const t = printable(kf) ? `${c.supplement}
 
-Authority: ${c.cite}`;
+Authority: ${kf.value}` : c.cite ? `${c.supplement}
+
+Reference: ${c.cite} (confirm before citing)` : c.supplement;
                     if (navigator.clipboard) navigator.clipboard.writeText(t);
                     toast("Supplement wording copied");
                   },
@@ -21282,8 +22809,10 @@ Authority: ${c.cite}`;
       ] }),
       SUPPLEMENT_TEMPLATES.map((t) => {
         const prov = citeFor(tplState, t.topic);
+        const pf = asFact(prov);
         const isOpen = openTpl === t.id;
-        const wording = t.wording.replaceAll("{CITE}", prov.cite);
+        const wording = pf.value ? t.wording.replaceAll("{CITE}", pf.value) : t.wording.replace(/Per \{CITE\},\s*/g, "").replaceAll("{CITE}", "the adopted code");
+        const canCopy = printable(pf);
         return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 16, style: { marginTop: 10 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setOpenTpl(isOpen ? null : t.id), style: {
             width: "100%",
@@ -21296,7 +22825,7 @@ Authority: ${c.cite}`;
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: t.category }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700, marginTop: 2 }, children: t.title }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 6 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: prov.verified ? "blue" : "amber", children: prov.cite }) })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 6 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: pf }) })
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronDown, { size: 17, style: { transform: isOpen ? "rotate(180deg)" : "none", flexShrink: 0 } })
           ] }) }),
@@ -21325,7 +22854,8 @@ Authority: ${c.cite}`;
               borderRadius: 10,
               padding: 12
             }, children: wording }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", style: { marginTop: 12 }, onClick: () => {
+            !canCopy && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: `Not verified for ${tplState}`, tone: "amber", children: pf.value ? `${pf.value} is the section this resolves to under ${codeNameForState(tplState)}, but nobody has confirmed the edition or the local adoption. Check it before this goes to an adjuster.` : "No code citation on file for this item in this state. Confirm the section locally before citing it." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", style: { marginTop: 12 }, disabled: !canCopy, onClick: () => {
               if (navigator.clipboard) navigator.clipboard.writeText(wording);
               toast("Wording copied \u2014 fill the [brackets]");
             }, children: [
@@ -21355,12 +22885,9 @@ Authority: ${c.cite}`;
           }
         )
       ] }),
-      zip.trim().length === 5 && !juris && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      zip.trim().length === 5 && (!juris || juris.needsContact) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
         !lookupResult && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14, color: S.ink, lineHeight: 1.55 }, children: [
-            zip.trim(),
-            " is not on file yet."
-          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.ink, lineHeight: 1.55 }, children: juris ? `We know ${zip.trim()} is in ${juris.state}, but not which office issues permits there.` : `${zip.trim()} is not on file yet.` }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginTop: 6 }, children: "Look it up and it is saved for everyone. If it falls in a county already on file, the building department comes with it." }),
           lookupErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Lookup failed", tone: "amber", children: lookupErr }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -21524,6 +23051,28 @@ Authority: ${c.cite}`;
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ExternalLink, { size: 12 })
               ] }) })
             ] }),
+            !juris.verified && juris.inspector.source && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+              marginTop: 10,
+              background: "#FFF8E6",
+              border: "1px solid #F0DCA8",
+              borderRadius: 10,
+              padding: "10px 12px"
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#6B4E0E", lineHeight: 1.5 }, children: "Taken from the department's published contact page \u2014 nobody here has called it yet. Confirm it once and the whole company gets it." }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => onSaveDept(juris.zip, {
+                  office: juris.inspector.office,
+                  phone: juris.inspector.phone,
+                  address: juris.inspector.address,
+                  web: juris.inspector.web || "",
+                  note: juris.inspector.note || ""
+                }), children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Check, { size: 13 }),
+                  " I called this \u2014 confirm it"
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AssistLink, { href: juris.inspector.source, children: "Source page" })
+              ] })
+            ] }),
             juris.inspector.checked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: [
               "Looked up ",
               juris.inspector.checked,
@@ -21539,7 +23088,7 @@ Authority: ${c.cite}`;
           ["iceBarrier", "tearOff", "dripEdge", "underlayment", "ventilation", "fastening", "decking"].map((topic) => {
             const p = citeFor(juris.state, topic);
             return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "10px 0", borderBottom: `1px solid ${S.line}` }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: p.verified ? "blue" : "amber", children: p.cite }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: p, compact: true }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.ink, marginTop: 6, lineHeight: 1.5 }, children: p.note })
             ] }, topic);
           })
@@ -21550,7 +23099,13 @@ Authority: ${c.cite}`;
           PROVISION_TOPICS.map((p, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: i ? `1px solid ${S.line}` : "none", padding: "12px 0" }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10 }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 800, color: S.ink }, children: p.topic }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: p.srcOH === "RCO" ? "blue" : "amber", children: p.oh })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: fact(p.oh, {
+                srcId: p.srcOH,
+                /* A topic the file itself flags as having two
+                   competing section numbers is not settled. */
+                confidence: p.conflict ? "derived" : "verified",
+                asOf: "Jul 2026"
+              }), compact: true })
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 5, lineHeight: 1.5 }, children: p.note }),
             p.conflict && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Check the section number", children: p.conflict }),
@@ -21886,7 +23441,7 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: st.label }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: st.channel === "sms" ? "Text" : "Email" })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 3, lineHeight: 1.5 }, children: st.body({ first: "Sarah", company: brand2.name || "Supreme Building Group", link: "[review link]" }) })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 3, lineHeight: 1.5 }, children: st.body({ first: "Sarah", company: brand2.company || "your company", link: "[review link]" }) })
         ] })
       ] }, st.id)),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "The sequence stops as soon as someone reviews, and pauses entirely for anyone who rates three or below so a human can call first." })
@@ -23388,7 +24943,7 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
     setEf(r ? { ...r, marginPct: margin(r).toFixed(1) } : { sku: "", item: "", unit: "EA", cost: 0, price: 0, supplier: "", category: "", marginPct: "30" });
   };
   const efSet = (k) => (e) => {
-    const v = e.target.value;
+    const v = e && e.target ? e.target.value : e;
     setEf((prev) => {
       const next = { ...prev, [k]: v };
       const cost = num(next.cost), price = num(next.price), m = num(next.marginPct);
@@ -23508,8 +25063,8 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Unit", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: ef.unit, onChange: efSet("unit"), children: UNIT_TYPES.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: u }, u)) }) })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Cost", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "number", step: "0.01", value: ef.cost, onChange: efSet("cost") }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Price", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "number", step: "0.01", value: ef.price, onChange: efSet("price") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Cost", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: ef.cost, onChange: efSet("cost") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Price", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: ef.price, onChange: efSet("price") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Margin %", hint: "Changing this recomputes price from cost.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "number", step: "0.1", value: ef.marginPct, onChange: efSet("marginPct") }) })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
@@ -24017,6 +25572,12 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
               (f.rateCard || []).filter((r) => (r.category || "Other") === cat).map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: `1px solid ${S.line}` }, children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
                   /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink }, children: r.label }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+                    fontSize: 10.5,
+                    marginTop: 2,
+                    fontWeight: 700,
+                    color: SUB_RATE_LABELS[r.code] ? T.accent : "#92600A"
+                  }, children: SUB_RATE_LABELS[r.code] || "Not auto-applied \u2014 price menu only" }),
                   r.notes && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub, lineHeight: 1.4 }, children: r.notes })
                 ] }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }, children: [
@@ -25194,7 +26755,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand:
                   onChange: (e) => setF((p2) => ({ ...p2, lines: (p2.lines || []).map((x, k) => k === i ? { ...x, state: e.target.value } : x) })),
                   children: [
                     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "State" }),
-                    US_STATES.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: s, children: s }, s))
+                    US_STATES.map(([ab, name]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: ab, children: name }, ab))
                   ]
                 }
               ),
@@ -25346,7 +26907,8 @@ var FEATURE_SWITCHES = [
   ["chat", "Team chat", "Company channel in the Inbox"],
   ["dispatch", "Dispatch board", "Crew-by-day scheduling"],
   ["codes", "Code lookup", "Jurisdiction requirements and citations"],
-  ["companycam", "CompanyCam", "Create and open CompanyCam projects"]
+  ["companycam", "CompanyCam", "Create and open CompanyCam projects"],
+  ["punchlist", "Punch list", "Track what a finished roof still owes, and warn before it is called done"]
 ];
 var DEFAULT_FEATURES = FEATURE_SWITCHES.reduce((a, [k]) => {
   a[k] = true;
@@ -26370,6 +27932,7 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser, theme = "light"
       ["insurance:ask", import_lucide_react.MessageCircle, "Roofing assistant", "Code, manufacturers, NRCA, claims \u2014 cited answers"],
       ["insurance", import_lucide_react.Shield, "Insurance & claims", "Clients, claims, supplements & depreciation"],
       ["insurance:codes", import_lucide_react.ScrollText, "Code lookup", "Adopted code & building department by zip"],
+      ["insurance:coverage", import_lucide_react.MapPin, "Coverage by state", "Confirm the contract law for every state you work"],
       ["insurance:resources", import_lucide_react.BookOpen, "Roofing resources", "Manufacturer specs, policy provisions, letters, playbook"]
     ]],
     ["Customers & documents", [
@@ -26491,9 +28054,10 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser, theme = "light"
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%", marginTop: 8 }, onClick: onLogout, children: "Sign out" })
   ] });
 }
-function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat, onDeleteMsg }) {
+function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat, onDeleteMsg, onSendQueued, integrations = {} }) {
   const [pane, setPane] = (0, import_react.useState)("team");
   const [filter, setFilter] = (0, import_react.useState)("All");
+  const [sendingId, setSendingId] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
     if (pane === "team" && onSeenChat) onSeenChat();
   }, [pane, chatMsgs && chatMsgs.length]);
@@ -26555,37 +28119,67 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
         cursor: "pointer"
       }, children: fl }, fl)) }),
       list.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: all.length === 0 ? "No messages yet. Send one from a job's Messages tab, or start with New message." : "Nothing matches this filter." }) }),
-      list.map(({ job, msg }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 14, style: { marginTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(job.id), style: { border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, width: "100%" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 7, alignItems: "center", minWidth: 0 }, children: [
-            msg.kind === "email" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Mail, { size: 14, color: T.accent }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MessageCircle, { size: 14, color: T.accent }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 700, color: S.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: job.name })
+      list.map(({ job, msg }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 14, style: { marginTop: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(job.id), style: { border: "none", background: "none", cursor: "pointer", textAlign: "left", padding: 0, width: "100%" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 7, alignItems: "center", minWidth: 0 }, children: [
+              msg.kind === "email" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Mail, { size: 14, color: T.accent }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MessageCircle, { size: 14, color: T.accent }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 700, color: S.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: job.name })
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", gap: 5, flexShrink: 0 }, children: [
+              msg.viewed && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Viewed" }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: msgTone(msg.status, "blue"), children: msgLabel(msg.status) })
+            ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", gap: 5, flexShrink: 0 }, children: [
-            msg.viewed && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Viewed" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: msg.status === "Sent" ? "blue" : "amber", children: msg.status === "Sent" ? "Sent" : "Queued" })
+          msg.subject && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, marginTop: 5 }, children: msg.subject }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+            fontSize: 13,
+            color: S.sub,
+            marginTop: 3,
+            lineHeight: 1.5,
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden"
+          }, children: msg.body }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 5 }, children: [
+            msg.audience,
+            " \xB7 ",
+            msg.to,
+            " \xB7 ",
+            msg.at,
+            msg.sendOn ? ` \xB7 scheduled for ${msg.sendOn}` : ""
           ] })
         ] }),
-        msg.subject && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, marginTop: 5 }, children: msg.subject }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
-          fontSize: 13,
-          color: S.sub,
-          marginTop: 3,
-          lineHeight: 1.5,
-          display: "-webkit-box",
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: "vertical",
-          overflow: "hidden"
-        }, children: msg.body }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 5 }, children: [
-          msg.audience,
-          " \xB7 ",
-          msg.to,
-          " \xB7 ",
-          msg.at
+        msg.status !== "Sent" && onSendQueued && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            Btn,
+            {
+              kind: "soft",
+              small: true,
+              disabled: sendingId === msg.id,
+              onClick: async () => {
+                setSendingId(msg.id);
+                await onSendQueued(job.id, msg.id);
+                setSendingId(null);
+              },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 13 }),
+                " ",
+                sendingId === msg.id ? "Sending\u2026" : "Send now"
+              ]
+            }
+          ),
+          msgFailed(msg.status) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: "#B42318", lineHeight: 1.4 }, children: msg.status })
         ] })
-      ] }) }, msg.id)),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 16, lineHeight: 1.55 }, children: '"Viewed" tracking needs the email backend \u2014 it works by embedding a tiny pixel that fires when the recipient opens the message. It arrives with the Gmail integration, not before.' })
+      ] }, msg.id)),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 16, lineHeight: 1.55 }, children: [
+        "Anything not yet sent stays here until you press ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Send now" }),
+        " \u2014 the app does not send on a schedule of its own, so a message sitting in this list has not gone out.",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("br", {}),
+        '"Viewed" tracking needs the email backend \u2014 it works by embedding a tiny pixel that fires when the recipient opens the message. It arrives with the Gmail integration, not before.'
+      ] })
     ] })
   ] });
 }
@@ -26670,7 +28264,7 @@ function useDbSync(st) {
     unpackOrg
   } = st;
   const [hydrated, setHydrated] = (0, import_react.useState)(!liveDb());
-  const [syncErr, setSyncErr] = (0, import_react.useState)("");
+  const [syncErr, setSyncErr2] = (0, import_react.useState)("");
   const jobRefs = (0, import_react.useRef)(/* @__PURE__ */ new Map());
   const apptRefs = (0, import_react.useRef)(/* @__PURE__ */ new Map());
   const persistedActivity = (0, import_react.useRef)(/* @__PURE__ */ new Set());
@@ -26747,9 +28341,9 @@ function useDbSync(st) {
           msgs.forEach((m) => persistedChat.current.add(m.id));
           setChatMsgs(msgs);
         }
-        setSyncErr("");
+        setSyncErr2("");
       } catch (e) {
-        if (alive) setSyncErr("Couldn't load saved data \u2014 check that the persistence migration has been run. " + (e && e.message ? e.message : ""));
+        if (alive) setSyncErr2("Couldn't load saved data \u2014 check that the persistence migration has been run. " + (e && e.message ? e.message : ""));
       }
       if (alive) setHydrated(true);
     })();
@@ -26809,9 +28403,9 @@ function useDbSync(st) {
           await db.from("crm_jobs").delete().in("id", removed);
           removed.forEach((id) => jobRefs.current.delete(id));
         }
-        setSyncErr("");
+        setSyncErr2("");
       } catch (e) {
-        setSyncErr("Save failed \u2014 changes are on this device only. " + (e && e.message ? e.message : ""));
+        setSyncErr2("Save failed \u2014 changes are on this device only. " + (e && e.message ? e.message : ""));
       }
     }, 1100);
     return () => {
@@ -26846,7 +28440,8 @@ function useDbSync(st) {
           await db.from("crm_appointments").delete().in("id", removed);
           removed.forEach((id) => apptRefs.current.delete(id));
         }
-      } catch {
+      } catch (e) {
+        setSyncErr2("Couldn't save an appointment \u2014 it exists on this device only. " + (e && e.message || ""));
       }
     }, 800);
     return () => clearTimeout(t);
@@ -26927,7 +28522,7 @@ function useDbSync(st) {
     orgTimer.current = setTimeout(() => {
       const write = tenantId ? db.from("crm_org").upsert({ tenant_id: tenantId, data: orgPack(), updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "tenant_id" }) : db.from("crm_org").upsert({ id: 1, data: orgPack(), updated_at: (/* @__PURE__ */ new Date()).toISOString() });
       write.then(({ error }) => {
-        if (error) setSyncErr("Settings save failed. " + error.message);
+        if (error) setSyncErr2("Settings save failed. " + error.message);
       });
     }, 1400);
     return () => {
@@ -27174,6 +28769,7 @@ function SupremeCRM() {
   const [apiSetup, setApiSetup] = (0, import_react.useState)({});
   const [ccAutoCreate, setCcAutoCreate] = (0, import_react.useState)(true);
   const [jurisContacts, setJurisContacts] = (0, import_react.useState)({});
+  const [stateFacts, setStateFacts] = (0, import_react.useState)({});
   const [learnedJuris, setLearnedJuris] = (0, import_react.useState)({});
   const [features, setFeatures] = (0, import_react.useState)({});
   const [security, setSecurity] = (0, import_react.useState)({ anomalyLogout: true });
@@ -27197,7 +28793,7 @@ function SupremeCRM() {
       setNav("home");
     }
   };
-  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, stateFacts, learnedJuris];
   const orgPack = () => ({
     announcements,
     calls,
@@ -27218,6 +28814,7 @@ function SupremeCRM() {
     features,
     security,
     jurisContacts,
+    stateFacts,
     learnedJuris,
     version: 1
   });
@@ -27242,6 +28839,10 @@ function SupremeCRM() {
     if (d.jurisContacts) {
       setJurisContacts(d.jurisContacts);
       setJurisOverrides(d.jurisContacts);
+    }
+    if (d.stateFacts) {
+      setStateFacts(d.stateFacts);
+      setLegalOverrides(d.stateFacts);
     }
     if (d.learnedJuris) {
       setLearnedJuris(d.learnedJuris);
@@ -27288,6 +28889,12 @@ function SupremeCRM() {
     };
   }, [currentUser && currentUser.id]);
   const deleteJobs = (ids, label) => {
+    const db = DB();
+    const tokens = jobs.filter((j) => ids.includes(j.id)).map((j) => j.portalToken).filter(Boolean);
+    if (db && tokens.length) {
+      db.from("crm_portal").update({ revoked: true }).in("token", tokens).then(() => {
+      }, () => setSyncErr("Deleted the job but couldn't revoke its customer portal link \u2014 revoke it from the job before deleting, or contact support."));
+    }
     setJobs((prev) => prev.filter((j) => !ids.includes(j.id)));
     if (openJobId && ids.includes(openJobId)) {
       setOpenJobId(null);
@@ -27393,6 +29000,7 @@ function SupremeCRM() {
           next.subInvoice = { ...base, status: terminal ? base.status : "needs_review" };
         }
       }
+      if (stageId === "s10" && !next.completedAt) next.completedAt = todayIso();
       if (j.portal?.notifyStage && stage) {
         const channel = j.consent?.sms?.granted ? "sms" : j.consent?.email?.granted ? "email" : null;
         if (channel) {
@@ -27416,7 +29024,7 @@ function SupremeCRM() {
       if (!gate.ready && gate.failed.length) {
         toast(`Moved to ${stageName} \u2014 still missing: ${gate.failed.map((f) => f.label.toLowerCase()).join(", ")}`);
       } else {
-        toast(`Moved to ${stageName}${jb.portal?.notifyStage ? " \u2014 customer update queued when consent is available" : ""}`);
+        toast(`Moved to ${stageName}${jb.portal?.notifyStage ? " \u2014 customer update waiting in the Inbox" : ""}`);
       }
     }
     if (!gate.ready && gate.failed.length) {
@@ -27432,6 +29040,22 @@ function SupremeCRM() {
       logAct({ kind: "sub", jobId, jobName: jb.name, text: `sub invoice for ${crew ? crew.name : "the crew"} needs review before payment` });
     }
     return true;
+  };
+  const sendQueuedMessage = async (jobId, msgId) => {
+    const jb = jobs.find((j) => j.id === jobId);
+    const msg = jb && (jb.messages || []).find((m) => m.id === msgId);
+    if (!jb || !msg) return;
+    const out = await deliverToCustomer(
+      jb,
+      { prefer: msg.kind || "sms", subject: msg.subject || "", body: msg.body },
+      integrations,
+      liveUser
+    );
+    setJobs((prev) => prev.map((j) => j.id !== jobId ? j : {
+      ...j,
+      messages: (j.messages || []).map((m) => m.id !== msgId ? m : { ...m, kind: out.kind, to: out.to || m.to, status: out.status, sentAt: out.delivered ? nowStamp() : m.sentAt })
+    }));
+    toast(out.delivered ? "Sent" : out.status);
   };
   const bulkMoveStage = (ids, stageId) => {
     const stage = stages.find((x) => x.id === stageId);
@@ -27836,7 +29460,9 @@ function SupremeCRM() {
           if (db) db.from("crm_chat").delete().eq("id", id).then(() => {
           }, () => {
           });
-        }
+        },
+        integrations,
+        onSendQueued: sendQueuedMessage
       }
     ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand: brand2, onNav: (id) => {
       if (id === "password") return setChangePwOpen(true);
@@ -27851,6 +29477,10 @@ function SupremeCRM() {
       }
       if (id === "insurance:resources") {
         setCodeSeed({ tab: "resources" });
+        return setNav("insurance");
+      }
+      if (id === "insurance:coverage") {
+        setCodeSeed({ tab: "coverage" });
         return setNav("insurance");
       }
       return setNav(id);
@@ -27883,6 +29513,23 @@ function SupremeCRM() {
           setLearnedJurisdictions(next);
           logAct({ type: "code", text: `Added ${rec.city || rec.zip}, ${rec.county} to the jurisdiction list` });
           toast(rec.needsContact ? "Saved \u2014 add the permit office when you have it" : "Saved with its building department");
+        },
+        stateFacts,
+        onConfirmLegal: (st, key, rec) => {
+          const next = { ...stateFacts, [st]: { ...stateFacts[st] || {}, [key]: { ...rec, at: todayIso(), by: userName } } };
+          setStateFacts(next);
+          setLegalOverrides(next);
+          logAct({ type: "code", text: `Confirmed ${key} for ${st}` });
+          toast("Confirmed for the whole company");
+        },
+        onClearLegal: (st, key) => {
+          const rest = { ...stateFacts[st] || {} };
+          delete rest[key];
+          const next = { ...stateFacts, [st]: rest };
+          setStateFacts(next);
+          setLegalOverrides(next);
+          logAct({ type: "code", text: `Withdrew the confirmation of ${key} for ${st}` });
+          toast("Withdrawn \u2014 contracts in that state are blocked again");
         },
         seed: codeSeed,
         onConsumeSeed: () => setCodeSeed(null)
@@ -28321,7 +29968,12 @@ function SupremeCRM() {
         onClose: () => setFiltersOpen(false),
         stages,
         filters,
-        setFilters
+        setFilters,
+        assignees: [...new Set([
+          ...users.filter((u) => u.active !== false).map((u) => u.name),
+          ...jobs.map((j) => j.assignee)
+        ].filter(Boolean))].sort(),
+        leadSources
       }
     ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(

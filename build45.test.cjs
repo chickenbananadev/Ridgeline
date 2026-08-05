@@ -13,7 +13,10 @@ ok(/_claimCorpus = buildClaimCorpus\(\)/.test(src) && /if \(!_claimCorpus\)/.tes
 ok(src.includes("function answerClaim"), "retrieval scorer exists");
 ok(src.includes("function ClaimAssistant"), "assistant component exists");
 ok(src.includes('["ask", "Assistant"]'), "assistant is a hub tab");
-ok(src.includes('{tab === "ask" && <ClaimAssistant />}'), "assistant tab renders the component");
+/* The hub instance has no job, so it now takes a state from the hub's own
+   picker rather than answering for nowhere in particular. Match the opening
+   tag, not the exact self-closing render. */
+ok(/\{tab === "ask" && <ClaimAssistant[ /]/.test(src), "assistant tab renders the component");
 ok(src.includes('"insurance:ask"'), "assistant has a menu deep-link");
 ok(src.includes("not legal advice"), "answers carry a verify disclaimer");
 // corpus draws from multiple KB sources

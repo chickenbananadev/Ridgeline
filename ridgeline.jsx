@@ -8,7 +8,7 @@ import {
   BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat, CloudRain,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
   Scale, Lightbulb, ExternalLink, Lock, Layers, Smile
-, Filter , Megaphone, Clock, Zap, Sun, Moon, Navigation } from "lucide-react";
+, Filter , Megaphone, Clock, Zap, Sun, Moon, Navigation, Award, ClipboardCheck } from "lucide-react";
 
 /* ================================================================
    BRANDING — single source of company identity. Everything company-
@@ -88,39 +88,69 @@ const JURISDICTIONS = {
     codeName: "Residential Code of Ohio (RCO)", codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "Roofing permit required for full replacement; verify with the building department.",
-    inspector: { office: "Forest Park Building Department", phone: "(513) 555-0100 — sample, verify", address: "1201 W Kemper Rd, Forest Park, OH" },
-    verified: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: "Jul 2026", by: "Office" },
+    inspector: { office: "Forest Park Building Department", phone: "5135955264", address: "1201 W Kemper Rd, Forest Park, OH 45240",
+      email: "bldgdept@forestpark.org", web: "https://www.forestpark.org/government/building/index.php",
+      source: "https://www.forestpark.org/government/building/contact_the_building_department.php" },
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false, needsContact: false, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
   },
   "45410": {
     zip: "45410", city: "Dayton", county: "Montgomery County", state: "OH",
     codeName: "Residential Code of Ohio (RCO)", codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "Permit required; verify regional building services handling for residential.",
-    inspector: { office: "City of Dayton — Building Inspection", phone: "(937) 555-0100 — sample, verify", address: "371 W 2nd St, Dayton, OH" },
-    verified: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: "Jul 2026", by: "Office" },
+    inspector: { office: "City of Dayton — Division of Building Inspection", phone: "9373333980", address: "371 W Second St, 2nd floor (One Stop Center), Dayton, OH 45402",
+      web: "https://www.daytonohio.gov/190/Building-Inspection",
+      note: "Permit status and plan-submittal questions: 1(937)333-3883.",
+      source: "https://www.daytonohio.gov/650/Building-Inspection-Directory" },
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false, needsContact: false, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
   },
   "45056": {
     zip: "45056", city: "Oxford", county: "Butler County", state: "OH",
     codeName: "Residential Code of Ohio (RCO)", codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "Roofing permit required for tear-off and re-roof.",
-    inspector: { office: "Butler County Building Department", phone: "(513) 555-0100 — sample, verify", address: "130 High St, Hamilton, OH" },
-    verified: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: "Jul 2026", by: "Office" },
+    inspector: { office: "City of Oxford — Community Development", phone: "5135245204", address: "15 S College Ave, Oxford, OH 45056",
+      email: "commdev@cityofoxford.org", web: "https://www.cityofoxford.org/government/departments/community_development/construction_and_development/building_and_zoning_permits.php",
+      note: "Oxford runs its own building and zoning office — Butler County does not serve this address.",
+      source: "https://www.cityofoxford.org/departments/community_development/building_zoning_permit.php" },
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false, needsContact: false, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
   },
   "43235": {
     zip: "43235", city: "Columbus", county: "Franklin County", state: "OH",
     codeName: "Residential Code of Ohio (RCO)", codeEdition: "2024 edition",
     adoption: "Statewide residential code",
     permit: "City of Columbus permit required for re-roofing.",
-    inspector: { office: "Columbus Building & Zoning Services", phone: "(614) 555-0100 — sample, verify", address: "111 N Front St, Columbus, OH" },
-    verified: true, sources: ["RCO", "OAC3901"], verifiedDetail: { date: "Jul 2026", by: "Office" },
+    inspector: { office: "City of Columbus — Building & Zoning Services", phone: "6146457433", address: "111 N Front St, Columbus, OH 43215",
+      web: "https://www.columbus.gov/Business-Development/Building-Zoning-Services",
+      note: "Counter hours 9:00-4:00 weekdays.",
+      source: "https://www.columbus.gov/files/sharedassets/city/v/7/building-and-zoning/bzs-contact-sheet-2026.pdf" },
+    /* The inspector phone below is a placeholder, not a checked number.
+       This used to say verified:true, which painted a green "Verified"
+       chip and a tap-to-call button over a 555 number. Until the office
+       confirms it, it is unverified and needs a contact. */
+    verified: false, needsContact: false, sources: ["RCO", "OAC3901"], verifiedDetail: { date: null, by: null },
   },
   "41179": {
     zip: "41179", city: "Vanceburg", county: "Lewis County", state: "KY",
     codeName: "Kentucky Residential Code (KRC)", codeEdition: "Current KRC — verify edition",
     adoption: "Statewide residential code",
     permit: "Verify permit handling with the county building official before tear-off.",
-    inspector: { office: "Lewis County Building Official", phone: "(606) 555-0100 — sample, verify", address: "Vanceburg, KY" },
+    inspector: { office: "No local building inspector — Lewis County", phone: "6067963062", address: "County Clerk, 112 2nd St, Vanceburg, KY 41179",
+      web: "https://dhbc.ky.gov",
+      note: "Kentucky DHBC lists no local building inspector for Lewis County. The Kentucky Residential Code still applies; commercial work goes to the state department. The clerk\u2019s number above is the starting point for zoning, not a building official.",
+      source: "https://dhbc.ky.gov/Documents/Lewis%20County.pdf" },
     verified: false, sources: ["KYDHBC", "ICC"], verifiedDetail: { date: null, by: null },
   },
   "41056": {
@@ -128,7 +158,10 @@ const JURISDICTIONS = {
     codeName: "Kentucky Residential Code (KRC)", codeEdition: "Current KRC — verify edition",
     adoption: "Statewide residential code",
     permit: "Verify with the Maysville building official before tear-off.",
-    inspector: { office: "City of Maysville Building Inspector", phone: "(606) 555-0100 — sample, verify", address: "216 Bridge St, Maysville, KY" },
+    inspector: { office: "City of Maysville / Mason County Codes Department", phone: "6065642525", address: "216 Bridge St, Maysville, KY 41056",
+      web: "https://www.cityofmaysvilleky.gov/departments/codes_department/index.php",
+      note: "Codes Officer 1(606)564-2504. Inspector in the office Mon, Tue, Wed, Fri 8:00-11:00am.",
+      source: "https://www.cityofmaysvilleky.gov/departments/codes_department/index.php" },
     verified: false, sources: ["KYDHBC", "ICC"], verifiedDetail: { date: null, by: null },
   },
   "60014": {
@@ -136,7 +169,10 @@ const JURISDICTIONS = {
     codeName: "Adopted IRC (local amendment)", codeEdition: "Locally adopted IRC — verify edition & amendments",
     adoption: "Illinois has no statewide residential code; adoption is municipal.",
     permit: "City roofing permit required; local amendments apply.",
-    inspector: { office: "Crystal Lake Community Development", phone: "(815) 555-0100 — sample, verify", address: "100 W Woodstock St, Crystal Lake, IL" },
+    inspector: { office: "City of Crystal Lake — Community Development, Building Division", phone: "8153563605", address: "100 W Woodstock St, Crystal Lake, IL 60014",
+      web: "https://www.crystallake.org/your-government/departments/community-development/building",
+      note: "Building, electrical and plumbing permits. City Hall main line 1(815)459-2020.",
+      source: "https://www.crystallake.org/your-government/departments/community-development/building" },
     verified: false, sources: ["MUNICODE", "ICC"], verifiedDetail: { date: null, by: null },
   },
 };
@@ -153,6 +189,8 @@ const CODE_PROVISIONS = {
     ventilation: { cite: "RCO R806.2", note: "Default required ratio is 1/150. The 1/300 exception applies only with a balanced system — 40 to 50 percent of net free area in the upper portion, balance at the eaves.", verified: true },
     fastening: { cite: "RCO R905.2.5", note: "4 nails per shingle minimum; 6-nail where manufacturer or wind zone requires.", verified: true },
     decking: { cite: "RCO R803 / R908.3", note: "Sheathing must be structurally sound; recover over unsound decking prohibited.", verified: true },
+    flashing: { cite: "RCO R905.2.8.4", note: "Base and step flashing at walls and roof-to-wall intersections; flashing cannot be reused after tear-off.", verified: true },
+    kickout: { cite: "RCO R703.4", note: "Kickout / diverter flashing required where a roof edge terminates against a wall.", verified: true },
   },
   KY: {
     iceBarrier: { cite: "KRC R905.1.2 — verify edition", note: "Ice barrier to 24 in. inside exterior wall line (IRC-based; confirm KY amendments).", verified: false },
@@ -162,6 +200,8 @@ const CODE_PROVISIONS = {
     ventilation: { cite: "KRC R806.2 — verify edition", note: "Balanced attic ventilation (confirm KY amendments).", verified: false },
     fastening: { cite: "KRC R905.2.5 — verify edition", note: "Fastening per code minimum and manufacturer spec (confirm).", verified: false },
     decking: { cite: "KRC R803 — verify edition", note: "Structurally sound sheathing required (confirm).", verified: false },
+    flashing: { cite: "KRC R905.2.8.4 — verify edition", note: "Step and base flashing at wall intersections (confirm KY amendments).", verified: false },
+    kickout: { cite: "KRC R703.4 — verify edition", note: "Kickout flashing at roof-to-wall terminations (confirm KY amendments).", verified: false },
   },
   IL: {
     iceBarrier: { cite: "Adopted IRC R905.1.2 — verify municipality", note: "Ice barrier per the locally adopted IRC edition — Illinois adoption is municipal.", verified: false },
@@ -171,6 +211,8 @@ const CODE_PROVISIONS = {
     ventilation: { cite: "Adopted IRC R806.2 — verify municipality", note: "Ventilation per local adopted edition.", verified: false },
     fastening: { cite: "Adopted IRC R905.2.5 — verify municipality", note: "Fastening per local adopted edition and manufacturer spec.", verified: false },
     decking: { cite: "Adopted IRC R803 — verify municipality", note: "Sheathing requirements per local adopted edition.", verified: false },
+    flashing: { cite: "Adopted IRC R905.2.8.4 — verify municipality", note: "Step and base flashing per local adopted edition.", verified: false },
+    kickout: { cite: "Adopted IRC R703.4 — verify municipality", note: "Kickout flashing per local adopted edition.", verified: false },
   },
 };
 
@@ -442,7 +484,7 @@ const KB_CODES = [
     body: "On slopes from 2:12 up to 4:12, underlayment must be applied in two layers, lapped 19 inches. Carriers routinely scope single-layer felt across the whole roof regardless of slope.",
     supplement: "Slopes measured at ___:12 require two-ply underlayment per R905.2.2. Requesting the additional layer over ___ squares." },
   { sys: "asphalt", title: "Ice barrier at eaves", cite: "IRC R905.1.2", src: "ICC",
-    body: "In areas with a history of ice forming along eaves, an ice barrier of two layers of cemented underlayment or a self-adhering polymer-modified bitumen sheet must extend from the lowest edge to at least 24 inches inside the exterior wall line. Ohio, Kentucky and Illinois all sit in jurisdictions where this is commonly required.",
+    body: "In areas with a history of ice forming along eaves, an ice barrier of two layers of cemented underlayment or a self-adhering polymer-modified bitumen sheet must extend from the lowest edge to at least 24 inches inside the exterior wall line. Whether it applies to a given roof is set by the local jurisdiction, which decides where ice forming along eaves has a history — so check the adopted code for the property's own jurisdiction before scoping it.",
     supplement: "Ice and water shield is required from the eave to 24 inches inside the exterior wall line. Carrier scope omits it entirely / includes only ___ LF." },
   { sys: "asphalt", title: "Fastener count and wind rating", cite: "IRC R905.2.6 / manufacturer instructions", src: "ICC",
     body: "Shingles must be fastened per the manufacturer's published instructions, which govern where they exceed code. Most high-wind warranties require six nails per shingle rather than four, and require nailing in the designated zone. A four-nail scope on a six-nail product voids the wind warranty.",
@@ -547,7 +589,7 @@ const KB_TERMS = [
   ["Betterment", "", "A carrier's term for an improvement over pre-loss condition, which they generally do not owe. Code requirements are not betterment — they are Ordinance and Law."],
   ["Matching", "", "The obligation to produce a reasonably comparable appearance when a partial repair would leave a mismatch. The basis of most full-slope and full-roof arguments."],
   ["Mortgagee clause", "", "Names the lender on the claim cheque. Requires endorsement and often a lender inspection before funds release — the most common reason a paid claim still has not funded."],
-  ["Public adjuster", "", "Licensed to negotiate coverage and settlement on the insured's behalf. In Ohio this is ORC Chapter 3951, and a contractor cannot act as the public adjuster on the same loss."],
+  ["Public adjuster", "", "Licensed by the state to negotiate coverage and settlement on the insured's behalf. Licensing is state law and the statute differs everywhere; in most states a contractor may not act as the public adjuster on a loss it is also repairing. Check the property state's insurance department before referring one."],
   ["Appraisal clause", "", "A policy provision for resolving disputes over the amount of loss, not over coverage. Each side appoints an appraiser, and the two select an umpire. Slower than negotiation but binding on amount."],
   ["Date of loss", "", "The date the damage occurred, not the date it was noticed or reported. Carriers use it to test policy period, deadlines and whether the storm event matches."],
   ["Proof of loss", "", "A sworn statement of the claim amount, sometimes demanded by the carrier with a deadline. Missing the deadline can prejudice the claim; treat any request for one as urgent."],
@@ -668,7 +710,7 @@ const CLAIM_SCENARIOS = [
       "For an aged roof that also has hail impact, granule loss at impact sites (fractured mat under the impact) is diagnostic of storm damage. Photograph in raking light.",
       "Brittleness test on a cool day is more reliable than on hot; document date and temperature.",
       "Request the carrier's engineer report if damage is denied on that basis.",
-      "Where the carrier blames installation or age rather than the storm, Ohio applies efficient proximate cause: if the covered peril was the predominant cause, the loss is covered even with contributing factors. Pin the storm date with NWS wind data and NOAA hail reports, and document neighboring properties.",
+      "Where the carrier blames installation or age rather than the storm, the argument is causation: that the covered peril was the predominant cause, so the loss is covered even with contributing factors. Which causation rule governs is state law — many states apply efficient proximate cause, others enforce anti-concurrent-causation wording in the policy — so confirm the property state's rule before you make the argument. Either way, pin the storm date with NWS wind data and NOAA hail reports, and document neighboring properties.",
     ]},
   { q: "“Roof is too old for full replacement value”",
     setup: "Adjuster settles on Actual Cash Value only, or applies a roof-age depreciation schedule that reduces the payment significantly.",
@@ -984,6 +1026,224 @@ const IRC_DEEP = [
    LETTER TEMPLATES — fill the bracketed fields, send in writing.
    Written communication is what survives a contested claim.
    ================================================================ */
+/* ==================================================================
+   REGULATORS
+
+   The Department of Insurance complaint letter used to be pre-addressed
+   to Columbus, Ohio, for every user in every state — so a Texas rep's
+   regulatory complaint went to an agency with no jurisdiction over the
+   file, achieved nothing, and let the real clock run out.
+
+   Fifty state agencies with fifty mailing addresses is exactly the data
+   this environment cannot source reliably, so it is not invented here.
+   Ohio, which the office has confirmed, is verified. Every other state
+   resolves to a pointer: the NAIC's official directory, which is the
+   canonical index of state insurance departments. Naming the right door
+   beats guessing the address behind it.
+================================================================== */
+const NAIC_DIRECTORY = "https://content.naic.org/state-insurance-departments";
+const STATE_REGULATORS = {
+  OH: {
+    name: "Ohio Department of Insurance — Consumer Services Division",
+    address: "50 W. Town Street, Third Floor, Suite 300\nColumbus, OH 43215",
+    phone: "1-800-686-1526",
+    url: "https://insurance.ohio.gov",
+    confidence: "verified", asOf: "Jul 2026",
+  },
+};
+/* Resolve a letter against a state. Returns the rendered body plus the
+   facts it leaned on, so the UI can show what resolved and the copy
+   action can refuse when something did not. A letter to a carrier with
+   an unresolved token, or with a cite nobody has verified, is worse than
+   no letter: it is the thing the adjuster uses to dismiss the rest. */
+function renderLetter(tpl, state) {
+  const used = [];
+  let body = String(tpl.body || "");
+  body = body.replace(/\{CITE:(\w+)\}/g, (_m, topic) => {
+    const f = asFact(citeFor(state, topic));
+    used.push({ token: topic, fact: f });
+    return f.value || `[code citation for ${topic} — not on file, confirm locally]`;
+  });
+  body = body.replace(/\{CODE_NAME\}/g, () => (state ? codeNameForState(state) : "the adopted building code"));
+  body = body.replace(/\{MATCHING_RULE\}/g, () => {
+    /* Ohio has a matching regulation. Most states do not, and the ones
+       that do use different standards — so outside a curated state the
+       letter argues from the policy rather than inventing a rule. */
+    const f = state === "OH"
+      ? fact("OAC 3901-1-54(I)(1)(b) requires that replacement items be of like kind and quality with reasonably comparable appearance.",
+          { srcId: "OAC3901", confidence: "verified", asOf: "Jul 2026" })
+      : fact("", { note: "No matching regulation on file for this state — argue from the policy's like-kind-and-quality language.", confidence: "unknown" });
+    used.push({ token: "matching", fact: f });
+    return f.value || "The policy provides for replacement with like kind and quality, which a visible line between new and existing slopes does not satisfy.";
+  });
+  body = body.replace(/\{APPRAISAL_AUTHORITY\}/g, () => {
+    const f = state === "OH"
+      ? fact("Schwartz v. Standard Fire Insurance Co. (Ohio 2008)", { confidence: "verified", asOf: "Jul 2026" })
+      : fact("", { note: "No appraisal authority on file for this state.", confidence: "unknown" });
+    used.push({ token: "appraisal", fact: f });
+    return f.value ? ` This is consistent with ${f.value}.` : "";
+  });
+  body = body.replace(/\{REGULATOR_BLOCK\}/g, () => {
+    const f = regulatorFor(state);
+    used.push({ token: "regulator", fact: f });
+    return f.value ? `${f.value}\n${f.note || ""}`.trim()
+      : "[your state's department of insurance — address it before sending]";
+  });
+  /* Anything below "verified" must not leave the building. */
+  const blocking = used.filter((u) => !printable(u.fact));
+  return { body, used, blocking, ready: blocking.length === 0 };
+}
+
+/* ==================================================================
+   LEGAL PACKS — what a contract has to say, per state.
+
+   The construction agreement recited "the State of Ohio and Kentucky"
+   on every tenant's contract, baked a 3-day rescission window, a
+   5-year workmanship warranty and 1.5%/month into `mkContract` for
+   every new tenant on day one, and defaulted the deposit to 50% — a
+   per-se violation in states that cap it at a third. None of that was
+   keyed to where the roof is.
+
+   Every state gets a row for every field. What a field does NOT do is
+   guess: outbound research here returns lead-generation aggregators
+   that contradict each other, so a field with nothing checked behind
+   it reads "not established" and carries the body that can settle it
+   plus a direct link. Naming the right door beats guessing what is
+   behind it — the same choice `regulatorFor` already makes.
+
+   `verified` is the only tier that prints into a binding document,
+   and only a human standing behind it on a date can set that. So even
+   Ohio's seeded values start at `derived` and the owner confirms them
+   once on the Coverage screen. That is deliberate: a seeded value
+   auto-promoted to verified is exactly the bug the ladder exists to
+   stop, and it has already shipped twice.
+================================================================== */
+/* National directories. Each is the canonical index for its field —
+   not a per-state URL invented to look precise. */
+const NAAG_DIRECTORY = "https://www.naag.org/find-my-ag/";
+const NASCLA_DIRECTORY = "https://www.nascla.org/page/licensing_boards";
+const LEGAL_AUTHORITIES = {
+  ag: { name: "State attorney general — consumer protection division", url: NAAG_DIRECTORY },
+  doi: { name: "State department of insurance", url: NAIC_DIRECTORY },
+  lic: { name: "State contractor licensing board", url: NASCLA_DIRECTORY },
+};
+/* `binding: true` means the field fills a slot in a document somebody
+   signs. Those gate signing. The rest inform the rep and appear on
+   Coverage, but an unconfirmed one does not stop a contract going out,
+   because it does not appear in the contract. */
+const LEGAL_FIELDS = [
+  { key: "choiceOfLaw", label: "Governing law", authority: "ag", binding: true,
+    help: "Which state's law the agreement is written under. Reciting the wrong one is the defect that started this." },
+  { key: "rescission", label: "Right to cancel", authority: "ag", binding: true,
+    help: "How long the owner has to cancel, and whether the clock runs in business or calendar days." },
+  { key: "noticeOfCancellation", label: "Notice of Cancellation", authority: "ag", binding: true,
+    help: "Whether a separate cancellation notice must be handed over, in how many copies, and at what type size." },
+  { key: "insuranceRescission", label: "Insurance-restoration cancellation", authority: "doi", binding: true,
+    help: "Several states give a separate right to cancel once the carrier denies the claim. Where one exists it must be in the contract." },
+  { key: "deductibleNotice", label: "Deductible-rebate notice", authority: "doi", binding: true,
+    help: "The statutory notice that the insured is responsible for the deductible and it cannot be waived or absorbed." },
+  { key: "financeCharge", label: "Finance-charge ceiling", authority: "ag", binding: true,
+    help: "The maximum late charge on an unpaid balance. The supplied terms assert 1.5% per month, which exceeds the cap in some states." },
+  { key: "downPayment", label: "Down-payment cap", authority: "ag", binding: true,
+    help: "The most that may be collected before work starts. The supplied terms say half down." },
+  { key: "cancellationFee", label: "Cancellation-fee limit", authority: "ag", binding: true,
+    help: "Whether a liquidated-damages fee on late cancellation is enforceable, and at what ceiling. The supplied terms assert 15% of the insurance proceeds." },
+  { key: "warrantyFloor", label: "Workmanship warranty floor", authority: "ag", binding: true,
+    help: "Any statutory minimum the written warranty has to meet." },
+  { key: "licenceOnContract", label: "Licence number on the contract", authority: "lic", binding: true,
+    help: "Where a licence number must be printed on the agreement, omitting it can void the contract or bar a lien." },
+  { key: "licensing", label: "Licence or registration required", authority: "lic", binding: false,
+    help: "Whether roofing work needs a state licence, a registration, or neither — and who issues it." },
+  { key: "consumerIndemnity", label: "Consumer indemnity permissible", authority: "ag", binding: false,
+    help: "The supplied terms have the homeowner indemnify the company. Several states will not enforce that against a consumer." },
+  { key: "aob", label: "Assignment of benefits", authority: "doi", binding: false,
+    help: "Whether an AOB is permitted, restricted, or prohibited for residential property claims." },
+];
+const LEGAL_FIELD_KEYS = LEGAL_FIELDS.map((f) => f.key);
+const BINDING_LEGAL_FIELDS = LEGAL_FIELDS.filter((f) => f.binding).map((f) => f.key);
+/* The only curated rows. Ohio's are the assertions the app already
+   makes elsewhere, moved here so there is one place to confirm them;
+   Kentucky asserts nothing today and so seeds nothing. Both sit at
+   `derived` until somebody opens the source and initials it. */
+const LEGAL_PACK_SEED = {
+  OH: {
+    choiceOfLaw: { value: "Ohio", note: "The property is in Ohio, so Ohio law governs the agreement.", srcId: "ORC1345" },
+    rescission: { value: "Three (3) business days from the date of the transaction",
+      note: "Ohio's Home Solicitation Sales Act. Confirm the current text and whether this sale is within its scope before relying on it.",
+      srcId: "ORC1345" },
+  },
+};
+/* A pack is never borrowed from another state. `citeFor` learned this
+   lesson first: an unknown topic returns nothing rather than Ohio's
+   answer, and the same rule has to hold for contract law. */
+function legalPackFor(state, overrides = {}) {
+  const st = String(state || "").toUpperCase();
+  const seed = LEGAL_PACK_SEED[st] || {};
+  const conf = (overrides && overrides[st]) || {};
+  const pack = {};
+  LEGAL_FIELDS.forEach((f) => {
+    const auth = LEGAL_AUTHORITIES[f.authority];
+    /* A confirmation from the Coverage screen is the only thing that
+       reaches `verified`, and it carries who and when. */
+    const c = conf[f.key];
+    if (c && c.value) {
+      pack[f.key] = fact(c.value, {
+        note: c.note || "", sourceUrl: c.sourceUrl || auth.url, sourceName: c.sourceName || auth.name,
+        asOf: c.at || null, verifiedBy: c.by || null, confidence: "verified",
+      });
+      return;
+    }
+    const s = seed[f.key];
+    if (s) {
+      const src = s.srcId ? SOURCES[s.srcId] : null;
+      pack[f.key] = fact(s.value, {
+        note: s.note || "", srcId: s.srcId || "",
+        sourceUrl: (src && src.url) || auth.url, sourceName: (src && src.name) || auth.name,
+        confidence: "derived",
+      });
+      return;
+    }
+    pack[f.key] = fact("", {
+      note: st
+        ? `Not established for ${st}. ${auth.name} is the body that settles this — check it and confirm here.`
+        : "Pick the property's state.",
+      sourceUrl: auth.url, sourceName: auth.name, confidence: "unknown",
+    });
+  });
+  return pack;
+}
+/* What is stopping this state's contracts from being signed. Empty
+   means every binding slot resolves to something a human stood behind. */
+function legalPackGaps(state, overrides = {}) {
+  const pack = legalPackFor(state, overrides);
+  return LEGAL_FIELDS.filter((f) => f.binding && !printable(pack[f.key]));
+}
+function legalPackReady(state, overrides = {}) {
+  return !!String(state || "").trim() && legalPackGaps(state, overrides).length === 0;
+}
+
+function regulatorFor(state) {
+  const r = STATE_REGULATORS[state];
+  if (r) {
+    return fact(r.name, {
+      note: r.address, sourceUrl: r.url, sourceName: r.name,
+      asOf: r.asOf, confidence: r.confidence,
+    });
+  }
+  return fact("", {
+    note: state
+      ? `No department of insurance on file for ${state}. Find it in the NAIC directory before sending.`
+      : "Pick a state to address this complaint.",
+    sourceUrl: NAIC_DIRECTORY, sourceName: "NAIC — state insurance departments",
+    confidence: "unknown",
+  });
+}
+
+/* Letter bodies carry {CITE:topic} tokens rather than hardcoded section
+   numbers, the same shape SUPPLEMENT_TEMPLATES already uses. renderLetter
+   resolves them against the job's state through citeFor, and reports what
+   it could not resolve so the copy action can refuse rather than send a
+   letter with a hole in it. */
 const LETTER_TEMPLATES = [
   { id: "lt-supp", title: "Supplement request", when: "The carrier's scope omits code-required or manufacturer-required line items.",
     body: `[Date]
@@ -991,19 +1251,19 @@ const LETTER_TEMPLATES = [
 RE: Claim #[claim] · Insured: [name] · Date of loss: [date]
 Property: [address]
 
-We are the contractor of record on the above claim. Having reviewed the loss summary dated [date], we have identified the following items that were omitted or under-scoped. Each is required by the Residential Code of Ohio, by the manufacturer's published installation instructions, or by the loss settlement terms of the policy.
+We are the contractor of record on the above claim. Having reviewed the loss summary dated [date], we have identified the following items that were omitted or under-scoped. Each is required by {CODE_NAME}, by the manufacturer's published installation instructions, or by the loss settlement terms of the policy.
 
-1. Drip edge, full perimeter — RCO R905.2.8.5. [LF] at [$].
-2. Ice barrier at eaves and valleys — RCO R905.1.2. Ohio sits in IECC Climate Zones 4A and 5A; this applies statewide. [SQ] at [$].
-3. Step flashing, remove and replace — RCO R905.2.8.4. Flashing cannot be reused after tear-off. [LF] at [$].
-4. Kickout flashing — RCO R703.4. [EA] at [$].
-5. Decking replacement where existing sheathing does not provide an adequate base — RCO R908.6. [SF] at [$].
-6. Ventilation brought to the code-required ratio — RCO R806.2. [detail] at [$].
+1. Drip edge, full perimeter — {CITE:dripEdge}. [LF] at [$].
+2. Ice barrier at eaves and valleys — {CITE:iceBarrier}. [SQ] at [$].
+3. Step flashing, remove and replace — {CITE:flashing}. Flashing cannot be reused after tear-off. [LF] at [$].
+4. Kickout flashing — {CITE:kickout}. [EA] at [$].
+5. Decking replacement where existing sheathing does not provide an adequate base — {CITE:decking}. [SF] at [$].
+6. Ventilation brought to the code-required ratio — {CITE:ventilation}. [detail] at [$].
 7. Permit and inspection fee. [$].
 8. Disposal. [$].
 9. Overhead and profit, where the loss requires coordination of multiple trades.
 
-Please update the loss summary to reflect these items and reissue payment within the timeframe set by OAC 3901-1-54. Supporting photographs and measurements are attached.
+Please update the loss summary to reflect these items and reissue payment within the timeframe your state's claim-handling rules allow. Supporting photographs and measurements are attached.
 
 [Rep name] — [Company] — [Phone]` },
 
@@ -1020,7 +1280,7 @@ The current authorization covers [x] slope(s). We respectfully request authoriza
 
 3. Partial replacement does not meet the policy's settlement standard. The policy provides for replacement with like kind and quality. A visible line between new and existing slopes does not satisfy that standard.
 
-4. OAC 3901-1-54(I)(1)(b) requires that replacement items be of like kind and quality with reasonably comparable appearance. If the carrier intends to maintain the partial position, OAC 3901-1-54(I)(2) requires a written explanation of the provision relied upon. We request that explanation in writing.
+4. {MATCHING_RULE} If the carrier intends to maintain the partial position, we request a written explanation of the policy provision relied upon.
 
 We request re-inspection within fourteen days. If the partial position is maintained, we will advise the insured of their right to invoke the policy's appraisal clause.
 
@@ -1052,22 +1312,20 @@ Pursuant to the appraisal provision of the policy, the insured demands appraisal
 
 The insured names [appraiser name, address] as their competent and disinterested appraiser.
 
-Please name the carrier's appraiser within the period required by the policy. The two appraisers will then select an umpire. An award agreed by any two of the three will be binding as to the amount of loss, consistent with Schwartz v. Standard Fire Insurance Co. (Ohio 2008).
+Please name the carrier's appraiser within the period required by the policy. The two appraisers will then select an umpire. An award agreed by any two of the three will be binding as to the amount of loss, as provided by the policy's appraisal clause.{APPRAISAL_AUTHORITY}
 
 [Insured name / Rep name] — [Company] — [Phone]` },
 
   { id: "lt-odi", title: "Department of Insurance complaint",
     when: "The carrier has missed handling deadlines or refused a written explanation. Escalates the file and creates a regulatory record.",
     body: `[Date]
-Ohio Department of Insurance — Consumer Services Division
-50 W. Town Street, Third Floor, Suite 300
-Columbus, OH 43215
+{REGULATOR_BLOCK}
 
 RE: Claim complaint · Insured: [name] · Carrier: [carrier] · Claim #[claim] · Date of loss: [date]
 
 The insured submits this complaint regarding the handling of the above claim.
 
-1. [Select: failure to acknowledge within 15 days per OAC 3901-1-54 / failure to complete investigation within 21 days / refusal to provide the written matching explanation required by OAC 3901-1-54(I)(2) / scope omitting code-required items / other].
+1. [Select: failure to acknowledge the claim within the period your state's claim-handling rules require / failure to complete the investigation within that period / refusal to provide a written explanation of the provision relied upon / scope omitting code-required items / other].
 
 2. The carrier has been given written notice regarding [drip edge / ice barrier / step flashing / kickout / decking / ventilation / matching] and has not updated the scope.
 
@@ -1447,6 +1705,11 @@ const DEFAULT_PORTAL_SETTINGS = {
      that does not want a tracker or a messaging thread in front of its
      customers can turn them off. */
   tracker: true, updates: true, messages: true, yourinfo: true, contact: true, requests: true, sign: true, review: true,
+  /* The certificate of completion is the homeowner's document as much as
+     the carrier's — they need it to chase their own depreciation cheque.
+     On by default, and independent of `documents`, which governs files
+     the office chose to upload. */
+  certificate: true,
 };
 /* Section id -> settings key. Most match by name; the ones that predate
    the registry keep their original keys so saved jobs are unaffected. */
@@ -1760,6 +2023,14 @@ const seedJobs = [
     },
     portal: { estimate: true, contract: true, photos: true, invoice: true }, crewId: "c1", messages: [], workOrder: { number: "WO-014", sentAt: "Jul 17, 8:02 AM", status: "Sent", notes: "Dumpster on the north side of the drive. Dog in the back yard — keep the gate shut." },
     review: { sent: true, clicked: true, posted: true },
+    /* A finished job that still owes something — the case the punch list
+       exists for, and the one that puts a red row on the home screen. */
+    punch: [{
+      id: "pn1", label: "Gutter apron short at the NE corner",
+      note: "Roughly 6 ft. Material is on the truck.", done: false,
+      at: "Jul 21, 4:15 PM", by: "Stephen Klein", doneAt: null, doneBy: null,
+      due: null, photo: null,
+    }],
   },
 ];
 
@@ -1780,7 +2051,12 @@ const ZIP_PREFIX_STATE = [
   { lo: 10, hi: 27, state: "MA" }, { lo: 28, hi: 29, state: "RI" }, { lo: 30, hi: 38, state: "NH" },
   { lo: 39, hi: 49, state: "ME" }, { lo: 50, hi: 59, state: "VT" }, { lo: 60, hi: 69, state: "CT" },
   { lo: 70, hi: 89, state: "NJ" }, { lo: 100, hi: 149, state: "NY" }, { lo: 150, hi: 196, state: "PA" },
-  { lo: 197, hi: 199, state: "DE" }, { lo: 200, hi: 205, state: "DC" }, { lo: 206, hi: 219, state: "MD" },
+  { lo: 197, hi: 199, state: "DE" },
+  /* 201 is Virginia (Loudoun County — Ashburn, Sterling, Herndon, Leesburg),
+     not DC. It sat inside the 200-205 DC block and silently resolved several
+     hundred thousand homes to the DC construction codes. */
+  { lo: 200, hi: 200, state: "DC" }, { lo: 201, hi: 201, state: "VA" }, { lo: 202, hi: 205, state: "DC" },
+  { lo: 206, hi: 219, state: "MD" },
   { lo: 220, hi: 246, state: "VA" }, { lo: 247, hi: 268, state: "WV" }, { lo: 270, hi: 289, state: "NC" },
   { lo: 290, hi: 299, state: "SC" }, { lo: 300, hi: 319, state: "GA" }, { lo: 320, hi: 349, state: "FL" },
   { lo: 350, hi: 369, state: "AL" }, { lo: 370, hi: 385, state: "TN" }, { lo: 386, hi: 397, state: "MS" },
@@ -1808,6 +2084,13 @@ const US_STATES = [
   ["RI", "Rhode Island"], ["SC", "South Carolina"], ["SD", "South Dakota"], ["TN", "Tennessee"], ["TX", "Texas"],
   ["UT", "Utah"], ["VT", "Vermont"], ["VA", "Virginia"], ["WA", "Washington"], ["WV", "West Virginia"], ["WI", "Wisconsin"], ["WY", "Wyoming"],
 ];
+/* "OH" reads as jargon in a sentence a rep is meant to act on. Returns
+   "" for an unknown or empty code so the caller can say something
+   sensible rather than printing "undefined". */
+function stateName(ab) {
+  const hit = US_STATES.find(([a]) => a === String(ab || "").toUpperCase());
+  return hit ? hit[1] : "";
+}
 /* Adopted residential code family per state. Statewide IRC adoptions are the
    norm; the notable exceptions (state-specific codes, home-rule/local
    adoption) are called out. Editions and local amendments always need local
@@ -1850,6 +2133,8 @@ const IRC_BASE = {
   ventilation: { cite: "IRC R806.2", note: "Default 1/150 net free ventilating area; the 1/300 exception applies only with a balanced system." },
   fastening: { cite: "IRC R905.2.5", note: "4 nails per shingle minimum; 6-nail where the manufacturer or wind zone requires." },
   decking: { cite: "IRC R803 / R908.3", note: "Sheathing must be structurally sound; recover over unsound decking prohibited." },
+  flashing: { cite: "IRC R905.2.8.4", note: "Base and step flashing at walls and roof-to-wall intersections." },
+  kickout: { cite: "IRC R703.4", note: "Kickout / diverter flashing where a roof edge terminates against a wall." },
 };
 const STATE_DEFAULTS = {
   OH: {
@@ -2008,8 +2293,11 @@ const KY_COUNTY_ZIPS = {
    County KY has no residential building inspector at all. Getting
    this wrong sends a rep to the wrong counter.
 ------------------------------------------------------------------- */
+/* Keyed "STATE:County". County names repeat across states — Warren exists
+   in fourteen of them — so a bare-name key returned an Ohio department for a
+   New Jersey zip, complete with an Ohio address and a tap-to-call button. */
 const COUNTY_DEPARTMENTS = {
-  "Montgomery County": {
+  "OH:Montgomery County": {
     office: "Montgomery County Building Regulations",
     phone: "9372254622", address: "371 W Second St, Dayton, OH 45402",
     web: "https://www.selectmcohio.com/building",
@@ -2017,7 +2305,7 @@ const COUNTY_DEPARTMENTS = {
     except: "Some cities run their own building or zoning office. Confirm the address is county-served before applying.",
     checked: "Jul 2026",
   },
-  "Greene County": {
+  "OH:Greene County": {
     office: "Greene County Department of Building Regulation",
     phone: "9375627420", address: "667 Dayton-Xenia Rd, Xenia, OH 45385",
     web: "https://www.greenecountyohio.gov/139/Building-Regulation",
@@ -2025,7 +2313,7 @@ const COUNTY_DEPARTMENTS = {
     except: "Does NOT cover Fairborn, Xenia, Bowersville, Clifton, Cedarville or Yellow Springs — each runs its own. Xenia Building Division: 1(937)372-6389.",
     checked: "Jul 2026",
   },
-  "Warren County": {
+  "OH:Warren County": {
     office: "Warren County Building & Zoning",
     phone: "5136951290", address: "406 Justice Drive, Room 167, Lebanon, OH 45036",
     web: "https://www.warrencountyohio.gov",
@@ -2033,7 +2321,7 @@ const COUNTY_DEPARTMENTS = {
     except: "Springboro and some villages run their own building or zoning office. Confirm jurisdiction first.",
     checked: "Jul 2026",
   },
-  "Butler County": {
+  "OH:Butler County": {
     office: "Butler County Building & Zoning (Dept. of Development)",
     phone: "5138873205", address: "130 High Street, Hamilton, OH 45011",
     web: "https://www.bcohio.gov",
@@ -2041,7 +2329,7 @@ const COUNTY_DEPARTMENTS = {
     except: "Cities run their own. City of Hamilton building department: 1(513)785-7360, building@hamilton-oh.gov. Fairfield and Oxford also separate.",
     checked: "Jul 2026",
   },
-  "Hamilton County": {
+  "OH:Hamilton County": {
     office: "Hamilton County Planning + Development, Buildings + Inspections",
     phone: "5139464550", address: "138 East Court Street, Room 801, Cincinnati, OH 45202",
     web: "https://www.hamiltoncountyohio.gov/government/departments/planning_and_development/buildings_and_inspections/index.php",
@@ -2049,7 +2337,7 @@ const COUNTY_DEPARTMENTS = {
     except: "The City of Cincinnati runs its own Permit Center and is NOT county-served. Electrical permits and inspections go through Inspection Bureau Inc, not the county.",
     checked: "Jul 2026",
   },
-  "Clermont County": {
+  "OH:Clermont County": {
     office: "Clermont County Permit Central / Building Inspection",
     phone: "5137327213", address: "2275 Bauer Road, Batavia, OH 45103",
     web: "http://building.clermontcountyohio.gov",
@@ -2057,7 +2345,7 @@ const COUNTY_DEPARTMENTS = {
     except: "Also handles COMMERCIAL work in Brown County — but not residential there, and not Russellville or Hamersville.",
     checked: "Jul 2026",
   },
-  "Brown County": {
+  "OH:Brown County": {
     office: "Brown County — confirm the issuing authority for the address",
     phone: "", address: "",
     web: "http://building.clermontcountyohio.gov",
@@ -2066,7 +2354,7 @@ const COUNTY_DEPARTMENTS = {
     checked: "Jul 2026",
   },
   /* ---------- Kentucky ---------- */
-  "Mason County": {
+  "KY:Mason County": {
     office: "City of Maysville / Mason County Codes Department",
     phone: "6065642525", address: "216 Bridge Street, Maysville, KY 41056",
     web: "https://www.cityofmaysvilleky.gov/departments/codes_department/index.php",
@@ -2074,7 +2362,7 @@ const COUNTY_DEPARTMENTS = {
     except: "The Mason County Fiscal Court adopted the building code in 2006 and the same office serves both city and county. Ask whether the address is inside Maysville city limits — the permit form asks.",
     checked: "Jul 2026",
   },
-  "Lewis County": {
+  "KY:Lewis County": {
     office: "No local building inspector",
     phone: "", address: "",
     web: "https://dhbc.ky.gov",
@@ -2082,7 +2370,7 @@ const COUNTY_DEPARTMENTS = {
     except: "Do not assume no inspector means no requirements — the KRC still applies, and the county clerk (1(606)796-3062, 112 2nd Street, Vanceburg) can point you at whoever handles zoning.",
     checked: "Jul 2026",
   },
-  "Kenton County": {
+  "KY:Kenton County": {
     office: "Planning and Development Services of Kenton County (PDS)",
     phone: "8599572408", address: "1840 Simon Kenton Way, Suite 3400, Covington, KY 41011",
     web: "https://www.pdskc.org/services/one-stop-shop/building-permits/",
@@ -2090,7 +2378,7 @@ const COUNTY_DEPARTMENTS = {
     except: "Some cities keep their own local building inspector — Erlanger, for example. PDS can tell you which applies.",
     checked: "Jul 2026",
   },
-  "Campbell County": {
+  "KY:Campbell County": {
     office: "Campbell County Planning, Zoning & Building Inspections",
     phone: "8592923880", address: "Campbell County, KY",
     web: "https://campbellcountyky.gov",
@@ -2106,14 +2394,23 @@ const COUNTY_DEPARTMENTS = {
    in the same state. */
 function buildMarketJurisdictions() {
   const out = {};
-  const add = (zip, city, county, state) => {
-    const dept = COUNTY_DEPARTMENTS[county] || null;
+  const add = (zip, city, county, state, suffixed) => {
+    /* County names repeat across states — there are Warren, Montgomery,
+       Hamilton and Greene counties in a dozen states each — so the
+       department table is keyed by state and county together. Keying on
+       the bare name returned an Ohio department for a New Jersey zip. */
+    const dept = COUNTY_DEPARTMENTS[`${state}:${county}`] || null;
     /* Keys ending in a letter are disambiguators for towns sharing a
        ZIP with another entry; strip them for the real key. */
     const z = zip.replace(/[a-z]$/, "");
-    if (out[z]) return;
+    /* A suffixed key must never displace a real one. "41042b" (Taylor Mill)
+       was inserted before Boone County's real "41042" (Florence) and the
+       first-wins guard then discarded Florence — sending that rep to the
+       wrong county's building department. Real keys always win. */
+    if (out[z] && !(out[z].suffixed && !suffixed)) return;
     const d = STATE_DEFAULTS[state];
     out[z] = {
+      suffixed: !!suffixed,
       zip: z, city, county, state,
       codeName: d.codeName, codeEdition: d.codeEdition,
       adoption: d.adoption, permit: d.permit,
@@ -2126,9 +2423,9 @@ function buildMarketJurisdictions() {
     };
   };
   Object.entries(OH_COUNTY_ZIPS).forEach(([county, zips]) =>
-    Object.entries(zips).forEach(([z, city]) => add(z, city, county, "OH")));
+    Object.entries(zips).forEach(([z, city]) => add(z, city, county, "OH", /[a-z]$/.test(z))));
   Object.entries(KY_COUNTY_ZIPS).forEach(([county, zips]) =>
-    Object.entries(zips).forEach(([z, city]) => add(z, city, county, "KY")));
+    Object.entries(zips).forEach(([z, city]) => add(z, city, county, "KY", /[a-z]$/.test(z))));
   return out;
 }
 const MARKET_JURISDICTIONS = buildMarketJurisdictions();
@@ -2146,6 +2443,18 @@ function stateForZip(zip) {
    from company settings on load. */
 let JURIS_OVERRIDES = {};
 function setJurisOverrides(map) { JURIS_OVERRIDES = map || {}; }
+
+/* Confirmed per-state contract law, saved from the Coverage screen.
+   Module scope for the same reason as JURIS_OVERRIDES: the document
+   builders are plain functions called from a dozen places and cannot
+   be handed React state, and a contract that silently rendered the
+   unconfirmed pack because the state did not reach it would defeat
+   the entire gate. */
+let LEGAL_OVERRIDES = {};
+function setLegalOverrides(map) { LEGAL_OVERRIDES = map || {}; }
+function legalPack(state) { return legalPackFor(state, LEGAL_OVERRIDES); }
+function legalGaps(state) { return legalPackGaps(state, LEGAL_OVERRIDES); }
+function legalReady(state) { return legalPackReady(state, LEGAL_OVERRIDES); }
 
 /* ZIPs looked up on demand and saved, so the database grows with use
    rather than needing every ZIP in the country shipped up front. */
@@ -2198,6 +2507,10 @@ function resolveJurisdiction(zip) {
     zip: z, city: "", county: "", state: st,
     codeName: d.codeName, codeEdition: d.codeEdition, adoption: d.adoption, permit: d.permit,
     inspector: { office: "Local building department — not yet on file", phone: "", address: "" },
+    /* Without this the card rendered as a populated record with a blank
+       phone and hid the "find the building department" links — from the
+       one group of users who have no other way to get them. */
+    needsContact: true,
     verified: false, sources: d.sources, verifiedDetail: { date: null, by: null },
     precision: "state",
   };
@@ -2325,7 +2638,7 @@ async function geoLookupZip(zip) {
     const county = rawCounty && !/county$/i.test(rawCounty) ? `${rawCounty} County` : rawCounty;
     return {
       zip: z, city: r.city || r.town || r.village || "", county, state,
-      dept: COUNTY_DEPARTMENTS[county] || null,
+      dept: COUNTY_DEPARTMENTS[`${state}:${county}`] || null,
       /* Ohio/Kentucky/Illinois have a validated code library; everywhere else
          we still resolve the state's adopted code, just flagged to verify. */
       curated: !!STATE_DEFAULTS[state],
@@ -2417,6 +2730,100 @@ const money = (n) =>
 const money0 = (n) =>
   (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
 const pct1 = (n) => `${n.toFixed(2)}%`;
+
+/* ==================================================================
+   THE VERIFICATION LADDER
+
+   Two bugs shipped from the same root cause: placeholder phone numbers
+   under a green "Verified" chip, and Ohio code sections marked verified
+   on an out-of-state supplement. Both were somebody setting
+   `verified: true` on data that was not. Convention did not hold, so
+   confidence becomes a value the render path reads rather than a flag
+   the author sets.
+
+   The tiers deliberately mirror resolveJurisdiction's existing
+   precision ladder ("verified" | "learned" | "market" | "state") so the
+   app carries one idea of confidence and not two:
+
+     verified — a person opened the source, on a date, and initialled
+                it. The only tier that may leave the building.
+     derived  — computed from a curated record (e.g. the IRC section for
+                a state's adopted code). True as far as it goes; shows
+                its derivation and asks to be checked.
+     seeded   — present but unconfirmed. On screen only.
+     unknown  — no value. Renders as a pointer to who would know, never
+                as a guess.
+
+   printable() is the whole point: anything below `verified` must not
+   reach a carrier, an adjuster or a homeowner. Callers omit the cite
+   entirely rather than printing it with a caveat, because a caveat in
+   a letter to an adjuster is still a citation in a letter to an
+   adjuster.
+================================================================== */
+const FACT_TIERS = ["unknown", "seeded", "derived", "verified"];
+function fact(value, opts = {}) {
+  return {
+    value: value == null ? "" : value,
+    note: opts.note || "",
+    sourceUrl: opts.sourceUrl || "",
+    sourceName: opts.sourceName || "",
+    srcId: opts.srcId || "",
+    asOf: opts.asOf || null,
+    verifiedBy: opts.verifiedBy || null,
+    confidence: FACT_TIERS.includes(opts.confidence) ? opts.confidence
+      : (value ? "seeded" : "unknown"),
+  };
+}
+/* Accepts a Fact or any of the older shapes still in the file
+   ({ cite, verified, missing }) so the two can coexist while the call
+   sites are converted. */
+function asFact(x) {
+  if (!x) return fact("");
+  /* A shape that already states its confidence may still be carrying the
+     value under the older `cite` key — citeFor's curated branch does. If
+     that is not normalised here, `value` is undefined, the letter renders
+     its placeholder text, and printable() returns true anyway because the
+     confidence says "verified". A confident fact with nothing in it is the
+     same false green this whole mechanism exists to prevent. */
+  if (x.confidence) return x.value != null ? x : { ...x, value: x.cite != null ? x.cite : "" };
+  if (x.missing) return fact("", { note: x.note, confidence: "unknown" });
+  return fact(x.cite != null ? x.cite : x.value, {
+    note: x.note, srcId: x.srcId || x.src, sourceUrl: x.sourceUrl || x.source,
+    asOf: x.asOf || (x.verifiedDetail && x.verifiedDetail.date) || x.checked || null,
+    verifiedBy: x.verifiedBy || (x.verifiedDetail && x.verifiedDetail.by) || null,
+    confidence: x.verified ? "verified" : (x.cite || x.value ? "derived" : "unknown"),
+  });
+}
+function printable(x) {
+  const f = asFact(x);
+  /* Both halves matter: a verified tier with an empty value is not
+     something to print, it is a bug upstream. */
+  return f.confidence === "verified" && !!String(f.value || "").trim();
+}
+function factTone(x) {
+  const c = asFact(x).confidence;
+  return c === "verified" ? "green" : c === "derived" ? "blue" : c === "seeded" ? "amber" : "gray";
+}
+const FACT_LABEL = {
+  verified: "Verified", derived: "Verify locally", seeded: "Unconfirmed", unknown: "Not on file",
+};
+/* Message delivery status. A send that hard-failed stores its reason in
+   the status string ("Failed — Gmail rejected the message: …"); showing
+   that as an amber "Queued" chip told the user it was still on its way
+   when nothing was ever going to retry it. */
+function msgFailed(status) { return /^failed/i.test(String(status || "")); }
+function msgTone(status, sentTone = "green") {
+  if (status === "Sent") return sentTone;
+  return msgFailed(status) ? "red" : "amber";
+}
+function msgLabel(status) {
+  if (status === "Sent") return "Sent";
+  return msgFailed(status) ? "Failed" : "Queued";
+}
+/* Read a number back out of anything money() (or a person) might have
+   written: "$24,850.00", "24850", "1,500". parseFloat stops at the "$",
+   so num() alone turns a formatted figure into a silent zero. */
+const moneyNum = (v) => num(String(v == null ? "" : v).replace(/[^0-9.-]/g, ""));
 
 /* Phone display, in the house format: 1(555)555-5555.
    Anything that is not ten or eleven digits is left exactly as typed —
@@ -2639,17 +3046,32 @@ function codeNameForState(st) {
     || "Adopted IRC — verify locally";
 }
 function citeFor(state, topic) {
-  if (CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic]) return CODE_PROVISIONS[state][topic];
-  /* Any state without a curated set gets the IRC base cite, labeled with the
-     state's adopted code so the rep knows where to verify the exact number. */
-  const base = IRC_BASE[topic] || CODE_PROVISIONS.OH[topic];
+  const curated = CODE_PROVISIONS[state] && CODE_PROVISIONS[state][topic];
+  if (curated) {
+    return { ...curated, state, confidence: curated.verified ? "verified" : "derived" };
+  }
+  /* No IRC base cite for this topic means we genuinely do not know it. The
+     old code reached into CODE_PROVISIONS.OH here and then labelled the
+     result with the local adopted code — an Ohio section number dressed up
+     as a Texas one. Say nothing instead. */
+  const base = IRC_BASE[topic];
+  if (!base) {
+    return { cite: "", value: "", state,
+      note: "No code citation on file for this item — verify locally before citing it.",
+      verified: false, missing: true, confidence: "unknown" };
+  }
   const adopt = STATE_CODE_ADOPTION[state];
   const label = adopt ? adopt.code : "the locally adopted IRC";
   /* Keep `cite` to the short IRC section so it fits the badge; the
      adopted-code context and the verify reminder ride on `note` (the card
      already shows a "verify locally" banner and the adopted code name). */
   const verifyLine = `Per ${label}; verify edition${adopt && adopt.local ? " & local adoption" : ""}.`;
-  return { cite: base.cite, note: base.note ? `${base.note} ${verifyLine}` : verifyLine, verified: false };
+  /* The IRC section is real; whether this state adopted that edition is
+     what has not been checked. That is "derived", not "verified" — it may
+     be shown, and it may not be sent to a carrier. */
+  return { cite: base.cite, value: base.cite, state,
+    note: base.note ? `${base.note} ${verifyLine}` : verifyLine,
+    verified: false, confidence: "derived" };
 }
 
 /* Material list generator — quantities from measurements + waste. */
@@ -2733,24 +3155,6 @@ function subRate(crew, code) {
 /* Figure a subcontractor's pay for a job from their uploaded rate card and
    the job's installed squares + conditions. Returns a transparent line
    breakdown so the office can see exactly how the number was built. */
-function computeSubPay(job, crew) {
-  if (!crew || !((crew.rateCard || []).length)) return null;
-  const cov = installedSquares(generateRoofingMaterials(job.measurements));
-  const sq = cov ? cov.total : 0;
-  const wo = job.workOrder || {};
-  const lines = [];
-  const per = subRate(crew, "per_square");
-  if (per && sq) lines.push({ label: `Install ${sq} sq @ ${money(per)}/sq`, amt: per * sq });
-  if (wo.steep) { const s = subRate(crew, "steep_per_square"); if (s && sq) lines.push({ label: `Steep ${sq} sq @ ${money(s)}/sq`, amt: s * sq }); }
-  const layers = parseInt(wo.layers || (job.checklist || {}).layers, 10) || 1;
-  if (layers > 1) { const t = subRate(crew, "tearoff_per_square"); if (t && sq) lines.push({ label: `Tear-off ${layers} layers, ${sq} sq @ ${money(t)}/sq`, amt: t * sq * (layers - 1) }); }
-  if (wo.stories === "2") { const a = subRate(crew, "story_2"); if (a) lines.push({ label: "2-story adder", amt: a }); }
-  if (wo.stories === "3+") { const a = subRate(crew, "story_3"); if (a) lines.push({ label: "3+ story adder", amt: a }); }
-  const chim = (wo.chimney || {}).size;
-  if (chim && chim !== "none") { const a = subRate(crew, `chimney_${chim}`); if (a) lines.push({ label: `Chimney flashing (${chim})`, amt: a }); }
-  const total = lines.reduce((a, l) => a + l.amt, 0);
-  return { lines, total: Math.round(total * 100) / 100, squares: sq };
-}
 /* Compliance docs (W-9, COI, license) that are expired or expiring within 30
    days, so a sub with lapsed paperwork gets flagged before they're paid. */
 function crewDocAlerts(crew, today) {
@@ -2795,6 +3199,12 @@ function buildSubInvoiceDraft(job, crew) {
   if (wo.steep) add("Shingle Installation", "Steep charge", sq, "SQ", subRate(crew, "steep_per_square"));
   const layers = parseInt(wo.layers || (job.checklist || {}).layers, 10) || 1;
   if (layers > 1) add("Shingle Installation", `Additional layer removal (${layers - 1})`, sq * (layers - 1), "SQ", subRate(crew, "tearoff_per_square"));
+  /* The story adders. subCodeFor parses story_2 / story_3 out of the crew's
+     uploaded rate card, but the draft builder never read wo.stories — so
+     every multi-story sub invoice went out short by the adder. The rate was
+     captured and then ignored. */
+  if (wo.stories === "2") add("Access", "2-story adder", 1, "job", subRate(crew, "story_2"));
+  if (wo.stories === "3+") add("Access", "3+ story adder", 1, "job", subRate(crew, "story_3"));
   const chim = (wo.chimney || {}).size;
   if (chim && chim !== "none") add("Chimney Flashing", `Chimney flashing (${chim})`, 1, "job", subRate(crew, `chimney_${chim}`));
   inv.lines = lines;
@@ -2951,6 +3361,60 @@ const inputStyle = {
   fontFamily: "inherit",
 };
 const selStyle = { ...inputStyle, appearance: "auto" };
+
+/* ==================================================================
+   MONEY INPUT
+
+   Every field that holds dollars shows them the way an accountant
+   writes them: a leading $, thousands separators, and two decimals,
+   right-aligned on tabular figures so columns line up.
+
+   Formatting happens on blur, never on keystroke. A field that
+   reformats as you type is unusable — "1" becomes "$1.00" and there
+   is no way to reach "12". So while the field has focus it shows the
+   plain number and behaves like an ordinary input; the moment you
+   leave, it settles into accounting format.
+
+   Negative values render "-$500.00" rather than the accounting
+   parenthesis, to match money() everywhere else in the app. A number
+   that reads one way in an input and another way in the total below
+   it is worse than either convention.
+
+   onChange receives the raw string, exactly as the plain inputs it
+   replaces did, so call sites keep their own num() conversion.
+================================================================== */
+function MoneyInput({ value, onChange, disabled, style, placeholder = "$0.00", ...rest }) {
+  const [editing, setEditing] = useState(false);
+  const [raw, setRaw] = useState("");
+  const blank = value === "" || value === null || value === undefined;
+  const shown = editing ? raw : (blank ? "" : money(moneyNum(value)));
+  return (
+    <input
+      {...rest}
+      style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", ...style }}
+      inputMode="decimal"
+      disabled={disabled}
+      placeholder={placeholder}
+      value={shown}
+      onFocus={(e) => {
+        setRaw(blank ? "" : String(moneyNum(value)));
+        setEditing(true);
+        /* Select on entry so tapping a filled field and typing replaces
+           it, rather than appending to "1,234.56". */
+        const el = e.target;
+        setTimeout(() => { try { el.select(); } catch (err) { /* not selectable */ } }, 0);
+      }}
+      onChange={(e) => { setRaw(e.target.value); onChange(e.target.value); }}
+      onBlur={() => {
+        setEditing(false);
+        /* Normalise what's stored: "1,234.56" and "$1,234.56" both
+           settle to 1234.56, and a field cleared to nothing stays
+           empty rather than becoming a hard zero. */
+        onChange(String(raw).trim() === "" ? "" : String(moneyNum(raw)));
+      }}
+    />
+  );
+}
 /* iOS renders type=date taller than a text input and ignores a fixed
    height, which overlapped the neighbouring field. Neutralising the
    native appearance and using minHeight keeps it in its column. */
@@ -3018,6 +3482,42 @@ function SourceLink({ srcId }) {
     }}>
       <ExternalLink size={13} /> {s.name}
     </a>
+  );
+}
+
+/* The one way a citation renders. The tone is computed from the fact's
+   own confidence rather than passed in, so a caller cannot paint an
+   unconfirmed value in the verified style — which is exactly how a
+   placeholder phone number ended up under a green "Verified" chip.
+
+   An `unknown` fact renders the pointer instead of the value: who would
+   know, and a link to them. Silence with a next step beats a guess. */
+function Cited({ fact: f, compact = false, style }) {
+  const x = asFact(f);
+  const tone = factTone(x);
+  if (!x.value) {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", ...style }}>
+        <Chip tone="gray">{FACT_LABEL.unknown}</Chip>
+        {x.note && <span style={{ fontSize: 11.5, color: S.sub }}>{x.note}</span>}
+        {x.srcId ? <SourceLink srcId={x.srcId} /> : null}
+        {!x.srcId && x.sourceUrl ? <AssistLink href={x.sourceUrl}>{x.sourceName || "Where to check"}</AssistLink> : null}
+      </span>
+    );
+  }
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap", ...style }}>
+      <Chip tone={tone}>{x.value}</Chip>
+      {!compact && x.confidence !== "verified" && (
+        <span style={{ fontSize: 11, fontWeight: 700, color: tone === "blue" ? T.accent : "#92600A" }}>
+          {FACT_LABEL[x.confidence]}
+        </span>
+      )}
+      {!compact && x.confidence === "verified" && x.asOf && (
+        <span style={{ fontSize: 11, color: S.sub }}>Verified {x.asOf}{x.verifiedBy ? ` · ${x.verifiedBy}` : ""}</span>
+      )}
+      {!compact && x.srcId ? <SourceLink srcId={x.srcId} /> : null}
+    </span>
   );
 }
 
@@ -4277,6 +4777,21 @@ function jobExceptions(job, ctx) {
     if (late.length) add("tasks", "red", `${late.length} overdue ${late.length === 1 ? "task" : "tasks"} — oldest: ${late[0].label}`, "tasks");
     if (job.soldRequestedAt && !job.jobFolder) add("approval", "amber", `Waiting on the office to approve the sold job`, "handoff");
     if (job.schedDate && job.schedDate >= today && !job.crewId) add("crew", "red", `Scheduled ${job.schedDate} with no crew assigned`, "workorder");
+  }
+  /* Outside the `!done` block on purpose. A completed job with work
+     still outstanding is the whole reason the punch list exists — put
+     this inside the block above and it goes quiet at exactly the moment
+     it matters, because `done` covers s10. */
+  const punch = openPunch(job);
+  if (punch.length) {
+    const late = punch.filter((p) => p.due && p.due < today);
+    add("punch", punchTone(job),
+      done
+        ? `${punch.length} punch ${punch.length === 1 ? "item" : "items"} still open — job marked ${(c.stages || []).find((s) => s.id === job.stageId) ? ((c.stages || []).find((s) => s.id === job.stageId).name.toLowerCase()) : "closed"}`
+        : late.length
+          ? `${late.length} punch ${late.length === 1 ? "item" : "items"} past due — oldest: ${late[0].label}`
+          : `${punch.length} punch ${punch.length === 1 ? "item" : "items"} open — ${punch[0].label}`,
+      "punchlist");
   }
   if (job.subInvoice && job.subInvoice.status === "needs_review") {
     add("sub", "amber", "Subcontractor invoice needs review before it can be paid", "financials");
@@ -5662,15 +6177,17 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       setAppointments([...appointments, { ...payload, id: uid("ap") }]);
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `scheduled ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
       toast(notified
-        ? `Appointment added — ${notified === "sms" ? "text" : "email"} queued for the customer`
+        ? `Appointment added — ${notified === "sms" ? "text" : "email"} ready to send from the Inbox`
         : "Appointment added");
     }
     setAdding(false); setEditingId(null);
     setF({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "", assignedTo: "", durationMin: 60, status: "Scheduled" });
   };
-  /* Queue a reminder on the customer's job thread. It sends for real once
-     Gmail/SMS integrations are live; until then it sits in the thread as
-     queued, visible in the Inbox. */
+  /* Draft a message on the customer's job thread. Nothing here delivers it —
+     this used to say it would "send for real once integrations are live",
+     which was never true: no code path ever drained the queue on any
+     configuration. Delivery happens when someone presses Send now in the
+     Inbox. */
   /* Which channel a customer has actually agreed to. Consent is not a
      formality — texting without it is a TCPA problem, so an appointment
      is never allowed to notify around a missing flag. */
@@ -5707,7 +6224,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   const queueReminder = () => {
     const j = jobs.find((x) => x.id === f.jobId);
     const ch = queueFor(j, f, "reminder");
-    if (ch) toast(`${ch === "sms" ? "Text" : "Email"} reminder queued — see it in the Inbox`);
+    if (ch) toast(`${ch === "sms" ? "Text" : "Email"} reminder drafted — send it from the Inbox`);
   };
   const addType = () => {
     const v = newType.trim();
@@ -6381,11 +6898,18 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject, currentUser, onDelete
    ================================================================ */
 function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURCES, users = [], jobs = [], seed = null }) {
   const contacts = useMemo(() => buildContactDirectory(jobs), [jobs]);
+  /* The real seat list, which this sheet has always been passed and never
+     read. TEAM is four demo names; falling back to it only matters before
+     any seats exist. */
+  const roster = useMemo(() => {
+    const names = (users || []).filter((u) => u.active !== false).map((u) => u.name).filter(Boolean);
+    return names.length ? names : TEAM;
+  }, [users]);
   const blank = {
     contactMode: "new", existingContactId: "", existingPropertyId: "",
-    first: "", last: "", phone: "", email: "", street: "", city: "", stateSel: "OH", zip: "",
+    first: "", last: "", phone: "", email: "", street: "", city: "", stateSel: "", zip: "",
     lat: null, lng: null,
-    leadSource: "", assignee: TEAM[0], claimType: "Insurance",
+    leadSource: "", assignee: "", claimType: "Insurance",
     roofTypes: [], roofAge: "", layers: "", workRequested: [], reasonForCalling: "",
     propertyUse: "Primary residence", decisionTimeline: "",
     carrier: "", policy: "", claim: "", adjusterName: "", adjusterPhone: "", deductible: "", coverage: "", oLaw: false,
@@ -6393,6 +6917,11 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
     smsConsent: false, emailConsent: false, notes: "",
   };
   const [f, setF] = useState(blank);
+  /* Default to the first real seat once the roster is known, rather than to
+     a demo name baked into the source. */
+  useEffect(() => {
+    if (open && !f.assignee && roster.length) setF((prev) => ({ ...prev, assignee: roster[0] }));
+  }, [open, roster, f.assignee]);
   useEffect(() => {
     if (!open) return;
     const selected = seed?.contactId ? contacts.find((c) => c.id === seed.contactId) : null;
@@ -6432,7 +6961,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
       ...f,
       contactMode: "existing", existingContactId: contact.id, existingPropertyId: "",
       first: contact.first, last: contact.last, phone: contact.phone || "", email: contact.email || "",
-      street: "", city: "", stateSel: "OH", zip: "", lat: null, lng: null,
+      street: "", city: "", stateSel: "", zip: "", lat: null, lng: null,
       smsConsent: contact.jobs.some((j) => j.consent?.sms?.granted),
       emailConsent: contact.jobs.some((j) => j.consent?.email?.granted),
     });
@@ -6440,18 +6969,30 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
   const selectProperty = (id) => {
     const property = existingContact?.properties.find((p) => p.id === id);
     if (!property) {
-      setF({ ...f, existingPropertyId: "", street: "", city: "", stateSel: "OH", zip: "", lat: null, lng: null });
+      setF({ ...f, existingPropertyId: "", street: "", city: "", stateSel: "", zip: "", lat: null, lng: null });
       return;
     }
     setF({
       ...f, existingPropertyId: property.id,
       street: property.street || property.address, city: property.city || "",
-      stateSel: property.state || "OH", zip: property.zip || "",
+      stateSel: property.state || "", zip: property.zip || "",
       lat: property.lat ?? null, lng: property.lng ?? null, propertyUse: property.use || f.propertyUse,
     });
   };
   const juris = jurisdictionForZip(f.zip);
-  const canCreate = f.first.trim() && f.last.trim() && f.street.trim() && f.zip.trim();
+  /* State selects the building code, the supplement cites and the legal
+     text on the contract, so a job carrying the wrong one is a job whose
+     paperwork is wrong. It used to default to "OH", which meant a rep who
+     typed a zip instead of picking an autocomplete suggestion silently
+     created an Ohio job anywhere in the country. Now it is derived from
+     the zip — the app already has a nationwide ZIP3 table — and only has
+     to be picked by hand when the zip doesn't resolve. */
+  const setZip = (e) => {
+    const zip = e.target.value;
+    const derived = stateForZip(zip);
+    setF((prev) => ({ ...prev, zip, stateSel: derived || prev.stateSel }));
+  };
+  const canCreate = f.first.trim() && f.last.trim() && f.street.trim() && f.zip.trim() && f.stateSel;
 
   /* Duplicate address guard. A property already selected from this
      customer's own list is an intentional repeat project, not a
@@ -6582,10 +7123,11 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
         <Field label="City"><input style={inputStyle} value={f.city} onChange={set("city")} /></Field>
         <Field label="State">
           <select style={selStyle} value={f.stateSel} onChange={set("stateSel")}>
+            <option value="">State…</option>
             {US_STATES.map(([ab]) => <option key={ab} value={ab}>{ab}</option>)}
           </select>
         </Field>
-        <Field label="Zip *"><input data-testid="lead-zip" style={inputStyle} value={f.zip} onChange={set("zip")} /></Field>
+        <Field label="Zip *"><input data-testid="lead-zip" style={inputStyle} value={f.zip} onChange={setZip} /></Field>
       </div>
       {juris && (
         <div style={{ background: T.accentSoft, borderRadius: 12, padding: "12px 14px", marginBottom: 14 }}>
@@ -6640,7 +7182,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
         </Field>
         <Field label="Assign to">
           <select style={selStyle} value={f.assignee} onChange={set("assignee")}>
-            {TEAM.map((t) => <option key={t}>{t}</option>)}
+            {roster.map((t) => <option key={t}>{t}</option>)}
           </select>
         </Field>
       </div>
@@ -6730,7 +7272,10 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
 /* ================================================================
    FILTERS SHEET
    ================================================================ */
-function FiltersSheet({ open, onClose, stages, filters, setFilters }) {
+/* The board filter used to list four hardcoded demo names and the built-in
+   lead-source constant, so a real org could not filter by their own reps or
+   by a lead source they had added. Both now come from the live data. */
+function FiltersSheet({ open, onClose, stages, filters, setFilters, assignees = [], leadSources = LEAD_SOURCES }) {
   const [local, setLocal] = useState(filters);
   useEffect(() => { if (open) setLocal(filters); }, [open]); // eslint-disable-line
   const toggle = (key, val) => {
@@ -6795,9 +7340,9 @@ function FiltersSheet({ open, onClose, stages, filters, setFilters }) {
         ))}
       </Section>
       <Section title="Assignees & job owner"
-        onAll={() => setLocal({ ...local, assignees: [...TEAM] })}
+        onAll={() => setLocal({ ...local, assignees: [...assignees] })}
         onNone={() => setLocal({ ...local, assignees: [] })}>
-        {TEAM.map((t) => (
+        {assignees.map((t) => (
           <CheckRow key={t} checked={local.assignees.includes(t)} label={t} onClick={() => toggle("assignees", t)} />
         ))}
       </Section>
@@ -6809,9 +7354,9 @@ function FiltersSheet({ open, onClose, stages, filters, setFilters }) {
         ))}
       </Section>
       <Section title="Lead sources"
-        onAll={() => setLocal({ ...local, sources: [...LEAD_SOURCES] })}
+        onAll={() => setLocal({ ...local, sources: [...leadSources] })}
         onNone={() => setLocal({ ...local, sources: [] })}>
-        {LEAD_SOURCES.map((l) => (
+        {leadSources.map((l) => (
           <CheckRow key={l} checked={local.sources.includes(l)} label={l} onClick={() => toggle("sources", l)} />
         ))}
       </Section>
@@ -7425,6 +7970,7 @@ const JOB_TABS = [
   ["payments", "Payments"], ["invoice", "Invoice"], ["workorder", "Work order"],
   ["tasks", "Tasks"], ["files", "Files"], ["assistant", "Ask the assistant"],
   ["portal", "Portal"], ["claim", "Insurance claim"],
+  ["certificate", "Certificate of completion"], ["punchlist", "Punch list"],
 ];
 
 /* Collapsible sections, in the order they are worked. Replaces a
@@ -7454,9 +8000,11 @@ const JOB_SECTIONS = [
   ["report", "Report", ScrollText, "Sell"],
   // Claim (insurance jobs only — gated in the render filter)
   ["claim", "Insurance claim", Shield, "Claim"],
+  ["certificate", "Certificate of completion", Award, "Claim"],
   // Build
   ["workorder", "Work order", ClipboardList, "Build"],
   ["handoff", "Sold & handoff", Share2, "Build"],
+  ["punchlist", "Punch list", ClipboardCheck, "Build"],
   ["tasks", "Tasks", CheckCircle2, "Build"],
   ["files", "Attachments", Layers, "Build"],
   ["assistant", "Ask the assistant", MessageCircle, "Build"],
@@ -7472,7 +8020,7 @@ const JOB_TAB_GROUPS = [
   ["Inspect", ["overview", "checklist", "ventilation", "measure", "photos"]],
   ["Sell", ["estimate", "contract", "materials", "report"]],
   ["Build", ["workorder", "tasks", "files", "assistant"]],
-  ["Money", ["financials", "payments", "invoice"]],
+  ["Money", ["financials", "payments", "invoice", "certificate"]],
   ["Customer", ["messages", "portal"]],
 ];
 
@@ -7664,7 +8212,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
             switch (id) {
               case "overview": return <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand}
                 currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} users={users} isAdmin={isAdmin}
-                onOpenCodeLookup={onOpenCodeLookup} />;
+                onOpenCodeLookup={onOpenCodeLookup} integrations={integrations} />;
               case "claim": return <TabClaim job={job} mut={mut} toast={toast} brand={brand} />;
               case "handoff": return <TabHandoff job={job} mut={mut} toast={toast} isAdmin={isAdmin}
                 currentUser={currentUser} stages={stages} onMoveStage={onMoveStage} showMoney={showMoney} />;
@@ -7687,11 +8235,14 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "messages": return <TabMessages job={job} mut={mut} toast={toast} brand={brand}
                 templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />;
               case "photos": return <TabPhotos job={job} mut={mut} toast={toast} ccToken={ccToken} />;
-              case "financials": return <TabFinancialsCombined job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} integrations={integrations} />;
+              case "financials": return <TabFinancialsCombined job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} integrations={integrations} onLog={onLog} />;
               case "workorder": return <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
                 crews={crews} templates={templates} currentUser={currentUser} users={users} />;
               case "tasks": return <TabTasks job={job} mut={mut} toast={toast} />;
+              case "punchlist": return <TabPunchList job={job} mut={mut} toast={toast} currentUser={currentUser} />;
               case "files": return <TabFiles job={job} mut={mut} toast={toast} />;
+              case "certificate": return <TabCertificate job={job} brand={brand} mut={mut} toast={toast}
+                currentUser={currentUser} integrations={integrations} />;
               case "assistant": return <ClaimAssistant job={job} />;
               case "portal": return <TabPortal job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser}
                 users={users}
@@ -7704,6 +8255,8 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
           const relevant = JOB_SECTIONS.filter(([id]) => {
             if (!featureOn(features, id)) return false;
             if (id === "claim") return job.claimType === "Insurance";
+            /* Retail jobs have no carrier to certify anything to. */
+            if (id === "certificate") return job.claimType === "Insurance";
             if (id === "handoff" || id === "changeorders") return true;
             return allowed.has(id);
           });
@@ -7712,6 +8265,16 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
              for. */
           const HINTS = {
             claim: "Carrier money and supplements",
+            punchlist: "What this roof still owes",
+          };
+          /* A count on the collapsed header, so an open punch item is
+             visible without opening the section. Returns a node or null;
+             only the punch list needs one today, but the shape
+             generalises if another section ever does. */
+          const sectionBadge = (sid) => {
+            if (sid !== "punchlist") return null;
+            const n = openPunch(job).length;
+            return n ? <Chip tone={punchTone(job) || "amber"}>{n}</Chip> : null;
           };
           /* Interleave a group divider before the first visible section
              of each group, so the accordion reads Inspect → Sell → …
@@ -7751,6 +8314,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
                       <span style={{ display: "block", fontSize: 11.5, color: S.sub, marginTop: 1 }}>{HINTS[id]}</span>
                     )}
                   </span>
+                  {sectionBadge(id)}
                   {isOpen ? <ChevronUp size={17} color={S.sub} /> : <ChevronDown size={17} color={S.sub} />}
                 </button>
                 {isOpen && (
@@ -7806,7 +8370,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
 }
 
 /* ---------- Overview ---------- */
-function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false, onOpenCodeLookup = () => {} }) {
+function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false, onOpenCodeLookup = () => {}, integrations = {} }) {
   const notes = job.notes || [];
   const [noteTxt, setNoteTxt] = useState("");
   const [noteVisible, setNoteVisible] = useState(false);
@@ -8118,7 +8682,7 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
         </div>
       </Card>
 
-      <EnRouteCard job={job} mut={mut} toast={toast} currentUser={currentUser} />
+      <EnRouteCard job={job} mut={mut} toast={toast} currentUser={currentUser} integrations={integrations} />
 
       <ForecastStrip lat={job.lat ?? job.property?.lat} lng={job.lng ?? job.property?.lng}
         zip={job.zip} schedDate={job.schedDate} />
@@ -9301,6 +9865,188 @@ function proposalCss(brand) {
   </style>`;
 }
 
+/* ==================================================================
+   CERTIFICATE OF COMPLETION
+
+   The document a carrier asks for before it releases recoverable
+   depreciation. It is a statement of fact about a finished job, so it
+   is generated from the job file rather than typed: everything on it
+   is already recorded somewhere by the time the job reaches "Job
+   completed", and the two things that were not — the completion date
+   and the peril — now are.
+
+   The settlement block deliberately does not itemise. This company
+   contracts on a total, not a line-item schedule, so the certificate
+   states the contract price, the deductible and what that leaves as
+   the carrier's share. An itemised certificate that disagrees with the
+   carrier's own estimate line for line invites an argument on a
+   document whose only job is to close the claim.
+================================================================== */
+const PERILS = ["Wind", "Hail", "Wind & Hail", "Fire", "Water", "Tree impact", "Other"];
+/* "2026-08-03" reads as a form field; "August 3, 2026" reads as a
+   statement. Parsed at noon so a timezone west of UTC cannot walk the
+   date back a day, which is the classic bug with date-only strings. */
+function longDate(iso) {
+  const s = String(iso || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}/.test(s)) return s;
+  const d = new Date(s.slice(0, 10) + "T12:00:00");
+  if (isNaN(d.getTime())) return s;
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+/* Everything the certificate states, resolved from the job with the
+   rep's corrections layered on top. Never written back on open — the
+   same rule the agreement follows, so viewing a job does not mutate it. */
+function certificateFor(job, brand) {
+  const c = job.certificate || {};
+  const ins = job.insurance || {};
+  const claim = job.claim || {};
+  const pay = paymentsSummary(job);
+  /* The contract total, which already includes approved change orders —
+     the figure the screen shows and, since the invoice fix, the figure
+     the invoice bills. Falling back to the claim's RCV covers a job
+     settled straight off the carrier's estimate with no contract typed. */
+  const rcv = num(pay.contract) || num(claim.rcv) || 0;
+  const deductible = c.deductible !== undefined && c.deductible !== ""
+    ? moneyNum(c.deductible) : moneyNum(ins.deductible);
+  return {
+    owner: c.owner || job.name || "",
+    address: c.address || job.address || "",
+    carrier: c.carrier || ins.carrier || "",
+    claimNo: c.claimNo || ins.claim || "",
+    policyNo: c.policyNo || ins.policy || "",
+    typeOfLoss: c.typeOfLoss || claim.typeOfLoss || "",
+    dateOfLoss: c.dateOfLoss || claim.dateOfLoss || "",
+    adjuster: c.adjuster || ins.adjusterName || "",
+    completedAt: c.completedAt || job.completedAt || "",
+    manager: c.manager || job.assignee || "",
+    rcv, deductible,
+    net: Math.max(0, rcv - deductible),
+    /* Free text under the money block. The sample names the carrier's
+       price list and estimate date; those are not on the job file, so
+       the default says what is true and the rep can paste the rest. */
+    note: c.note !== undefined ? c.note : "",
+    /* Who signs for the company. The contract's countersignature is the
+       right default — the same person already stood behind this job. */
+    signedBy: c.signedBy || job.assignee || "",
+    scope: c.scope || `${titleish(projectNoun(job))} — Insurance Restoration`,
+  };
+}
+function titleish(s) {
+  const map = { roofing: "Residential Roof Replacement", siding: "Residential Siding Replacement", gutter: "Gutter Replacement", window: "Window Replacement", exterior: "Residential Exterior Restoration" };
+  return map[String(s || "").toLowerCase()] || "Residential Roof Replacement";
+}
+/* What is still missing before this can go to a carrier. A certificate
+   with a blank claim number or no completion date is not a document,
+   it is a draft — and it is the contractor's name on the assertion. */
+function certificateGaps(job, brand) {
+  const a = certificateFor(job, brand);
+  const out = [];
+  if (!a.completedAt) out.push("the date the work was completed");
+  if (!a.claimNo) out.push("the claim number");
+  if (!a.carrier) out.push("the insurance carrier");
+  if (!a.rcv) out.push("a contract price");
+  if (!a.owner) out.push("the property owner's name");
+  if (!a.address) out.push("the property address");
+  return out;
+}
+function certificateReady(job, brand) { return certificateGaps(job, brand).length === 0; }
+
+function certificateCss(brand) {
+  const ink = "#111", sub = "#666", rule = "#bbb", band = "#f2f2f2";
+  return `<style>
+@page { size: letter; margin: 0.62in 0.62in 0.55in; }
+.cert { font-family: Helvetica, Arial, sans-serif; color: ${ink}; font-size: 9pt; line-height: 1.42; }
+.certh { text-align: center; margin-bottom: 13pt; }
+.certh1 { font-size: 17.5pt; font-weight: 700; letter-spacing: .01em; margin: 0 0 4pt; }
+.certh2 { font-size: 8.5pt; color: ${ink}; margin: 0 0 5pt; }
+.certh3 { font-size: 7.6pt; color: ${sub}; margin: 0; }
+.certband { background: ${band}; font-size: 9.5pt; font-weight: 700; padding: 3pt 6pt; margin: 0 0 3pt; }
+.certgrid { width: 100%; border-collapse: collapse; margin-bottom: 11pt; }
+.certgrid td { border-bottom: 1px solid ${rule}; padding: 3pt 6pt 3pt 0; vertical-align: top; }
+.certgrid td.k { font-size: 8pt; font-weight: 700; width: 17%; }
+.certgrid td.v { font-size: 9pt; width: 33%; padding-right: 14pt; }
+.certmoney { width: 100%; border-collapse: collapse; margin-bottom: 6pt; }
+.certmoney td { border-bottom: 1px solid ${rule}; padding: 3.5pt 6pt 3.5pt 0; font-size: 9pt; }
+.certmoney td.r { text-align: right; white-space: nowrap; }
+.certmoney tr.certtot td { font-weight: 700; }
+.certnote { font-size: 7.6pt; color: ${sub}; line-height: 1.45; margin: 0 0 11pt; }
+.certp { font-size: 8.4pt; line-height: 1.5; margin: 0 0 14pt; }
+.certsig { width: 100%; border-collapse: collapse; }
+.certsig td { vertical-align: bottom; padding-top: 3pt; }
+.certsig tr.gap td { padding-top: 20pt; }
+.certsig td.d { width: 34%; padding-left: 18pt; }
+.certink { font-family: 'Snell Roundhand', 'Apple Chancery', 'Segoe Script', cursive; font-size: 15pt; }
+.certline { border-bottom: 1px solid ${ink}; height: 13pt; }
+.certcap { font-size: 7.6pt; color: ${ink}; padding-top: 3pt; border-top: 1px solid ${rule}; }
+.certfoot { position: fixed; bottom: 0; left: 0; right: 0; font-size: 7pt; color: ${sub};
+  display: flex; justify-content: space-between; border-top: 1px solid ${rule}; padding-top: 3pt; }
+@media print { .certfoot { position: fixed; } }
+</style>`;
+}
+function certificateDocHtml(job, brand) {
+  const a = certificateFor(job, brand);
+  const co = [brand.company, brand.address, brand.phone, brand.email].filter(Boolean).map(esc).join(" &nbsp;|&nbsp; ");
+  const row = (k1, v1, k2, v2) => `<tr>
+    <td class="k">${esc(k1)}</td><td class="v">${esc(v1) || "&nbsp;"}</td>
+    <td class="k">${esc(k2)}</td><td class="v">${esc(v2) || "&nbsp;"}</td></tr>`;
+  const done = longDate(a.completedAt);
+  return `<div class="cert">
+  <div class="certh">
+    <div class="certh1">CERTIFICATE OF COMPLETION</div>
+    <div class="certh2">${esc(a.scope)}</div>
+    <div class="certh3">${co}</div>
+  </div>
+
+  <div class="certband">PROJECT INFORMATION</div>
+  <table class="certgrid">
+    ${row("PROPERTY OWNER", a.owner, "PROPERTY ADDRESS", a.address)}
+    ${row("INSURANCE CARRIER", a.carrier, "CLAIM NUMBER", a.claimNo)}
+    ${row("POLICY NUMBER", a.policyNo, "TYPE OF LOSS", a.typeOfLoss)}
+    ${row("DATE OF LOSS", longDate(a.dateOfLoss), "ADJUSTER / ESTIMATOR", a.adjuster)}
+    ${row("WORK COMPLETED", done, "PROJECT MANAGER", a.manager)}
+  </table>
+
+  <div class="certband">CONTRACT PRICE &amp; SETTLEMENT SUMMARY</div>
+  <table class="certmoney">
+    <tr><td>Replacement Cost Value (Total Contract Price)</td><td class="r">${money(a.rcv)}</td></tr>
+    <tr><td>Less Insured's Deductible</td><td class="r">(${money(a.deductible)})</td></tr>
+    <tr class="certtot"><td>Net Claim / Insurance Proceeds</td><td class="r">${money(a.net)}</td></tr>
+  </table>
+  ${a.note ? `<p class="certnote">${esc(a.note)}</p>` : `<p class="certnote">Amounts per the signed contract for this project, including any approved change orders. Recoverable depreciation and supplements are billed per that contract.</p>`}
+
+  <div class="certband">CERTIFICATION</div>
+  <p class="certp">${esc(brand.company || "The Company")} certifies that all work described above was completed on
+  ${esc(done || "____________")} at ${esc(a.address)} in a good and workmanlike manner, in accordance with the
+  approved insurance scope, manufacturer instructions, and applicable building code. All debris was removed and the
+  site left in clean condition. The undersigned property owner has inspected the work and accepts it as complete and
+  satisfactory.</p>
+
+  <table class="certsig">
+    <tr>
+      <td><div class="certink">${esc(a.signedBy)}</div></td>
+      <td class="d"><div class="certink">${esc(done)}</div></td>
+    </tr>
+    <tr>
+      <td class="certcap">${esc(a.signedBy)} &mdash; ${esc(brand.company || "")}</td>
+      <td class="d certcap">Date</td>
+    </tr>
+    <tr class="gap">
+      <td><div class="certline"></div></td>
+      <td class="d"><div class="certline"></div></td>
+    </tr>
+    <tr>
+      <td class="certcap">${esc(a.owner)} &mdash; Property Owner</td>
+      <td class="d certcap">Date</td>
+    </tr>
+  </table>
+</div>
+<div class="certfoot">
+  <span>${esc(brand.company || "")} &nbsp;|&nbsp; Certificate of Completion${a.owner ? " &nbsp;|&nbsp; " + esc(a.owner) : ""}${a.claimNo ? " &nbsp;|&nbsp; Claim " + esc(a.claimNo) : ""}</span>
+  <span>Page 1</span>
+</div>
+${certificateCss(brand)}`;
+}
+
 function invoiceDocHtml(job, brand) {
   const pay = paymentsSummary(job);
   const est = job.estimate;
@@ -9318,7 +10064,24 @@ function invoiceDocHtml(job, brand) {
     </div>
   </div>`;
   out += `<h2>Work performed</h2>` + lineTable((est && est.items) || []);
-  const contractPrice = (job.contract && job.contract.price) || estimateTotal(est);
+  /* Approved change orders. paymentsSummary and computeCapOut have always
+     added these to the contract; this document computed its own total and
+     left them out, so the screen and the PDF from the same button disagreed
+     and the customer was billed the lower number. The lines are listed too —
+     a balance that includes work the invoice never mentions invites a
+     phone call at best. */
+  const approvedCos = (Array.isArray(job.changeOrders) ? job.changeOrders : [])
+    .filter((c) => c.status === "Approved");
+  const coApproved = approvedCos.reduce((a2, c) => a2 + coTotal(c), 0);
+  if (approvedCos.length) {
+    const coLines = approvedCos.flatMap((c) => (c.lines || []).map((l) => ({
+      desc: `${c.title || "Change order"} — ${l.label || ""}`.trim(),
+      qty: l.qty, unit: l.unit, price: l.price,
+    })));
+    out += `<h2>Approved change orders</h2>` + lineTable(coLines.length ? coLines
+      : approvedCos.map((c) => ({ desc: c.title || "Change order", qty: 1, unit: "", price: coTotal(c) })));
+  }
+  const contractPrice = ((job.contract && job.contract.price) || estimateTotal(est)) + coApproved;
   out += `<div class="tot"><span>Contract total</span><span>${money(contractPrice)}</span></div>`;
   out += `<div class="tot"><span>Payments received</span><span>−${money(pay.received)}</span></div>`;
   out += `<div class="tot grand"><span>Balance due</span><span>${money(contractPrice - pay.received)}</span></div>`;
@@ -9518,14 +10281,22 @@ const AGREEMENT_HOA_LINE = "Property Owner to obtain required authorization from
 const AGREEMENT_DECK_POLICY = "State building codes require that any damaged or deteriorated roof decking discovered during the tear off process be replaced to ensure a nail fastened surface. Most insurance carriers consider deck replacement a maintenance item and may not include it in your claim. The Property Owner agrees to a rate of $%RATE% per sheet for all necessary labor and materials.";
 const AGREEMENT_TERMS_PARA = "By signing this Agreement the Property Owner authorizes {company} to pursue the Property Owner’s best interest for a project replacement or repair at a “price agreeable” to the insurance company and {company} with no additional cost to the Property Owner except the deductible. When “price agreeable” is determined it shall become the final contract price and Property Owner authorizes {company} to obtain labor and material in accordance with the “price agreeable” and the specification set out herein and on the reverse side hereof.";
 const AGREEMENT_READ_PARA = "Property Owner(s) acknowledges that they have read the front and reverse of this Agreement, understands its terms, has received a completed, signed, and dated copy, and was orally advised of the right to cancel this transaction.";
-const AGREEMENT_CANCEL_PARA = "You, the Property Owner, may cancel this transaction at any time prior to midnight of the third business day after the date of this transaction.";
+/* Page one's RIGHT TO CANCEL box. Same state-law slot as clause 21 on
+   the reverse, and the two have to agree — a contract that gives one
+   window in a box and another in the terms is worse than either. */
+const AGREEMENT_CANCEL_PARA = "You, the Property Owner, may cancel this transaction at any time prior to midnight of {rescission} after the date of this transaction.";
 
 /* Reverse-side terms. Shipped as the default template; a tenant edits their
    own copy in Branding, which is stored on brand.agreementTerms and wins.
    Transcribed exactly as printed — including the typos ("DDED", "th reverse
    side"), because silently correcting the wording of a legal document is not
    this app's call to make. */
-const AGREEMENT_TERMS_INTRO = "This contract and any agreement made pursuant thereto (the “Agreement”) is between {company} (the “Company”) and the customer(s) named herein on th reverse side. This Agreement is subject to all appropriate law, regulations and ordinances in the State of Ohio and Kentucky and these terms and conditions.";
+/* {state} resolves to the property's governing law. It read "the State
+   of Ohio and Kentucky" — on every tenant's contract, for every roof in
+   the country. The rest of the sentence is the supplied text, down to
+   the "th reverse side" typo, because it is the owner's agreement and
+   not ours to rewrite. */
+const AGREEMENT_TERMS_INTRO = "This contract and any agreement made pursuant thereto (the “Agreement”) is between {company} (the “Company”) and the customer(s) named herein on th reverse side. This Agreement is subject to all appropriate law, regulations and ordinances in {state} and these terms and conditions.";
 const AGREEMENT_TERMS = [
   "This Agreement is composed of this page, the reverse (or front page) side of this page, the Pre-Start Checklist, the Scope of work Attachment if applicable, and all other documents referenced in or incorporated into this Agreement.",
   "Each Agreement is subject to approval of our credit department and office without exception. This Agreement and all applicable warranties shall not be assigned except by or with the written permission of the Company.",
@@ -9547,7 +10318,13 @@ const AGREEMENT_TERMS = [
   "Pay per Trade Policy: Customer agrees to pay in full at the completion of each trade on the project. The company reserves the right to collect payment in full per trade prior to beginning on the next trade.",
   "Company Retainage Policy: Customer agrees to pay in full at the completion of each trade on the project. The company reserves the right to collect payment in full per trade prior to beginning the next trade.",
   "The Company’s failure to enforce any right under this Agreement shall not be construed as a waiver of any subsequent right to enforce the same or any other right, term or condition.",
-  "You, the consumer, may cancel this transaction at any time prior to midnight of the 3rd business day after the date of this transaction.",
+  /* The cancellation window is state law, not a company term — three
+     business days is Ohio's, and stating it on a contract in a state
+     with a different window misstates the owner's rights on the one
+     clause that exists to protect them. {rescission} resolves through
+     the state's legal pack, and the agreement will not go out for
+     signature until somebody has confirmed what it resolves to. */
+  "You, the consumer, may cancel this transaction at any time prior to midnight of {rescission} after the date of this transaction.",
 ];
 
 /* The numbered roof diagram on the right of page one. Ships as a bundled
@@ -9562,8 +10339,57 @@ function agreementTermsFor(brand) {
     ? brand.agreementTerms : AGREEMENT_TERMS;
   return custom;
 }
-function agreementFill(text, brand) {
-  return String(text || "").replace(/\{company\}/g, (brand && brand.company) || "the Company");
+/* The legal-pack tokens a contract body may carry, and which field
+   each resolves against. Anything not in this map is left alone —
+   {company} is filled separately and is not state law. */
+const LEGAL_TOKENS = { state: "choiceOfLaw", rescission: "rescission" };
+/* Fills {company} plus every state-keyed slot, and reports which slots
+   did not resolve. A slot below `verified` renders as a visible
+   placeholder rather than quietly disappearing or, worse, resolving to
+   the home market's answer — a homeowner reading a blank where their
+   cancellation right should be will ask, which is the point. */
+function agreementFillLegal(text, brand, state) {
+  const pack = legalPack(state);
+  const unresolved = [];
+  let out = String(text || "").replace(/\{company\}/g, (brand && brand.company) || "the Company");
+  out = out.replace(/\{(\w+)\}/g, (m, key) => {
+    const field = LEGAL_TOKENS[key];
+    if (!field) return m;
+    const f = pack[field];
+    if (printable(f)) return f.value;
+    const spec = LEGAL_FIELDS.find((x) => x.key === field);
+    unresolved.push({ token: key, field, label: (spec && spec.label) || field, fact: f });
+    return `[${(spec && spec.label) || field} for ${state || "this state"} — not confirmed]`;
+  });
+  return { text: out, unresolved };
+}
+function agreementFill(text, brand, state) {
+  return agreementFillLegal(text, brand, state).text;
+}
+/* Bumped whenever the shape of a pack changes in a way that would make
+   an older snapshot read differently. Stored with every signature so a
+   past signature can always be interpreted under the rules in force
+   when it was given. */
+const LEGAL_PACK_VERSION = 1;
+/* The state-keyed clauses as they render for this job, in order. This
+   is what a signature binds to — a reference to "the OH pack" would
+   silently change meaning the next time somebody edits it. */
+function renderedLegalText(job) {
+  const st = (job && job.state) || "";
+  const pack = legalPack(st);
+  return LEGAL_FIELDS
+    .filter((f) => f.binding)
+    .map((f) => `${f.label}: ${printable(pack[f.key]) ? pack[f.key].value : "[not confirmed]"}`)
+    .join("\n");
+}
+/* Everything blocking this job's agreement from being signed: the
+   binding fields nobody has confirmed for the property's state. An
+   agreement with no state at all is blocked too — that is not a
+   national contract, it is a contract nobody checked. */
+function agreementBlockers(job) {
+  const st = (job && job.state) || "";
+  if (!st) return [{ key: "state", label: "Property state", note: "The job has no state, so no legal pack applies." }];
+  return legalGaps(st);
 }
 
 /* Everything the job file already knows. Not written to the job until the
@@ -9595,13 +10421,13 @@ function agreementPrefill(job, brand) {
     carrier: ins.carrier || "",
     claimNumber: ins.claim || "",
     dateOfLoss: cl.dateOfLoss || "",
-    outOfPocket: ins.deductible ? money0(num(ins.deductible)) : "",
+    outOfPocket: ins.deductible ? money(num(ins.deductible)) : "",
     agreementDate: todayIso(),
     projectAddress: "",
     tearoffLayers: layers,
-    finalPrice: price ? money0(price) : "",
-    deductible: ins.deductible ? money0(num(ins.deductible)) : "",
-    deposit: deposit ? money0(deposit) : "",
+    finalPrice: price ? String(price) : "",
+    deductible: ins.deductible ? String(num(ins.deductible)) : "",
+    deposit: deposit ? String(deposit) : "",
     balance: "",
   };
 }
@@ -9611,6 +10437,15 @@ function agreementFor(job, brand) {
   return { ...agreementPrefill(job, brand), ...(job.agreement || {}) };
 }
 
+/* The money lines on the agreement. A purely numeric value prints in
+   accounting format; anything else — a rep writing "See addendum" on the
+   balance line — prints exactly as written, because that is a deliberate
+   override of the arithmetic and must not be mangled into $0.00. */
+function agMoney(v) {
+  const t = String(v == null ? "" : v).trim();
+  if (!t) return "";
+  return /^\$?\s*-?[\d,]+(\.\d+)?$/.test(t) ? money(moneyNum(t)) : t;
+}
 function agBlank(v, w) {
   return `<span class="agbl" style="min-width:${Math.round(w)}px">${esc(v || "")}</span>`;
 }
@@ -9652,17 +10487,21 @@ function agFieldHtml(f, a) {
 function agreementDocHtml(job, brand) {
   const a = agreementFor(job, brand);
   const con = job.contract || {};
+  /* Every state-keyed clause resolves against the property's state, not
+     against the home market. An unconfirmed slot prints as a labelled
+     placeholder and the signing affordances upstream are disabled. */
+  const st = job.state || "";
   const left = AGREEMENT_SPEC.filter((s) => s.col === "L");
   const right = AGREEMENT_SPEC.filter((s) => s.col === "R");
   const mark = brand.logo
     ? `<img class="aglogo" src="${brand.logo}" alt="${esc(brand.company)}">`
     : `<div class="agmark">${esc(brand.company)}</div>`;
-  const price = num(String(a.finalPrice).replace(/[^0-9.]/g, ""));
-  const dep = num(String(a.deposit).replace(/[^0-9.]/g, ""));
+  const price = moneyNum(a.finalPrice);
+  const dep = moneyNum(a.deposit);
   /* The balance line is the one number on the sheet that is arithmetic
      rather than negotiation, so it is computed — unless the rep has
      deliberately written something else in it. */
-  const balance = String(a.balance || "").trim() || (price ? money0(price - dep) : "");
+  const balance = String(a.balance || "").trim() ? agMoney(a.balance) : (price ? money(price - dep) : "");
   const sigCell = (img, who, role) => `<div class="agsigbox">
     <div class="agsigwho">${esc(who)}</div>
     <div class="agsigline">${img ? `<img src="${img}" alt="">` : ""}</div>
@@ -9713,7 +10552,7 @@ function agreementDocHtml(job, brand) {
 
   <div class="agterm">
     <p><b>Defective Decking and Plywood Policy</b>&nbsp; ${AGREEMENT_DECK_POLICY.split("%RATE%").map(esc).join(agBlank(a.deckRate, 70))}</p>
-    <p><b>Terms</b>&nbsp; ${esc(agreementFill(AGREEMENT_TERMS_PARA, brand))}</p>
+    <p><b>Terms</b>&nbsp; ${esc(agreementFill(AGREEMENT_TERMS_PARA, brand, st))}</p>
     <p>${esc(AGREEMENT_READ_PARA)}</p>
   </div>
 
@@ -9721,13 +10560,13 @@ function agreementDocHtml(job, brand) {
     <div class="agprice">
       <div class="agpricet">AGREEMENT PRICE</div>
       <div class="agpriceb">
-        ${AGREEMENT_PRICE_ROWS.map((r) => `<div class="agprow"><span>${esc(r.label)}</span>${agBlank(a[r.k], 160)}</div>`).join("")}
+        ${AGREEMENT_PRICE_ROWS.map((r) => `<div class="agprow"><span>${esc(r.label)}</span>${agBlank(agMoney(a[r.k]), 160)}</div>`).join("")}
         <div class="agprow grand"><span>BALANCE DUE ON COMPLETION</span>${agBlank(balance, 160)}</div>
       </div>
     </div>
     <div class="agbox tint agcancel">
       <div class="agboxt">RIGHT TO CANCEL</div>
-      <div class="agcanp">${esc(AGREEMENT_CANCEL_PARA)}</div>
+      <div class="agcanp">${esc(agreementFill(AGREEMENT_CANCEL_PARA, brand, st))}</div>
       <div class="aginit">INITIALS ${agBlank(a.cancelInit, 70)}</div>
     </div>
   </div>
@@ -9742,8 +10581,8 @@ function agreementDocHtml(job, brand) {
 <section class="agpage agrev">
   <div class="agrevlogo">${mark}</div>
   <h1 class="agrevh">TERMS AND CONDITIONS</h1>
-  <p class="agrevi">${esc(agreementFill(brand.agreementIntro || AGREEMENT_TERMS_INTRO, brand))}</p>
-  <ol class="agrevo">${agreementTermsFor(brand).map((c) => `<li>${esc(agreementFill(c, brand))}</li>`).join("")}</ol>
+  <p class="agrevi">${esc(agreementFill(brand.agreementIntro || AGREEMENT_TERMS_INTRO, brand, st))}</p>
+  <ol class="agrevo">${agreementTermsFor(brand).map((c) => `<li>${esc(agreementFill(c, brand, st))}</li>`).join("")}</ol>
 </section>
 <div class="agfoot">${esc(brand.company)} &bull; Construction Agreement${a.customerName ? " &bull; " + esc(a.customerName) : ""}</div>
 ${agreementCss(brand)}`;
@@ -10254,9 +11093,35 @@ function projectNoun(job) {
   return "roofing";
 }
 
+/* What the homeowner may open under Documents: the files the office
+   shared, plus the certificate of completion, which is generated rather
+   than uploaded and so carries its rendered body instead of a storage
+   URL. Withheld until it is complete — a homeowner should never be shown
+   a certificate with a blank where the claim number goes. */
+function portalDocuments(job, brand, portal) {
+  const out = portal.documents ? (job.files || []).filter((file) => file.shared).map((file) => ({
+    name: file.name, category: file.cat, date: file.at, url: file.url || null,
+  })) : [];
+  const cert = job.certificate || {};
+  if (portal.certificate !== false && cert.shared !== false && certificateReady(job, brand)) {
+    const a = certificateFor(job, brand);
+    out.unshift({
+      name: "Certificate of Completion", category: "Insurance",
+      date: longDate(a.completedAt), url: null,
+      html: certificateDocHtml(job, brand),
+    });
+  }
+  return out;
+}
 function buildPortalSnapshot(job, brand, token, users = []) {
   const portal = { ...DEFAULT_PORTAL_SETTINGS, ...(job.portal || {}) };
   const pay = paymentsSummary(job);
+  /* Built before the snapshot so the section order can depend on it. The
+     Documents section is normally gated on `portal.documents`, which
+     governs uploaded files and ships off; a certificate the office chose
+     to share would otherwise be filed into a section the homeowner
+     cannot open. */
+  const portalDocs = portalDocuments(job, brand, portal);
   return {
     token, job_id: job.id,
     data: {
@@ -10265,7 +11130,7 @@ function buildPortalSnapshot(job, brand, token, users = []) {
       jobId: job.id, name: job.name, address: job.address,
       projectType: projectNoun(job),
       stageLabel: job.stageLabel || "",
-      order: portalOrderOf(portal).filter((sid) => portalSectionOn(portal, sid)),
+      order: portalOrderOf(portal).filter((sid) => (sid === "documents" ? portalDocs.length > 0 : portalSectionOn(portal, sid))),
       /* Rep block: a per-job override wins over the assigned seat, so a
          different face can be put in front of a customer without
          reassigning the job. */
@@ -10292,7 +11157,11 @@ function buildPortalSnapshot(job, brand, token, users = []) {
           });
         }
         const con = job.contract;
-        if (con && con.price && con.status !== "Signed" && portal.contract) {
+        /* Same gate as the in-app signature pad. A homeowner opening the
+           portal is the one path where nobody from the office is looking
+           at the screen, so it is the last place a contract with an
+           unconfirmed state-law clause should be signable. */
+        if (con && con.price && con.status !== "Signed" && portal.contract && legalReady(job.state)) {
           out.push({
             type: "contract", id: con.number || "con", title: `Contract ${con.number || ""}`.trim(),
             subtitle: job.address,
@@ -10302,8 +11171,25 @@ function buildPortalSnapshot(job, brand, token, users = []) {
               { label: "Contract price", value: money(num(con.price)) },
             ],
             total: num(con.price),
-            terms: "By signing you enter into a binding agreement for the work described, at the price shown. You may cancel within three business days under Ohio Revised Code Chapter 1345 without penalty.",
-            snapshot: { number: con.number, price: con.price, address: job.address },
+            /* This used to cite Ohio Revised Code Chapter 1345 by name, to
+               every homeowner in every state, directly above the signature
+               pad — and no tenant could edit it. The cancellation right is
+               real nearly everywhere but its statutory basis and notice
+               requirements are not Ohio's outside Ohio, so the sentence now
+               points at the signed agreement, which carries the notice that
+               actually applies, rather than naming the wrong statute. */
+            terms: "By signing you enter into a binding agreement for the work described, at the price shown. Your signed agreement sets out your right to cancel and the notice period that applies where the property is located.",
+            /* The rendered legal text travels with the signature, not just
+               a reference to the pack. Editing a state's pack later must
+               not retroactively change what a past signature appears to
+               have covered — the hash has to bind to the words the
+               homeowner actually read. */
+            snapshot: {
+              number: con.number, price: con.price, address: job.address,
+              legalPackState: job.state || "",
+              legalPackVersion: LEGAL_PACK_VERSION,
+              renderedLegalText: renderedLegalText(job),
+            },
           });
         }
         (job.changeOrders || []).filter((c) => c.status === "Sent").forEach((c) => {
@@ -10342,9 +11228,7 @@ function buildPortalSnapshot(job, brand, token, users = []) {
       portal,
       notes: (job.notes || []).filter((n) => n.customerVisible).map((n) => ({ at: n.at, text: n.text })),
       photos: portal.photos ? (job.photos || []).filter((ph) => ph.shared).map((ph) => ({ url: ph.url || ph.dataUrl, label: ph.label || "" })) : [],
-      documents: portal.documents ? (job.files || []).filter((file) => file.shared).map((file) => ({
-        name: file.name, category: file.cat, date: file.at, url: file.url || null,
-      })) : [],
+      documents: portalDocs,
       estimate: portal.estimate ? (() => {
         const est = job.estimate;
         /* Send the Good/Better/Best tiers and optional upgrades UNFLATTENED so
@@ -11221,6 +12105,15 @@ function PublicPortal({ token }) {
                     <div style={{ fontSize: 11.5, color: S.sub }}>{file.category}{file.date ? ` · ${file.date}` : ""}</div>
                   </div>
                   {file.url && <a href={file.url} target="_blank" rel="noreferrer" style={{ color: prim, fontSize: 12.5, fontWeight: 700 }}>Open</a>}
+                  {/* A generated document has no storage URL — it travels
+                      in the snapshot as rendered HTML, so it prints
+                      through the same path the office uses. */}
+                  {!file.url && file.html && (
+                    <button onClick={() => openDoc(file.name, { company: d.company, logo: d.logo, primary: d.primary, phone: d.phone, email: d.email }, file.html, () => {}, { bare: true })}
+                      style={{ border: "none", background: "none", cursor: "pointer", color: prim, fontSize: 12.5, fontWeight: 700, fontFamily: "inherit", padding: 0 }}>
+                      View
+                    </button>
+                  )}
                 </div>
               ))}
             </Card>
@@ -11998,23 +12891,33 @@ function EnRouteCard({ job, mut, toast, currentUser, integrations = {} }) {
     return next;
   };
 
+  /* This used to write a "Queued" message, stamp sharedAt and toast "ETA
+     sent to the customer" without calling any send function — on every
+     configuration, including a fully connected one. It also had no consent
+     check and addressed the message to job.name when no email was on file.
+     It now goes through deliverToCustomer and reports what actually
+     happened. */
   const share = async (state) => {
     const s = state || er;
     if (!s) return;
     const mins = etaRemaining(s) ?? s.etaMin;
     const first = String(job.name || "").split(" ")[0];
     const body = `Hi ${first}, ${s.by || "your crew"} is on the way to ${job.address} — about ${mins} minutes out, arriving around ${etaClock(new Date().toISOString(), mins)}.`;
+    const out = await deliverToCustomer(job, { prefer: "sms", subject: "On our way", body }, integrations, currentUser);
     mut((j) => ({
       ...j,
-      enroute: { ...(j.enroute || s), sharedAt: new Date().toISOString() },
+      /* sharedAt drives the portal's live ETA card and the "customer
+         notified" line, so it is only stamped on an actual delivery. */
+      enroute: { ...(j.enroute || s), sharedAt: out.delivered ? new Date().toISOString() : (j.enroute || s).sharedAt || null },
       messages: [...(j.messages || []), {
-        id: uid("m"), kind: j.consent?.sms?.granted ? "sms" : "email", audience: "Customer",
-        to: j.consent?.sms?.granted ? (j.phone || j.name) : (j.email || j.name),
-        subject: j.consent?.sms?.granted ? "" : "On our way",
-        body, status: "Queued", at: new Date().toISOString().slice(0, 16).replace("T", " "),
+        id: uid("m"), kind: out.kind, audience: "Customer", to: out.to,
+        subject: out.kind === "sms" ? "" : "On our way",
+        body, status: out.status, at: new Date().toISOString().slice(0, 16).replace("T", " "),
       }],
     }));
-    toast && toast("ETA sent to the customer — it's live in their portal too");
+    if (!toast) return;
+    if (out.delivered) toast(`ETA sent to the customer${job.portalToken ? " — it's live in their portal too" : ""}`);
+    else toast(out.status);
   };
 
   const arrive = () => {
@@ -12065,6 +12968,44 @@ function EnRouteCard({ job, mut, toast, currentUser, integrations = {} }) {
    someone renames a task. Downscale to a card-sized JPEG first: a 1000px
    wide, quality-0.72 shot lands around 80 KB and still looks sharp on a
    Retina card. Falls back to the raw data URL if canvas isn't available. */
+/* Shrink a camera photo to something a claim file can carry before it goes
+   anywhere. A phone shot is 3-8 MB; at 1600px wide and q0.82 it is a few
+   hundred KB, still detailed enough for an adjuster to see hail bruising,
+   and small enough to survive the inline fallback when Storage isn't on.
+   Returns a File so uploadJobFile can treat it like any other upload. */
+function downscaleImageFile(file, maxW = 1600, quality = 0.82) {
+  return new Promise((resolve) => {
+    if (!file || !String(file.type || "").startsWith("image/")) { resolve(file); return; }
+    const done = (f) => resolve(f || file);
+    try {
+      const r = new FileReader();
+      r.onerror = () => done(null);
+      r.onload = () => {
+        const img = new Image();
+        img.onerror = () => done(null);
+        img.onload = () => {
+          try {
+            const scale = Math.min(1, maxW / (img.width || maxW));
+            /* Already small enough — don't re-encode and lose quality. */
+            if (scale >= 1 && file.size < 900 * 1024) { done(null); return; }
+            const c = document.createElement("canvas");
+            c.width = Math.max(1, Math.round((img.width || maxW) * scale));
+            c.height = Math.max(1, Math.round((img.height || maxW) * scale));
+            c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+            c.toBlob((blob) => {
+              if (!blob || blob.size >= file.size) { done(null); return; }
+              const name = String(file.name || "photo").replace(/\.[^.]+$/, "") + ".jpg";
+              done(new File([blob], name, { type: "image/jpeg" }));
+            }, "image/jpeg", quality);
+          } catch (e) { done(null); }
+        };
+        img.src = String(r.result);
+      };
+      r.readAsDataURL(file);
+    } catch (e) { done(null); }
+  });
+}
+
 function imageToDataUrl(file, maxW = 1000, quality = 0.72) {
   return new Promise((resolve) => {
     const r = new FileReader();
@@ -13141,6 +14082,13 @@ const STAGE_CHECKS = {
   paidfull: { label: "Balance collected in full",
     test: (j) => { const p = paymentsSummary(j); return !p.contract || p.balance <= 0.01; },
     fix: "Financials — there is still a balance owed on this job." },
+  /* Warns rather than blocks by default, per the shipped s10 rule. An
+     office that wants a hard stop can flip it in the workflow editor —
+     the check picker iterates STAGE_CHECKS, so it appears there with no
+     further wiring. */
+  punchclear: { label: "Punch list cleared",
+    test: (j) => !(j.punch || []).some((p) => !p.done),
+    fix: "Punch list — close what's been fixed, or delete anything raised in error." },
   reason: { label: "Reason recorded",
     test: (j) => !!String(j.lostReason || "").trim(),
     fix: "Say why this one went away — the move dialog will ask you." },
@@ -13190,7 +14138,7 @@ const DEFAULT_STAGE_RULES = {
         tasks: [{ label: "Confirm crew and delivery", dueIn: 1 }, { label: "Complete installation", dueIn: 3 }], notify: true },
   s9: { sla: 10, gate: { mode: "warn", checks: ["measure"] },
         tasks: [{ label: "Send final invoice", dueIn: 1 }, { label: "Collect depreciation & deductible", dueIn: 5, when: "Insurance" }] },
-  s10: { sla: 0, gate: { mode: "warn", checks: ["paidfull"] },
+  s10: { sla: 0, gate: { mode: "warn", checks: ["paidfull", "punchclear"] },
          tasks: [{ label: "Request review", dueIn: 1 }], notify: true },
   s11: { sla: 0, gate: { mode: "warn", checks: ["reason"] }, tasks: [] },
   s12: { sla: 0, gate: { mode: "warn", checks: ["reason"] }, tasks: [] },
@@ -13696,9 +14644,8 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand, showMoney = true
                               {["ea", "sq", "LF", "SF", "hr", "day", "sheet", "bundle"].map((u) => <option key={u}>{u}</option>)}
                             </select>
                             <span style={{ fontSize: 13, color: S.sub }}>×</span>
-                            <span style={{ fontSize: 13, color: S.sub }}>$</span>
-                            <input style={{ ...inputStyle, flex: 1, textAlign: "right", padding: "8px 10px" }} inputMode="decimal"
-                              value={l.price} placeholder="0.00" onChange={(e) => editLine(c.id, l.id, "price", e.target.value)} />
+                            <MoneyInput style={{ ...inputStyle, flex: 1, padding: "8px 10px" }}
+                              value={l.price} onChange={(v) => editLine(c.id, l.id, "price", v)} />
                           </div>
                           <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: S.ink, marginTop: 6 }}>
                             {money(lineTotal(l.qty, l.price))}
@@ -14246,6 +15193,12 @@ function TabClaim({ job, mut, toast, brand }) {
             <input style={dateInputStyle} type="date" value={c.dateOfLoss || ""} onChange={(e) => set("dateOfLoss")(e.target.value)} />
           </Field>
         </div>
+        {/* The peril. Recorded here because the certificate of completion
+            states it to the carrier, and it was the one field on that
+            document with nowhere in the job file to come from. */}
+        <Field label="Type of loss">
+          <PillGroup options={PERILS} value={c.typeOfLoss || ""} onPick={set("typeOfLoss")} />
+        </Field>
         <Field label="Adjuster">
           <input style={inputStyle} value={ins.adjusterName || ""} onChange={(e) => setIns("adjusterName")(e.target.value)} />
         </Field>
@@ -14291,18 +15244,18 @@ function TabClaim({ job, mut, toast, brand }) {
         <CardTitle>Settlement</CardTitle>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="RCV (total scope)">
-            <input style={inputStyle} inputMode="decimal" value={c.rcv || ""} onChange={(e) => set("rcv")(e.target.value)} placeholder="0.00" />
+            <MoneyInput style={inputStyle} value={c.rcv || ""} onChange={set("rcv")} />
           </Field>
           <Field label="ACV (first cheque)">
-            <input style={inputStyle} inputMode="decimal" value={c.acv || ""} onChange={(e) => set("acv")(e.target.value)} placeholder="0.00" />
+            <MoneyInput style={inputStyle} value={c.acv || ""} onChange={set("acv")} />
           </Field>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Deductible">
-            <input style={inputStyle} inputMode="decimal" value={c.deductible || ins.deductible || ""} onChange={(e) => set("deductible")(e.target.value)} placeholder="0.00" />
+            <MoneyInput style={inputStyle} value={c.deductible || ins.deductible || ""} onChange={set("deductible")} />
           </Field>
           <Field label="Non-recoverable" hint="Never paid.">
-            <input style={inputStyle} inputMode="decimal" value={c.nonRecoverable || ""} onChange={(e) => set("nonRecoverable")(e.target.value)} placeholder="0.00" />
+            <MoneyInput style={inputStyle} value={c.nonRecoverable || ""} onChange={set("nonRecoverable")} />
           </Field>
         </div>
         <div style={{ background: S.soft, borderRadius: 10, padding: "11px 13px", marginTop: 4 }}>
@@ -14334,9 +15287,8 @@ function TabClaim({ job, mut, toast, brand }) {
               <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} value={sp.desc}
                 placeholder="e.g. Drip edge, 180 LF — R905.2.8.5"
                 onChange={(e) => editSup(sp.id, "desc", e.target.value)} />
-              <span style={{ color: S.sub, fontSize: 13 }}>$</span>
-              <input style={{ ...inputStyle, width: 92, textAlign: "right", padding: "9px 11px" }} inputMode="decimal"
-                value={sp.amount} onChange={(e) => editSup(sp.id, "amount", e.target.value)} />
+              <MoneyInput style={{ ...inputStyle, width: 104, padding: "9px 11px" }}
+                value={sp.amount} onChange={(v) => editSup(sp.id, "amount", v)} />
               <button onClick={() => delSup(sp.id)} style={{ border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}>
                 <Trash2 size={15} color="#B42318" />
               </button>
@@ -14365,14 +15317,14 @@ function TabClaim({ job, mut, toast, brand }) {
         <CardTitle>Money received</CardTitle>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="ACV cheque">
-            <input style={inputStyle} inputMode="decimal" value={c.acvReceived || ""} onChange={(e) => set("acvReceived")(e.target.value)} placeholder="0.00" />
+            <MoneyInput style={inputStyle} value={c.acvReceived || ""} onChange={set("acvReceived")} />
           </Field>
           <Field label="Depreciation cheque">
-            <input style={inputStyle} inputMode="decimal" value={c.depReceived || ""} onChange={(e) => set("depReceived")(e.target.value)} placeholder="0.00" />
+            <MoneyInput style={inputStyle} value={c.depReceived || ""} onChange={set("depReceived")} />
           </Field>
         </div>
         <Field label="Deductible collected">
-          <input style={inputStyle} inputMode="decimal" value={c.deductibleCollected || ""} onChange={(e) => set("deductibleCollected")(e.target.value)} placeholder="0.00" />
+          <MoneyInput style={inputStyle} value={c.deductibleCollected || ""} onChange={set("deductibleCollected")} />
         </Field>
         <div style={{ background: S.soft, borderRadius: 10, padding: "11px 13px", marginTop: 4 }}>
           <KV k="Claim value (RCV + approved supplements)" v={money(m.claimValue)} />
@@ -14417,8 +15369,12 @@ function TabVentilation({ job, mut, toast }) {
   const n1 = (x) => Math.round(x).toLocaleString();
 
   const supplementText = () => {
-    const cite = "IRC / RCO R806.2";
-    return `Attic ventilation — ${n1(m.area)} sq ft ventilated area. Per ${cite}, required net free area at 1/${m.effectiveRatio} is ${n1(m.effectiveRequired)} in². `
+    /* Was hardcoded to "IRC / RCO R806.2" for every job in the country.
+       Resolves against the property's state now, and where the cite is not
+       verified there the sentence simply does not claim one. */
+    const vf = asFact(citeFor(job.state || "", "ventilation"));
+    const per = printable(vf) && vf.value ? `Per ${vf.value}, required` : "Required";
+    return `Attic ventilation — ${n1(m.area)} sq ft ventilated area. ${per} net free area at 1/${m.effectiveRatio} is ${n1(m.effectiveRequired)} in². `
       + `Existing system provides ${n1(m.totalIn2)} in² (${n1(m.exhaustIn2)} in² exhaust, ${n1(m.intakeIn2)} in² intake). `
       + (m.meets
         ? `System meets the required ratio.`
@@ -15089,7 +16045,11 @@ function supplementFindings(job) {
   const text = items.map((i) => String(i.desc || "").toLowerCase()).join(" \n ");
   const has = (re) => re.test(text);
   const n = (x) => num(x);
-  const state = (jurisdictionForZip(job.zip) || {}).state || "OH";
+  /* An unresolved zip used to fall back to "OH", which put Residential Code
+     of Ohio section numbers on a supplement anywhere in the country. A wrong
+     cite is what gets a supplement denied, so carry the unknown through and
+     let citeFor say it has nothing on file. */
+  const state = (jurisdictionForZip(job.zip) || {}).state || (job.state || "");
   const out = [];
   /* opts: { topic, line } — topic maps to the state code library (citeFor),
      line is a ready-to-add estimate row so the finding is one tap to fix. */
@@ -15133,7 +16093,7 @@ function supplementFindings(job) {
   if ((c.flashingFail === "Yes" || n(m.wallFlash) > 0) && !has(/kickout|kick\s*out|diverter/i))
     add("MODERATE", "Kickout / diverter flashing",
       "Wall-to-roof intersections need a kickout diverter at the eave end to keep runoff out of the wall — commonly omitted and code-required.",
-      { cite: "IRC R703.4", line: { desc: "Kickout / diverter flashing", qty: 2, unit: "EA" } });
+      { topic: "kickout", line: { desc: "Kickout / diverter flashing", qty: 2, unit: "EA" } });
 
   // --- Field of the roof ---
   if (!has(/underlayment|synthetic|felt/i))
@@ -15222,13 +16182,22 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
     setDone((d) => ({ ...d, [f.title]: "estimate" }));
     toast && toast(`Added "${f.line.desc}" — set its price`);
   };
+  /* The cite used to be concatenated into `desc` and the tier discarded,
+     so once written the row was just "Drip edge [RCO R905.2.8.5]" with no
+     way to tell whether anyone had checked it. This text is what a rep
+     reads to an adjuster, so an unverified cite is left off entirely and
+     the tier travels with the row. */
   const addAsSupplement = (f) => {
     if (!mut) return;
-    const cite = f.cite ? ` [${f.cite}]` : "";
-    const row = { id: uid("sup"), desc: `${f.title}${cite}`, amount: "", status: "Draft", at: nowStamp() };
+    const cf = asFact(f);
+    const cite = printable(cf) && cf.value ? ` [${cf.value}]` : "";
+    const row = { id: uid("sup"), desc: `${f.title}${cite}`, amount: "", status: "Draft", at: nowStamp(),
+      cite: cf.value || "", citeConfidence: cf.confidence, citeState: f.state || "" };
     mut((j) => ({ ...j, claim: { ...(j.claim || {}), supplements: [...((j.claim || {}).supplements || []), row] } }));
     setDone((d) => ({ ...d, [f.title]: "supplement" }));
-    toast && toast(`Added "${f.title}" to the claim supplements`);
+    toast && toast(printable(cf) || !cf.value
+      ? `Added "${f.title}" to the claim supplements`
+      : `Added "${f.title}" — the code cite was left off because it is not verified for this state`);
   };
 
   return (
@@ -15255,7 +16224,7 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{f.title}</div>
                   <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 2 }}>{f.why}</div>
-                  {f.cite && <div style={{ marginTop: 5 }}><Chip tone={f.verified ? "blue" : "amber"}>{f.cite}</Chip></div>}
+                  {f.cite && <div style={{ marginTop: 5 }}><Cited fact={f} compact /></div>}
                 </div>
               </div>
               {!locked && mut && (done[f.title] || f.line || isClaim) && (
@@ -15334,15 +16303,15 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
             <input style={{ ...inputStyle, width: 62 }} value={it.unit} disabled={locked}
               onChange={(e) => setItem(it.id, "unit", e.target.value)} />
             <span style={{ color: S.sub }}>×</span>
-            <input style={{ ...inputStyle, width: 92, textAlign: "right" }} value={it.price} disabled={locked}
-              inputMode="decimal" onChange={(e) => setItem(it.id, "price", e.target.value)} />
+            <MoneyInput style={{ ...inputStyle, width: 104 }} value={it.price} disabled={locked}
+              onChange={(v) => setItem(it.id, "price", v)} />
             <div style={{ marginLeft: "auto", fontWeight: 800, fontSize: 14 }}>{money(num(it.qty) * num(it.price))}</div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
             <span style={{ fontSize: 11.5, color: S.sub }}>Cost</span>
-            <input style={{ ...inputStyle, width: 84, textAlign: "right", padding: "7px 9px", fontSize: 13 }}
-              value={it.cost ?? ""} disabled={locked} inputMode="decimal" placeholder="—"
-              onChange={(e) => setItem(it.id, "cost", e.target.value)} />
+            <MoneyInput style={{ ...inputStyle, width: 96, padding: "7px 9px", fontSize: 13 }}
+              value={it.cost ?? ""} disabled={locked} placeholder="—"
+              onChange={(v) => setItem(it.id, "cost", v)} />
             <span style={{ fontSize: 11.5, color: S.sub }}>Margin</span>
             <input style={{ ...inputStyle, width: 62, textAlign: "right", padding: "7px 9px", fontSize: 13 }}
               value={lineMargin(it) ?? ""} disabled={locked || !(num(it.cost) > 0)} inputMode="decimal" placeholder="%"
@@ -16154,10 +17123,8 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
               ) : (
                 <div style={{ flex: 1, fontSize: 13, color: S.ink, opacity: on ? 1 : 0.55 }}>{c.desc} <span style={{ color: S.sub }}>({c.unit})</span></div>
               )}
-              <span style={{ color: S.sub, fontSize: 13 }}>$</span>
-              <input style={{ ...inputStyle, width: 82, textAlign: "right", opacity: on ? 1 : 0.55 }} value={c.price} disabled={locked}
-                inputMode="decimal"
-                onChange={(e) => setConcealed(c.id, "price", e.target.value)} />
+              <MoneyInput style={{ ...inputStyle, width: 96, opacity: on ? 1 : 0.55 }} value={c.price} disabled={locked}
+                onChange={(v) => setConcealed(c.id, "price", v)} />
               {!locked && c.custom && (
                 <button onClick={() => removeConcealed(c.id)} style={{ border: "none", background: "none", cursor: "pointer" }}>
                   <Trash2 size={15} color="#B42318" />
@@ -16245,11 +17212,11 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
                 onChange={(e) => setUpgrade(u.id, "desc", e.target.value)} />
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <span style={{ fontSize: 11.5, color: S.sub }}>Price</span>
-                <input style={{ ...inputStyle, width: 100, textAlign: "right" }} value={u.price} disabled={locked}
-                  inputMode="decimal" onChange={(e) => setUpgrade(u.id, "price", e.target.value)} />
+                <MoneyInput style={{ ...inputStyle, width: 108 }} value={u.price} disabled={locked}
+                  onChange={(v) => setUpgrade(u.id, "price", v)} />
                 <span style={{ fontSize: 11.5, color: S.sub, marginLeft: 8 }}>Cost</span>
-                <input style={{ ...inputStyle, width: 92, textAlign: "right", fontSize: 13 }} value={u.cost ?? ""} disabled={locked}
-                  inputMode="decimal" placeholder="—" onChange={(e) => setUpgrade(u.id, "cost", e.target.value)} />
+                <MoneyInput style={{ ...inputStyle, width: 100, fontSize: 13 }} value={u.cost ?? ""} disabled={locked}
+                  placeholder="—" onChange={(v) => setUpgrade(u.id, "cost", v)} />
                 {!locked && (
                   <button onClick={() => removeUpgrade(u.id)} style={{ border: "none", background: "none", cursor: "pointer", marginLeft: "auto" }}>
                     <Trash2 size={15} color="#B42318" />
@@ -16352,8 +17319,8 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
         value={a[p.k] || ""} disabled={locked} onChange={(e) => set(p.k, e.target.value)} />
     );
   };
-  const price = num(String(a.finalPrice).replace(/[^0-9.]/g, ""));
-  const dep = num(String(a.deposit).replace(/[^0-9.]/g, ""));
+  const price = moneyNum(a.finalPrice);
+  const dep = moneyNum(a.deposit);
 
   return (
     <>
@@ -16436,10 +17403,17 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Agreement price</CardTitle>
-        {AGREEMENT_PRICE_ROWS.map((r) => <Field key={r.k} label={r.label}>{txt(r.k)}</Field>)}
+        {AGREEMENT_PRICE_ROWS.map((r) => (
+          <Field key={r.k} label={r.label}>
+            <MoneyInput style={inputStyle} value={a[r.k] || ""} disabled={locked}
+              onChange={(v) => set(r.k, v)} />
+          </Field>
+        ))}
+        {/* Free text rather than a money field: a rep is allowed to write
+            "See addendum" here, and the renderer prints that verbatim. */}
         <Field label="Balance due on completion"
-          hint={price ? `Leave blank to print ${money0(price - dep)} — the contract price less the deposit.` : "Leave blank to print the contract price less the deposit."}>
-          <input style={inputStyle} value={a.balance || ""} disabled={locked} placeholder={price ? money0(price - dep) : ""}
+          hint={price ? `Leave blank to print ${money(price - dep)} — the contract price less the deposit.` : "Leave blank to print the contract price less the deposit."}>
+          <input style={inputStyle} value={a.balance || ""} disabled={locked} placeholder={price ? money(price - dep) : ""}
             onChange={(e) => set("balance", e.target.value)} />
         </Field>
         <Field label="Right-to-cancel initials"><input style={{ ...inputStyle, width: 120 }} value={a.cancelInit || ""} disabled={locked}
@@ -16471,6 +17445,15 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
     r.readAsDataURL(file);
   };
   const removeAttachment = (id) => setCon({ attachments: (con.attachments || []).filter((a) => a.id !== id) });
+  /* What the state's legal pack has not settled yet. A contract is a
+     binding document: rendering the home market's cancellation window
+     to a homeowner in another state, or a blank where their rights
+     should be, is the failure this gate exists to prevent. Signing,
+     executing and emailing are all off until somebody has confirmed the
+     binding fields for this state on the Coverage screen. Printing is
+     deliberately still allowed — a rep needs to be able to look at the
+     draft and see exactly which slots are unfilled. */
+  const blockers = agreementBlockers(job);
   const estTotal = estimateTotal(job.estimate);
   const depositMode = con.depositMode || "pct";
   const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
@@ -16488,7 +17471,7 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
             ? <span style={{ fontFamily: "cursive", fontSize: 22 }}>{label === "Client" ? job.name : "Supreme Building Group"}</span>
             : <img src={value} alt={`${label} signature`} style={{ maxHeight: 66 }} />
         ) : (
-          <Btn small kind="soft" onClick={onSign} disabled={locked}><PenLine size={13} /> Sign here</Btn>
+          <Btn small kind="soft" onClick={onSign} disabled={locked || blockers.length > 0}><PenLine size={13} /> Sign here</Btn>
         )}
       </div>
       <div style={{ fontSize: 12, color: S.sub, marginTop: 6 }}>{label} {con.signedAt && value ? `· ${con.signedAt}` : ""}</div>
@@ -16540,9 +17523,8 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
         <CardTitle>Price & payment schedule</CardTitle>
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
           <div style={{ flex: 1, fontSize: 14 }}>Contract price</div>
-          <span style={{ color: S.sub }}>$</span>
-          <input style={{ ...inputStyle, width: 130, textAlign: "right" }} value={con.price} disabled={locked}
-            inputMode="decimal" onChange={(e) => setCon({ price: num(e.target.value) })} />
+          <MoneyInput style={{ ...inputStyle, width: 150 }} value={con.price} disabled={locked}
+            onChange={(v) => setCon({ price: num(v) })} />
         </div>
         {estTotal > 0 && !locked && (
           <button style={{ ...linkBtn, marginBottom: 10 }}
@@ -16571,11 +17553,8 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
               <option value="fixed">Fixed $</option>
             </select>
             {depositMode === "fixed" ? (
-              <>
-                <span style={{ color: S.sub }}>$</span>
-                <input style={{ ...inputStyle, width: 110, textAlign: "right" }} value={con.depositFixed ?? ""} disabled={locked}
-                  inputMode="decimal" onChange={(e) => setCon({ depositFixed: num(e.target.value) })} />
-              </>
+              <MoneyInput style={{ ...inputStyle, width: 130 }} value={con.depositFixed ?? ""} disabled={locked}
+                onChange={(v) => setCon({ depositFixed: num(v) })} />
             ) : (
               <>
                 <input style={{ ...inputStyle, width: 84, textAlign: "right" }} value={con.depositPct} disabled={locked}
@@ -16644,11 +17623,26 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
         onExport={(name, dataUrl) => { setCon({ attachments: [...(con.attachments || []), { id: uid("att"), name, dataUrl }] }); toast("Filled PDF attached to the contract"); }} />
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Signatures</CardTitle>
+        {!locked && blockers.length > 0 && (
+          <Callout tone="amber" label={`Not ready to sign in ${stateName(job.state) || "an unknown state"}`}>
+            <div style={{ lineHeight: 1.55 }}>
+              This contract states rights that are set by state law, and nobody has confirmed them
+              for {stateName(job.state) || "this property's state"} yet. Until they are confirmed the
+              agreement prints a labelled placeholder wherever one of those clauses belongs, and it
+              cannot be signed or sent.
+              <div style={{ marginTop: 8 }}>
+                {blockers.map((b) => (
+                  <div key={b.key} style={{ fontSize: 12.5, marginTop: 3 }}>• <b>{b.label}</b>{b.help ? ` — ${b.help}` : ""}</div>
+                ))}
+              </div>
+            </div>
+          </Callout>
+        )}
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
           <SigLine label="Client" value={con.clientSig} onSign={() => setSigFor("client")} />
           <SigLine label={`${brand.company} representative`} value={con.contractorSig} onSign={() => setSigFor("contractor")} />
         </div>
-        {con.clientSig && con.contractorSig && !locked && (
+        {con.clientSig && con.contractorSig && !locked && blockers.length === 0 && (
           <Btn kind="green" style={{ marginTop: 14, width: "100%" }} onClick={() => {
             setCon({ status: "Signed", signedAt: nowStamp() });
             toast("Contract executed and locked");
@@ -16662,11 +17656,21 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
         <Btn kind="ghost" onClick={() => (form === "agreement"
           ? openDoc(`Construction Agreement — ${job.name}`, brand, agreementDocHtml(job, brand), toast, { bare: true })
           : openDoc(`Contract — ${job.name}`, brand, contractDocHtml(job, brand), toast))}><Printer size={15} /> PDF</Btn>
-        <Btn kind="ghost" onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
+        {/* Sending it is the act that puts it in front of a homeowner to
+            sign, so it is gated with the signature. Printing is not — the
+            rep has to be able to see the draft and its gaps. */}
+        <Btn kind="ghost" disabled={blockers.length > 0} onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
           subject: `Your contract is ready — ${brand.company}`,
           body: `Hi ${job.name}, your contract for ${job.address} is ready to review and sign. Reply to this email with any questions.`,
         })}><Send size={15} /> Email to client</Btn>
       </div>
+      {blockers.length > 0 && (
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+          Printing the draft still works so you can see exactly which clauses are unfilled.
+          Confirm {stateName(job.state) || "the state"}'s contract law under More → Insurance &amp; resources →
+          Coverage by state to unlock signing and sending.
+        </div>
+      )}
       <SignaturePad open={!!sigFor} onClose={() => setSigFor(null)}
         title={sigFor === "client" ? "Client signature" : "Company signature"}
         onApply={(dataUrl, at) => {
@@ -16847,6 +17851,59 @@ async function sendClientEmail(job, mut, currentUser, integrations, toast, { sub
   toast("Saved to thread — connect your Gmail to deliver");
 }
 
+/* One delivery path for everything the app sends the customer on its own —
+   appointment confirmations, en-route ETAs, stage updates.
+
+   Those three used to write a message with status "Queued" and toast that
+   the customer had been notified. Nothing drained the queue, so on every
+   configuration the text was never sent: a roofer was told their Tuesday
+   inspection was confirmed to the homeowner when it wasn't. The en-route
+   share was worse — it had no consent check at all, the only send path in
+   the app without one, and fell back to `to: job.email || job.name`, so
+   with no email on file the "recipient" was the customer's own name.
+
+   Returns the real outcome and never throws. Callers record what it says. */
+async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, integrations, currentUser) {
+  const consent = job.consent || {};
+  const smsOk = !!(consent.sms && consent.sms.granted) && !!job.phone;
+  const emailOk = !!(consent.email && consent.email.granted) && !!job.email;
+  /* Preference, then the other channel, then nothing. Consent is per
+     channel and is not transferable between them. */
+  const kind = (prefer === "sms" && smsOk) ? "sms"
+    : (prefer === "email" && emailOk) ? "email"
+    : smsOk ? "sms" : emailOk ? "email" : null;
+  if (!kind) {
+    const why = (consent.sms && consent.sms.granted) || (consent.email && consent.email.granted)
+      ? "Not sent — no contact details on file"
+      : "Not sent — no messaging consent on file";
+    return { kind: prefer, to: "", status: why, delivered: false };
+  }
+  const to = kind === "sms" ? job.phone : job.email;
+  const auth = AUTH();
+  const notSetUp = (m) => /not configured|Function not found|Failed to send a request|non-2xx|isn't connected/i.test(m);
+  if (kind === "sms") {
+    if (!(auth && auth.sendSms)) return { kind, to, status: "Queued — no provider connected", delivered: false };
+    try {
+      await auth.sendSms({ to, body, jobId: job.id });
+      return { kind, to, status: "Sent", delivered: true };
+    } catch (e) {
+      const m = (e && e.message) || "Could not send";
+      return { kind, to, status: notSetUp(m) ? "Queued — texting not set up yet" : `Failed — ${m}`, delivered: false };
+    }
+  }
+  const myGmail = ((integrations && integrations.gmailByUser) || {})[currentUser && currentUser.id] || { connected: false };
+  if (!(myGmail.connected && auth && auth.sendGmail)) {
+    return { kind, to, status: "Queued — no provider connected", delivered: false };
+  }
+  try {
+    await auth.sendGmail({ to, subject, body });
+    return { kind, to, status: "Sent", delivered: true };
+  } catch (e) {
+    const m = (e && e.message) || "Could not send";
+    return { kind, to, status: notSetUp(m) ? "Queued — email not set up yet" : `Failed — ${m}`, delivered: false };
+  }
+}
+
 /* ================================================================
    MESSAGES — send email or SMS to the customer or crew from the job,
    with the thread kept on the job record.
@@ -16990,7 +18047,7 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
                 <span style={{ fontSize: 13, fontWeight: 700, color: S.ink }}>{m.audience}</span>
                 <span style={{ fontSize: 12, color: S.sub, overflow: "hidden", textOverflow: "ellipsis" }}>{m.to}</span>
               </div>
-              <Chip tone={m.status === "Sent" ? "green" : "amber"}>{m.status === "Sent" ? "Sent" : "Queued"}</Chip>
+              <Chip tone={msgTone(m.status)}>{msgLabel(m.status)}</Chip>
             </div>
             {m.subject && <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 6 }}>{m.subject}</div>}
             <div style={{ fontSize: 13, color: S.sub, marginTop: 4, whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{m.body}</div>
@@ -17137,6 +18194,8 @@ function TabPhotos({ job, mut, toast, ccToken }) {
   const [geo, setGeo] = useState(null);       // last fix
   const [locating, setLocating] = useState(false);
   const [geoErr, setGeoErr] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [upErr, setUpErr] = useState("");
   const fileRef = useRef(null);
   const pendingLabel = useRef("");
 
@@ -17155,15 +18214,38 @@ function TabPhotos({ job, mut, toast, ccToken }) {
     return r;
   };
 
+  /* This used to store an object-URL for the picked file — a blob: reference
+     scoped to one browser tab. The image bytes were never uploaded, so only the label,
+     timestamp and coordinates survived a reload, and every document that
+     left the building (inspection report, proposal findings, portal album)
+     rendered a broken image. For a roofer the storm photos ARE the claim, so
+     they now go through the same upload path as job files: Supabase Storage
+     when it is configured, an inline data URL when it is not. */
   const addPhoto = async (label, file) => {
+    /* The busy flag covers the GPS fix as well as the upload. captureLocation
+       allows up to ten seconds for a fix, and on a roof it often uses them —
+       leaving the screen silent after a tap for that long reads as a dropped
+       photo, which is how people end up shooting the same elevation twice. */
+    setUploading(true); setUpErr("");
     let fix = geo;
     if (!fix) { const r = await getFix(); fix = r.ok ? r : null; }
     const iso = new Date().toISOString();
-    const url = file ? URL.createObjectURL(file) : null;
+    let up = null;
+    try {
+      const small = await downscaleImageFile(file);
+      up = await uploadJobFile(job.id, small);
+    } catch (e) {
+      setUploading(false);
+      setUpErr((e && e.message) || "Couldn't save that photo.");
+      return;                       // never record a photo we failed to store
+    }
+    setUploading(false);
     mut((j) => ({
       ...j,
       photos: [...j.photos, {
-        id: uid("p"), label, at: fmtStamp(iso), iso, url,
+        id: uid("p"), label, at: fmtStamp(iso), iso,
+        url: up.url, storage: up.storage, storageKey: up.key, size: up.size, mime: up.mime,
+        shared: false,
         fileName: file ? file.name : null,
         lat: fix ? fix.lat : null, lng: fix ? fix.lng : null,
         accuracy: fix ? fix.accuracy : null,
@@ -17172,6 +18254,8 @@ function TabPhotos({ job, mut, toast, ccToken }) {
     }));
     toast(fix ? "Photo stamped with time + location" : "Photo saved — no location fix");
   };
+  const toggleShared = (id) =>
+    mut((j) => ({ ...j, photos: j.photos.map((x) => x.id === id ? { ...x, shared: !x.shared } : x) }));
 
   const pickFile = (label) => { pendingLabel.current = label; fileRef.current && fileRef.current.click(); };
   const onFile = (e) => {
@@ -17251,6 +18335,12 @@ function TabPhotos({ job, mut, toast, ccToken }) {
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="blue">{job.photos.length}</Chip>}>Photo album</CardTitle>
+        {uploading && <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>Saving photo — getting a location fix…</div>}
+        {upErr && <Callout label="Photo not saved" tone="red">{upErr}</Callout>}
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Tap <b>Share</b> on a photo to put it in the customer's portal album and the proposal's
+          findings section.
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {job.photos.map((p) => (
             <div key={p.id} style={{ border: `1px solid ${S.line}`, borderRadius: 12, overflow: "hidden" }}>
@@ -17270,6 +18360,13 @@ function TabPhotos({ job, mut, toast, ccToken }) {
                 ) : (
                   <div style={{ fontSize: 10.5, color: "#92600A", marginTop: 5 }}>No location</div>
                 )}
+                <button onClick={() => toggleShared(p.id)} style={{
+                  marginTop: 7, display: "inline-flex", alignItems: "center", gap: 5,
+                  border: `1px solid ${p.shared ? T.accent : S.line}`,
+                  background: p.shared ? T.accentSoft : S.card,
+                  color: p.shared ? T.accent : S.sub,
+                  borderRadius: 999, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer",
+                }}>{p.shared ? <Check size={10} /> : null} {p.shared ? "Shared" : "Share"}</button>
               </div>
             </div>
           ))}
@@ -17299,9 +18396,8 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} value={l.label}
               placeholder="Line item" onChange={(e) => onEdit(l.id, "label", e.target.value)} />
-            <span style={{ color: S.sub, fontSize: 13 }}>$</span>
-            <input style={{ ...inputStyle, width: 96, textAlign: "right", padding: "9px 11px" }} value={l.amt}
-              inputMode="decimal" onChange={(e) => onEdit(l.id, "amt", e.target.value)} />
+            <MoneyInput style={{ ...inputStyle, width: 110, padding: "9px 11px" }} value={l.amt}
+              onChange={(v) => onEdit(l.id, "amt", v)} />
             <button onClick={() => onDelete(l.id)} style={{ border: "none", background: "none", cursor: "pointer" }}>
               <Trash2 size={15} color="#B42318" />
             </button>
@@ -17341,7 +18437,7 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
    each sub-tab is still the exact same component as before (nothing
    about TabFinancials/TabPayments/TabInvoice changed), just reached
    through one door instead of three. */
-function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, integrations = {} }) {
+function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, integrations = {}, onLog = () => {} }) {
   const [sub, setSub] = useState("costs");
   const SUBS = [["costs", "Costs & profit"], ["payments", "Payments"], ["invoice", "Invoice"]];
   return (
@@ -17357,7 +18453,7 @@ function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, i
         ))}
       </div>
       {sub === "costs" && <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />}
-      {sub === "payments" && <TabPayments job={job} mut={mut} toast={toast} />}
+      {sub === "payments" && <TabPayments job={job} mut={mut} toast={toast} onLog={onLog} />}
       {sub === "invoice" && <TabInvoice job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser} integrations={integrations} />}
     </>
   );
@@ -17598,9 +18694,8 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
           <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
             <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} value={r.label}
               onChange={(e) => mut((j) => ({ ...j, fin: { ...j.fin, reimbursements: j.fin.reimbursements.map((x) => x.id === r.id ? { ...x, label: e.target.value } : x) } }))} />
-            <input style={{ ...inputStyle, width: 86, textAlign: "right", padding: "9px 11px" }} value={r.amt}
-              inputMode="decimal"
-              onChange={(e) => mut((j) => ({ ...j, fin: { ...j.fin, reimbursements: j.fin.reimbursements.map((x) => x.id === r.id ? { ...x, amt: num(e.target.value) } : x) } }))} />
+            <MoneyInput style={{ ...inputStyle, width: 100, padding: "9px 11px" }} value={r.amt}
+              onChange={(v) => mut((j) => ({ ...j, fin: { ...j.fin, reimbursements: j.fin.reimbursements.map((x) => x.id === r.id ? { ...x, amt: num(v) } : x) } }))} />
             <button onClick={() => mut((j) => ({ ...j, fin: { ...j.fin, reimbursements: j.fin.reimbursements.map((x) => x.id === r.id ? { ...x, status: x.status === "Reimbursed" ? "Needs paid" : "Reimbursed" } : x) } }))}
               style={{ border: "none", background: "none", cursor: "pointer", padding: 0 }}>
               <Chip tone={r.status === "Reimbursed" ? "green" : "red"}>{r.status}</Chip>
@@ -17655,17 +18750,36 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
 }
 
 /* ---------- Payments ---------- */
-function TabPayments({ job, mut, toast }) {
+function TabPayments({ job, mut, toast, onLog = () => {} }) {
   const [editPay, setEditPay] = useState(null);
   const [ef2, setEf2] = useState(null);
   const checkRef = useRef(null);
   const openPayEdit = (p2) => { setEditPay(p2.id); setEf2({ ...p2 }); };
+  /* The edit sheet tells the user "every edit is written to the activity
+     feed with the old values, so the record stays honest". It wasn't — both
+     of these only mutated and toasted, so a logged deposit could be silently
+     zeroed. Now the claim is true. */
   const savePayEdit = () => {
+    const before = (job.payments || []).find((x) => x.id === editPay);
     mut((j) => ({ ...j, payments: j.payments.map((x) => (x.id === editPay ? { ...x, ...ef2, amt: num(ef2.amt) } : x)) }));
+    if (before) {
+      const changes = [];
+      if (num(before.amt) !== num(ef2.amt)) changes.push(`amount ${money(num(before.amt))} → ${money(num(ef2.amt))}`);
+      if ((before.date || "") !== (ef2.date || "")) changes.push(`date ${before.date || "—"} → ${ef2.date || "—"}`);
+      if ((before.method || "") !== (ef2.method || "")) changes.push(`method ${before.method || "—"} → ${ef2.method || "—"}`);
+      if ((before.ref || "") !== (ef2.ref || "")) changes.push(`reference ${before.ref || "—"} → ${ef2.ref || "—"}`);
+      onLog({ kind: "payment", jobId: job.id, jobName: job.name,
+        text: changes.length ? `edited a payment — ${changes.join("; ")}` : "edited a payment (no values changed)" });
+    }
     setEditPay(null); toast("Payment updated");
   };
   const deletePay = () => {
+    const before = (job.payments || []).find((x) => x.id === editPay);
     mut((j) => ({ ...j, payments: j.payments.filter((x) => x.id !== editPay) }));
+    if (before) {
+      onLog({ kind: "payment", jobId: job.id, jobName: job.name,
+        text: `removed a ${money(num(before.amt))} payment${before.date ? ` dated ${before.date}` : ""}${before.method ? ` (${before.method})` : ""}` });
+    }
     setEditPay(null); toast("Payment removed");
   };
   const attachCheck = (e) => {
@@ -17701,8 +18815,8 @@ function TabPayments({ job, mut, toast }) {
         </div>
         <Field label="Description"><input style={inputStyle} value={form.label} placeholder="Deposit — check #, crew draw…"
           onChange={(e) => setForm({ ...form, label: e.target.value })} /></Field>
-        <Field label="Amount ($)"><input style={inputStyle} value={form.amt} inputMode="decimal"
-          onChange={(e) => setForm({ ...form, amt: e.target.value })} /></Field>
+        <Field label="Amount"><MoneyInput style={inputStyle} value={form.amt}
+          onChange={(v) => setForm({ ...form, amt: v })} /></Field>
         <Btn style={{ width: "100%" }} disabled={!form.label.trim() || !num(form.amt)} onClick={() => {
           mut((j) => ({ ...j, payments: [...j.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp() }] }));
           setForm({ type: "Received", label: "", amt: "" });
@@ -17740,8 +18854,8 @@ function TabPayments({ job, mut, toast }) {
               stays honest.
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Field label="Amount"><input style={inputStyle} value={ef2.amt} inputMode="decimal"
-                onChange={(e) => setEf2({ ...ef2, amt: e.target.value })} /></Field>
+              <Field label="Amount"><MoneyInput style={inputStyle} value={ef2.amt}
+                onChange={(v) => setEf2({ ...ef2, amt: v })} /></Field>
               <Field label="Date"><input style={inputStyle} type="date" value={ef2.date || ""}
                 onChange={(e) => setEf2({ ...ef2, date: e.target.value })} /></Field>
             </div>
@@ -17770,6 +18884,177 @@ function TabPayments({ job, mut, toast }) {
 }
 
 /* ---------- Invoice ---------- */
+/* The certificate screen. Deliberately not a form to fill in: it shows
+   what the certificate will say, sourced from the job, and lets a rep
+   correct any line. Everything blank is blank because nothing upstream
+   recorded it, and the screen says which screen records it. */
+function TabCertificate({ job, brand, mut, toast, currentUser = null, integrations = {} }) {
+  const a = certificateFor(job, brand);
+  const gaps = certificateGaps(job, brand);
+  const ready = gaps.length === 0;
+  const cert = job.certificate || {};
+  const set = (k) => (v) => mut((j) => ({ ...j, certificate: { ...(j.certificate || {}), [k]: v } }));
+  const shared = cert.shared !== false;
+  const completed = job.stageId === "s10";
+  const docTitle = `Certificate of Completion — ${job.name}`;
+  return (
+    <>
+      <Card>
+        <CardTitle right={<Chip tone={ready ? "green" : "amber"}>{ready ? "Ready" : `${gaps.length} missing`}</Chip>}>
+          Certificate of completion
+        </CardTitle>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
+          The document the carrier wants before it releases recoverable depreciation. It builds itself from this
+          job — the completion date is stamped when the job moves to <b>Job completed</b>, and the rest comes off
+          the claim and the contract. Correct anything below and it changes on the certificate.
+        </div>
+        {!completed && (
+          <Callout label="This job is not marked completed yet">
+            You can still print a draft, but the completion date is stamped when the job reaches <b>Job completed</b>.
+            A certificate dated before the work finished is worse than a late one.
+          </Callout>
+        )}
+        {!ready && (
+          <Callout label="Not ready to send">
+            The certificate is missing {gaps.join(", ")}. Fill those in below, or on the Insurance claim screen where
+            the carrier details live.
+          </Callout>
+        )}
+        {/* A warning, not a gate — open punch items block nothing, by
+            decision. But this document tells a carrier the work is
+            "complete and satisfactory", and signing that with the punch
+            list still open is a false statement with the contractor's
+            name on it. Deliberately screen-only: the punch list is
+            internal and must never reach the printed certificate. */}
+        {openPunch(job).length > 0 && (
+          <Callout label={`${openPunch(job).length} punch ${openPunch(job).length === 1 ? "item is" : "items are"} still open`}>
+            This certificate states the work was completed in a good and workmanlike manner and that the owner
+            accepts it as complete. Closing out the punch list first is the honest order to do this in.
+            <div style={{ marginTop: 6 }}>
+              {openPunch(job).slice(0, 3).map((p) => (
+                <div key={p.id} style={{ fontSize: 12.5, marginTop: 2 }}>• {p.label}</div>
+              ))}
+              {openPunch(job).length > 3 && (
+                <div style={{ fontSize: 12.5, marginTop: 2, color: S.sub }}>
+                  …and {openPunch(job).length - 3} more on the Punch list.
+                </div>
+              )}
+            </div>
+          </Callout>
+        )}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Project information</CardTitle>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Property owner">
+            <input style={inputStyle} value={a.owner} onChange={(e) => set("owner")(e.target.value)} />
+          </Field>
+          <Field label="Work completed">
+            <input style={dateInputStyle} type="date" value={a.completedAt} onChange={(e) => set("completedAt")(e.target.value)} />
+          </Field>
+        </div>
+        <Field label="Property address">
+          <input style={inputStyle} value={a.address} onChange={(e) => set("address")(e.target.value)} />
+        </Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Insurance carrier">
+            <input style={inputStyle} value={a.carrier} onChange={(e) => set("carrier")(e.target.value)} />
+          </Field>
+          <Field label="Claim number">
+            <input style={inputStyle} value={a.claimNo} onChange={(e) => set("claimNo")(e.target.value)} />
+          </Field>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Policy number">
+            <input style={inputStyle} value={a.policyNo} onChange={(e) => set("policyNo")(e.target.value)} />
+          </Field>
+          <Field label="Type of loss">
+            <input style={inputStyle} value={a.typeOfLoss} placeholder="Wind" onChange={(e) => set("typeOfLoss")(e.target.value)} />
+          </Field>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Date of loss">
+            <input style={dateInputStyle} type="date" value={a.dateOfLoss} onChange={(e) => set("dateOfLoss")(e.target.value)} />
+          </Field>
+          <Field label="Adjuster / estimator">
+            <input style={inputStyle} value={a.adjuster} onChange={(e) => set("adjuster")(e.target.value)} />
+          </Field>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Project manager">
+            <input style={inputStyle} value={a.manager} onChange={(e) => set("manager")(e.target.value)} />
+          </Field>
+          <Field label="Signed for the company by">
+            <input style={inputStyle} value={a.signedBy} onChange={(e) => set("signedBy")(e.target.value)} />
+          </Field>
+        </div>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Contract price &amp; settlement</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Stated as a total, not a line-item schedule — the contract price including approved change orders, less
+          the deductible. An itemised certificate that disagrees with the carrier's own estimate line for line
+          starts an argument on a document whose only job is to close the claim.
+        </div>
+        <KV k="Replacement Cost Value (total contract price)" v={money(a.rcv)} />
+        <Field label="Insured's deductible">
+          <MoneyInput style={inputStyle} value={cert.deductible !== undefined ? cert.deductible : ((job.insurance || {}).deductible || "")}
+            onChange={set("deductible")} />
+        </Field>
+        <KV k="Net claim / insurance proceeds" v={money(a.net)} strong />
+        <Field label="Note under the settlement block"
+          hint="Optional. Paste the carrier's price list and estimate date here if the adjuster wants them cited.">
+          <textarea style={{ ...inputStyle, minHeight: 62, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.5 }}
+            value={a.note} placeholder="Amounts per the approved [carrier] estimate (Price List ______, completed __/__/____)."
+            onChange={(e) => set("note")(e.target.value)} />
+        </Field>
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Where it goes</CardTitle>
+        <label style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0", fontSize: 13.5, cursor: "pointer" }}>
+          <input type="checkbox" checked={shared} onChange={(e) => set("shared")(e.target.checked)}
+            style={{ width: 18, height: 18, accentColor: T.accent }} />
+          <span>
+            <span style={{ display: "block", fontWeight: 600 }}>Show it in the customer portal</span>
+            <span style={{ fontSize: 11.5, color: S.sub }}>
+              Filed under Documents, alongside anything else you have shared. It is the homeowner's certificate —
+              they need it as much as the carrier does.
+            </span>
+          </span>
+        </label>
+        {shared && !ready && (
+          <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
+            It will not appear in the portal until it is complete — a homeowner should not be shown a certificate
+            with blanks in it.
+          </div>
+        )}
+      </Card>
+
+      <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+        <Btn kind="ghost" style={{ flex: 1 }}
+          onClick={() => openDoc(docTitle, brand, certificateDocHtml(job, brand), toast, { bare: true })}>
+          <Printer size={15} /> PDF
+        </Btn>
+        <Btn style={{ flex: 1 }} disabled={!ready}
+          onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
+            subject: `Certificate of completion — ${job.address}`,
+            body: `Hi ${(job.name || "").split(" ")[0]}, attached is the certificate of completion for the work at ${job.address}, finished ${longDate(a.completedAt)}. Your carrier will usually want a copy of this before releasing the recoverable depreciation on claim ${a.claimNo}. It is also in your customer portal under Documents.`,
+          })}>
+          <Send size={15} /> Email it
+        </Btn>
+      </div>
+      <div style={{ fontSize: 12, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
+        {ready
+          ? "Print it for a wet signature from the homeowner, or email it as it stands. The owner's signature line is left blank on purpose."
+          : "Printing a draft works so you can see what is still blank. Emailing is off until it is complete."}
+      </div>
+    </>
+  );
+}
+
 function TabInvoice({ job, brand, mut, toast, currentUser = null, integrations = {} }) {
   const pay = paymentsSummary(job);
   return (
@@ -17918,7 +19203,7 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
             <input style={{ ...inputStyle, width: 72, textAlign: "right" }} value={l.qty} inputMode="decimal" onChange={(e) => setLine(l.id, "qty", e.target.value)} />
             <input style={{ ...inputStyle, width: 62 }} value={l.unit} onChange={(e) => setLine(l.id, "unit", e.target.value)} />
             <span style={{ color: S.sub }}>×</span>
-            <input style={{ ...inputStyle, width: 92, textAlign: "right" }} value={l.price} inputMode="decimal" onChange={(e) => setLine(l.id, "price", e.target.value)} />
+            <MoneyInput style={{ ...inputStyle, width: 104 }} value={l.price} onChange={(v) => setLine(l.id, "price", v)} />
             <span style={{ marginLeft: "auto", fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{money(num(l.qty) * num(l.price))}</span>
           </div>
         </div>
@@ -18256,6 +19541,185 @@ function TaskRow({ t, today, onToggle }) {
         )}
       </span>
     </button>
+  );
+}
+
+/* ==================================================================
+   PUNCH LIST
+
+   Everything the crew still owes on a job that is otherwise finished.
+   `moveStage` has stamped `completedAt` since the certificate landed,
+   and the comment explaining why it is stamped only once already said
+   "a job bounces back for a punch item" — while no punch item existed
+   anywhere in the app. This is that model.
+
+   It is close to `job.tasks` on purpose, so the code reads the same,
+   but a punch item is a *finding* rather than a to-do, which changes
+   two things: it records who spotted it, and it can be deleted. A task
+   raised in error can reasonably be closed as done; a punch item
+   cannot, because "done" here means somebody went back and fixed it.
+
+   Internal only. Nothing here reaches the customer portal.
+================================================================== */
+function openPunch(job) { return (job.punch || []).filter((p) => !p.done); }
+/* Red when the job is being called finished with work outstanding, or
+   when an item has blown its date; amber while the job is still in
+   flight and nothing is late. The Blockers card handles no other tone. */
+function punchTone(job) {
+  const open = openPunch(job);
+  if (!open.length) return null;
+  const done = ["s10", "s11", "s12"].includes(job.stageId);
+  const late = open.some((p) => p.due && p.due < todayIso());
+  return (done || late) ? "red" : "amber";
+}
+
+function PunchRow({ p, today, onToggle, onDelete }) {
+  const late = !p.done && p.due && p.due < today;
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 11, padding: "11px 0", borderBottom: `1px solid ${S.line}` }}>
+      <button onClick={onToggle} aria-label={p.done ? "Reopen" : "Mark fixed"}
+        style={{ border: "none", background: "none", cursor: "pointer", padding: 0, marginTop: 1, touchAction: "manipulation" }}>
+        {p.done ? <CheckCircle2 size={20} color="#177245" /> : <Circle size={20} color="#C7CBD1" />}
+      </button>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, color: p.done ? S.sub : S.ink, textDecoration: p.done ? "line-through" : "none", lineHeight: 1.35 }}>
+          {p.label}
+        </div>
+        {p.note && <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.45, marginTop: 3 }}>{p.note}</div>}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 5 }}>
+          {p.due && (
+            <Chip tone={p.done ? "gray" : late ? "red" : "blue"}>
+              {late ? "Overdue · " : "Due "}{p.due}
+            </Chip>
+          )}
+          {/* Who spotted it. On a punch item this is the person to ask,
+              which is why it is on the row rather than buried. */}
+          <span style={{ fontSize: 11.5, color: S.sub }}>
+            Raised by {p.by || "—"}{p.at ? ` · ${p.at}` : ""}
+            {p.done && p.doneAt ? ` · fixed ${p.doneAt}${p.doneBy ? ` by ${p.doneBy}` : ""}` : ""}
+          </span>
+        </div>
+        {p.photo && p.photo.url && (
+          <a href={p.photo.url} target="_blank" rel="noreferrer" style={{ display: "inline-block", marginTop: 7 }}>
+            <img src={p.photo.url} alt={p.label} style={{ maxHeight: 96, borderRadius: 8, border: `1px solid ${S.line}` }} />
+          </a>
+        )}
+      </div>
+      <button onClick={onDelete} aria-label="Delete this item"
+        style={{ border: "none", background: "none", cursor: "pointer", padding: 2, flexShrink: 0 }}>
+        <Trash2 size={15} color="#B42318" />
+      </button>
+    </div>
+  );
+}
+
+function TabPunchList({ job, mut, toast, currentUser = null }) {
+  const [txt, setTxt] = useState("");
+  const [note, setNote] = useState("");
+  const [due, setDue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const fileRef = useRef(null);
+  const pendingPhoto = useRef(null);
+  const today = todayIso();
+  const who = (currentUser && currentUser.name) || job.assignee || "—";
+  /* No job created before this feature has the field. */
+  const items = job.punch || [];
+  const open = items.filter((p) => !p.done);
+  const fixed = items.filter((p) => p.done);
+
+  const add = (photo = null) => {
+    const label = txt.trim();
+    if (!label) return;
+    mut((j) => ({ ...j, punch: [...(j.punch || []), {
+      id: uid("pn"), label, note: note.trim(), done: false,
+      at: nowStamp(), by: who, doneAt: null, doneBy: null,
+      due: due || null, photo,
+    }] }));
+    setTxt(""); setNote(""); setDue("");
+    toast("Added to the punch list");
+  };
+  const toggle = (p) => mut((j) => ({ ...j, punch: (j.punch || []).map((x) => x.id === p.id
+    ? { ...x, done: !x.done, doneAt: !x.done ? nowStamp() : null, doneBy: !x.done ? who : null }
+    : x) }));
+  const remove = (p) => mut((j) => ({ ...j, punch: (j.punch || []).filter((x) => x.id !== p.id) }));
+
+  /* Same path as job photos: downscale, then upload, and record nothing
+     if the upload fails rather than leaving an item pointing at an
+     image that was never stored. */
+  const onFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setBusy(true); setErr("");
+    let up = null;
+    try {
+      up = await uploadJobFile(job.id, await downscaleImageFile(file));
+    } catch (ex) {
+      setBusy(false);
+      setErr((ex && ex.message) || "Couldn't save that photo.");
+      return;
+    }
+    setBusy(false);
+    add({ url: up.url, storage: up.storage, storageKey: up.key, size: up.size, mime: up.mime });
+  };
+
+  return (
+    <>
+      <input ref={fileRef} type="file" accept="image/*" capture="environment"
+        onChange={onFile} style={{ display: "none" }} />
+      <Card>
+        <CardTitle right={<Chip tone={open.length ? (punchTone(job) || "amber") : "green"}>
+          {open.length ? `${open.length} open` : "Clear"}
+        </Chip>}>Punch list</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
+          What the crew still owes on this roof. Internal — the homeowner never sees this list.
+          Open items show on the home screen until they are closed, and warn when the job is moved
+          to <b>Job completed</b> or a certificate is issued, but they never block anything.
+        </div>
+
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 14 }}>OPEN ({open.length})</div>
+        {open.length === 0 && <div style={{ fontSize: 13.5, color: S.sub, padding: "10px 0" }}>Nothing outstanding.</div>}
+        {open.map((p) => <PunchRow key={p.id} p={p} today={today} onToggle={() => toggle(p)} onDelete={() => remove(p)} />)}
+
+        {fixed.length > 0 && (
+          <>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: S.sub, marginTop: 16 }}>FIXED ({fixed.length})</div>
+            {fixed.map((p) => <PunchRow key={p.id} p={p} today={today} onToggle={() => toggle(p)} onDelete={() => remove(p)} />)}
+          </>
+        )}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle>Add an item</CardTitle>
+        <Field label="What needs fixing">
+          <input style={inputStyle} value={txt} placeholder="Gutter apron short at the NE corner"
+            onChange={(e) => setTxt(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && txt.trim()) add(); }} />
+        </Field>
+        <Field label="Detail (optional)">
+          <textarea style={{ ...inputStyle, minHeight: 54, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.5 }}
+            value={note} placeholder="Roughly 6 ft short. Material is on the truck."
+            onChange={(e) => setNote(e.target.value)} />
+        </Field>
+        <Field label="Needed by (optional)">
+          <input style={dateInputStyle} type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+        </Field>
+        {err && <div style={{ fontSize: 12.5, color: "#B42318", marginBottom: 8 }}>{err}</div>}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Btn style={{ flex: 1 }} disabled={!txt.trim() || busy} onClick={() => add()}>
+            <Plus size={15} /> Add
+          </Btn>
+          <Btn kind="soft" style={{ flex: 1 }} disabled={!txt.trim() || busy}
+            onClick={() => fileRef.current && fileRef.current.click()}>
+            <Camera size={15} /> {busy ? "Saving…" : "Add with photo"}
+          </Btn>
+        </div>
+        <div style={{ fontSize: 11.5, color: S.sub, marginTop: 7, lineHeight: 1.45 }}>
+          A photo makes it obvious what you meant three weeks later, and settles it with the crew.
+        </div>
+      </Card>
+    </>
   );
 }
 
@@ -18888,12 +20352,19 @@ function ShingleFinder() {
 /* ================================================================
    LETTER TEMPLATES — copy, fill the brackets, send.
    ================================================================ */
-function LetterTemplates() {
+function LetterTemplates({ state: stateProp = "" }) {
   const [open, setOpen] = useState(null);
   const [copied, setCopied] = useState(null);
-  const copy = async (t) => {
+  /* These go to a carrier or a regulator on company letterhead, so they
+     resolve against a state before they can be copied. They used to carry
+     Ohio code sections and the Columbus DOI address as literal prose, to
+     every user in the country. */
+  /* No default. Defaulting to Ohio here would be the same habit this whole
+     round is removing — the rep picks, or nothing resolves. */
+  const [state, setState] = useState(stateProp || "");
+  const copy = async (t, body) => {
     try {
-      await navigator.clipboard.writeText(t.body);
+      await navigator.clipboard.writeText(body);
       setCopied(t.id);
       setTimeout(() => setCopied(null), 1800);
     } catch { setCopied("fail"); setTimeout(() => setCopied(null), 1800); }
@@ -18904,7 +20375,17 @@ function LetterTemplates() {
         Put it in writing. Verbal approvals and denials disappear when a claim gets contested — written ones do not.
         Copy a template, fill the bracketed fields, send it from your work email so there's a timestamp.
       </div>
-      {LETTER_TEMPLATES.map((t, i) => (
+      <Card style={{ marginBottom: 14 }}>
+        <Field label="Where is the property?" hint="Code sections, the matching rule and the regulator's address all resolve from this.">
+          <select style={selStyle} value={state} onChange={(e) => setState(e.target.value)}>
+            <option value="">Select a state…</option>
+            {US_STATES.map(([ab, name]) => <option key={ab} value={ab}>{name}</option>)}
+          </select>
+        </Field>
+      </Card>
+      {LETTER_TEMPLATES.map((t, i) => {
+        const r = renderLetter(t, state);
+        return (
         <Card key={t.id} style={{ marginTop: i ? 12 : 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
             <div style={{ minWidth: 0 }}>
@@ -18912,11 +20393,30 @@ function LetterTemplates() {
               <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 4 }}>{t.when}</div>
             </div>
           </div>
+          {r.used.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+              {r.used.map((u, k) => <Cited key={k} fact={u.fact} compact />)}
+            </div>
+          )}
+          {!r.ready && (
+            <Callout label={state ? `Not ready to send in ${state}` : "Pick a state first"} tone="amber">
+              {r.blocking.length} of the references in this letter {r.blocking.length === 1 ? "is" : "are"} not
+              verified for {state || "the selected state"}. Sending an unchecked citation to an adjuster is what
+              gets the rest of the letter dismissed — confirm {r.blocking.length === 1 ? "it" : "them"} first.
+              {r.blocking.some((b) => b.fact.sourceUrl) && (
+                <div style={{ marginTop: 6 }}>
+                  {r.blocking.filter((b) => b.fact.sourceUrl).map((b, k) => (
+                    <AssistLink key={k} href={b.fact.sourceUrl}>{b.fact.sourceName || "Where to check"}</AssistLink>
+                  ))}
+                </div>
+              )}
+            </Callout>
+          )}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => setOpen(open === t.id ? null : t.id)}>
               <Eye size={13} /> {open === t.id ? "Hide" : "Read"}
             </Btn>
-            <Btn small style={{ flex: 1 }} onClick={() => copy(t)}>
+            <Btn small style={{ flex: 1 }} disabled={!r.ready} onClick={() => copy(t, r.body)}>
               {copied === t.id ? <><Check size={13} /> Copied</> : <><Copy size={13} /> Copy</>}
             </Btn>
           </div>
@@ -18925,10 +20425,11 @@ function LetterTemplates() {
               whiteSpace: "pre-wrap", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
               fontSize: 12.5, lineHeight: 1.6, color: S.ink, background: "#FAFBFC",
               border: `1px solid ${S.line}`, borderRadius: 10, padding: 13, marginTop: 12, overflowX: "auto",
-            }}>{t.body}</pre>
+            }}>{r.body}</pre>
           )}
         </Card>
-      ))}
+        );
+      })}
       <Callout label="Before sending">
         Replace every bracketed field — an unfilled placeholder in front of an adjuster costs credibility on the whole
         letter. Attach the photos, measurements, and manufacturer bulletin you reference. Keep a copy in the job's Files tab.
@@ -19033,14 +20534,39 @@ function ManufacturerSpecs() {
    can synthesize; until then it surfaces the most relevant cited entries.
    ================================================================ */
 const CLAIM_STOPWORDS = new Set("the a an of to in on for is are do does how what when should i my me we our you your can could with and or if it this that at as be by from about".split(" "));
+/* Every corpus record now declares whose law it is. Without this the
+   retrieval index was flat and stateless, so a New Mexico rep asking about
+   drip edge got an Ohio RCO section quoted back with a citation attached —
+   and the edge function is told to use citations verbatim, which made the
+   answer look authoritative. `state: null` means national and is never
+   filtered; a two-letter code is filtered against the job's state. */
+/* Playbook answers and trigger lists carry their cites inside free prose,
+   so the only honest way to tell whose law a record states is to look for
+   an Ohio citation in it. Anything without one is treated as national. */
+/* Tags whose records assert what the law requires. Everything else —
+   manufacturer specs, NRCA practice, the glossary, app help — is national
+   and stays visible in every state. */
+const LAW_STATING_TAGS = new Set(["Code", "Policy", "Playbook", "Supplement"]);
+function ohIfCited(parts) {
+  return /\b(RCO|OAC|O\.A\.C|R\.C\.|ORC)\b/.test((parts || []).join(" ")) ? "OH" : null;
+}
 function buildClaimCorpus() {
   const items = [];
-  (KB_CODES || []).forEach((c) => items.push({ title: c.title, body: `${c.body} ${c.supplement || ""}`, cite: c.cite, source: "Code", tag: "Code" }));
+  /* KB_CODES is mostly IRC, but four records are Ohio insurance regulation
+     wearing a code jacket — the matching provision, the claim-handling
+     deadlines. Their cites carry OAC, so the same test that tags the
+     playbooks tags these. */
+  (KB_CODES || []).forEach((c) => items.push({ title: c.title, body: `${c.body} ${c.supplement || ""}`, cite: c.cite, source: "Code", tag: "Code", state: ohIfCited([c.cite, c.body, c.supplement]) }));
   (KB_TERMS || []).forEach(([term, expand, def]) => items.push({ title: `${term}${expand ? ` — ${expand}` : ""}`, body: def, source: "Glossary", tag: "Term" }));
-  (CLAIM_SCENARIOS || []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook" }));
-  (typeof MORE_SCENARIOS !== "undefined" ? MORE_SCENARIOS : []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook" }));
+  (CLAIM_SCENARIOS || []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook", state: ohIfCited(s.answer) }));
+  (typeof MORE_SCENARIOS !== "undefined" ? MORE_SCENARIOS : []).forEach((s) => items.push({ title: s.q, body: `${s.setup || ""} ${(s.answer || []).join(" ")}`, source: "Claim playbook", tag: "Playbook", state: ohIfCited(s.answer) }));
   (typeof CARRIER_PATTERNS !== "undefined" ? CARRIER_PATTERNS : []).forEach((c) => items.push({ title: c.title, body: `${c.pattern || ""} ${(c.answer || []).join(" ")}`, source: "Carrier patterns", tag: "Carrier" }));
-  (SUPPLEMENT_TEMPLATES || []).forEach((t) => items.push({ title: t.title, body: `${t.scenario || ""} ${t.wording || ""}`, source: "Supplement template", tag: "Supplement" }));
+  /* The wording carries a {CITE} token that the supplement screen resolves
+     per state through citeFor. The corpus is built once and memoised, so it
+     cannot resolve it — and pushing the raw string surfaced the literal
+     "Per {CITE}, ice barrier is required…" on a source card. Carry the topic
+     so the render can resolve it, and neutralise the token in the body. */
+  (SUPPLEMENT_TEMPLATES || []).forEach((t) => items.push({ title: t.title, topic: t.topic, body: `${t.scenario || ""} ${String(t.wording || "").replace(/\{CITE\}/g, "the code section adopted in this state")}`, source: "Supplement template", tag: "Supplement" }));
   (typeof POLICY_CARDS !== "undefined" ? POLICY_CARDS : []).forEach((c) => items.push({ title: c.title, body: `${c.body || ""} ${(c.callout && c.callout.text) || ""}`, source: "Policy provisions", tag: "Policy" }));
   /* Everything below was already bundled and already maintained — it just
      wasn't reachable from the assistant, so a rep asking "what nail count
@@ -19049,13 +20575,13 @@ function buildClaimCorpus() {
   (typeof NRCA_PRACTICE !== "undefined" ? NRCA_PRACTICE : []).forEach((n) => items.push({ title: `NRCA — ${n.topic}`, body: n.body, cite: n.cite, source: "NRCA best practice", tag: "NRCA" }));
   (typeof IRC_DEEP !== "undefined" ? IRC_DEEP : []).forEach((c) => items.push({ title: `${c.topic}`, body: c.body, cite: c.cite, source: "Building code (IRC)", tag: "Code" }));
   (typeof IRC_BASE !== "undefined" ? IRC_BASE : {}) && Object.entries(IRC_BASE || {}).forEach(([k, v]) => items.push({ title: k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()), body: v.note, cite: v.cite, source: "Building code (IRC)", tag: "Code" }));
-  (typeof PROVISION_TOPICS !== "undefined" ? PROVISION_TOPICS : []).forEach((p) => items.push({ title: p.topic, body: p.note, cite: p.oh, source: "Code provisions", tag: "Code" }));
+  (typeof PROVISION_TOPICS !== "undefined" ? PROVISION_TOPICS : []).forEach((p) => items.push({ title: p.topic, body: p.note, cite: p.oh, source: "Code provisions", tag: "Code", state: "OH" }));
   /* Per-state code provisions: one record per state × topic, so "ice barrier
      in Texas" resolves to the Texas cite rather than the Ohio one. */
   Object.entries(typeof CODE_PROVISIONS !== "undefined" ? CODE_PROVISIONS : {}).forEach(([st, topics]) => {
     Object.entries(topics || {}).forEach(([k, v]) => {
       if (!v || !v.note) return;
-      items.push({ title: `${st} — ${k.replace(/([A-Z])/g, " $1").toLowerCase().trim()}`, body: v.note, cite: v.cite, source: `Building code (${st})`, tag: "Code" });
+      items.push({ title: `${st} — ${k.replace(/([A-Z])/g, " $1").toLowerCase().trim()}`, body: v.note, cite: v.cite, source: `Building code (${st})`, tag: "Code", state: st });
     });
   });
   (typeof MFR_SPECS !== "undefined" ? MFR_SPECS : []).forEach((m) => items.push({
@@ -19066,10 +20592,18 @@ function buildClaimCorpus() {
     title: `${s.mfr} ${s.line}`,
     body: `${s.type}, ${s.status === "disco" ? "discontinued" : "current"}${s.years ? ` (${s.years})` : ""}. ${s.w} by ${s.l} with ${s.exp} exposure. ${s.note || ""}`,
     source: "Shingle database", tag: "Manufacturer" }));
-  (typeof SUPPLEMENT_TRIGGERS !== "undefined" ? SUPPLEMENT_TRIGGERS : []).forEach(([label, cite]) => items.push({ title: label, body: `Commonly omitted from a carrier's scope and supportable on code grounds.`, cite, source: "Supplement trigger", tag: "Supplement" }));
-  (typeof LETTER_TEMPLATES !== "undefined" ? LETTER_TEMPLATES : []).forEach((t) => items.push({ title: `Letter — ${t.title}`, body: `${t.when || ""} ${t.body || ""}`, source: "Letter template", tag: "Letter" }));
-  (typeof LAW_ITEMS !== "undefined" ? LAW_ITEMS : []).forEach((l) => items.push({ title: l.title, body: l.body, source: "Regulation", tag: "Policy" }));
-  (typeof KEY_CONTACTS !== "undefined" ? KEY_CONTACTS : []).forEach(([name, phone, web]) => items.push({ title: name, body: `Technical services / consumer line. ${[phone, web].filter(Boolean).join("  ·  ")}`, source: "Contacts", tag: "Term" }));
+  (typeof SUPPLEMENT_TRIGGERS !== "undefined" ? SUPPLEMENT_TRIGGERS : []).forEach(([label, cite]) => items.push({ title: label, body: `Commonly omitted from a carrier's scope and supportable on code grounds.`, cite, source: "Supplement trigger", tag: "Supplement", state: ohIfCited([cite]) }));
+  /* The bodies are tokenised now, so what the corpus sees is state-neutral
+     — but the letters resolve per state at render time, so the record says
+     so rather than implying the tokens are the answer. */
+  (typeof LETTER_TEMPLATES !== "undefined" ? LETTER_TEMPLATES : []).forEach((t) => items.push({ title: `Letter — ${t.title}`, body: `${t.when || ""} ${String(t.body || "").replace(/\{[A-Z_:a-zA-Z]+\}/g, "the applicable citation")}`, source: "Letter template", tag: "Letter", state: null }));
+  /* Every LAW_ITEMS record is Ohio insurance law — the header comment on
+     the constant says so. Untagged, these were the single biggest source of
+     "the app told a Texas rep what Ohio requires". */
+  (typeof LAW_ITEMS !== "undefined" ? LAW_ITEMS : []).forEach((l) => items.push({ title: l.title, body: l.body, source: "Regulation", tag: "Policy", state: "OH" }));
+  /* Mixed: two Ohio agencies, the rest national manufacturer and NOAA
+     lines. Tagged per row rather than per constant. */
+  (typeof KEY_CONTACTS !== "undefined" ? KEY_CONTACTS : []).forEach(([name, phone, web]) => items.push({ title: name, body: `Technical services / consumer line. ${[phone, web].filter(Boolean).join("  ·  ")}`, source: "Contacts", tag: "Term", state: /\bOhio\b/.test(name) ? "OH" : null }));
   (typeof SIDING_MATCHING !== "undefined" ? [SIDING_MATCHING] : []).forEach((s) => items.push({ title: "Vinyl siding — the matching reality", body: `${(s.points || []).join(" ")} ${s.argument || ""}`, source: "Claim playbook", tag: "Playbook" }));
   (typeof VENT_EXHAUST !== "undefined" ? VENT_EXHAUST : []).forEach((v) => items.push({ title: `Exhaust vent — ${v.name || v[0]}`, body: JSON.stringify(v).replace(/["{}]/g, " "), source: "Ventilation", tag: "Term" }));
   (typeof VENT_INTAKE !== "undefined" ? VENT_INTAKE : []).forEach((v) => items.push({ title: `Intake vent — ${v.name || v[0]}`, body: JSON.stringify(v).replace(/["{}]/g, " "), source: "Ventilation", tag: "Term" }));
@@ -19092,7 +20626,14 @@ function claimCorpus() {
    is also what selects the grounding records when one is — so it keeps a
    permanent job either way. limit is higher for the model than for the
    on-screen cards, which only have room for a handful. */
-function answerClaim(q, limit = 4) {
+/* `state` is the property's state. A record tagged with a different state
+   is dropped outright when it states law (code, regulation, playbook) and
+   down-weighted otherwise; a record with no state is national and untouched.
+
+   The penalty has to be a multiplier. Scoring below adds covered² × 2, so
+   on a long question an additive penalty is swamped by the coverage term
+   and an out-of-state record still wins. */
+function answerClaim(q, limit = 4, state = "") {
   const raw = String(q || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/)
     .filter((w) => w.length > 2 && !CLAIM_STOPWORDS.has(w));
   if (!raw.length) return [];
@@ -19116,7 +20657,19 @@ function answerClaim(q, limit = 4) {
        the minimum-slope rule. */
     score += covered * covered * 2;
     return { it, score };
-  }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, limit).map((x) => x.it);
+  }).filter((x) => {
+    if (x.score <= 0) return false;
+    const rs = x.it.state;
+    if (!rs || !state || rs === state) return true;
+    /* A record that states another state's law is not "less relevant" —
+       it is wrong for this roof, and quoting it is how a rep ends up
+       citing Ohio administrative code to a Texas adjuster. */
+    return !LAW_STATING_TAGS.has(x.it.tag);
+  }).map((x) => {
+    const rs = x.it.state;
+    const off = rs && state && rs !== state;
+    return off ? { ...x, score: x.score * 0.2 } : x;
+  }).sort((a, b) => b.score - a.score).slice(0, limit).map((x) => x.it);
 }
 
 /* A compact, money-free summary of the open job, so "what's missing on this
@@ -19142,8 +20695,13 @@ function assistantJobContext(job) {
   };
 }
 
-function ClaimAssistant({ job = null }) {
+function ClaimAssistant({ job = null, defaultState = "" }) {
   const auth = AUTH();
+  /* Which state's law applies. From the open job when there is one; from a
+     picker otherwise, because this component is also rendered with no job
+     at all in the Insurance hub and had no state source there whatsoever. */
+  const [askState, setAskState] = useState((job && job.state) || defaultState || "");
+  useEffect(() => { if (job && job.state) setAskState(job.state); }, [job && job.state]);
   const jobSuggestions = job ? [
     "What's missing on this roof before it goes to production?",
     job.claimType === "Insurance"
@@ -19171,8 +20729,8 @@ function ClaimAssistant({ job = null }) {
     /* The local scorer runs first, always. It is the answer when no key is
        deployed, and it is what selects the grounding records when one is —
        so the assistant is never worse than it was, only sometimes better. */
-    const hits = answerClaim(question, 4);
-    const grounding = answerClaim(question, 12);
+    const hits = answerClaim(question, 4, askState);
+    const grounding = answerClaim(question, 12, askState);
     setQ("");
     setMsgs((m) => [...m, { role: "user", text: question }, {
       role: "bot", hits, pending: true,
@@ -19187,7 +20745,14 @@ function ClaimAssistant({ job = null }) {
     try {
       answer = await auth.askAssistant({
         question,
-        records: grounding.map((h) => ({ title: h.title, body: h.body, cite: h.cite || "", source: h.source })),
+        /* `state` travels with each record so the model can be told which
+           jurisdiction a citation belongs to. Without it the prompt's
+           "use the citation verbatim" rule had nothing to weigh against
+           its "code varies by jurisdiction" rule. */
+        records: grounding.map((h) => ({
+          title: h.title, body: h.body, cite: h.cite || "", source: h.source,
+          state: h.state || "national",
+        })),
         job: useJob ? assistantJobContext(job) : null,
       });
     } catch { answer = null; }
@@ -19209,6 +20774,20 @@ function ClaimAssistant({ job = null }) {
           library — building code, manufacturer install specs and warranty terms, NRCA best practice, policy provisions,
           carrier patterns and the claim playbook — with every source shown so you can verify before you quote it.
         </div>
+        {!job && (
+          <Field label="Which state is the property in?"
+            hint="Code sections and insurance regulation are state law. Without this the assistant answers from every state at once.">
+            <select style={selStyle} value={askState} onChange={(e) => setAskState(e.target.value)}>
+              <option value="">All states — nothing filtered</option>
+              {US_STATES.map(([ab, name]) => <option key={ab} value={ab}>{name}</option>)}
+            </select>
+          </Field>
+        )}
+        {job && job.state && (
+          <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8 }}>
+            Answering for <b>{job.state}</b> — records that state another state's law are filtered out.
+          </div>
+        )}
         {job && (
           <label style={{ display: "flex", gap: 9, alignItems: "center", fontSize: 13, cursor: "pointer", marginTop: 10 }}>
             <input type="checkbox" checked={useJob} onChange={(e) => setUseJob(e.target.checked)}
@@ -19251,7 +20830,22 @@ function ClaimAssistant({ job = null }) {
                 <Card key={j} style={{ marginBottom: 8 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 5 }}>
                     <Chip tone={tone[h.tag] || "gray"}>{h.source}</Chip>
-                    {h.cite && <span style={{ fontSize: 12, fontWeight: 700, color: T.accent }}>{h.cite}</span>}
+                    {/* Whose law this is. A record with no state applies
+                        anywhere — the IRC, a manufacturer spec, NRCA. Saying
+                        so is the difference between a rep quoting a section
+                        and a rep quoting the wrong state's section. */}
+                    <Chip tone={h.state ? "slate" : "gray"}>{h.state || "Applies nationally"}</Chip>
+                    {/* A supplement template's citation is per state, so it is
+                        resolved here rather than baked into the corpus. */}
+                    {!h.cite && h.topic && askState && (
+                      <Cited fact={asFact(citeFor(askState, h.topic))} compact />
+                    )}
+                    {h.cite && <Cited fact={fact(h.cite, {
+                      /* Only real code sections read as authority here. The
+                         corpus also carries "NRCA Roofing Manual" and
+                         "Manufacturer instructions" in this same field. */
+                      confidence: /^(IRC|RCO|OAC|R\.C\.)\s/.test(String(h.cite)) ? "derived" : "seeded",
+                    })} compact />}
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 800, color: S.ink, lineHeight: 1.35 }}>{h.title}</div>
                   <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginTop: 5 }}>{h.body.length > 320 ? h.body.slice(0, 320).trim() + "…" : h.body}</div>
@@ -19275,10 +20869,166 @@ function ClaimAssistant({ job = null }) {
   );
 }
 
-function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {}, seed = null, onConsumeSeed = () => {} }) {
+/* Coverage by state — where a seeded pointer becomes a fact somebody
+   stands behind, which is the only way anything reaches `verified`.
+
+   Structured as a review, not a form: each field says what it governs,
+   what the supplied contract currently asserts, and which body settles
+   it, with a link. Confirming stamps who and when onto the org blob,
+   exactly as the building-department confirm flow does one level down.
+   Nothing here fills a value in for the reader. */
+function CoverageByState({ jobs = [], stateFacts = {}, onConfirm, onClear, toast = () => {} }) {
+  /* Every state the company actually has work in, plus anything already
+     confirmed — so a state does not vanish off this screen the moment
+     its last job closes. */
+  const active = useMemo(() => {
+    const set = new Set();
+    (jobs || []).forEach((j) => { if (j && j.state) set.add(j.state); });
+    Object.keys(stateFacts || {}).forEach((s) => set.add(s));
+    return [...set].sort();
+  }, [jobs, stateFacts]);
+  const [sel, setSel] = useState(active[0] || "");
+  useEffect(() => { if (!sel && active.length) setSel(active[0]); }, [active.length]);
+  const [draft, setDraft] = useState({});
+  const [openField, setOpenField] = useState(null);
+  useEffect(() => { setDraft({}); setOpenField(null); }, [sel]);
+
+  const pack = legalPackFor(sel, stateFacts);
+  const gaps = legalPackGaps(sel, stateFacts);
+  const ready = legalPackReady(sel, stateFacts);
+  const jobCount = (jobs || []).filter((j) => j && j.state === sel).length;
+
+  return (
+    <div>
+      <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }}>
+        A contract states rights that are set by the state the property is in. This is where those get
+        confirmed. Until a state's binding fields are confirmed, its contracts print a labelled
+        placeholder where the clause belongs and cannot be signed or sent — which is the point:
+        the app does not know your states' law and will not pretend to.
+      </div>
+      {!active.length ? (
+        <Card><div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
+          No jobs with a state on file yet. A state appears here as soon as there is a job in it.
+        </div></Card>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 14 }}>
+            {active.map((st) => {
+              const on = st === sel;
+              const good = legalPackReady(st, stateFacts);
+              return (
+                <button key={st} onClick={() => setSel(st)} style={{
+                  border: `1px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : S.card,
+                  color: on ? T.accent : S.ink, borderRadius: 999, padding: "7px 14px",
+                  fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                }}>
+                  {stateName(st) || st}
+                  <span style={{
+                    width: 8, height: 8, borderRadius: 99,
+                    background: good ? "var(--rl-green-fg)" : "var(--rl-amber-fg)",
+                  }} />
+                </button>
+              );
+            })}
+          </div>
+          <Card>
+            <CardTitle right={<Chip tone={ready ? "green" : "amber"}>{ready ? "Contracts can be signed" : `${gaps.length} to confirm`}</Chip>}>
+              {stateName(sel) || sel}
+            </CardTitle>
+            <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
+              {jobCount} {jobCount === 1 ? "job" : "jobs"} on file.
+              {ready
+                ? " Every binding field has been confirmed, so agreements here render and sign normally."
+                : " Agreements in this state are blocked from signing until the fields marked below are confirmed."}
+            </div>
+          </Card>
+          {LEGAL_FIELDS.map((f) => {
+            const cur = pack[f.key];
+            const conf = ((stateFacts || {})[sel] || {})[f.key];
+            const open = openField === f.key;
+            const val = draft[f.key] !== undefined ? draft[f.key] : (conf ? conf.value : cur.value);
+            return (
+              <Card key={f.key} style={{ marginTop: 10 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 800, color: S.ink, lineHeight: 1.3 }}>
+                      {f.label}{f.binding && <span style={{ color: "var(--rl-amber-fg)", marginLeft: 6, fontSize: 11.5, fontWeight: 800 }}>BINDING</span>}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 3 }}>{f.help}</div>
+                  </div>
+                </div>
+                {/* Not compact: this is the screen where the tier is the
+                    whole point, and compact mode drops the word for it —
+                    a seeded value would render as a chip with no label
+                    saying nobody has checked it. */}
+                {/* Cited renders the note and the authority link itself for
+                    a fact with nothing behind it — that pointer IS the
+                    unknown state. Repeating them here printed each one
+                    twice. */}
+                <Cited fact={cur} style={{ marginTop: 8 }} />
+                {cur.value && cur.note && (
+                  <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 6 }}>{cur.note}</div>
+                )}
+                {cur.value && cur.sourceUrl && (
+                  <a href={cur.sourceUrl} target="_blank" rel="noreferrer"
+                    style={{ display: "inline-block", fontSize: 12.5, fontWeight: 700, color: T.accent, textDecoration: "none", marginTop: 6 }}>
+                    {cur.sourceName || "Open the source"} →
+                  </a>
+                )}
+                {conf && (
+                  <div style={{ fontSize: 12, color: S.sub, marginTop: 6 }}>
+                    Confirmed by {conf.by} on {conf.at}.
+                  </div>
+                )}
+                {!open ? (
+                  <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                    <Btn kind="soft" small onClick={() => setOpenField(f.key)}>
+                      <PenLine size={13} /> {conf ? "Update" : "Confirm for " + (stateName(sel) || sel)}
+                    </Btn>
+                    {conf && <Btn kind="ghost" small onClick={() => onClear(sel, f.key)}>Withdraw</Btn>}
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 10 }}>
+                    <Field label={`What ${stateName(sel) || sel} requires`}
+                      hint="Write it as it should read to a homeowner. This text goes into the contract wherever this clause belongs.">
+                      <textarea style={{ ...inputStyle, minHeight: 72, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.55 }}
+                        value={val} onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })} />
+                    </Field>
+                    <div style={{ fontSize: 12, color: S.sub, lineHeight: 1.5, marginBottom: 8 }}>
+                      Confirming records your name and today's date against this field. Only confirm what you
+                      have actually read at the source — the whole gate is worthless if it is clicked through.
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Btn kind="green" small disabled={!String(val || "").trim()}
+                        onClick={() => {
+                          onConfirm(sel, f.key, { value: String(val).trim(), sourceUrl: cur.sourceUrl, sourceName: cur.sourceName });
+                          setOpenField(null);
+                          setDraft({ ...draft, [f.key]: undefined });
+                        }}>
+                        <CheckCircle2 size={14} /> I've read the source — confirm
+                      </Btn>
+                      <Btn kind="ghost" small onClick={() => { setOpenField(null); setDraft({ ...draft, [f.key]: undefined }); }}>Cancel</Btn>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+          <div style={{ fontSize: 11.5, color: S.sub, lineHeight: 1.5, marginTop: 14 }}>
+            This is a record of what your office has checked. It is not legal advice, and confirming a
+            field here does not make it correct — it records that a named person read the source on a date.
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {}, stateFacts = {}, onConfirmLegal = () => {}, onClearLegal = () => {}, seed = null, onConsumeSeed = () => {} }) {
   const [tab, setTab] = useState(seed && seed.tab ? seed.tab : (seed && seed.zip ? "codes" : "clients"));
   const [zip, setZip] = useState(seed ? seed.zip || "" : "");
-  const [tplState, setTplState] = useState("OH");
+  const [tplState, setTplState] = useState("");
   const [openTpl, setOpenTpl] = useState(null);
   const [resourcePage, setResourcePage] = useState(null);
   const [lookingUp, setLookingUp] = useState(false);
@@ -19301,7 +21051,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
   }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["coverage", "Coverage"], ["resources", "Resources"]];
 
   /* One index across codes, terms and supplement triggers, so a rep
      types what they half-remember rather than guessing which tab it
@@ -19341,7 +21091,11 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
         ))}
       </div>
 
-      {tab === "ask" && <ClaimAssistant />}
+      {tab === "ask" && <ClaimAssistant defaultState={tplState} />}
+      {tab === "coverage" && (
+        <CoverageByState jobs={jobs} stateFacts={stateFacts} toast={toast}
+          onConfirm={onConfirmLegal} onClear={onClearLegal} />
+      )}
 
       {tab === "storm" && <StormScout toast={toast} />}
 
@@ -19445,7 +21199,15 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                         </div>
                         <Btn kind="soft" small style={{ width: "100%", marginTop: 9 }}
                           onClick={() => {
-                            const t = `${c.supplement}\n\nAuthority: ${c.cite}`;
+                            /* "Authority:" was prepended to whatever was in
+                               `cite` — including "Manufacturer instructions"
+                               and "Industry standard pricing", which are
+                               pointers, not authority. Only a verified cite
+                               gets the label. */
+                            const kf = asFact({ cite: c.cite, verified: /^IRC\s/.test(String(c.cite || "")) });
+                            const t = printable(kf)
+                              ? `${c.supplement}\n\nAuthority: ${kf.value}`
+                              : (c.cite ? `${c.supplement}\n\nReference: ${c.cite} (confirm before citing)` : c.supplement);
                             if (navigator.clipboard) navigator.clipboard.writeText(t);
                             toast("Supplement wording copied");
                           }}>
@@ -19539,8 +21301,17 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
           </Card>
           {SUPPLEMENT_TEMPLATES.map((t) => {
             const prov = citeFor(tplState, t.topic);
+            const pf = asFact(prov);
             const isOpen = openTpl === t.id;
-            const wording = t.wording.replaceAll("{CITE}", prov.cite);
+            /* When citeFor has nothing on file, substituting an empty string
+               produced "Per , ice barrier is required…" — a malformed
+               sentence going to a carrier. The wording drops the clause
+               instead, and the copy action is withheld unless the cite is
+               verified for this state. */
+            const wording = pf.value
+              ? t.wording.replaceAll("{CITE}", pf.value)
+              : t.wording.replace(/Per \{CITE\},\s*/g, "").replaceAll("{CITE}", "the adopted code");
+            const canCopy = printable(pf);
             return (
               <Card key={t.id} pad={16} style={{ marginTop: 10 }}>
                 <button onClick={() => setOpenTpl(isOpen ? null : t.id)} style={{
@@ -19551,7 +21322,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                     <div>
                       <div style={{ fontSize: 12, color: S.sub }}>{t.category}</div>
                       <div style={{ fontSize: 15, fontWeight: 700, marginTop: 2 }}>{t.title}</div>
-                      <div style={{ marginTop: 6 }}><Chip tone={prov.verified ? "blue" : "amber"}>{prov.cite}</Chip></div>
+                      <div style={{ marginTop: 6 }}><Cited fact={pf} /></div>
                     </div>
                     <ChevronDown size={17} style={{ transform: isOpen ? "rotate(180deg)" : "none", flexShrink: 0 }} />
                   </div>
@@ -19575,7 +21346,14 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                       fontSize: 13, color: S.ink, lineHeight: 1.6, background: "#FAFBFC",
                       border: `1px solid ${S.line}`, borderRadius: 10, padding: 12,
                     }}>{wording}</div>
-                    <Btn small kind="soft" style={{ marginTop: 12 }} onClick={() => {
+                    {!canCopy && (
+                      <Callout label={`Not verified for ${tplState}`} tone="amber">
+                        {pf.value
+                          ? `${pf.value} is the section this resolves to under ${codeNameForState(tplState)}, but nobody has confirmed the edition or the local adoption. Check it before this goes to an adjuster.`
+                          : "No code citation on file for this item in this state. Confirm the section locally before citing it."}
+                      </Callout>
+                    )}
+                    <Btn small kind="soft" style={{ marginTop: 12 }} disabled={!canCopy} onClick={() => {
                       if (navigator.clipboard) navigator.clipboard.writeText(wording);
                       toast("Wording copied — fill the [brackets]");
                     }}><Copy size={13} /> Copy wording</Btn>
@@ -19597,12 +21375,21 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
             <input style={inputStyle} placeholder="Zip code — try 45402, 41056, 45103" value={zip}
               inputMode="numeric" onChange={(e) => { setZip(e.target.value); setLookupResult(null); setLookupErr(""); }} />
           </Card>
-          {zip.trim().length === 5 && !juris && (
+          {/* This used to be gated on `!juris`, which is only true for a zip
+              whose prefix is missing from the national table — about two
+              percent of the country. Everywhere else resolved to a
+              state-level guess and the enrichment flow, the one thing that
+              can put a real building department on file, was unreachable
+              from the exact zips that needed it. It now opens whenever we
+              do not have an office for the address. */}
+          {zip.trim().length === 5 && (!juris || juris.needsContact) && (
             <Card style={{ marginTop: 12 }}>
               {!lookupResult && (
                 <>
                   <div style={{ fontSize: 14, color: S.ink, lineHeight: 1.55 }}>
-                    {zip.trim()} is not on file yet.
+                    {juris
+                      ? `We know ${zip.trim()} is in ${juris.state}, but not which office issues permits there.`
+                      : `${zip.trim()} is not on file yet.`}
                   </div>
                   <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginTop: 6 }}>
                     Look it up and it is saved for everyone. If it falls in a county
@@ -19786,6 +21573,23 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                         </a>
                       )}
                     </div>
+                    {!juris.verified && juris.inspector.source && (
+                      <div style={{ marginTop: 10, background: "#FFF8E6", border: "1px solid #F0DCA8",
+                        borderRadius: 10, padding: "10px 12px" }}>
+                        <div style={{ fontSize: 12.5, color: "#6B4E0E", lineHeight: 1.5 }}>
+                          Taken from the department's published contact page — nobody here has
+                          called it yet. Confirm it once and the whole company gets it.
+                        </div>
+                        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+                          <Btn kind="soft" small onClick={() => onSaveDept(juris.zip, {
+                            office: juris.inspector.office, phone: juris.inspector.phone,
+                            address: juris.inspector.address, web: juris.inspector.web || "",
+                            note: juris.inspector.note || "",
+                          })}><Check size={13} /> I called this — confirm it</Btn>
+                          <AssistLink href={juris.inspector.source}>Source page</AssistLink>
+                        </div>
+                      </div>
+                    )}
                     {juris.inspector.checked && (
                       <div style={{ fontSize: 11, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
                         Looked up {juris.inspector.checked} from the department's own
@@ -19805,7 +21609,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                   const p = citeFor(juris.state, topic);
                   return (
                     <div key={topic} style={{ padding: "10px 0", borderBottom: `1px solid ${S.line}` }}>
-                      <Chip tone={p.verified ? "blue" : "amber"}>{p.cite}</Chip>
+                      <Cited fact={p} compact />
                       <div style={{ fontSize: 13, color: S.ink, marginTop: 6, lineHeight: 1.5 }}>{p.note}</div>
                     </div>
                   );
@@ -19819,7 +21623,13 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
                     <div key={i} style={{ borderTop: i ? `1px solid ${S.line}` : "none", padding: "12px 0" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                         <div style={{ fontSize: 14, fontWeight: 800, color: S.ink }}>{p.topic}</div>
-                        <Chip tone={p.srcOH === "RCO" ? "blue" : "amber"}>{p.oh}</Chip>
+                        <Cited fact={fact(p.oh, {
+                          srcId: p.srcOH,
+                          /* A topic the file itself flags as having two
+                             competing section numbers is not settled. */
+                          confidence: p.conflict ? "derived" : "verified",
+                          asOf: "Jul 2026",
+                        })} compact />
                       </div>
                       <div style={{ fontSize: 13, color: S.sub, marginTop: 5, lineHeight: 1.5 }}>{p.note}</div>
                       {p.conflict && <Callout label="Check the section number">{p.conflict}</Callout>}
@@ -20246,7 +22056,7 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
                 <Chip tone="gray">{st.channel === "sms" ? "Text" : "Email"}</Chip>
               </div>
               <div style={{ fontSize: 12, color: S.sub, marginTop: 3, lineHeight: 1.5 }}>
-                {st.body({ first: "Sarah", company: brand.name || "Supreme Building Group", link: "[review link]" })}
+                {st.body({ first: "Sarah", company: brand.company || "your company", link: "[review link]" })}
               </div>
             </div>
           </div>
@@ -21481,8 +23291,10 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
   const [editing, setEditing] = useState(null);
   const [ef, setEf] = useState(null);
   const openEdit = (r) => { setEditing(r ? r.id : "new"); setEf(r ? { ...r, marginPct: margin(r).toFixed(1) } : { sku: "", item: "", unit: "EA", cost: 0, price: 0, supplier: "", category: "", marginPct: "30" }); };
+  /* Accepts either a change event or a bare value, so MoneyInput (which
+     hands back a string) and plain inputs can share one setter. */
   const efSet = (k) => (e) => {
-    const v = e.target.value;
+    const v = e && e.target ? e.target.value : e;
     setEf((prev) => {
       const next = { ...prev, [k]: v };
       const cost = num(next.cost), price = num(next.price), m = num(next.marginPct);
@@ -21586,8 +23398,8 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
               </Field>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-              <Field label="Cost"><input style={inputStyle} type="number" step="0.01" value={ef.cost} onChange={efSet("cost")} /></Field>
-              <Field label="Price"><input style={inputStyle} type="number" step="0.01" value={ef.price} onChange={efSet("price")} /></Field>
+              <Field label="Cost"><MoneyInput style={inputStyle} value={ef.cost} onChange={efSet("cost")} /></Field>
+              <Field label="Price"><MoneyInput style={inputStyle} value={ef.price} onChange={efSet("price")} /></Field>
               <Field label="Margin %" hint="Changing this recomputes price from cost.">
                 <input style={inputStyle} type="number" step="0.1" value={ef.marginPct} onChange={efSet("marginPct")} />
               </Field>
@@ -22002,6 +23814,14 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
                     <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: `1px solid ${S.line}` }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13.5, color: S.ink }}>{r.label}</div>
+                        {/* Which rows the app will actually apply on its own. A rate
+                            that matched no code is still usable from the price menu,
+                            but it will never appear in an auto-built draft — and
+                            silently missing an adder is how subs get underpaid. */}
+                        <div style={{ fontSize: 10.5, marginTop: 2, fontWeight: 700,
+                          color: SUB_RATE_LABELS[r.code] ? T.accent : "#92600A" }}>
+                          {SUB_RATE_LABELS[r.code] || "Not auto-applied — price menu only"}
+                        </div>
                         {r.notes && <div style={{ fontSize: 11, color: S.sub, lineHeight: 1.4 }}>{r.notes}</div>}
                       </div>
                       <span style={{ fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{money(r.price)}{r.unit && r.unit !== "flat" ? `/${r.unit}` : ""}</span>
@@ -23166,7 +24986,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
                 <select style={{ ...selStyle, width: 92, padding: "9px 8px" }} value={l.state || ""}
                   onChange={(e) => setF((p2) => ({ ...p2, lines: (p2.lines || []).map((x, k) => k === i ? { ...x, state: e.target.value } : x) }))}>
                   <option value="">State</option>
-                  {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  {US_STATES.map(([ab, name]) => <option key={ab} value={ab}>{name}</option>)}
                 </select>
                 <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} inputMode="tel" placeholder="Phone" value={l.phone || ""}
                   onChange={(e) => setF((p2) => ({ ...p2, lines: (p2.lines || []).map((x, k) => k === i ? { ...x, phone: formatPhone(e.target.value) } : x) }))} />
@@ -23311,6 +25131,7 @@ const FEATURE_SWITCHES = [
   ["dispatch", "Dispatch board", "Crew-by-day scheduling"],
   ["codes", "Code lookup", "Jurisdiction requirements and citations"],
   ["companycam", "CompanyCam", "Create and open CompanyCam projects"],
+  ["punchlist", "Punch list", "Track what a finished roof still owes, and warn before it is called done"],
 ];
 const DEFAULT_FEATURES = FEATURE_SWITCHES.reduce((a, [k]) => { a[k] = true; return a; }, {});
 function featureOn(features, key) {
@@ -24288,6 +26109,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["insurance:ask", MessageCircle, "Roofing assistant", "Code, manufacturers, NRCA, claims — cited answers"],
       ["insurance", Shield, "Insurance & claims", "Clients, claims, supplements & depreciation"],
       ["insurance:codes", ScrollText, "Code lookup", "Adopted code & building department by zip"],
+      ["insurance:coverage", MapPin, "Coverage by state", "Confirm the contract law for every state you work"],
       ["insurance:resources", BookOpen, "Roofing resources", "Manufacturer specs, policy provisions, letters, playbook"],
     ]],
     ["Customers & documents", [
@@ -24408,12 +26230,13 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
   );
 }
 
-function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat, onDeleteMsg }) {
+function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat, onDeleteMsg, onSendQueued, integrations = {} }) {
   /* Team chat and customer messages are both messages, so they live
      under one Inbox rather than two destinations. Team opens first —
      it is the one with unread counts attached to the nav badge. */
   const [pane, setPane] = useState("team");
   const [filter, setFilter] = useState("All");
+  const [sendingId, setSendingId] = useState(null);
   useEffect(() => { if (pane === "team" && onSeenChat) onSeenChat(); }, [pane, chatMsgs && chatMsgs.length]); // eslint-disable-line
   const all = jobs.flatMap((j) => (j.messages || []).map((msg) => ({ job: j, msg })))
     .sort((x, y2) => (y2.msg.at || "").localeCompare(x.msg.at || ""));
@@ -24480,7 +26303,7 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
               </div>
               <span style={{ display: "flex", gap: 5, flexShrink: 0 }}>
                 {msg.viewed && <Chip tone="green">Viewed</Chip>}
-                <Chip tone={msg.status === "Sent" ? "blue" : "amber"}>{msg.status === "Sent" ? "Sent" : "Queued"}</Chip>
+                <Chip tone={msgTone(msg.status, "blue")}>{msgLabel(msg.status)}</Chip>
               </span>
             </div>
             {msg.subject && <div style={{ fontSize: 13.5, fontWeight: 700, marginTop: 5 }}>{msg.subject}</div>}
@@ -24488,11 +26311,28 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
               fontSize: 13, color: S.sub, marginTop: 3, lineHeight: 1.5,
               display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
             }}>{msg.body}</div>
-            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 5 }}>{msg.audience} · {msg.to} · {msg.at}</div>
+            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 5 }}>
+              {msg.audience} · {msg.to} · {msg.at}
+              {msg.sendOn ? ` · scheduled for ${msg.sendOn}` : ""}
+            </div>
           </button>
+          {msg.status !== "Sent" && onSendQueued && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+              <Btn kind="soft" small disabled={sendingId === msg.id}
+                onClick={async () => { setSendingId(msg.id); await onSendQueued(job.id, msg.id); setSendingId(null); }}>
+                <Send size={13} /> {sendingId === msg.id ? "Sending…" : "Send now"}
+              </Btn>
+              {msgFailed(msg.status) && (
+                <span style={{ fontSize: 11.5, color: "#B42318", lineHeight: 1.4 }}>{msg.status}</span>
+              )}
+            </div>
+          )}
         </Card>
       ))}
       <div style={{ fontSize: 12, color: S.sub, marginTop: 16, lineHeight: 1.55 }}>
+        Anything not yet sent stays here until you press <b>Send now</b> — the app does not send on a schedule
+        of its own, so a message sitting in this list has not gone out.
+        <br />
         "Viewed" tracking needs the email backend — it works by embedding a tiny pixel that fires when the recipient
         opens the message. It arrives with the Gmail integration, not before.
       </div>
@@ -24793,7 +26633,14 @@ function useDbSync(st) {
           await db.from("crm_appointments").delete().in("id", removed);
           removed.forEach((id) => apptRefs.current.delete(id));
         }
-      } catch { /* surfaced via jobs path if systemic */ }
+      } catch (e) {
+        /* This used to be swallowed on the assumption that the jobs path
+           would surface anything systemic. It does not — it only reports
+           its own errors. A blocked RLS write or a dropped connection left
+           the appointment on one device with no indication, and a missed
+           inspection is a lost job. */
+        setSyncErr("Couldn't save an appointment — it exists on this device only. " + ((e && e.message) || ""));
+      }
     }, 800);
     return () => clearTimeout(t);
   }, [appointments, ready, hydrated]);
@@ -25139,6 +26986,12 @@ export default function SupremeCRM() {
      ZIP. Kept in company settings so one person's phone call becomes
      everyone's. */
   const [jurisContacts, setJurisContacts] = useState({});
+  /* Per-state contract law the office has confirmed, keyed by state and
+     then by field: { OH: { rescission: { value, note, at, by } } }. Same
+     reasoning as jurisContacts one level up — one person reading the
+     statute becomes every rep's contract. This is what promotes a
+     seeded pointer to a `verified` fact, and nothing else does. */
+  const [stateFacts, setStateFacts] = useState({});
   /* ZIPs looked up on demand. The jurisdiction table grows with use
      rather than needing every ZIP shipped up front. */
   const [learnedJuris, setLearnedJuris] = useState({});
@@ -25163,11 +27016,11 @@ export default function SupremeCRM() {
   };
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, stateFacts, learnedJuris];
   const orgPack = () => ({
     announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates,
     priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate,
-    features, security, jurisContacts, learnedJuris, version: 1,
+    features, security, jurisContacts, stateFacts, learnedJuris, version: 1,
   });
   const unpackOrg = (d) => {
     if (d.announcements) setAnnouncements(d.announcements);
@@ -25191,6 +27044,7 @@ export default function SupremeCRM() {
     if (d.ccAutoCreate !== undefined) setCcAutoCreate(d.ccAutoCreate);
     if (d.features) setFeatures(d.features);
     if (d.jurisContacts) { setJurisContacts(d.jurisContacts); setJurisOverrides(d.jurisContacts); }
+    if (d.stateFacts) { setStateFacts(d.stateFacts); setLegalOverrides(d.stateFacts); }
     if (d.learnedJuris) { setLearnedJuris(d.learnedJuris); setLearnedJurisdictions(d.learnedJuris); }
     if (d.security) setSecurity(d.security);
   };
@@ -25227,6 +27081,17 @@ export default function SupremeCRM() {
      site; the removal itself flows through the sync diff, which issues
      the crm_jobs delete. Always logged. */
   const deleteJobs = (ids, label) => {
+    /* Revoke the customer portal first. The job row is deleted by the sync
+       effect, but crm_portal was never touched — so the homeowner's link
+       kept serving their estimate, contract, photos and balance
+       indefinitely after the job was gone, with nothing in the UI able to
+       stop it. Revoking is the same call the Revoke link button makes. */
+    const db = DB();
+    const tokens = jobs.filter((j) => ids.includes(j.id)).map((j) => j.portalToken).filter(Boolean);
+    if (db && tokens.length) {
+      db.from("crm_portal").update({ revoked: true }).in("token", tokens)
+        .then(() => {}, () => setSyncErr("Deleted the job but couldn't revoke its customer portal link — revoke it from the job before deleting, or contact support."));
+    }
     setJobs((prev) => prev.filter((j) => !ids.includes(j.id)));
     if (openJobId && ids.includes(openJobId)) { setOpenJobId(null); setNav("jobs"); }
     ids.forEach(() => noteBehaviour("bulk_delete"));
@@ -25359,6 +27224,14 @@ export default function SupremeCRM() {
           next.subInvoice = { ...base, status: terminal ? base.status : "needs_review" };
         }
       }
+      /* Job completed (s10). The certificate of completion generates
+         itself from the job file, and the one thing it needs that
+         nothing else recorded is the date the work was actually
+         finished — stageAt is the date of the last stage move, which is
+         not the same thing once a job bounces back for a punch item.
+         Stamped once and never overwritten for exactly that reason;
+         the certificate screen can correct it. */
+      if (stageId === "s10" && !next.completedAt) next.completedAt = todayIso();
       if (j.portal?.notifyStage && stage) {
         const channel = j.consent?.sms?.granted ? "sms" : j.consent?.email?.granted ? "email" : null;
         if (channel) {
@@ -25380,7 +27253,7 @@ export default function SupremeCRM() {
       if (!gate.ready && gate.failed.length) {
         toast(`Moved to ${stageName} — still missing: ${gate.failed.map((f) => f.label.toLowerCase()).join(", ")}`);
       } else {
-        toast(`Moved to ${stageName}${jb.portal?.notifyStage ? " — customer update queued when consent is available" : ""}`);
+        toast(`Moved to ${stageName}${jb.portal?.notifyStage ? " — customer update waiting in the Inbox" : ""}`);
       }
     }
     if (!gate.ready && gate.failed.length) {
@@ -25398,6 +27271,28 @@ export default function SupremeCRM() {
      gate dialog and every job after it would silently vanish into a dialog
      that only knows about one of them. So move what passes, keep quiet about
      each one, and report the split once. */
+  /* Push one queued message out for real and write back what happened.
+     Three features wrote messages with status "Queued" and nothing ever
+     drained them, so on every configuration the customer was never
+     contacted while the app said they had been. This is the drain. It is
+     driven by a person rather than a schedule, because a browser-only app
+     cannot deliver a day-before reminder at 8am and should not pretend to. */
+  const sendQueuedMessage = async (jobId, msgId) => {
+    const jb = jobs.find((j) => j.id === jobId);
+    const msg = jb && (jb.messages || []).find((m) => m.id === msgId);
+    if (!jb || !msg) return;
+    const out = await deliverToCustomer(
+      jb, { prefer: msg.kind || "sms", subject: msg.subject || "", body: msg.body },
+      integrations, liveUser,
+    );
+    setJobs((prev) => prev.map((j) => j.id !== jobId ? j : {
+      ...j,
+      messages: (j.messages || []).map((m) => m.id !== msgId ? m
+        : { ...m, kind: out.kind, to: out.to || m.to, status: out.status, sentAt: out.delivered ? nowStamp() : m.sentAt }),
+    }));
+    toast(out.delivered ? "Sent" : out.status);
+  };
+
   const bulkMoveStage = (ids, stageId) => {
     const stage = stages.find((x) => x.id === stageId);
     const stageName = stage ? (stage.name || stage.label || "the next stage") : "";
@@ -25677,7 +27572,9 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
                refresh re-hydrates it, which surfaces the problem. */
             const db = DB();
             if (db) db.from("crm_chat").delete().eq("id", id).then(() => {}, () => {});
-          }} />
+          }}
+          integrations={integrations}
+          onSendQueued={sendQueuedMessage} />
       ) : nav === "more" ? (
         <MoreMenu brand={brand} onNav={(id) => {
           if (id === "password") return setChangePwOpen(true);
@@ -25685,6 +27582,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           if (id === "insurance:ask") { setCodeSeed({ tab: "ask" }); return setNav("insurance"); }
           if (id === "insurance:codes") { setCodeSeed({ tab: "codes" }); return setNav("insurance"); }
           if (id === "insurance:resources") { setCodeSeed({ tab: "resources" }); return setNav("insurance"); }
+          if (id === "insurance:coverage") { setCodeSeed({ tab: "coverage" }); return setNav("insurance"); }
           return setNav(id);
         }} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} theme={theme} setTheme={setTheme} />
       ) : nav === "insurance" ? (
@@ -25704,6 +27602,23 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             toast(rec.needsContact
               ? "Saved — add the permit office when you have it"
               : "Saved with its building department");
+          }}
+          stateFacts={stateFacts}
+          onConfirmLegal={(st, key, rec) => {
+            const next = { ...stateFacts, [st]: { ...(stateFacts[st] || {}), [key]: { ...rec, at: todayIso(), by: userName } } };
+            setStateFacts(next);
+            setLegalOverrides(next);
+            logAct({ type: "code", text: `Confirmed ${key} for ${st}` });
+            toast("Confirmed for the whole company");
+          }}
+          onClearLegal={(st, key) => {
+            const rest = { ...(stateFacts[st] || {}) };
+            delete rest[key];
+            const next = { ...stateFacts, [st]: rest };
+            setStateFacts(next);
+            setLegalOverrides(next);
+            logAct({ type: "code", text: `Withdrew the confirmation of ${key} for ${st}` });
+            toast("Withdrawn — contracts in that state are blocked again");
           }}
           seed={codeSeed} onConsumeSeed={() => setCodeSeed(null)} />
       ) : nav === "performance" ? (
@@ -25886,7 +27801,10 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         </Field>
       </Sheet>
       <FiltersSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} stages={stages}
-        filters={filters} setFilters={setFilters} />
+        filters={filters} setFilters={setFilters}
+        assignees={[...new Set([...users.filter((u) => u.active !== false).map((u) => u.name),
+          ...jobs.map((j) => j.assignee)].filter(Boolean))].sort()}
+        leadSources={leadSources} />
       <WorkflowEditor open={workflowOpen} onClose={() => setWorkflowOpen(false)} stages={stages}
         setStages={applyRemovedStages} stageRules={stageRules} setStageRules={setStageRules} />
       <StageGateSheet prompt={gatePrompt} isAdmin={isAdmin} currentUser={liveUser}
