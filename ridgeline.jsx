@@ -2417,6 +2417,10 @@ const money = (n) =>
 const money0 = (n) =>
   (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
 const pct1 = (n) => `${n.toFixed(2)}%`;
+/* Read a number back out of anything money() (or a person) might have
+   written: "$24,850.00", "24850", "1,500". parseFloat stops at the "$",
+   so num() alone turns a formatted figure into a silent zero. */
+const moneyNum = (v) => num(String(v == null ? "" : v).replace(/[^0-9.-]/g, ""));
 
 /* Phone display, in the house format: 1(555)555-5555.
    Anything that is not ten or eleven digits is left exactly as typed —
@@ -2951,6 +2955,60 @@ const inputStyle = {
   fontFamily: "inherit",
 };
 const selStyle = { ...inputStyle, appearance: "auto" };
+
+/* ==================================================================
+   MONEY INPUT
+
+   Every field that holds dollars shows them the way an accountant
+   writes them: a leading $, thousands separators, and two decimals,
+   right-aligned on tabular figures so columns line up.
+
+   Formatting happens on blur, never on keystroke. A field that
+   reformats as you type is unusable — "1" becomes "$1.00" and there
+   is no way to reach "12". So while the field has focus it shows the
+   plain number and behaves like an ordinary input; the moment you
+   leave, it settles into accounting format.
+
+   Negative values render "-$500.00" rather than the accounting
+   parenthesis, to match money() everywhere else in the app. A number
+   that reads one way in an input and another way in the total below
+   it is worse than either convention.
+
+   onChange receives the raw string, exactly as the plain inputs it
+   replaces did, so call sites keep their own num() conversion.
+================================================================== */
+function MoneyInput({ value, onChange, disabled, style, placeholder = "$0.00", ...rest }) {
+  const [editing, setEditing] = useState(false);
+  const [raw, setRaw] = useState("");
+  const blank = value === "" || value === null || value === undefined;
+  const shown = editing ? raw : (blank ? "" : money(moneyNum(value)));
+  return (
+    <input
+      {...rest}
+      style={{ textAlign: "right", fontVariantNumeric: "tabular-nums", ...style }}
+      inputMode="decimal"
+      disabled={disabled}
+      placeholder={placeholder}
+      value={shown}
+      onFocus={(e) => {
+        setRaw(blank ? "" : String(moneyNum(value)));
+        setEditing(true);
+        /* Select on entry so tapping a filled field and typing replaces
+           it, rather than appending to "1,234.56". */
+        const el = e.target;
+        setTimeout(() => { try { el.select(); } catch (err) { /* not selectable */ } }, 0);
+      }}
+      onChange={(e) => { setRaw(e.target.value); onChange(e.target.value); }}
+      onBlur={() => {
+        setEditing(false);
+        /* Normalise what's stored: "1,234.56" and "$1,234.56" both
+           settle to 1234.56, and a field cleared to nothing stays
+           empty rather than becoming a hard zero. */
+        onChange(String(raw).trim() === "" ? "" : String(moneyNum(raw)));
+      }}
+    />
+  );
+}
 /* iOS renders type=date taller than a text input and ignores a fixed
    height, which overlapped the neighbouring field. Neutralising the
    native appearance and using minHeight keeps it in its column. */
@@ -9595,13 +9653,13 @@ function agreementPrefill(job, brand) {
     carrier: ins.carrier || "",
     claimNumber: ins.claim || "",
     dateOfLoss: cl.dateOfLoss || "",
-    outOfPocket: ins.deductible ? money0(num(ins.deductible)) : "",
+    outOfPocket: ins.deductible ? money(num(ins.deductible)) : "",
     agreementDate: todayIso(),
     projectAddress: "",
     tearoffLayers: layers,
-    finalPrice: price ? money0(price) : "",
-    deductible: ins.deductible ? money0(num(ins.deductible)) : "",
-    deposit: deposit ? money0(deposit) : "",
+    finalPrice: price ? String(price) : "",
+    deductible: ins.deductible ? String(num(ins.deductible)) : "",
+    deposit: deposit ? String(deposit) : "",
     balance: "",
   };
 }
@@ -9611,6 +9669,15 @@ function agreementFor(job, brand) {
   return { ...agreementPrefill(job, brand), ...(job.agreement || {}) };
 }
 
+/* The money lines on the agreement. A purely numeric value prints in
+   accounting format; anything else — a rep writing "See addendum" on the
+   balance line — prints exactly as written, because that is a deliberate
+   override of the arithmetic and must not be mangled into $0.00. */
+function agMoney(v) {
+  const t = String(v == null ? "" : v).trim();
+  if (!t) return "";
+  return /^\$?\s*-?[\d,]+(\.\d+)?$/.test(t) ? money(moneyNum(t)) : t;
+}
 function agBlank(v, w) {
   return `<span class="agbl" style="min-width:${Math.round(w)}px">${esc(v || "")}</span>`;
 }
@@ -9657,12 +9724,12 @@ function agreementDocHtml(job, brand) {
   const mark = brand.logo
     ? `<img class="aglogo" src="${brand.logo}" alt="${esc(brand.company)}">`
     : `<div class="agmark">${esc(brand.company)}</div>`;
-  const price = num(String(a.finalPrice).replace(/[^0-9.]/g, ""));
-  const dep = num(String(a.deposit).replace(/[^0-9.]/g, ""));
+  const price = moneyNum(a.finalPrice);
+  const dep = moneyNum(a.deposit);
   /* The balance line is the one number on the sheet that is arithmetic
      rather than negotiation, so it is computed — unless the rep has
      deliberately written something else in it. */
-  const balance = String(a.balance || "").trim() || (price ? money0(price - dep) : "");
+  const balance = String(a.balance || "").trim() ? agMoney(a.balance) : (price ? money(price - dep) : "");
   const sigCell = (img, who, role) => `<div class="agsigbox">
     <div class="agsigwho">${esc(who)}</div>
     <div class="agsigline">${img ? `<img src="${img}" alt="">` : ""}</div>
@@ -9721,7 +9788,7 @@ function agreementDocHtml(job, brand) {
     <div class="agprice">
       <div class="agpricet">AGREEMENT PRICE</div>
       <div class="agpriceb">
-        ${AGREEMENT_PRICE_ROWS.map((r) => `<div class="agprow"><span>${esc(r.label)}</span>${agBlank(a[r.k], 160)}</div>`).join("")}
+        ${AGREEMENT_PRICE_ROWS.map((r) => `<div class="agprow"><span>${esc(r.label)}</span>${agBlank(agMoney(a[r.k]), 160)}</div>`).join("")}
         <div class="agprow grand"><span>BALANCE DUE ON COMPLETION</span>${agBlank(balance, 160)}</div>
       </div>
     </div>
@@ -13696,9 +13763,8 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand, showMoney = true
                               {["ea", "sq", "LF", "SF", "hr", "day", "sheet", "bundle"].map((u) => <option key={u}>{u}</option>)}
                             </select>
                             <span style={{ fontSize: 13, color: S.sub }}>×</span>
-                            <span style={{ fontSize: 13, color: S.sub }}>$</span>
-                            <input style={{ ...inputStyle, flex: 1, textAlign: "right", padding: "8px 10px" }} inputMode="decimal"
-                              value={l.price} placeholder="0.00" onChange={(e) => editLine(c.id, l.id, "price", e.target.value)} />
+                            <MoneyInput style={{ ...inputStyle, flex: 1, padding: "8px 10px" }}
+                              value={l.price} onChange={(v) => editLine(c.id, l.id, "price", v)} />
                           </div>
                           <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: S.ink, marginTop: 6 }}>
                             {money(lineTotal(l.qty, l.price))}
@@ -14291,18 +14357,18 @@ function TabClaim({ job, mut, toast, brand }) {
         <CardTitle>Settlement</CardTitle>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="RCV (total scope)">
-            <input style={inputStyle} inputMode="decimal" value={c.rcv || ""} onChange={(e) => set("rcv")(e.target.value)} placeholder="0.00" />
+            <MoneyInput style={inputStyle} value={c.rcv || ""} onChange={set("rcv")} />
           </Field>
           <Field label="ACV (first cheque)">
-            <input style={inputStyle} inputMode="decimal" value={c.acv || ""} onChange={(e) => set("acv")(e.target.value)} placeholder="0.00" />
+            <MoneyInput style={inputStyle} value={c.acv || ""} onChange={set("acv")} />
           </Field>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Deductible">
-            <input style={inputStyle} inputMode="decimal" value={c.deductible || ins.deductible || ""} onChange={(e) => set("deductible")(e.target.value)} placeholder="0.00" />
+            <MoneyInput style={inputStyle} value={c.deductible || ins.deductible || ""} onChange={set("deductible")} />
           </Field>
           <Field label="Non-recoverable" hint="Never paid.">
-            <input style={inputStyle} inputMode="decimal" value={c.nonRecoverable || ""} onChange={(e) => set("nonRecoverable")(e.target.value)} placeholder="0.00" />
+            <MoneyInput style={inputStyle} value={c.nonRecoverable || ""} onChange={set("nonRecoverable")} />
           </Field>
         </div>
         <div style={{ background: S.soft, borderRadius: 10, padding: "11px 13px", marginTop: 4 }}>
@@ -14334,9 +14400,8 @@ function TabClaim({ job, mut, toast, brand }) {
               <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} value={sp.desc}
                 placeholder="e.g. Drip edge, 180 LF — R905.2.8.5"
                 onChange={(e) => editSup(sp.id, "desc", e.target.value)} />
-              <span style={{ color: S.sub, fontSize: 13 }}>$</span>
-              <input style={{ ...inputStyle, width: 92, textAlign: "right", padding: "9px 11px" }} inputMode="decimal"
-                value={sp.amount} onChange={(e) => editSup(sp.id, "amount", e.target.value)} />
+              <MoneyInput style={{ ...inputStyle, width: 104, padding: "9px 11px" }}
+                value={sp.amount} onChange={(v) => editSup(sp.id, "amount", v)} />
               <button onClick={() => delSup(sp.id)} style={{ border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}>
                 <Trash2 size={15} color="#B42318" />
               </button>
@@ -14365,14 +14430,14 @@ function TabClaim({ job, mut, toast, brand }) {
         <CardTitle>Money received</CardTitle>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="ACV cheque">
-            <input style={inputStyle} inputMode="decimal" value={c.acvReceived || ""} onChange={(e) => set("acvReceived")(e.target.value)} placeholder="0.00" />
+            <MoneyInput style={inputStyle} value={c.acvReceived || ""} onChange={set("acvReceived")} />
           </Field>
           <Field label="Depreciation cheque">
-            <input style={inputStyle} inputMode="decimal" value={c.depReceived || ""} onChange={(e) => set("depReceived")(e.target.value)} placeholder="0.00" />
+            <MoneyInput style={inputStyle} value={c.depReceived || ""} onChange={set("depReceived")} />
           </Field>
         </div>
         <Field label="Deductible collected">
-          <input style={inputStyle} inputMode="decimal" value={c.deductibleCollected || ""} onChange={(e) => set("deductibleCollected")(e.target.value)} placeholder="0.00" />
+          <MoneyInput style={inputStyle} value={c.deductibleCollected || ""} onChange={set("deductibleCollected")} />
         </Field>
         <div style={{ background: S.soft, borderRadius: 10, padding: "11px 13px", marginTop: 4 }}>
           <KV k="Claim value (RCV + approved supplements)" v={money(m.claimValue)} />
@@ -15334,15 +15399,15 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
             <input style={{ ...inputStyle, width: 62 }} value={it.unit} disabled={locked}
               onChange={(e) => setItem(it.id, "unit", e.target.value)} />
             <span style={{ color: S.sub }}>×</span>
-            <input style={{ ...inputStyle, width: 92, textAlign: "right" }} value={it.price} disabled={locked}
-              inputMode="decimal" onChange={(e) => setItem(it.id, "price", e.target.value)} />
+            <MoneyInput style={{ ...inputStyle, width: 104 }} value={it.price} disabled={locked}
+              onChange={(v) => setItem(it.id, "price", v)} />
             <div style={{ marginLeft: "auto", fontWeight: 800, fontSize: 14 }}>{money(num(it.qty) * num(it.price))}</div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
             <span style={{ fontSize: 11.5, color: S.sub }}>Cost</span>
-            <input style={{ ...inputStyle, width: 84, textAlign: "right", padding: "7px 9px", fontSize: 13 }}
-              value={it.cost ?? ""} disabled={locked} inputMode="decimal" placeholder="—"
-              onChange={(e) => setItem(it.id, "cost", e.target.value)} />
+            <MoneyInput style={{ ...inputStyle, width: 96, padding: "7px 9px", fontSize: 13 }}
+              value={it.cost ?? ""} disabled={locked} placeholder="—"
+              onChange={(v) => setItem(it.id, "cost", v)} />
             <span style={{ fontSize: 11.5, color: S.sub }}>Margin</span>
             <input style={{ ...inputStyle, width: 62, textAlign: "right", padding: "7px 9px", fontSize: 13 }}
               value={lineMargin(it) ?? ""} disabled={locked || !(num(it.cost) > 0)} inputMode="decimal" placeholder="%"
@@ -16154,10 +16219,8 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
               ) : (
                 <div style={{ flex: 1, fontSize: 13, color: S.ink, opacity: on ? 1 : 0.55 }}>{c.desc} <span style={{ color: S.sub }}>({c.unit})</span></div>
               )}
-              <span style={{ color: S.sub, fontSize: 13 }}>$</span>
-              <input style={{ ...inputStyle, width: 82, textAlign: "right", opacity: on ? 1 : 0.55 }} value={c.price} disabled={locked}
-                inputMode="decimal"
-                onChange={(e) => setConcealed(c.id, "price", e.target.value)} />
+              <MoneyInput style={{ ...inputStyle, width: 96, opacity: on ? 1 : 0.55 }} value={c.price} disabled={locked}
+                onChange={(v) => setConcealed(c.id, "price", v)} />
               {!locked && c.custom && (
                 <button onClick={() => removeConcealed(c.id)} style={{ border: "none", background: "none", cursor: "pointer" }}>
                   <Trash2 size={15} color="#B42318" />
@@ -16245,11 +16308,11 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
                 onChange={(e) => setUpgrade(u.id, "desc", e.target.value)} />
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <span style={{ fontSize: 11.5, color: S.sub }}>Price</span>
-                <input style={{ ...inputStyle, width: 100, textAlign: "right" }} value={u.price} disabled={locked}
-                  inputMode="decimal" onChange={(e) => setUpgrade(u.id, "price", e.target.value)} />
+                <MoneyInput style={{ ...inputStyle, width: 108 }} value={u.price} disabled={locked}
+                  onChange={(v) => setUpgrade(u.id, "price", v)} />
                 <span style={{ fontSize: 11.5, color: S.sub, marginLeft: 8 }}>Cost</span>
-                <input style={{ ...inputStyle, width: 92, textAlign: "right", fontSize: 13 }} value={u.cost ?? ""} disabled={locked}
-                  inputMode="decimal" placeholder="—" onChange={(e) => setUpgrade(u.id, "cost", e.target.value)} />
+                <MoneyInput style={{ ...inputStyle, width: 100, fontSize: 13 }} value={u.cost ?? ""} disabled={locked}
+                  placeholder="—" onChange={(v) => setUpgrade(u.id, "cost", v)} />
                 {!locked && (
                   <button onClick={() => removeUpgrade(u.id)} style={{ border: "none", background: "none", cursor: "pointer", marginLeft: "auto" }}>
                     <Trash2 size={15} color="#B42318" />
@@ -16352,8 +16415,8 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
         value={a[p.k] || ""} disabled={locked} onChange={(e) => set(p.k, e.target.value)} />
     );
   };
-  const price = num(String(a.finalPrice).replace(/[^0-9.]/g, ""));
-  const dep = num(String(a.deposit).replace(/[^0-9.]/g, ""));
+  const price = moneyNum(a.finalPrice);
+  const dep = moneyNum(a.deposit);
 
   return (
     <>
@@ -16436,10 +16499,17 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Agreement price</CardTitle>
-        {AGREEMENT_PRICE_ROWS.map((r) => <Field key={r.k} label={r.label}>{txt(r.k)}</Field>)}
+        {AGREEMENT_PRICE_ROWS.map((r) => (
+          <Field key={r.k} label={r.label}>
+            <MoneyInput style={inputStyle} value={a[r.k] || ""} disabled={locked}
+              onChange={(v) => set(r.k, v)} />
+          </Field>
+        ))}
+        {/* Free text rather than a money field: a rep is allowed to write
+            "See addendum" here, and the renderer prints that verbatim. */}
         <Field label="Balance due on completion"
-          hint={price ? `Leave blank to print ${money0(price - dep)} — the contract price less the deposit.` : "Leave blank to print the contract price less the deposit."}>
-          <input style={inputStyle} value={a.balance || ""} disabled={locked} placeholder={price ? money0(price - dep) : ""}
+          hint={price ? `Leave blank to print ${money(price - dep)} — the contract price less the deposit.` : "Leave blank to print the contract price less the deposit."}>
+          <input style={inputStyle} value={a.balance || ""} disabled={locked} placeholder={price ? money(price - dep) : ""}
             onChange={(e) => set("balance", e.target.value)} />
         </Field>
         <Field label="Right-to-cancel initials"><input style={{ ...inputStyle, width: 120 }} value={a.cancelInit || ""} disabled={locked}
@@ -16540,9 +16610,8 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
         <CardTitle>Price & payment schedule</CardTitle>
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }}>
           <div style={{ flex: 1, fontSize: 14 }}>Contract price</div>
-          <span style={{ color: S.sub }}>$</span>
-          <input style={{ ...inputStyle, width: 130, textAlign: "right" }} value={con.price} disabled={locked}
-            inputMode="decimal" onChange={(e) => setCon({ price: num(e.target.value) })} />
+          <MoneyInput style={{ ...inputStyle, width: 150 }} value={con.price} disabled={locked}
+            onChange={(v) => setCon({ price: num(v) })} />
         </div>
         {estTotal > 0 && !locked && (
           <button style={{ ...linkBtn, marginBottom: 10 }}
@@ -16571,11 +16640,8 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
               <option value="fixed">Fixed $</option>
             </select>
             {depositMode === "fixed" ? (
-              <>
-                <span style={{ color: S.sub }}>$</span>
-                <input style={{ ...inputStyle, width: 110, textAlign: "right" }} value={con.depositFixed ?? ""} disabled={locked}
-                  inputMode="decimal" onChange={(e) => setCon({ depositFixed: num(e.target.value) })} />
-              </>
+              <MoneyInput style={{ ...inputStyle, width: 130 }} value={con.depositFixed ?? ""} disabled={locked}
+                onChange={(v) => setCon({ depositFixed: num(v) })} />
             ) : (
               <>
                 <input style={{ ...inputStyle, width: 84, textAlign: "right" }} value={con.depositPct} disabled={locked}
@@ -17299,9 +17365,8 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} value={l.label}
               placeholder="Line item" onChange={(e) => onEdit(l.id, "label", e.target.value)} />
-            <span style={{ color: S.sub, fontSize: 13 }}>$</span>
-            <input style={{ ...inputStyle, width: 96, textAlign: "right", padding: "9px 11px" }} value={l.amt}
-              inputMode="decimal" onChange={(e) => onEdit(l.id, "amt", e.target.value)} />
+            <MoneyInput style={{ ...inputStyle, width: 110, padding: "9px 11px" }} value={l.amt}
+              onChange={(v) => onEdit(l.id, "amt", v)} />
             <button onClick={() => onDelete(l.id)} style={{ border: "none", background: "none", cursor: "pointer" }}>
               <Trash2 size={15} color="#B42318" />
             </button>
@@ -17598,9 +17663,8 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
           <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
             <input style={{ ...inputStyle, flex: 1, padding: "9px 11px" }} value={r.label}
               onChange={(e) => mut((j) => ({ ...j, fin: { ...j.fin, reimbursements: j.fin.reimbursements.map((x) => x.id === r.id ? { ...x, label: e.target.value } : x) } }))} />
-            <input style={{ ...inputStyle, width: 86, textAlign: "right", padding: "9px 11px" }} value={r.amt}
-              inputMode="decimal"
-              onChange={(e) => mut((j) => ({ ...j, fin: { ...j.fin, reimbursements: j.fin.reimbursements.map((x) => x.id === r.id ? { ...x, amt: num(e.target.value) } : x) } }))} />
+            <MoneyInput style={{ ...inputStyle, width: 100, padding: "9px 11px" }} value={r.amt}
+              onChange={(v) => mut((j) => ({ ...j, fin: { ...j.fin, reimbursements: j.fin.reimbursements.map((x) => x.id === r.id ? { ...x, amt: num(v) } : x) } }))} />
             <button onClick={() => mut((j) => ({ ...j, fin: { ...j.fin, reimbursements: j.fin.reimbursements.map((x) => x.id === r.id ? { ...x, status: x.status === "Reimbursed" ? "Needs paid" : "Reimbursed" } : x) } }))}
               style={{ border: "none", background: "none", cursor: "pointer", padding: 0 }}>
               <Chip tone={r.status === "Reimbursed" ? "green" : "red"}>{r.status}</Chip>
@@ -17701,8 +17765,8 @@ function TabPayments({ job, mut, toast }) {
         </div>
         <Field label="Description"><input style={inputStyle} value={form.label} placeholder="Deposit — check #, crew draw…"
           onChange={(e) => setForm({ ...form, label: e.target.value })} /></Field>
-        <Field label="Amount ($)"><input style={inputStyle} value={form.amt} inputMode="decimal"
-          onChange={(e) => setForm({ ...form, amt: e.target.value })} /></Field>
+        <Field label="Amount"><MoneyInput style={inputStyle} value={form.amt}
+          onChange={(v) => setForm({ ...form, amt: v })} /></Field>
         <Btn style={{ width: "100%" }} disabled={!form.label.trim() || !num(form.amt)} onClick={() => {
           mut((j) => ({ ...j, payments: [...j.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp() }] }));
           setForm({ type: "Received", label: "", amt: "" });
@@ -17740,8 +17804,8 @@ function TabPayments({ job, mut, toast }) {
               stays honest.
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Field label="Amount"><input style={inputStyle} value={ef2.amt} inputMode="decimal"
-                onChange={(e) => setEf2({ ...ef2, amt: e.target.value })} /></Field>
+              <Field label="Amount"><MoneyInput style={inputStyle} value={ef2.amt}
+                onChange={(v) => setEf2({ ...ef2, amt: v })} /></Field>
               <Field label="Date"><input style={inputStyle} type="date" value={ef2.date || ""}
                 onChange={(e) => setEf2({ ...ef2, date: e.target.value })} /></Field>
             </div>
@@ -17918,7 +17982,7 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
             <input style={{ ...inputStyle, width: 72, textAlign: "right" }} value={l.qty} inputMode="decimal" onChange={(e) => setLine(l.id, "qty", e.target.value)} />
             <input style={{ ...inputStyle, width: 62 }} value={l.unit} onChange={(e) => setLine(l.id, "unit", e.target.value)} />
             <span style={{ color: S.sub }}>×</span>
-            <input style={{ ...inputStyle, width: 92, textAlign: "right" }} value={l.price} inputMode="decimal" onChange={(e) => setLine(l.id, "price", e.target.value)} />
+            <MoneyInput style={{ ...inputStyle, width: 104 }} value={l.price} onChange={(v) => setLine(l.id, "price", v)} />
             <span style={{ marginLeft: "auto", fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{money(num(l.qty) * num(l.price))}</span>
           </div>
         </div>
@@ -21481,8 +21545,10 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
   const [editing, setEditing] = useState(null);
   const [ef, setEf] = useState(null);
   const openEdit = (r) => { setEditing(r ? r.id : "new"); setEf(r ? { ...r, marginPct: margin(r).toFixed(1) } : { sku: "", item: "", unit: "EA", cost: 0, price: 0, supplier: "", category: "", marginPct: "30" }); };
+  /* Accepts either a change event or a bare value, so MoneyInput (which
+     hands back a string) and plain inputs can share one setter. */
   const efSet = (k) => (e) => {
-    const v = e.target.value;
+    const v = e && e.target ? e.target.value : e;
     setEf((prev) => {
       const next = { ...prev, [k]: v };
       const cost = num(next.cost), price = num(next.price), m = num(next.marginPct);
@@ -21586,8 +21652,8 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
               </Field>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-              <Field label="Cost"><input style={inputStyle} type="number" step="0.01" value={ef.cost} onChange={efSet("cost")} /></Field>
-              <Field label="Price"><input style={inputStyle} type="number" step="0.01" value={ef.price} onChange={efSet("price")} /></Field>
+              <Field label="Cost"><MoneyInput style={inputStyle} value={ef.cost} onChange={efSet("cost")} /></Field>
+              <Field label="Price"><MoneyInput style={inputStyle} value={ef.price} onChange={efSet("price")} /></Field>
               <Field label="Margin %" hint="Changing this recomputes price from cost.">
                 <input style={inputStyle} type="number" step="0.1" value={ef.marginPct} onChange={efSet("marginPct")} />
               </Field>

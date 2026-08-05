@@ -3144,6 +3144,7 @@ var fmtStamp = (iso) => {
 var money = (n) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 var money0 = (n) => (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
 var pct1 = (n) => `${n.toFixed(2)}%`;
+var moneyNum = (v) => num(String(v == null ? "" : v).replace(/[^0-9.-]/g, ""));
 function fmtPhone(v) {
   const d = String(v || "").replace(/\D/g, "");
   if (d.length === 10) return `1(${d.slice(0, 3)})${d.slice(3, 6)}-${d.slice(6)}`;
@@ -3618,6 +3619,42 @@ var inputStyle = {
   fontFamily: "inherit"
 };
 var selStyle = { ...inputStyle, appearance: "auto" };
+function MoneyInput({ value, onChange, disabled, style, placeholder = "$0.00", ...rest }) {
+  const [editing, setEditing] = (0, import_react.useState)(false);
+  const [raw, setRaw] = (0, import_react.useState)("");
+  const blank = value === "" || value === null || value === void 0;
+  const shown = editing ? raw : blank ? "" : money(moneyNum(value));
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    "input",
+    {
+      ...rest,
+      style: { textAlign: "right", fontVariantNumeric: "tabular-nums", ...style },
+      inputMode: "decimal",
+      disabled,
+      placeholder,
+      value: shown,
+      onFocus: (e) => {
+        setRaw(blank ? "" : String(moneyNum(value)));
+        setEditing(true);
+        const el = e.target;
+        setTimeout(() => {
+          try {
+            el.select();
+          } catch (err) {
+          }
+        }, 0);
+      },
+      onChange: (e) => {
+        setRaw(e.target.value);
+        onChange(e.target.value);
+      },
+      onBlur: () => {
+        setEditing(false);
+        onChange(String(raw).trim() === "" ? "" : String(moneyNum(raw)));
+      }
+    }
+  );
+}
 var dateInputStyle = {
   ...inputStyle,
   WebkitAppearance: "none",
@@ -10880,18 +10917,23 @@ function agreementPrefill(job, brand2) {
     carrier: ins.carrier || "",
     claimNumber: ins.claim || "",
     dateOfLoss: cl.dateOfLoss || "",
-    outOfPocket: ins.deductible ? money0(num(ins.deductible)) : "",
+    outOfPocket: ins.deductible ? money(num(ins.deductible)) : "",
     agreementDate: todayIso(),
     projectAddress: "",
     tearoffLayers: layers,
-    finalPrice: price ? money0(price) : "",
-    deductible: ins.deductible ? money0(num(ins.deductible)) : "",
-    deposit: deposit ? money0(deposit) : "",
+    finalPrice: price ? String(price) : "",
+    deductible: ins.deductible ? String(num(ins.deductible)) : "",
+    deposit: deposit ? String(deposit) : "",
     balance: ""
   };
 }
 function agreementFor(job, brand2) {
   return { ...agreementPrefill(job, brand2), ...job.agreement || {} };
+}
+function agMoney(v) {
+  const t = String(v == null ? "" : v).trim();
+  if (!t) return "";
+  return /^\$?\s*-?[\d,]+(\.\d+)?$/.test(t) ? money(moneyNum(t)) : t;
 }
 function agBlank(v, w) {
   return `<span class="agbl" style="min-width:${Math.round(w)}px">${esc(v || "")}</span>`;
@@ -10934,9 +10976,9 @@ function agreementDocHtml(job, brand2) {
   const left = AGREEMENT_SPEC.filter((s) => s.col === "L");
   const right = AGREEMENT_SPEC.filter((s) => s.col === "R");
   const mark = brand2.logo ? `<img class="aglogo" src="${brand2.logo}" alt="${esc(brand2.company)}">` : `<div class="agmark">${esc(brand2.company)}</div>`;
-  const price = num(String(a.finalPrice).replace(/[^0-9.]/g, ""));
-  const dep = num(String(a.deposit).replace(/[^0-9.]/g, ""));
-  const balance = String(a.balance || "").trim() || (price ? money0(price - dep) : "");
+  const price = moneyNum(a.finalPrice);
+  const dep = moneyNum(a.deposit);
+  const balance = String(a.balance || "").trim() ? agMoney(a.balance) : price ? money(price - dep) : "";
   const sigCell = (img, who, role) => `<div class="agsigbox">
     <div class="agsigwho">${esc(who)}</div>
     <div class="agsigline">${img ? `<img src="${img}" alt="">` : ""}</div>
@@ -10994,7 +11036,7 @@ function agreementDocHtml(job, brand2) {
     <div class="agprice">
       <div class="agpricet">AGREEMENT PRICE</div>
       <div class="agpriceb">
-        ${AGREEMENT_PRICE_ROWS.map((r) => `<div class="agprow"><span>${esc(r.label)}</span>${agBlank(a[r.k], 160)}</div>`).join("")}
+        ${AGREEMENT_PRICE_ROWS.map((r) => `<div class="agprow"><span>${esc(r.label)}</span>${agBlank(agMoney(a[r.k]), 160)}</div>`).join("")}
         <div class="agprow grand"><span>BALANCE DUE ON COMPLETION</span>${agBlank(balance, 160)}</div>
       </div>
     </div>
@@ -14907,15 +14949,12 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand: brand2, showMone
                     }
                   ),
                   /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.sub }, children: "\xD7" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, color: S.sub }, children: "$" }),
                   /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                    "input",
+                    MoneyInput,
                     {
-                      style: { ...inputStyle, flex: 1, textAlign: "right", padding: "8px 10px" },
-                      inputMode: "decimal",
+                      style: { ...inputStyle, flex: 1, padding: "8px 10px" },
                       value: l.price,
-                      placeholder: "0.00",
-                      onChange: (e) => editLine(c.id, l.id, "price", e.target.value)
+                      onChange: (v) => editLine(c.id, l.id, "price", v)
                     }
                   )
                 ] }),
@@ -15489,12 +15528,12 @@ function TabClaim({ job, mut, toast, brand: brand2 }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Settlement" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "RCV (total scope)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.rcv || "", onChange: (e) => set("rcv")(e.target.value), placeholder: "0.00" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "ACV (first cheque)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.acv || "", onChange: (e) => set("acv")(e.target.value), placeholder: "0.00" }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "RCV (total scope)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: c.rcv || "", onChange: set("rcv") }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "ACV (first cheque)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: c.acv || "", onChange: set("acv") }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deductible", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.deductible || ins.deductible || "", onChange: (e) => set("deductible")(e.target.value), placeholder: "0.00" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Non-recoverable", hint: "Never paid.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.nonRecoverable || "", onChange: (e) => set("nonRecoverable")(e.target.value), placeholder: "0.00" }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deductible", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: c.deductible || ins.deductible || "", onChange: set("deductible") }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Non-recoverable", hint: "Never paid.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: c.nonRecoverable || "", onChange: set("nonRecoverable") }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.soft, borderRadius: 10, padding: "11px 13px", marginTop: 4 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Carrier holds back", v: money(m.heldBack) }),
@@ -15518,14 +15557,12 @@ function TabClaim({ job, mut, toast, brand: brand2 }) {
               onChange: (e) => editSup(sp.id, "desc", e.target.value)
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "input",
+            MoneyInput,
             {
-              style: { ...inputStyle, width: 92, textAlign: "right", padding: "9px 11px" },
-              inputMode: "decimal",
+              style: { ...inputStyle, width: 104, padding: "9px 11px" },
               value: sp.amount,
-              onChange: (e) => editSup(sp.id, "amount", e.target.value)
+              onChange: (v) => editSup(sp.id, "amount", v)
             }
           ),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => delSup(sp.id), style: { border: "none", background: "none", cursor: "pointer", lineHeight: 0 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
@@ -15554,10 +15591,10 @@ function TabClaim({ job, mut, toast, brand: brand2 }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Money received" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "ACV cheque", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.acvReceived || "", onChange: (e) => set("acvReceived")(e.target.value), placeholder: "0.00" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Depreciation cheque", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.depReceived || "", onChange: (e) => set("depReceived")(e.target.value), placeholder: "0.00" }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "ACV cheque", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: c.acvReceived || "", onChange: set("acvReceived") }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Depreciation cheque", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: c.depReceived || "", onChange: set("depReceived") }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deductible collected", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, inputMode: "decimal", value: c.deductibleCollected || "", onChange: (e) => set("deductibleCollected")(e.target.value), placeholder: "0.00" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deductible collected", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: c.deductibleCollected || "", onChange: set("deductibleCollected") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.soft, borderRadius: 10, padding: "11px 13px", marginTop: 4 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Claim value (RCV + approved supplements)", v: money(m.claimValue) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Collected", v: money(m.collected) }),
@@ -16574,13 +16611,12 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub }, children: "\xD7" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
+          MoneyInput,
           {
-            style: { ...inputStyle, width: 92, textAlign: "right" },
+            style: { ...inputStyle, width: 104 },
             value: it.price,
             disabled: locked,
-            inputMode: "decimal",
-            onChange: (e) => setItem(it.id, "price", e.target.value)
+            onChange: (v) => setItem(it.id, "price", v)
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginLeft: "auto", fontWeight: 800, fontSize: 14 }, children: money(num(it.qty) * num(it.price)) })
@@ -16588,14 +16624,13 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginTop: 6, flexWrap: "wrap" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: "Cost" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
+          MoneyInput,
           {
-            style: { ...inputStyle, width: 84, textAlign: "right", padding: "7px 9px", fontSize: 13 },
+            style: { ...inputStyle, width: 96, padding: "7px 9px", fontSize: 13 },
             value: it.cost ?? "",
             disabled: locked,
-            inputMode: "decimal",
             placeholder: "\u2014",
-            onChange: (e) => setItem(it.id, "cost", e.target.value)
+            onChange: (v) => setItem(it.id, "cost", v)
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: "Margin" }),
@@ -17486,15 +17521,13 @@ function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], s
               ")"
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "input",
+            MoneyInput,
             {
-              style: { ...inputStyle, width: 82, textAlign: "right", opacity: on ? 1 : 0.55 },
+              style: { ...inputStyle, width: 96, opacity: on ? 1 : 0.55 },
               value: c.price,
               disabled: locked,
-              inputMode: "decimal",
-              onChange: (e) => setConcealed(c.id, "price", e.target.value)
+              onChange: (v) => setConcealed(c.id, "price", v)
             }
           ),
           !locked && c.custom && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeConcealed(c.id), style: { border: "none", background: "none", cursor: "pointer" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
@@ -17604,25 +17637,23 @@ function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], s
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub }, children: "Price" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "input",
+              MoneyInput,
               {
-                style: { ...inputStyle, width: 100, textAlign: "right" },
+                style: { ...inputStyle, width: 108 },
                 value: u.price,
                 disabled: locked,
-                inputMode: "decimal",
-                onChange: (e) => setUpgrade(u.id, "price", e.target.value)
+                onChange: (v) => setUpgrade(u.id, "price", v)
               }
             ),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.sub, marginLeft: 8 }, children: "Cost" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "input",
+              MoneyInput,
               {
-                style: { ...inputStyle, width: 92, textAlign: "right", fontSize: 13 },
+                style: { ...inputStyle, width: 100, fontSize: 13 },
                 value: u.cost ?? "",
                 disabled: locked,
-                inputMode: "decimal",
                 placeholder: "\u2014",
-                onChange: (e) => setUpgrade(u.id, "cost", e.target.value)
+                onChange: (v) => setUpgrade(u.id, "cost", v)
               }
             ),
             !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeUpgrade(u.id), style: { border: "none", background: "none", cursor: "pointer", marginLeft: "auto" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
@@ -17764,8 +17795,8 @@ function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
       )
     );
   };
-  const price = num(String(a.finalPrice).replace(/[^0-9.]/g, ""));
-  const dep = num(String(a.deposit).replace(/[^0-9.]/g, ""));
+  const price = moneyNum(a.finalPrice);
+  const dep = moneyNum(a.deposit);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: repull, children: "Re-read job file" }), children: "Construction agreement" }),
@@ -17843,19 +17874,27 @@ function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Agreement price" }),
-      AGREEMENT_PRICE_ROWS.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: r.label, children: txt(r.k) }, r.k)),
+      AGREEMENT_PRICE_ROWS.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: r.label, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        MoneyInput,
+        {
+          style: inputStyle,
+          value: a[r.k] || "",
+          disabled: locked,
+          onChange: (v) => set(r.k, v)
+        }
+      ) }, r.k)),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         Field,
         {
           label: "Balance due on completion",
-          hint: price ? `Leave blank to print ${money0(price - dep)} \u2014 the contract price less the deposit.` : "Leave blank to print the contract price less the deposit.",
+          hint: price ? `Leave blank to print ${money(price - dep)} \u2014 the contract price less the deposit.` : "Leave blank to print the contract price less the deposit.",
           children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             "input",
             {
               style: inputStyle,
               value: a.balance || "",
               disabled: locked,
-              placeholder: price ? money0(price - dep) : "",
+              placeholder: price ? money(price - dep) : "",
               onChange: (e) => set("balance", e.target.value)
             }
           )
@@ -17986,15 +18025,13 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Price & payment schedule" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "center", marginBottom: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, fontSize: 14 }, children: "Contract price" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub }, children: "$" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
+          MoneyInput,
           {
-            style: { ...inputStyle, width: 130, textAlign: "right" },
+            style: { ...inputStyle, width: 150 },
             value: con.price,
             disabled: locked,
-            inputMode: "decimal",
-            onChange: (e) => setCon({ price: num(e.target.value) })
+            onChange: (v) => setCon({ price: num(v) })
           }
         )
       ] }),
@@ -18048,19 +18085,15 @@ function TabContract({ job, brand: brand2, setBrand = () => {
               ]
             }
           ),
-          depositMode === "fixed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub }, children: "$" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "input",
-              {
-                style: { ...inputStyle, width: 110, textAlign: "right" },
-                value: con.depositFixed ?? "",
-                disabled: locked,
-                inputMode: "decimal",
-                onChange: (e) => setCon({ depositFixed: num(e.target.value) })
-              }
-            )
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          depositMode === "fixed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            MoneyInput,
+            {
+              style: { ...inputStyle, width: 130 },
+              value: con.depositFixed ?? "",
+              disabled: locked,
+              onChange: (v) => setCon({ depositFixed: num(v) })
+            }
+          ) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
               "input",
               {
@@ -18910,14 +18943,12 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
             onChange: (e) => onEdit(l.id, "label", e.target.value)
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub, fontSize: 13 }, children: "$" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
+          MoneyInput,
           {
-            style: { ...inputStyle, width: 96, textAlign: "right", padding: "9px 11px" },
+            style: { ...inputStyle, width: 110, padding: "9px 11px" },
             value: l.amt,
-            inputMode: "decimal",
-            onChange: (e) => onEdit(l.id, "amt", e.target.value)
+            onChange: (v) => onEdit(l.id, "amt", v)
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onDelete(l.id), style: { border: "none", background: "none", cursor: "pointer" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 15, color: "#B42318" }) })
@@ -19251,12 +19282,11 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand: brand2 = 
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "input",
+          MoneyInput,
           {
-            style: { ...inputStyle, width: 86, textAlign: "right", padding: "9px 11px" },
+            style: { ...inputStyle, width: 100, padding: "9px 11px" },
             value: r.amt,
-            inputMode: "decimal",
-            onChange: (e) => mut((j) => ({ ...j, fin: { ...j.fin, reimbursements: j.fin.reimbursements.map((x) => x.id === r.id ? { ...x, amt: num(e.target.value) } : x) } }))
+            onChange: (v) => mut((j) => ({ ...j, fin: { ...j.fin, reimbursements: j.fin.reimbursements.map((x) => x.id === r.id ? { ...x, amt: num(v) } : x) } }))
           }
         ),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -19367,13 +19397,12 @@ function TabPayments({ job, mut, toast }) {
           onChange: (e) => setForm({ ...form, label: e.target.value })
         }
       ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Amount ($)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "input",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Amount", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        MoneyInput,
         {
           style: inputStyle,
           value: form.amt,
-          inputMode: "decimal",
-          onChange: (e) => setForm({ ...form, amt: e.target.value })
+          onChange: (v) => setForm({ ...form, amt: v })
         }
       ) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%" }, disabled: !form.label.trim() || !num(form.amt), onClick: () => {
@@ -19414,12 +19443,11 @@ function TabPayments({ job, mut, toast }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 12, lineHeight: 1.5 }, children: "Corrections are fine \u2014 every edit is written to the activity feed with the old values, so the record stays honest." }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Amount", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              "input",
+              MoneyInput,
               {
                 style: inputStyle,
                 value: ef2.amt,
-                inputMode: "decimal",
-                onChange: (e) => setEf2({ ...ef2, amt: e.target.value })
+                onChange: (v) => setEf2({ ...ef2, amt: v })
               }
             ) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -19632,7 +19660,7 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand: brand2 }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 72, textAlign: "right" }, value: l.qty, inputMode: "decimal", onChange: (e) => setLine(l.id, "qty", e.target.value) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 62 }, value: l.unit, onChange: (e) => setLine(l.id, "unit", e.target.value) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.sub }, children: "\xD7" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 92, textAlign: "right" }, value: l.price, inputMode: "decimal", onChange: (e) => setLine(l.id, "price", e.target.value) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: { ...inputStyle, width: 104 }, value: l.price, onChange: (v) => setLine(l.id, "price", v) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { marginLeft: "auto", fontWeight: 800, fontVariantNumeric: "tabular-nums" }, children: money(num(l.qty) * num(l.price)) })
       ] })
     ] }, l.id)),
@@ -23388,7 +23416,7 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
     setEf(r ? { ...r, marginPct: margin(r).toFixed(1) } : { sku: "", item: "", unit: "EA", cost: 0, price: 0, supplier: "", category: "", marginPct: "30" });
   };
   const efSet = (k) => (e) => {
-    const v = e.target.value;
+    const v = e && e.target ? e.target.value : e;
     setEf((prev) => {
       const next = { ...prev, [k]: v };
       const cost = num(next.cost), price = num(next.price), m = num(next.marginPct);
@@ -23508,8 +23536,8 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Unit", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: ef.unit, onChange: efSet("unit"), children: UNIT_TYPES.map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: u }, u)) }) })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Cost", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "number", step: "0.01", value: ef.cost, onChange: efSet("cost") }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Price", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "number", step: "0.01", value: ef.price, onChange: efSet("price") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Cost", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: ef.cost, onChange: efSet("cost") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Price", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: ef.price, onChange: efSet("price") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Margin %", hint: "Changing this recomputes price from cost.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "number", step: "0.1", value: ef.marginPct, onChange: efSet("marginPct") }) })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [

@@ -74,7 +74,10 @@ ok(pre.state === "OH" && pre.zip === "45247", "prefill takes state and zip");
 ok(pre.carrier === "State Farm" && pre.claimNumber === "CLM-448190", "prefill takes carrier and claim number");
 ok(pre.dateOfLoss === "2026-04-18", "prefill takes the date of loss");
 ok(pre.tearoffLayers === "2", "prefill reads the layer count off the inspection checklist");
-ok(/12,425/.test(pre.deposit), "prefill computes the deposit from the contract's deposit terms");
+/* Stored as a plain number — formatting is the renderer's and the money
+   input's job, so the value stays parseable. */
+ok(pre.deposit === "12425", "prefill computes the deposit from the contract's deposit terms");
+ok(pre.finalPrice === "24850", "prefill stores the price unformatted");
 
 /* An address that isn't comma-shaped must not lose the street. */
 const odd = m.agreementPrefill({ ...baseJob, address: "127 Market Street" }, brand);
@@ -124,8 +127,15 @@ ok(!/agck on/.test(blankDoc), "an unfilled agreement prints empty boxes, not tic
 ok(/class="agfval"/.test(blankDoc), "an unfilled agreement still prints its rules so it can be finished by hand");
 
 /* The balance line is arithmetic unless the rep overrode it. */
-const auto = m.agreementDocHtml({ ...baseJob, agreement: { finalPrice: "$24,850", deposit: "$12,425" } }, brand);
-ok(/BALANCE DUE ON COMPLETION<\/span><span class="agbl"[^>]*>\$12,425</.test(auto), "balance = price less deposit");
+const auto = m.agreementDocHtml({ ...baseJob, agreement: { finalPrice: "24850", deposit: "12425" } }, brand);
+ok(/BALANCE DUE ON COMPLETION<\/span><span class="agbl"[^>]*>\$12,425\.00</.test(auto), "balance = price less deposit");
+/* A value already carrying $ and commas must survive the round trip —
+   parseFloat("$24,850") is NaN, which would silently print $0.00. */
+const preformatted = m.agreementDocHtml({ ...baseJob, agreement: { finalPrice: "$24,850.00", deposit: "$12,425.00" } }, brand);
+ok(/BALANCE DUE ON COMPLETION<\/span><span class="agbl"[^>]*>\$12,425\.00</.test(preformatted),
+  "a pre-formatted money string is parsed, not zeroed");
+ok(/Final Contract Price[^<]*<\/span><span class="agbl"[^>]*>\$24,850\.00</.test(auto),
+  "price rows print in accounting format regardless of how they were stored");
 const manual = m.agreementDocHtml({ ...baseJob, agreement: { finalPrice: "$24,850", deposit: "$12,425", balance: "See addendum" } }, brand);
 ok(/BALANCE DUE ON COMPLETION<\/span><span class="agbl"[^>]*>See addendum</.test(manual), "a written balance overrides the arithmetic");
 
