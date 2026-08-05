@@ -2790,24 +2790,6 @@ function subRate(crew, code) {
 /* Figure a subcontractor's pay for a job from their uploaded rate card and
    the job's installed squares + conditions. Returns a transparent line
    breakdown so the office can see exactly how the number was built. */
-function computeSubPay(job, crew) {
-  if (!crew || !((crew.rateCard || []).length)) return null;
-  const cov = installedSquares(generateRoofingMaterials(job.measurements));
-  const sq = cov ? cov.total : 0;
-  const wo = job.workOrder || {};
-  const lines = [];
-  const per = subRate(crew, "per_square");
-  if (per && sq) lines.push({ label: `Install ${sq} sq @ ${money(per)}/sq`, amt: per * sq });
-  if (wo.steep) { const s = subRate(crew, "steep_per_square"); if (s && sq) lines.push({ label: `Steep ${sq} sq @ ${money(s)}/sq`, amt: s * sq }); }
-  const layers = parseInt(wo.layers || (job.checklist || {}).layers, 10) || 1;
-  if (layers > 1) { const t = subRate(crew, "tearoff_per_square"); if (t && sq) lines.push({ label: `Tear-off ${layers} layers, ${sq} sq @ ${money(t)}/sq`, amt: t * sq * (layers - 1) }); }
-  if (wo.stories === "2") { const a = subRate(crew, "story_2"); if (a) lines.push({ label: "2-story adder", amt: a }); }
-  if (wo.stories === "3+") { const a = subRate(crew, "story_3"); if (a) lines.push({ label: "3+ story adder", amt: a }); }
-  const chim = (wo.chimney || {}).size;
-  if (chim && chim !== "none") { const a = subRate(crew, `chimney_${chim}`); if (a) lines.push({ label: `Chimney flashing (${chim})`, amt: a }); }
-  const total = lines.reduce((a, l) => a + l.amt, 0);
-  return { lines, total: Math.round(total * 100) / 100, squares: sq };
-}
 /* Compliance docs (W-9, COI, license) that are expired or expiring within 30
    days, so a sub with lapsed paperwork gets flagged before they're paid. */
 function crewDocAlerts(crew, today) {
@@ -2852,6 +2834,12 @@ function buildSubInvoiceDraft(job, crew) {
   if (wo.steep) add("Shingle Installation", "Steep charge", sq, "SQ", subRate(crew, "steep_per_square"));
   const layers = parseInt(wo.layers || (job.checklist || {}).layers, 10) || 1;
   if (layers > 1) add("Shingle Installation", `Additional layer removal (${layers - 1})`, sq * (layers - 1), "SQ", subRate(crew, "tearoff_per_square"));
+  /* The story adders. subCodeFor parses story_2 / story_3 out of the crew's
+     uploaded rate card, but the draft builder never read wo.stories — so
+     every multi-story sub invoice went out short by the adder. The rate was
+     captured and then ignored. */
+  if (wo.stories === "2") add("Access", "2-story adder", 1, "job", subRate(crew, "story_2"));
+  if (wo.stories === "3+") add("Access", "3+ story adder", 1, "job", subRate(crew, "story_3"));
   const chim = (wo.chimney || {}).size;
   if (chim && chim !== "none") add("Chimney Flashing", `Chimney flashing (${chim})`, 1, "job", subRate(crew, `chimney_${chim}`));
   inv.lines = lines;
@@ -5773,15 +5761,17 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       setAppointments([...appointments, { ...payload, id: uid("ap") }]);
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `scheduled ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
       toast(notified
-        ? `Appointment added — ${notified === "sms" ? "text" : "email"} queued for the customer`
+        ? `Appointment added — ${notified === "sms" ? "text" : "email"} ready to send from the Inbox`
         : "Appointment added");
     }
     setAdding(false); setEditingId(null);
     setF({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "", assignedTo: "", durationMin: 60, status: "Scheduled" });
   };
-  /* Queue a reminder on the customer's job thread. It sends for real once
-     Gmail/SMS integrations are live; until then it sits in the thread as
-     queued, visible in the Inbox. */
+  /* Draft a message on the customer's job thread. Nothing here delivers it —
+     this used to say it would "send for real once integrations are live",
+     which was never true: no code path ever drained the queue on any
+     configuration. Delivery happens when someone presses Send now in the
+     Inbox. */
   /* Which channel a customer has actually agreed to. Consent is not a
      formality — texting without it is a TCPA problem, so an appointment
      is never allowed to notify around a missing flag. */
@@ -5818,7 +5808,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
   const queueReminder = () => {
     const j = jobs.find((x) => x.id === f.jobId);
     const ch = queueFor(j, f, "reminder");
-    if (ch) toast(`${ch === "sms" ? "Text" : "Email"} reminder queued — see it in the Inbox`);
+    if (ch) toast(`${ch === "sms" ? "Text" : "Email"} reminder drafted — send it from the Inbox`);
   };
   const addType = () => {
     const v = newType.trim();
@@ -6492,11 +6482,18 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject, currentUser, onDelete
    ================================================================ */
 function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURCES, users = [], jobs = [], seed = null }) {
   const contacts = useMemo(() => buildContactDirectory(jobs), [jobs]);
+  /* The real seat list, which this sheet has always been passed and never
+     read. TEAM is four demo names; falling back to it only matters before
+     any seats exist. */
+  const roster = useMemo(() => {
+    const names = (users || []).filter((u) => u.active !== false).map((u) => u.name).filter(Boolean);
+    return names.length ? names : TEAM;
+  }, [users]);
   const blank = {
     contactMode: "new", existingContactId: "", existingPropertyId: "",
     first: "", last: "", phone: "", email: "", street: "", city: "", stateSel: "", zip: "",
     lat: null, lng: null,
-    leadSource: "", assignee: TEAM[0], claimType: "Insurance",
+    leadSource: "", assignee: "", claimType: "Insurance",
     roofTypes: [], roofAge: "", layers: "", workRequested: [], reasonForCalling: "",
     propertyUse: "Primary residence", decisionTimeline: "",
     carrier: "", policy: "", claim: "", adjusterName: "", adjusterPhone: "", deductible: "", coverage: "", oLaw: false,
@@ -6504,6 +6501,11 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
     smsConsent: false, emailConsent: false, notes: "",
   };
   const [f, setF] = useState(blank);
+  /* Default to the first real seat once the roster is known, rather than to
+     a demo name baked into the source. */
+  useEffect(() => {
+    if (open && !f.assignee && roster.length) setF((prev) => ({ ...prev, assignee: roster[0] }));
+  }, [open, roster, f.assignee]);
   useEffect(() => {
     if (!open) return;
     const selected = seed?.contactId ? contacts.find((c) => c.id === seed.contactId) : null;
@@ -6764,7 +6766,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
         </Field>
         <Field label="Assign to">
           <select style={selStyle} value={f.assignee} onChange={set("assignee")}>
-            {TEAM.map((t) => <option key={t}>{t}</option>)}
+            {roster.map((t) => <option key={t}>{t}</option>)}
           </select>
         </Field>
       </div>
@@ -6854,7 +6856,10 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
 /* ================================================================
    FILTERS SHEET
    ================================================================ */
-function FiltersSheet({ open, onClose, stages, filters, setFilters }) {
+/* The board filter used to list four hardcoded demo names and the built-in
+   lead-source constant, so a real org could not filter by their own reps or
+   by a lead source they had added. Both now come from the live data. */
+function FiltersSheet({ open, onClose, stages, filters, setFilters, assignees = [], leadSources = LEAD_SOURCES }) {
   const [local, setLocal] = useState(filters);
   useEffect(() => { if (open) setLocal(filters); }, [open]); // eslint-disable-line
   const toggle = (key, val) => {
@@ -6919,9 +6924,9 @@ function FiltersSheet({ open, onClose, stages, filters, setFilters }) {
         ))}
       </Section>
       <Section title="Assignees & job owner"
-        onAll={() => setLocal({ ...local, assignees: [...TEAM] })}
+        onAll={() => setLocal({ ...local, assignees: [...assignees] })}
         onNone={() => setLocal({ ...local, assignees: [] })}>
-        {TEAM.map((t) => (
+        {assignees.map((t) => (
           <CheckRow key={t} checked={local.assignees.includes(t)} label={t} onClick={() => toggle("assignees", t)} />
         ))}
       </Section>
@@ -6933,9 +6938,9 @@ function FiltersSheet({ open, onClose, stages, filters, setFilters }) {
         ))}
       </Section>
       <Section title="Lead sources"
-        onAll={() => setLocal({ ...local, sources: [...LEAD_SOURCES] })}
+        onAll={() => setLocal({ ...local, sources: [...leadSources] })}
         onNone={() => setLocal({ ...local, sources: [] })}>
-        {LEAD_SOURCES.map((l) => (
+        {leadSources.map((l) => (
           <CheckRow key={l} checked={local.sources.includes(l)} label={l} onClick={() => toggle("sources", l)} />
         ))}
       </Section>
@@ -7788,7 +7793,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
             switch (id) {
               case "overview": return <TabOverview job={job} juris={juris} mut={mut} toast={toast} reviewSettings={reviewSettings} brand={brand}
                 currentUser={currentUser} onLog={onLog} leadSources={leadSources} activity={activity} users={users} isAdmin={isAdmin}
-                onOpenCodeLookup={onOpenCodeLookup} />;
+                onOpenCodeLookup={onOpenCodeLookup} integrations={integrations} />;
               case "claim": return <TabClaim job={job} mut={mut} toast={toast} brand={brand} />;
               case "handoff": return <TabHandoff job={job} mut={mut} toast={toast} isAdmin={isAdmin}
                 currentUser={currentUser} stages={stages} onMoveStage={onMoveStage} showMoney={showMoney} />;
@@ -7811,7 +7816,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "messages": return <TabMessages job={job} mut={mut} toast={toast} brand={brand}
                 templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />;
               case "photos": return <TabPhotos job={job} mut={mut} toast={toast} ccToken={ccToken} />;
-              case "financials": return <TabFinancialsCombined job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} integrations={integrations} />;
+              case "financials": return <TabFinancialsCombined job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} integrations={integrations} onLog={onLog} />;
               case "workorder": return <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
                 crews={crews} templates={templates} currentUser={currentUser} users={users} />;
               case "tasks": return <TabTasks job={job} mut={mut} toast={toast} />;
@@ -7930,7 +7935,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
 }
 
 /* ---------- Overview ---------- */
-function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false, onOpenCodeLookup = () => {} }) {
+function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {}, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false, onOpenCodeLookup = () => {}, integrations = {} }) {
   const notes = job.notes || [];
   const [noteTxt, setNoteTxt] = useState("");
   const [noteVisible, setNoteVisible] = useState(false);
@@ -8242,7 +8247,7 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
         </div>
       </Card>
 
-      <EnRouteCard job={job} mut={mut} toast={toast} currentUser={currentUser} />
+      <EnRouteCard job={job} mut={mut} toast={toast} currentUser={currentUser} integrations={integrations} />
 
       <ForecastStrip lat={job.lat ?? job.property?.lat} lng={job.lng ?? job.property?.lng}
         zip={job.zip} schedDate={job.schedDate} />
@@ -9442,7 +9447,24 @@ function invoiceDocHtml(job, brand) {
     </div>
   </div>`;
   out += `<h2>Work performed</h2>` + lineTable((est && est.items) || []);
-  const contractPrice = (job.contract && job.contract.price) || estimateTotal(est);
+  /* Approved change orders. paymentsSummary and computeCapOut have always
+     added these to the contract; this document computed its own total and
+     left them out, so the screen and the PDF from the same button disagreed
+     and the customer was billed the lower number. The lines are listed too —
+     a balance that includes work the invoice never mentions invites a
+     phone call at best. */
+  const approvedCos = (Array.isArray(job.changeOrders) ? job.changeOrders : [])
+    .filter((c) => c.status === "Approved");
+  const coApproved = approvedCos.reduce((a2, c) => a2 + coTotal(c), 0);
+  if (approvedCos.length) {
+    const coLines = approvedCos.flatMap((c) => (c.lines || []).map((l) => ({
+      desc: `${c.title || "Change order"} — ${l.label || ""}`.trim(),
+      qty: l.qty, unit: l.unit, price: l.price,
+    })));
+    out += `<h2>Approved change orders</h2>` + lineTable(coLines.length ? coLines
+      : approvedCos.map((c) => ({ desc: c.title || "Change order", qty: 1, unit: "", price: coTotal(c) })));
+  }
+  const contractPrice = ((job.contract && job.contract.price) || estimateTotal(est)) + coApproved;
   out += `<div class="tot"><span>Contract total</span><span>${money(contractPrice)}</span></div>`;
   out += `<div class="tot"><span>Payments received</span><span>−${money(pay.received)}</span></div>`;
   out += `<div class="tot grand"><span>Balance due</span><span>${money(contractPrice - pay.received)}</span></div>`;
@@ -12138,23 +12160,33 @@ function EnRouteCard({ job, mut, toast, currentUser, integrations = {} }) {
     return next;
   };
 
+  /* This used to write a "Queued" message, stamp sharedAt and toast "ETA
+     sent to the customer" without calling any send function — on every
+     configuration, including a fully connected one. It also had no consent
+     check and addressed the message to job.name when no email was on file.
+     It now goes through deliverToCustomer and reports what actually
+     happened. */
   const share = async (state) => {
     const s = state || er;
     if (!s) return;
     const mins = etaRemaining(s) ?? s.etaMin;
     const first = String(job.name || "").split(" ")[0];
     const body = `Hi ${first}, ${s.by || "your crew"} is on the way to ${job.address} — about ${mins} minutes out, arriving around ${etaClock(new Date().toISOString(), mins)}.`;
+    const out = await deliverToCustomer(job, { prefer: "sms", subject: "On our way", body }, integrations, currentUser);
     mut((j) => ({
       ...j,
-      enroute: { ...(j.enroute || s), sharedAt: new Date().toISOString() },
+      /* sharedAt drives the portal's live ETA card and the "customer
+         notified" line, so it is only stamped on an actual delivery. */
+      enroute: { ...(j.enroute || s), sharedAt: out.delivered ? new Date().toISOString() : (j.enroute || s).sharedAt || null },
       messages: [...(j.messages || []), {
-        id: uid("m"), kind: j.consent?.sms?.granted ? "sms" : "email", audience: "Customer",
-        to: j.consent?.sms?.granted ? (j.phone || j.name) : (j.email || j.name),
-        subject: j.consent?.sms?.granted ? "" : "On our way",
-        body, status: "Queued", at: new Date().toISOString().slice(0, 16).replace("T", " "),
+        id: uid("m"), kind: out.kind, audience: "Customer", to: out.to,
+        subject: out.kind === "sms" ? "" : "On our way",
+        body, status: out.status, at: new Date().toISOString().slice(0, 16).replace("T", " "),
       }],
     }));
-    toast && toast("ETA sent to the customer — it's live in their portal too");
+    if (!toast) return;
+    if (out.delivered) toast(`ETA sent to the customer${job.portalToken ? " — it's live in their portal too" : ""}`);
+    else toast(out.status);
   };
 
   const arrive = () => {
@@ -12205,6 +12237,44 @@ function EnRouteCard({ job, mut, toast, currentUser, integrations = {} }) {
    someone renames a task. Downscale to a card-sized JPEG first: a 1000px
    wide, quality-0.72 shot lands around 80 KB and still looks sharp on a
    Retina card. Falls back to the raw data URL if canvas isn't available. */
+/* Shrink a camera photo to something a claim file can carry before it goes
+   anywhere. A phone shot is 3-8 MB; at 1600px wide and q0.82 it is a few
+   hundred KB, still detailed enough for an adjuster to see hail bruising,
+   and small enough to survive the inline fallback when Storage isn't on.
+   Returns a File so uploadJobFile can treat it like any other upload. */
+function downscaleImageFile(file, maxW = 1600, quality = 0.82) {
+  return new Promise((resolve) => {
+    if (!file || !String(file.type || "").startsWith("image/")) { resolve(file); return; }
+    const done = (f) => resolve(f || file);
+    try {
+      const r = new FileReader();
+      r.onerror = () => done(null);
+      r.onload = () => {
+        const img = new Image();
+        img.onerror = () => done(null);
+        img.onload = () => {
+          try {
+            const scale = Math.min(1, maxW / (img.width || maxW));
+            /* Already small enough — don't re-encode and lose quality. */
+            if (scale >= 1 && file.size < 900 * 1024) { done(null); return; }
+            const c = document.createElement("canvas");
+            c.width = Math.max(1, Math.round((img.width || maxW) * scale));
+            c.height = Math.max(1, Math.round((img.height || maxW) * scale));
+            c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+            c.toBlob((blob) => {
+              if (!blob || blob.size >= file.size) { done(null); return; }
+              const name = String(file.name || "photo").replace(/\.[^.]+$/, "") + ".jpg";
+              done(new File([blob], name, { type: "image/jpeg" }));
+            }, "image/jpeg", quality);
+          } catch (e) { done(null); }
+        };
+        img.src = String(r.result);
+      };
+      r.readAsDataURL(file);
+    } catch (e) { done(null); }
+  });
+}
+
 function imageToDataUrl(file, maxW = 1000, quality = 0.72) {
   return new Promise((resolve) => {
     const r = new FileReader();
@@ -16990,6 +17060,59 @@ async function sendClientEmail(job, mut, currentUser, integrations, toast, { sub
   toast("Saved to thread — connect your Gmail to deliver");
 }
 
+/* One delivery path for everything the app sends the customer on its own —
+   appointment confirmations, en-route ETAs, stage updates.
+
+   Those three used to write a message with status "Queued" and toast that
+   the customer had been notified. Nothing drained the queue, so on every
+   configuration the text was never sent: a roofer was told their Tuesday
+   inspection was confirmed to the homeowner when it wasn't. The en-route
+   share was worse — it had no consent check at all, the only send path in
+   the app without one, and fell back to `to: job.email || job.name`, so
+   with no email on file the "recipient" was the customer's own name.
+
+   Returns the real outcome and never throws. Callers record what it says. */
+async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, integrations, currentUser) {
+  const consent = job.consent || {};
+  const smsOk = !!(consent.sms && consent.sms.granted) && !!job.phone;
+  const emailOk = !!(consent.email && consent.email.granted) && !!job.email;
+  /* Preference, then the other channel, then nothing. Consent is per
+     channel and is not transferable between them. */
+  const kind = (prefer === "sms" && smsOk) ? "sms"
+    : (prefer === "email" && emailOk) ? "email"
+    : smsOk ? "sms" : emailOk ? "email" : null;
+  if (!kind) {
+    const why = (consent.sms && consent.sms.granted) || (consent.email && consent.email.granted)
+      ? "Not sent — no contact details on file"
+      : "Not sent — no messaging consent on file";
+    return { kind: prefer, to: "", status: why, delivered: false };
+  }
+  const to = kind === "sms" ? job.phone : job.email;
+  const auth = AUTH();
+  const notSetUp = (m) => /not configured|Function not found|Failed to send a request|non-2xx|isn't connected/i.test(m);
+  if (kind === "sms") {
+    if (!(auth && auth.sendSms)) return { kind, to, status: "Queued — no provider connected", delivered: false };
+    try {
+      await auth.sendSms({ to, body, jobId: job.id });
+      return { kind, to, status: "Sent", delivered: true };
+    } catch (e) {
+      const m = (e && e.message) || "Could not send";
+      return { kind, to, status: notSetUp(m) ? "Queued — texting not set up yet" : `Failed — ${m}`, delivered: false };
+    }
+  }
+  const myGmail = ((integrations && integrations.gmailByUser) || {})[currentUser && currentUser.id] || { connected: false };
+  if (!(myGmail.connected && auth && auth.sendGmail)) {
+    return { kind, to, status: "Queued — no provider connected", delivered: false };
+  }
+  try {
+    await auth.sendGmail({ to, subject, body });
+    return { kind, to, status: "Sent", delivered: true };
+  } catch (e) {
+    const m = (e && e.message) || "Could not send";
+    return { kind, to, status: notSetUp(m) ? "Queued — email not set up yet" : `Failed — ${m}`, delivered: false };
+  }
+}
+
 /* ================================================================
    MESSAGES — send email or SMS to the customer or crew from the job,
    with the thread kept on the job record.
@@ -17280,6 +17403,8 @@ function TabPhotos({ job, mut, toast, ccToken }) {
   const [geo, setGeo] = useState(null);       // last fix
   const [locating, setLocating] = useState(false);
   const [geoErr, setGeoErr] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [upErr, setUpErr] = useState("");
   const fileRef = useRef(null);
   const pendingLabel = useRef("");
 
@@ -17298,15 +17423,38 @@ function TabPhotos({ job, mut, toast, ccToken }) {
     return r;
   };
 
+  /* This used to store an object-URL for the picked file — a blob: reference
+     scoped to one browser tab. The image bytes were never uploaded, so only the label,
+     timestamp and coordinates survived a reload, and every document that
+     left the building (inspection report, proposal findings, portal album)
+     rendered a broken image. For a roofer the storm photos ARE the claim, so
+     they now go through the same upload path as job files: Supabase Storage
+     when it is configured, an inline data URL when it is not. */
   const addPhoto = async (label, file) => {
+    /* The busy flag covers the GPS fix as well as the upload. captureLocation
+       allows up to ten seconds for a fix, and on a roof it often uses them —
+       leaving the screen silent after a tap for that long reads as a dropped
+       photo, which is how people end up shooting the same elevation twice. */
+    setUploading(true); setUpErr("");
     let fix = geo;
     if (!fix) { const r = await getFix(); fix = r.ok ? r : null; }
     const iso = new Date().toISOString();
-    const url = file ? URL.createObjectURL(file) : null;
+    let up = null;
+    try {
+      const small = await downscaleImageFile(file);
+      up = await uploadJobFile(job.id, small);
+    } catch (e) {
+      setUploading(false);
+      setUpErr((e && e.message) || "Couldn't save that photo.");
+      return;                       // never record a photo we failed to store
+    }
+    setUploading(false);
     mut((j) => ({
       ...j,
       photos: [...j.photos, {
-        id: uid("p"), label, at: fmtStamp(iso), iso, url,
+        id: uid("p"), label, at: fmtStamp(iso), iso,
+        url: up.url, storage: up.storage, storageKey: up.key, size: up.size, mime: up.mime,
+        shared: false,
         fileName: file ? file.name : null,
         lat: fix ? fix.lat : null, lng: fix ? fix.lng : null,
         accuracy: fix ? fix.accuracy : null,
@@ -17315,6 +17463,8 @@ function TabPhotos({ job, mut, toast, ccToken }) {
     }));
     toast(fix ? "Photo stamped with time + location" : "Photo saved — no location fix");
   };
+  const toggleShared = (id) =>
+    mut((j) => ({ ...j, photos: j.photos.map((x) => x.id === id ? { ...x, shared: !x.shared } : x) }));
 
   const pickFile = (label) => { pendingLabel.current = label; fileRef.current && fileRef.current.click(); };
   const onFile = (e) => {
@@ -17394,6 +17544,12 @@ function TabPhotos({ job, mut, toast, ccToken }) {
 
       <Card style={{ marginTop: 12 }}>
         <CardTitle right={<Chip tone="blue">{job.photos.length}</Chip>}>Photo album</CardTitle>
+        {uploading && <div style={{ fontSize: 13, color: S.sub, marginBottom: 10 }}>Saving photo — getting a location fix…</div>}
+        {upErr && <Callout label="Photo not saved" tone="red">{upErr}</Callout>}
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Tap <b>Share</b> on a photo to put it in the customer's portal album and the proposal's
+          findings section.
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           {job.photos.map((p) => (
             <div key={p.id} style={{ border: `1px solid ${S.line}`, borderRadius: 12, overflow: "hidden" }}>
@@ -17413,6 +17569,13 @@ function TabPhotos({ job, mut, toast, ccToken }) {
                 ) : (
                   <div style={{ fontSize: 10.5, color: "#92600A", marginTop: 5 }}>No location</div>
                 )}
+                <button onClick={() => toggleShared(p.id)} style={{
+                  marginTop: 7, display: "inline-flex", alignItems: "center", gap: 5,
+                  border: `1px solid ${p.shared ? T.accent : S.line}`,
+                  background: p.shared ? T.accentSoft : S.card,
+                  color: p.shared ? T.accent : S.sub,
+                  borderRadius: 999, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer",
+                }}>{p.shared ? <Check size={10} /> : null} {p.shared ? "Shared" : "Share"}</button>
               </div>
             </div>
           ))}
@@ -17483,7 +17646,7 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
    each sub-tab is still the exact same component as before (nothing
    about TabFinancials/TabPayments/TabInvoice changed), just reached
    through one door instead of three. */
-function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, integrations = {} }) {
+function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, integrations = {}, onLog = () => {} }) {
   const [sub, setSub] = useState("costs");
   const SUBS = [["costs", "Costs & profit"], ["payments", "Payments"], ["invoice", "Invoice"]];
   return (
@@ -17499,7 +17662,7 @@ function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, i
         ))}
       </div>
       {sub === "costs" && <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />}
-      {sub === "payments" && <TabPayments job={job} mut={mut} toast={toast} />}
+      {sub === "payments" && <TabPayments job={job} mut={mut} toast={toast} onLog={onLog} />}
       {sub === "invoice" && <TabInvoice job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser} integrations={integrations} />}
     </>
   );
@@ -17796,17 +17959,36 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
 }
 
 /* ---------- Payments ---------- */
-function TabPayments({ job, mut, toast }) {
+function TabPayments({ job, mut, toast, onLog = () => {} }) {
   const [editPay, setEditPay] = useState(null);
   const [ef2, setEf2] = useState(null);
   const checkRef = useRef(null);
   const openPayEdit = (p2) => { setEditPay(p2.id); setEf2({ ...p2 }); };
+  /* The edit sheet tells the user "every edit is written to the activity
+     feed with the old values, so the record stays honest". It wasn't — both
+     of these only mutated and toasted, so a logged deposit could be silently
+     zeroed. Now the claim is true. */
   const savePayEdit = () => {
+    const before = (job.payments || []).find((x) => x.id === editPay);
     mut((j) => ({ ...j, payments: j.payments.map((x) => (x.id === editPay ? { ...x, ...ef2, amt: num(ef2.amt) } : x)) }));
+    if (before) {
+      const changes = [];
+      if (num(before.amt) !== num(ef2.amt)) changes.push(`amount ${money(num(before.amt))} → ${money(num(ef2.amt))}`);
+      if ((before.date || "") !== (ef2.date || "")) changes.push(`date ${before.date || "—"} → ${ef2.date || "—"}`);
+      if ((before.method || "") !== (ef2.method || "")) changes.push(`method ${before.method || "—"} → ${ef2.method || "—"}`);
+      if ((before.ref || "") !== (ef2.ref || "")) changes.push(`reference ${before.ref || "—"} → ${ef2.ref || "—"}`);
+      onLog({ kind: "payment", jobId: job.id, jobName: job.name,
+        text: changes.length ? `edited a payment — ${changes.join("; ")}` : "edited a payment (no values changed)" });
+    }
     setEditPay(null); toast("Payment updated");
   };
   const deletePay = () => {
+    const before = (job.payments || []).find((x) => x.id === editPay);
     mut((j) => ({ ...j, payments: j.payments.filter((x) => x.id !== editPay) }));
+    if (before) {
+      onLog({ kind: "payment", jobId: job.id, jobName: job.name,
+        text: `removed a ${money(num(before.amt))} payment${before.date ? ` dated ${before.date}` : ""}${before.method ? ` (${before.method})` : ""}` });
+    }
     setEditPay(null); toast("Payment removed");
   };
   const attachCheck = (e) => {
@@ -20387,7 +20569,7 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
                 <Chip tone="gray">{st.channel === "sms" ? "Text" : "Email"}</Chip>
               </div>
               <div style={{ fontSize: 12, color: S.sub, marginTop: 3, lineHeight: 1.5 }}>
-                {st.body({ first: "Sarah", company: brand.name || "Supreme Building Group", link: "[review link]" })}
+                {st.body({ first: "Sarah", company: brand.company || "your company", link: "[review link]" })}
               </div>
             </div>
           </div>
@@ -22145,6 +22327,14 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
                     <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: `1px solid ${S.line}` }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13.5, color: S.ink }}>{r.label}</div>
+                        {/* Which rows the app will actually apply on its own. A rate
+                            that matched no code is still usable from the price menu,
+                            but it will never appear in an auto-built draft — and
+                            silently missing an adder is how subs get underpaid. */}
+                        <div style={{ fontSize: 10.5, marginTop: 2, fontWeight: 700,
+                          color: SUB_RATE_LABELS[r.code] ? T.accent : "#92600A" }}>
+                          {SUB_RATE_LABELS[r.code] || "Not auto-applied — price menu only"}
+                        </div>
                         {r.notes && <div style={{ fontSize: 11, color: S.sub, lineHeight: 1.4 }}>{r.notes}</div>}
                       </div>
                       <span style={{ fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{money(r.price)}{r.unit && r.unit !== "flat" ? `/${r.unit}` : ""}</span>
@@ -24551,12 +24741,13 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
   );
 }
 
-function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat, onDeleteMsg }) {
+function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat, onDeleteMsg, onSendQueued, integrations = {} }) {
   /* Team chat and customer messages are both messages, so they live
      under one Inbox rather than two destinations. Team opens first —
      it is the one with unread counts attached to the nav badge. */
   const [pane, setPane] = useState("team");
   const [filter, setFilter] = useState("All");
+  const [sendingId, setSendingId] = useState(null);
   useEffect(() => { if (pane === "team" && onSeenChat) onSeenChat(); }, [pane, chatMsgs && chatMsgs.length]); // eslint-disable-line
   const all = jobs.flatMap((j) => (j.messages || []).map((msg) => ({ job: j, msg })))
     .sort((x, y2) => (y2.msg.at || "").localeCompare(x.msg.at || ""));
@@ -24631,11 +24822,28 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
               fontSize: 13, color: S.sub, marginTop: 3, lineHeight: 1.5,
               display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
             }}>{msg.body}</div>
-            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 5 }}>{msg.audience} · {msg.to} · {msg.at}</div>
+            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 5 }}>
+              {msg.audience} · {msg.to} · {msg.at}
+              {msg.sendOn ? ` · scheduled for ${msg.sendOn}` : ""}
+            </div>
           </button>
+          {msg.status !== "Sent" && onSendQueued && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
+              <Btn kind="soft" small disabled={sendingId === msg.id}
+                onClick={async () => { setSendingId(msg.id); await onSendQueued(job.id, msg.id); setSendingId(null); }}>
+                <Send size={13} /> {sendingId === msg.id ? "Sending…" : "Send now"}
+              </Btn>
+              {msgFailed(msg.status) && (
+                <span style={{ fontSize: 11.5, color: "#B42318", lineHeight: 1.4 }}>{msg.status}</span>
+              )}
+            </div>
+          )}
         </Card>
       ))}
       <div style={{ fontSize: 12, color: S.sub, marginTop: 16, lineHeight: 1.55 }}>
+        Anything not yet sent stays here until you press <b>Send now</b> — the app does not send on a schedule
+        of its own, so a message sitting in this list has not gone out.
+        <br />
         "Viewed" tracking needs the email backend — it works by embedding a tiny pixel that fires when the recipient
         opens the message. It arrives with the Gmail integration, not before.
       </div>
@@ -24936,7 +25144,14 @@ function useDbSync(st) {
           await db.from("crm_appointments").delete().in("id", removed);
           removed.forEach((id) => apptRefs.current.delete(id));
         }
-      } catch { /* surfaced via jobs path if systemic */ }
+      } catch (e) {
+        /* This used to be swallowed on the assumption that the jobs path
+           would surface anything systemic. It does not — it only reports
+           its own errors. A blocked RLS write or a dropped connection left
+           the appointment on one device with no indication, and a missed
+           inspection is a lost job. */
+        setSyncErr("Couldn't save an appointment — it exists on this device only. " + ((e && e.message) || ""));
+      }
     }, 800);
     return () => clearTimeout(t);
   }, [appointments, ready, hydrated]);
@@ -25370,6 +25585,17 @@ export default function SupremeCRM() {
      site; the removal itself flows through the sync diff, which issues
      the crm_jobs delete. Always logged. */
   const deleteJobs = (ids, label) => {
+    /* Revoke the customer portal first. The job row is deleted by the sync
+       effect, but crm_portal was never touched — so the homeowner's link
+       kept serving their estimate, contract, photos and balance
+       indefinitely after the job was gone, with nothing in the UI able to
+       stop it. Revoking is the same call the Revoke link button makes. */
+    const db = DB();
+    const tokens = jobs.filter((j) => ids.includes(j.id)).map((j) => j.portalToken).filter(Boolean);
+    if (db && tokens.length) {
+      db.from("crm_portal").update({ revoked: true }).in("token", tokens)
+        .then(() => {}, () => setSyncErr("Deleted the job but couldn't revoke its customer portal link — revoke it from the job before deleting, or contact support."));
+    }
     setJobs((prev) => prev.filter((j) => !ids.includes(j.id)));
     if (openJobId && ids.includes(openJobId)) { setOpenJobId(null); setNav("jobs"); }
     ids.forEach(() => noteBehaviour("bulk_delete"));
@@ -25523,7 +25749,7 @@ export default function SupremeCRM() {
       if (!gate.ready && gate.failed.length) {
         toast(`Moved to ${stageName} — still missing: ${gate.failed.map((f) => f.label.toLowerCase()).join(", ")}`);
       } else {
-        toast(`Moved to ${stageName}${jb.portal?.notifyStage ? " — customer update queued when consent is available" : ""}`);
+        toast(`Moved to ${stageName}${jb.portal?.notifyStage ? " — customer update waiting in the Inbox" : ""}`);
       }
     }
     if (!gate.ready && gate.failed.length) {
@@ -25541,6 +25767,28 @@ export default function SupremeCRM() {
      gate dialog and every job after it would silently vanish into a dialog
      that only knows about one of them. So move what passes, keep quiet about
      each one, and report the split once. */
+  /* Push one queued message out for real and write back what happened.
+     Three features wrote messages with status "Queued" and nothing ever
+     drained them, so on every configuration the customer was never
+     contacted while the app said they had been. This is the drain. It is
+     driven by a person rather than a schedule, because a browser-only app
+     cannot deliver a day-before reminder at 8am and should not pretend to. */
+  const sendQueuedMessage = async (jobId, msgId) => {
+    const jb = jobs.find((j) => j.id === jobId);
+    const msg = jb && (jb.messages || []).find((m) => m.id === msgId);
+    if (!jb || !msg) return;
+    const out = await deliverToCustomer(
+      jb, { prefer: msg.kind || "sms", subject: msg.subject || "", body: msg.body },
+      integrations, liveUser,
+    );
+    setJobs((prev) => prev.map((j) => j.id !== jobId ? j : {
+      ...j,
+      messages: (j.messages || []).map((m) => m.id !== msgId ? m
+        : { ...m, kind: out.kind, to: out.to || m.to, status: out.status, sentAt: out.delivered ? nowStamp() : m.sentAt }),
+    }));
+    toast(out.delivered ? "Sent" : out.status);
+  };
+
   const bulkMoveStage = (ids, stageId) => {
     const stage = stages.find((x) => x.id === stageId);
     const stageName = stage ? (stage.name || stage.label || "the next stage") : "";
@@ -25820,7 +26068,9 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
                refresh re-hydrates it, which surfaces the problem. */
             const db = DB();
             if (db) db.from("crm_chat").delete().eq("id", id).then(() => {}, () => {});
-          }} />
+          }}
+          integrations={integrations}
+          onSendQueued={sendQueuedMessage} />
       ) : nav === "more" ? (
         <MoreMenu brand={brand} onNav={(id) => {
           if (id === "password") return setChangePwOpen(true);
@@ -26029,7 +26279,10 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         </Field>
       </Sheet>
       <FiltersSheet open={filtersOpen} onClose={() => setFiltersOpen(false)} stages={stages}
-        filters={filters} setFilters={setFilters} />
+        filters={filters} setFilters={setFilters}
+        assignees={[...new Set([...users.filter((u) => u.active !== false).map((u) => u.name),
+          ...jobs.map((j) => j.assignee)].filter(Boolean))].sort()}
+        leadSources={leadSources} />
       <WorkflowEditor open={workflowOpen} onClose={() => setWorkflowOpen(false)} stages={stages}
         setStages={applyRemovedStages} stageRules={stageRules} setStageRules={setStageRules} />
       <StageGateSheet prompt={gatePrompt} isAdmin={isAdmin} currentUser={liveUser}

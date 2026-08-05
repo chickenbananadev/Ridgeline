@@ -73,7 +73,9 @@ ok(/routed: true/.test(src) && /straight line — road distance unavailable, thi
 ok(/async function jobCoords\(job\)/.test(src) && /return await geocodeZip\(job\.zip\)/.test(src),
   "the destination resolves from coordinates, a stamped photo, or the zip");
 ok(/function EnRouteCard\(\{ job, mut, toast, currentUser, integrations = \{\} \}\)/.test(src), "EnRouteCard exists");
-ok(/<EnRouteCard job=\{job\} mut=\{mut\} toast=\{toast\} currentUser=\{currentUser\} \/>/.test(src), "it renders on the job");
+/* Prop list deliberately not pinned byte-for-byte — it gained `integrations`
+   when the ETA share was made to actually send. */
+ok(/<EnRouteCard job=\{job\} mut=\{mut\} toast=\{toast\} currentUser=\{currentUser\}/.test(src), "it renders on the job");
 ok(/function etaRemaining\(er\)/.test(src), "the ETA counts down against the promise instead of going stale");
 ok(/is on the way to \$\{job\.address\} — about \$\{mins\} minutes out, arriving around/.test(src),
   "the customer message carries a wall-clock arrival, not just a duration");
