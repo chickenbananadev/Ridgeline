@@ -7384,6 +7384,11 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
     const consentJobs = selected?.jobs || [];
     setF({
       ...blank,
+      /* This reset runs in the same effect flush as the roster-default
+         effect above and always wins (it replaces the whole object, not
+         a functional update) — defaulting the assignee here directly
+         keeps a new lead from silently landing with assignee: "". */
+      assignee: roster.length ? roster[0] : "",
       contactMode: selected ? "existing" : "new",
       existingContactId: selected?.id || "",
       first: selected?.first || seedName[0] || "",
@@ -7394,7 +7399,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
       smsConsent: consentJobs.some((j) => j.consent?.sms?.granted),
       emailConsent: consentJobs.some((j) => j.consent?.email?.granted),
     });
-  }, [open, seed]); // eslint-disable-line
+  }, [open, seed, roster]); // eslint-disable-line
   /* Seed the address-search proximity bias from where this company already
      works, so the very first lookup ranks local results first. */
   useEffect(() => {
@@ -8163,7 +8168,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
 /* ================================================================
    JOB BOARD — kanban with drag between stages + tap-to-move
    ================================================================ */
-function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {}, stageRules = {}, onBulkMoveStage = () => {}, appointments = [] }) {
+function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {}, stageRules = {}, onBulkMoveStage = () => {}, appointments = [], users = [] }) {
   const dragJob = useRef(null);
   const focusRef = useRef(null);
   useEffect(() => {
@@ -8180,7 +8185,11 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
   const [bulkMenu, setBulkMenu] = useState(null); // "stage" | "assign" | null
   const toggleSel = (id) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const clearSel = () => { setSelected(new Set()); setBulkMenu(null); };
-  const assigneeOptions = useMemo(() => [...new Set(jobs.map((j) => j.assignee).filter(Boolean))], [jobs]);
+  /* Same union FiltersSheet already uses: active seats first, so a
+     newly onboarded rep with zero jobs is still a valid bulk-assign
+     target, not just names already sitting on a job. */
+  const assigneeOptions = useMemo(() => [...new Set([...users.filter((u) => u.active !== false).map((u) => u.name),
+    ...jobs.map((j) => j.assignee)].filter(Boolean))].sort(), [jobs, users]);
 
   const filtered = useMemo(() => {
     let out = jobs.filter((j) => {
@@ -8195,7 +8204,8 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       return true;
     });
     const s = filters.sort;
-    if (s === "value-hi") out = [...out].sort((a, b) => b.value - a.value);
+    if (s === "updated") out = [...out].sort((a, b) => (b.touchedAt || 0) - (a.touchedAt || 0));
+    else if (s === "value-hi") out = [...out].sort((a, b) => b.value - a.value);
     else if (s === "value-lo") out = [...out].sort((a, b) => a.value - b.value);
     else if (s === "stage-time") out = [...out].sort((a, b) => stageDays(b) - stageDays(a));
     else if (s === "name") out = [...out].sort((a, b) => a.name.localeCompare(b.name));
@@ -28790,7 +28800,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onQuickAction={(jobId) => setQuickJobId(jobId)}
           focusStage={boardStage} onClearFocus={() => setBoardStage(null)}
           view={boardView} setView={setBoardView}
-          stageRules={stageRules} onBulkMoveStage={bulkMoveStage} appointments={appointments}
+          stageRules={stageRules} onBulkMoveStage={bulkMoveStage} appointments={appointments} users={users}
           onBulkUpdate={(ids, patch) => setJobs((prev) => prev.map((j) => ids.includes(j.id) ? { ...j, ...patch } : j))} />
       ) : nav === "inbox" ? (
         <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)}

@@ -8219,6 +8219,11 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
     const consentJobs = selected?.jobs || [];
     setF({
       ...blank,
+      /* This reset runs in the same effect flush as the roster-default
+         effect above and always wins (it replaces the whole object, not
+         a functional update) — defaulting the assignee here directly
+         keeps a new lead from silently landing with assignee: "". */
+      assignee: roster.length ? roster[0] : "",
       contactMode: selected ? "existing" : "new",
       existingContactId: selected?.id || "",
       first: selected?.first || seedName[0] || "",
@@ -8229,7 +8234,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
       smsConsent: consentJobs.some((j) => j.consent?.sms?.granted),
       emailConsent: consentJobs.some((j) => j.consent?.email?.granted)
     });
-  }, [open, seed]);
+  }, [open, seed, roster]);
   (0, import_react.useEffect)(() => {
     if (!open || GEO_BIAS) return;
     const withCoords = jobs.find((j) => (j.lat ?? j.property?.lat) != null && (j.lng ?? j.property?.lng) != null);
@@ -9118,7 +9123,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
 }
 function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {
 }, stageRules = {}, onBulkMoveStage = () => {
-}, appointments = [] }) {
+}, appointments = [], users = [] }) {
   const dragJob = (0, import_react.useRef)(null);
   const focusRef = (0, import_react.useRef)(null);
   (0, import_react.useEffect)(() => {
@@ -9142,7 +9147,10 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
     setSelected(/* @__PURE__ */ new Set());
     setBulkMenu(null);
   };
-  const assigneeOptions = (0, import_react.useMemo)(() => [...new Set(jobs.map((j) => j.assignee).filter(Boolean))], [jobs]);
+  const assigneeOptions = (0, import_react.useMemo)(() => [...new Set([
+    ...users.filter((u) => u.active !== false).map((u) => u.name),
+    ...jobs.map((j) => j.assignee)
+  ].filter(Boolean))].sort(), [jobs, users]);
   const filtered = (0, import_react.useMemo)(() => {
     let out = jobs.filter((j) => {
       if (q) {
@@ -9165,7 +9173,8 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       return true;
     });
     const s = filters.sort;
-    if (s === "value-hi") out = [...out].sort((a, b) => b.value - a.value);
+    if (s === "updated") out = [...out].sort((a, b) => (b.touchedAt || 0) - (a.touchedAt || 0));
+    else if (s === "value-hi") out = [...out].sort((a, b) => b.value - a.value);
     else if (s === "value-lo") out = [...out].sort((a, b) => a.value - b.value);
     else if (s === "stage-time") out = [...out].sort((a, b) => stageDays(b) - stageDays(a));
     else if (s === "name") out = [...out].sort((a, b) => a.name.localeCompare(b.name));
@@ -30340,6 +30349,7 @@ function SupremeCRM() {
         stageRules,
         onBulkMoveStage: bulkMoveStage,
         appointments,
+        users,
         onBulkUpdate: (ids, patch) => setJobs((prev) => prev.map((j) => ids.includes(j.id) ? { ...j, ...patch } : j))
       }
     ) : nav === "inbox" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(

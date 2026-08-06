@@ -13,7 +13,7 @@ const src = fs.readFileSync(path.join(__dirname, "ridgeline.jsx"), "utf8");
 let fails = 0;
 const ok = (c, l) => { if (!c) { fails++; console.log("FAIL: " + l); } };
 
-ok(/function JobBoard\(\{[\s\S]{0,400}appointments = \[\] \}\) \{/.test(src),
+ok(/function JobBoard\(\{[\s\S]{0,400}appointments = \[\]/.test(src),
   "JobBoard accepts an appointments prop so its checks can see the calendar, same as the Dashboard's feed");
 ok(/const exceptionsByJob = useMemo\(\(\) => \{/.test(src),
   "column risk is computed once per render, not per column");
