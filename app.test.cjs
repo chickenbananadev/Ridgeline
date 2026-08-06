@@ -4374,6 +4374,14 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
   ] });
 }
 function Sheet({ open, onClose, title, children, footer, wide, tall, center = true }) {
+  (0, import_react.useEffect)(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   if (!open) return null;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
     position: "fixed",
@@ -7186,6 +7194,17 @@ function isoLocal(d) {
 function todayIso() {
   return isoLocal(/* @__PURE__ */ new Date());
 }
+function humanToIso(s) {
+  if (!s) return "";
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? "" : isoLocal(d);
+}
+function isoToHuman(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+  if (!m) return "";
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.toLocaleDateString(void 0, { month: "short", day: "numeric", year: "numeric" });
+}
 function stageDays(job) {
   if (!job) return 0;
   if (job.stageAt) {
@@ -9809,10 +9828,13 @@ function JobDetail({
     }, 80);
   };
   (0, import_react.useEffect)(() => {
-    if (openTab) {
-      setTab(openTab);
-      setOpen((o) => ({ ...o, [openTab]: true }));
-    }
+    if (!openTab) return;
+    setTab(openTab);
+    setOpen((o) => ({ ...o, [openTab]: true }));
+    setTimeout(() => {
+      const el = document.getElementById(`jobsec-${openTab}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
   }, [openTab, job.id]);
   const [delOpen, setDelOpen] = (0, import_react.useState)(false);
   const [delTyped, setDelTyped] = (0, import_react.useState)("");
@@ -10899,9 +10921,6 @@ function openDoc(title, brand2, bodyHtml, toast, opts = {}) {
     document.body.appendChild(frame);
     const doc = frame.contentWindow && frame.contentWindow.document;
     if (doc) {
-      doc.open();
-      doc.write(html);
-      doc.close();
       const done = () => {
         try {
           frame.contentWindow.focus();
@@ -10909,7 +10928,10 @@ function openDoc(title, brand2, bodyHtml, toast, opts = {}) {
         } catch (e) {
         }
       };
-      setTimeout(done, 400);
+      frame.addEventListener("load", done, { once: true });
+      doc.open();
+      doc.write(html);
+      doc.close();
       setTimeout(() => {
         try {
           document.body.removeChild(frame);
@@ -11939,7 +11961,7 @@ var AGREEMENT_SPEC = [
   ] },
   { n: "2", title: "ROOF DECK PROTECTION", col: "L", rows: [
     [{ t: "t", v: "A. Felt Underlayment 15lb" }, { t: "c", k: "felt15" }, { t: "t", v: "B. 30lb" }, { t: "c", k: "felt30" }],
-    [{ t: "t", v: "C. Synthetic" }, { t: "b", k: "synthetic", w: 175 }]
+    [{ t: "t", v: "C. Synthetic" }, { t: "c", k: "syntheticOn" }, { t: "b", k: "synthetic", w: 175 }]
   ] },
   { n: "3", title: "DRIP EDGE / GUTTER APRON", col: "L", rows: [
     [{ t: "t", v: "A. Drip Edge Color" }, { t: "b", k: "dripColor", w: 90 }, { t: "t", v: "Rakes" }],
@@ -12828,6 +12850,12 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
             id: con.number || "con",
             title: `Contract ${con.number || ""}`.trim(),
             subtitle: job.address,
+            /* The construction-agreement form (not the plain contract) has
+               three numbered acknowledgment lines that used to be typed by
+               a rep on the customer's behalf — genuine customer initials,
+               same as the signature, only make sense to collect when this
+               is the form that actually carries those paragraphs. */
+            needsInitials: con.form === "agreement",
             lines: [
               { label: "Property", value: job.address },
               { label: "Scope", value: (job.intake?.workRequested || []).join(", ") || "Roof replacement" },
@@ -13201,6 +13229,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
   const [busy, setBusy] = (0, import_react.useState)(false);
   const [err, setErr] = (0, import_react.useState)("");
   const [signed, setSigned] = (0, import_react.useState)([]);
+  const [initials, setInitials] = (0, import_react.useState)({ owner: "", hoa: "", cancel: "" });
   (0, import_react.useEffect)(() => {
     const db = DB();
     if (!db || !token) return;
@@ -13222,7 +13251,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
     }
     setBusy(true);
     setErr("");
-    const snapshot = openDoc2.type === "estimate" && estSelection ? { ...openDoc2.snapshot, selection: estSelection, total: estSelection.total } : openDoc2.snapshot;
+    const snapshot = openDoc2.type === "estimate" && estSelection ? { ...openDoc2.snapshot, selection: estSelection, total: estSelection.total } : openDoc2.needsInitials ? { ...openDoc2.snapshot, initials: { owner: initials.owner.trim(), hoa: initials.hoa.trim(), cancel: initials.cancel.trim() } } : openDoc2.snapshot;
     const row = {
       id: uid("sig"),
       job_id: jobId,
@@ -13253,6 +13282,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
     setOpenDoc(null);
     setSig(null);
     setConsent(false);
+    setInitials({ owner: "", hoa: "", cancel: "" });
   };
   const pending = (docs || []).filter((d) => !isSigned(d));
   const done = (docs || []).filter((d) => isSigned(d));
@@ -13279,6 +13309,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
             setSig(null);
             setConsent(false);
             setErr("");
+            setInitials({ owner: "", hoa: "", cancel: "" });
           },
           children: "Review & sign"
         }
@@ -13301,7 +13332,10 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
       Sheet,
       {
         open: !!openDoc2,
-        onClose: () => setOpenDoc(null),
+        onClose: () => {
+          setOpenDoc(null);
+          setInitials({ owner: "", hoa: "", cancel: "" });
+        },
         title: openDoc2 ? openDoc2.title : "Sign",
         wide: true,
         footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
@@ -13329,6 +13363,50 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
             ] })
           ] }),
           openDoc2.terms && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.6, marginBottom: 14 }, children: openDoc2.terms }),
+          openDoc2.needsInitials && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 14 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.ink, marginBottom: 8 }, children: "Initial to acknowledge" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, flexWrap: "wrap" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 130 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginBottom: 4 }, children: "Insurance-dependent pricing" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    style: { ...inputStyle, width: "100%" },
+                    value: initials.owner,
+                    maxLength: 6,
+                    onChange: (e) => setInitials({ ...initials, owner: e.target.value }),
+                    placeholder: "Initials"
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 130 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginBottom: 4 }, children: "HOA approval, if required" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    style: { ...inputStyle, width: "100%" },
+                    value: initials.hoa,
+                    maxLength: 6,
+                    onChange: (e) => setInitials({ ...initials, hoa: e.target.value }),
+                    placeholder: "Initials"
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 130 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginBottom: 4 }, children: "Right to cancel" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    style: { ...inputStyle, width: "100%" },
+                    value: initials.cancel,
+                    maxLength: 6,
+                    onChange: (e) => setInitials({ ...initials, cancel: e.target.value }),
+                    placeholder: "Initials"
+                  }
+                )
+              ] })
+            ] })
+          ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.ink, marginBottom: 8 }, children: "Your signature" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             SignatureField,
@@ -14637,7 +14715,7 @@ function PropertyPhoto({ job, mut, toast }) {
     toast && toast("Property photo saved");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 12 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: fileRef, type: "file", accept: "image/*", capture: "environment", onChange: onFile, style: { display: "none" } }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: fileRef, type: "file", accept: "image/*", onChange: onFile, style: { display: "none" } }),
     photo ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "relative", borderRadius: 12, overflow: "hidden", background: S.soft }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: photo.url, alt: `${job.address}`, style: { width: "100%", height: 168, objectFit: "cover", display: "block" } }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "absolute", right: 8, bottom: 8, display: "flex", gap: 6 }, children: [
@@ -16359,7 +16437,17 @@ function TabSignatures({ job, mut, toast, currentUser, brand: brand2 }) {
       return;
     }
     if (signing.doc_type === "contract") {
-      mut((j) => ({ ...j, contract: { ...j.contract || {}, status: "Signed", signedAt: todayIso() } }));
+      const custInitials = signing.doc_snapshot && signing.doc_snapshot.initials || null;
+      mut((j) => ({
+        ...j,
+        contract: { ...j.contract || {}, status: "Signed", signedAt: todayIso() },
+        ...custInitials ? { agreement: {
+          ...j.agreement || {},
+          ownerInit1: custInitials.owner || (j.agreement || {}).ownerInit1 || "",
+          ownerInit2: custInitials.hoa || (j.agreement || {}).ownerInit2 || "",
+          cancelInit: custInitials.cancel || (j.agreement || {}).cancelInit || ""
+        } } : {}
+      }));
     }
     if (signing.doc_type === "estimate") {
       const sel = (signing.doc_snapshot || {}).selection || null;
@@ -18534,7 +18622,6 @@ function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], s
 }, priceList = [], docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
 }, users = [] }) {
   const est = { ...job.estimate, tiers: job.estimate.tiers || [], upgrades: job.estimate.upgrades || [] };
-  const [sigOpen, setSigOpen] = (0, import_react.useState)(false);
   const locked = est.status === "Signed";
   const setEst = (patch) => mut((j) => ({ ...j, estimate: { ...j.estimate, ...patch } }));
   const setItem = (id, k, v) => setEst({ items: est.items.map((it) => it.id === id ? { ...it, [k]: v } : it) });
@@ -18680,7 +18767,16 @@ function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], s
           }
         ) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Valid through", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: est.validThrough, disabled: locked, onChange: (e) => setEst({ validThrough: e.target.value }) }) })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Valid through", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: dateInputStyle,
+          type: "date",
+          disabled: locked,
+          value: humanToIso(est.validThrough),
+          onChange: (e) => setEst({ validThrough: isoToHuman(e.target.value) })
+        }
+      ) })
     ] }),
     num(m.squares) > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Roof measurements (reference)" }),
@@ -18894,39 +18990,25 @@ function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], s
           ". Document locked."
         ] }),
         est.clientSig !== "signed" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: est.clientSig, alt: "Client signature", style: { maxWidth: 260, border: `1px solid ${S.line}`, borderRadius: 10 } })
-      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "Client signs on-screen at the kitchen table, or through the shared portal link." })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: job.portalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        "Ready to sign at ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `${window.location.origin}/?portal=${job.portalToken}`, target: "_blank", rel: "noreferrer", style: { color: T.accent, fontWeight: 700 }, children: "the client portal" }),
+        " \u2014 open it there yourself for an in-person signature, or send the link."
+      ] }) : "Publish a client portal link (Client portal tab) so the customer can sign there \u2014 in person or remotely." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => openDoc(`Estimate \u2014 ${job.name}`, brand2, estimateDocHtml(job, brand2, users), toast, { bare: true }), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
         " PDF"
       ] }),
-      !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => {
-          setEst({ status: "Sent" });
-          toast(job.portalToken ? "Sent \u2014 it's live in the client portal to choose and sign" : "Marked sent \u2014 publish the client portal to share it");
-        }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }),
-          " Send"
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { onClick: () => setSigOpen(true), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.PenLine, { size: 15 }),
-          " Client signature"
-        ] })
+      !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => {
+        setEst({ status: "Sent" });
+        toast(job.portalToken ? "Sent \u2014 it's live in the client portal to choose and sign" : "Marked sent \u2014 publish the client portal to share it");
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }),
+        " Send"
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-      SignaturePad,
-      {
-        open: sigOpen,
-        onClose: () => setSigOpen(false),
-        title: "Client acceptance \u2014 estimate",
-        onApply: (dataUrl, at) => {
-          setEst({ clientSig: dataUrl, sigAt: at, status: "Signed" });
-          toast("Estimate signed and locked");
-        }
-      }
-    ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open: marginSheet, onClose: () => setMarginSheet(false), title: "Pricing controls", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 14, lineHeight: 1.5 }, children: "Margin is profit as a share of the sell price; markup is a percentage added on top of cost. Lines with a unit cost are computed from cost; lines without one scale from their current price." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
@@ -19124,6 +19206,10 @@ function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
       onChange: (e) => set(k, e.target.value)
     }
   );
+  const InitialsStatus = ({ value }) => value ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { ...inputStyle, width: 120, display: "flex", alignItems: "center", fontWeight: 700 }, children: value }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, lineHeight: 1.4, maxWidth: 220 }, children: job.portalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    "Collected with the signature at ",
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `${window.location.origin}/?portal=${job.portalToken}`, target: "_blank", rel: "noreferrer", style: { color: T.accent, fontWeight: 700 }, children: "the client portal" })
+  ] }) : "Collected with the signature once a client portal link is published" });
   const partInput = (p, i) => {
     if (p.t === "t") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, color: S.ink }, children: p.v }, i);
     if (p.t === "c") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AgreementBox, { on: !!a[p.k], disabled: locked, onClick: () => set(p.k, !a[p.k]) }, i);
@@ -19190,34 +19276,18 @@ function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Acknowledgements & schedule" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 8 }, children: AGREEMENT_ACK_INSURANCE }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Owner initials", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "input",
-        {
-          style: { ...inputStyle, width: 120 },
-          value: a.ownerInit1 || "",
-          disabled: locked,
-          onChange: (e) => set("ownerInit1", e.target.value)
-        }
-      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Owner initials", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InitialsStatus, { value: a.ownerInit1 }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 16, alignItems: "center", marginBottom: 8 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700 }, children: "HOA approval required" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AgreementBox, { on: !!a.hoaYes, disabled: locked, label: "Yes", onClick: () => set("hoaYes", !a.hoaYes) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AgreementBox, { on: !!a.hoaNo, disabled: locked, label: "No", onClick: () => set("hoaNo", !a.hoaNo) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Owner initials (HOA)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "input",
-        {
-          style: { ...inputStyle, width: 120 },
-          value: a.ownerInit2 || "",
-          disabled: locked,
-          onChange: (e) => set("ownerInit2", e.target.value)
-        }
-      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Owner initials (HOA)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InitialsStatus, { value: a.ownerInit2 }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Anticipated start (weeks)", children: txt("startWeeks") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Anticipated completion (weeks)", children: txt("endWeeks") })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Defective decking rate ($ per sheet)", hint: "Printed into the Defective Decking and Plywood Policy paragraph.", children: txt("deckRate") })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Defective decking rate ($ per sheet)", hint: "Printed into the Defective Decking and Plywood Policy paragraph.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: a.deckRate || "", disabled: locked, onChange: (v) => set("deckRate", v) }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Agreement price" }),
@@ -19247,15 +19317,7 @@ function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
           )
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Right-to-cancel initials", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "input",
-        {
-          style: { ...inputStyle, width: 120 },
-          value: a.cancelInit || "",
-          disabled: locked,
-          onChange: (e) => set("cancelInit", e.target.value)
-        }
-      ) })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Right-to-cancel initials", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InitialsStatus, { value: a.cancelInit }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
       Btn,
@@ -19293,7 +19355,7 @@ function TabContract({ job, brand: brand2, setBrand = () => {
   const depositMode = con.depositMode || "pct";
   const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
   const form = con.form === "agreement" ? "agreement" : "simple";
-  const SigLine = ({ label, value, onSign }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 220 }, children: [
+  const SigLine = ({ label, value, onSign, portalPrompt }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 220 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
       height: 74,
       border: `1.5px dashed ${S.line}`,
@@ -19302,10 +19364,10 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       placeItems: "center",
       background: "#FAFBFC",
       overflow: "hidden"
-    }, children: value ? value === "signed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontFamily: "cursive", fontSize: 22 }, children: label === "Client" ? job.name : "Supreme Building Group" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: value, alt: `${label} signature`, style: { maxHeight: 66 } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", onClick: onSign, disabled: locked || blockers.length > 0, children: [
+    }, children: value ? value === "signed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontFamily: "cursive", fontSize: 22 }, children: label === "Client" ? job.name : "Supreme Building Group" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: value, alt: `${label} signature`, style: { maxHeight: 66 } }) : onSign ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", onClick: onSign, disabled: locked || blockers.length > 0, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.PenLine, { size: 13 }),
       " Sign here"
-    ] }) }),
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, textAlign: "center", padding: "0 10px", lineHeight: 1.4 }, children: portalPrompt }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 6 }, children: [
       label,
       " ",
@@ -19560,7 +19622,11 @@ function TabContract({ job, brand: brand2, setBrand = () => {
         ] }, b.key)) })
       ] }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 14, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SigLine, { label: "Client", value: con.clientSig, onSign: () => setSigFor("client") }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SigLine, { label: "Client", value: con.clientSig, portalPrompt: job.portalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          "Signs at ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `${window.location.origin}/?portal=${job.portalToken}`, target: "_blank", rel: "noreferrer", style: { color: T.accent, fontWeight: 700 }, children: "the client portal" }),
+          " \u2014 open it there for an in-person signature, or send the link"
+        ] }) : "Publish a client portal link (Client portal tab) so the customer can sign there" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SigLine, { label: `${brand2.company} representative`, value: con.contractorSig, onSign: () => setSigFor("contractor") })
       ] }),
       con.clientSig && con.contractorSig && !locked && blockers.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "green", style: { marginTop: 14, width: "100%" }, onClick: () => {
@@ -19599,9 +19665,9 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       {
         open: !!sigFor,
         onClose: () => setSigFor(null),
-        title: sigFor === "client" ? "Client signature" : "Company signature",
+        title: "Company signature",
         onApply: (dataUrl, at) => {
-          setCon(sigFor === "client" ? { clientSig: dataUrl } : { contractorSig: dataUrl });
+          setCon({ contractorSig: dataUrl });
           toast("Signature captured");
         }
       }

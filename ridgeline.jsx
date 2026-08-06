@@ -3697,6 +3697,17 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
 }
 
 function Sheet({ open, onClose, title, children, footer, wide, tall, center = true }) {
+  /* Escape closing a dialog is the instinct a keyboard/trackpad user
+     reaches for before hunting for the X — every other dismissible
+     surface in this file (the combobox dropdown, inline rename fields)
+     already honours it; Sheet never did. The listener has to attach
+     even when closed (hooks can't be conditional) — it just no-ops. */
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   if (!open) return null;
   /* Dialogs float centered by default (pass center={false} for a bottom sheet).
      `center` renders a floating, vertically-centered dialog (rounded on all
@@ -6441,6 +6452,26 @@ function isoLocal(d) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 }
 function todayIso() { return isoLocal(new Date()); }
+/* A few fields (estimate "Valid through") store the same human string
+   every other date in the app does ("Jul 24, 2026"), but a native
+   type="date" picker needs ISO in and out. These convert only at the
+   edges so the stored value — and every print template that already
+   reads it — never changes format. isoToHuman builds the Date from
+   local y/m/d parts rather than parsing the ISO string directly, for
+   the same reason isoLocal does above: parsing "2026-07-24" as an
+   instant and formatting it back can roll the day back one in a
+   negative UTC offset. */
+function humanToIso(s) {
+  if (!s) return "";
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? "" : isoLocal(d);
+}
+function isoToHuman(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+  if (!m) return "";
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
 /* How long a job has sat in its current stage.
 
    This used to read job.daysInStage directly, which was dead data: the
@@ -8621,7 +8652,18 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
     }, 80);
   };
   useEffect(() => {
-    if (openTab) { setTab(openTab); setOpen((o) => ({ ...o, [openTab]: true })); }
+    if (!openTab) return;
+    setTab(openTab);
+    setOpen((o) => ({ ...o, [openTab]: true }));
+    /* Expanding the section isn't enough on its own — Punch list sits
+       near the bottom of a ~20-section accordion, so without this a
+       deep link to it (e.g. the Home-screen blocker row) lands the rep
+       on the top of the job with no visible sign anything happened.
+       Same scroll jumpToSection already does for in-job Quick Actions. */
+    setTimeout(() => {
+      const el = document.getElementById(`jobsec-${openTab}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
   }, [openTab, job.id]);
   const [delOpen, setDelOpen] = useState(false);
   const [delTyped, setDelTyped] = useState("");
@@ -9552,10 +9594,15 @@ function openDoc(title, brand, bodyHtml, toast, opts = {}) {
     document.body.appendChild(frame);
     const doc = frame.contentWindow && frame.contentWindow.document;
     if (doc) {
-      doc.open(); doc.write(html); doc.close();
       const done = () => { try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (e) { /* ignore */ } };
-      // Give the iframe a tick to lay out before printing.
-      setTimeout(done, 400);
+      /* print() has to fire close enough to the click that the browser
+         still treats it as user-initiated, or it's silently dropped —
+         a blind setTimeout (the old approach here) reliably ran too late
+         for that. document.close() fires this iframe's own load event
+         once the written HTML has actually parsed, which is the earliest
+         real signal the document is ready — not a guessed delay. */
+      frame.addEventListener("load", done, { once: true });
+      doc.open(); doc.write(html); doc.close();
       // Clean up after the print sheet has had time to open.
       setTimeout(() => { try { document.body.removeChild(frame); } catch (e) { /* ignore */ } }, 60000);
       toast && toast("Opening the print sheet…");
@@ -10785,7 +10832,7 @@ const AGREEMENT_SPEC = [
   ] },
   { n: "2", title: "ROOF DECK PROTECTION", col: "L", rows: [
     [{ t: "t", v: "A. Felt Underlayment 15lb" }, { t: "c", k: "felt15" }, { t: "t", v: "B. 30lb" }, { t: "c", k: "felt30" }],
-    [{ t: "t", v: "C. Synthetic" }, { t: "b", k: "synthetic", w: 175 }],
+    [{ t: "t", v: "C. Synthetic" }, { t: "c", k: "syntheticOn" }, { t: "b", k: "synthetic", w: 175 }],
   ] },
   { n: "3", title: "DRIP EDGE / GUTTER APRON", col: "L", rows: [
     [{ t: "t", v: "A. Drip Edge Color" }, { t: "b", k: "dripColor", w: 90 }, { t: "t", v: "Rakes" }],
@@ -11744,6 +11791,12 @@ function buildPortalSnapshot(job, brand, token, users = []) {
           out.push({
             type: "contract", id: con.number || "con", title: `Contract ${con.number || ""}`.trim(),
             subtitle: job.address,
+            /* The construction-agreement form (not the plain contract) has
+               three numbered acknowledgment lines that used to be typed by
+               a rep on the customer's behalf — genuine customer initials,
+               same as the signature, only make sense to collect when this
+               is the form that actually carries those paragraphs. */
+            needsInitials: con.form === "agreement",
             lines: [
               { label: "Property", value: job.address },
               { label: "Scope", value: (job.intake?.workRequested || []).join(", ") || "Roof replacement" },
@@ -12117,6 +12170,14 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [signed, setSigned] = useState([]);
+  /* The construction agreement's three acknowledgment lines (insurance
+     dependency, HOA approval, right to cancel) — collected here, next to
+     the real signature, so a value in them is genuinely the homeowner's
+     own rather than typed in for them back at the office. Optional, same
+     as the printed form always treated them: a blank initial today prints
+     the same blank it always did, just never a rep's handwriting standing
+     in for the customer's. */
+  const [initials, setInitials] = useState({ owner: "", hoa: "", cancel: "" });
 
   useEffect(() => {
     const db = DB();
@@ -12140,7 +12201,9 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
        they picked and the team can apply it on countersign. */
     const snapshot = (openDoc.type === "estimate" && estSelection)
       ? { ...openDoc.snapshot, selection: estSelection, total: estSelection.total }
-      : openDoc.snapshot;
+      : openDoc.needsInitials
+        ? { ...openDoc.snapshot, initials: { owner: initials.owner.trim(), hoa: initials.hoa.trim(), cancel: initials.cancel.trim() } }
+        : openDoc.snapshot;
     const row = {
       id: uid("sig"),
       job_id: jobId,
@@ -12171,7 +12234,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
       return;
     }
     setSigned((prev) => [{ ...row, signed_at: new Date().toISOString() }, ...prev]);
-    setOpenDoc(null); setSig(null); setConsent(false);
+    setOpenDoc(null); setSig(null); setConsent(false); setInitials({ owner: "", hoa: "", cancel: "" });
   };
 
   const pending = (docs || []).filter((d) => !isSigned(d));
@@ -12198,7 +12261,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
             {d.subtitle && <div style={{ fontSize: 12, color: S.sub, marginTop: 1 }}>{d.subtitle}</div>}
           </div>
           <Btn small style={{ background: accent, borderColor: accent }}
-            onClick={() => { setOpenDoc(d); setSig(null); setConsent(false); setErr(""); }}>
+            onClick={() => { setOpenDoc(d); setSig(null); setConsent(false); setErr(""); setInitials({ owner: "", hoa: "", cancel: "" }); }}>
             Review &amp; sign
           </Btn>
         </div>
@@ -12221,7 +12284,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
         );
       })}
 
-      <Sheet open={!!openDoc} onClose={() => setOpenDoc(null)} title={openDoc ? openDoc.title : "Sign"} wide
+      <Sheet open={!!openDoc} onClose={() => { setOpenDoc(null); setInitials({ owner: "", hoa: "", cancel: "" }); }} title={openDoc ? openDoc.title : "Sign"} wide
         footer={
           <div style={{ display: "flex", gap: 10 }}>
             <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setOpenDoc(null)}>Cancel</Btn>
@@ -12250,6 +12313,29 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
             </div>
             {openDoc.terms && (
               <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.6, marginBottom: 14 }}>{openDoc.terms}</div>
+            )}
+
+            {openDoc.needsInitials && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: S.ink, marginBottom: 8 }}>Initial to acknowledge</div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 130 }}>
+                    <div style={{ fontSize: 11.5, color: S.sub, marginBottom: 4 }}>Insurance-dependent pricing</div>
+                    <input style={{ ...inputStyle, width: "100%" }} value={initials.owner} maxLength={6}
+                      onChange={(e) => setInitials({ ...initials, owner: e.target.value })} placeholder="Initials" />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 130 }}>
+                    <div style={{ fontSize: 11.5, color: S.sub, marginBottom: 4 }}>HOA approval, if required</div>
+                    <input style={{ ...inputStyle, width: "100%" }} value={initials.hoa} maxLength={6}
+                      onChange={(e) => setInitials({ ...initials, hoa: e.target.value })} placeholder="Initials" />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 130 }}>
+                    <div style={{ fontSize: 11.5, color: S.sub, marginBottom: 4 }}>Right to cancel</div>
+                    <input style={{ ...inputStyle, width: "100%" }} value={initials.cancel} maxLength={6}
+                      onChange={(e) => setInitials({ ...initials, cancel: e.target.value })} placeholder="Initials" />
+                  </div>
+                </div>
+              </div>
             )}
 
             <div style={{ fontSize: 13, fontWeight: 700, color: S.ink, marginBottom: 8 }}>Your signature</div>
@@ -13640,7 +13726,12 @@ function PropertyPhoto({ job, mut, toast }) {
 
   return (
     <div style={{ marginBottom: 12 }}>
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onFile} style={{ display: "none" }} />
+      {/* No `capture` here on purpose — unlike the on-site inspection/punch-
+          list captures (which force the live camera so they stay
+          GPS/timestamp-verifiable evidence), a property photo is just as
+          often a listing photo or a Street View screenshot, so the OS's
+          normal "Photo Library / Take Photo" choice belongs here. */}
+      <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{ display: "none" }} />
       {photo ? (
         <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: S.soft }}>
           <img src={photo.url} alt={`${job.address}`} style={{ width: "100%", height: 168, objectFit: "cover", display: "block" }} />
@@ -15334,9 +15425,24 @@ function TabSignatures({ job, mut, toast, currentUser, brand }) {
     const { error } = await db.from("crm_signatures").insert(row);
     setBusy(false);
     if (error) { setErr(dbErrorMessage(error, { table: "signatures", migration: "014" })); return; }
-    /* Contracts flip to Signed once both sides are on the same hash. */
+    /* Contracts flip to Signed once both sides are on the same hash. If
+       the customer's own signature carried the agreement's acknowledgment
+       initials (construction-agreement form only), they land in
+       job.agreement here — the same field the printed agreement already
+       reads, now sourced from the portal instead of a rep typing on the
+       customer's behalf. */
     if (signing.doc_type === "contract") {
-      mut((j) => ({ ...j, contract: { ...(j.contract || {}), status: "Signed", signedAt: todayIso() } }));
+      const custInitials = (signing.doc_snapshot && signing.doc_snapshot.initials) || null;
+      mut((j) => ({
+        ...j,
+        contract: { ...(j.contract || {}), status: "Signed", signedAt: todayIso() },
+        ...(custInitials ? { agreement: {
+          ...(j.agreement || {}),
+          ownerInit1: custInitials.owner || (j.agreement || {}).ownerInit1 || "",
+          ownerInit2: custInitials.hoa || (j.agreement || {}).ownerInit2 || "",
+          cancelInit: custInitials.cancel || (j.agreement || {}).cancelInit || "",
+        } } : {}),
+      }));
     }
     /* An accepted estimate applies the customer's chosen tier + add-ons
        (recorded in the signature snapshot), flips the estimate to Signed, and
@@ -17420,7 +17526,6 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
      every one of those reads becomes safe without having to find and
      patch each individual call site. */
   const est = { ...job.estimate, tiers: job.estimate.tiers || [], upgrades: job.estimate.upgrades || [] };
-  const [sigOpen, setSigOpen] = useState(false);
   const locked = est.status === "Signed";
   const setEst = (patch) => mut((j) => ({ ...j, estimate: { ...j.estimate, ...patch } }));
   const setItem = (id, k, v) =>
@@ -17586,7 +17691,11 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
               disabled={locked} onChange={(e) => setEst({ date: e.target.value })} />
           </Field>
         </div>
-        <Field label="Valid through"><input style={inputStyle} value={est.validThrough} disabled={locked} onChange={(e) => setEst({ validThrough: e.target.value })} /></Field>
+        <Field label="Valid through">
+          <input style={dateInputStyle} type="date" disabled={locked}
+            value={humanToIso(est.validThrough)}
+            onChange={(e) => setEst({ validThrough: isoToHuman(e.target.value) })} />
+        </Field>
       </Card>
 
       {num(m.squares) > 0 && (
@@ -17790,7 +17899,13 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
           </>
         ) : (
           <div style={{ fontSize: 13, color: S.sub }}>
-            Client signs on-screen at the kitchen table, or through the shared portal link.
+            {/* Signing happens only in the client portal now — in person, hand the
+                rep's device to the customer at the portal link, or send it to sign
+                remotely — so every acceptance carries real consent and the IP and
+                timestamp our system records, not the device's own clock. */}
+            {job.portalToken
+              ? <>Ready to sign at <a href={`${window.location.origin}/?portal=${job.portalToken}`} target="_blank" rel="noreferrer" style={{ color: T.accent, fontWeight: 700 }}>the client portal</a> — open it there yourself for an in-person signature, or send the link.</>
+              : "Publish a client portal link (Client portal tab) so the customer can sign there — in person or remotely."}
           </div>
         )}
       </Card>
@@ -17798,24 +17913,16 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
       <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
         <Btn kind="ghost" onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand, users), toast, { bare: true })}><Printer size={15} /> PDF</Btn>
         {!locked && (
-          <>
-            <Btn kind="ghost" onClick={() => {
-              setEst({ status: "Sent" });
-              toast(job.portalToken
-                ? "Sent — it's live in the client portal to choose and sign"
-                : "Marked sent — publish the client portal to share it");
-            }}>
-              <Send size={15} /> Send
-            </Btn>
-            <Btn onClick={() => setSigOpen(true)}><PenLine size={15} /> Client signature</Btn>
-          </>
+          <Btn kind="ghost" onClick={() => {
+            setEst({ status: "Sent" });
+            toast(job.portalToken
+              ? "Sent — it's live in the client portal to choose and sign"
+              : "Marked sent — publish the client portal to share it");
+          }}>
+            <Send size={15} /> Send
+          </Btn>
         )}
       </div>
-      <SignaturePad open={sigOpen} onClose={() => setSigOpen(false)} title="Client acceptance — estimate"
-        onApply={(dataUrl, at) => {
-          setEst({ clientSig: dataUrl, sigAt: at, status: "Signed" });
-          toast("Estimate signed and locked");
-        }} />
 
       <Sheet open={marginSheet} onClose={() => setMarginSheet(false)} title="Pricing controls">
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 14, lineHeight: 1.5 }}>
@@ -17946,6 +18053,20 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
     <input style={{ ...inputStyle, ...extra }} value={a[k] || ""} disabled={locked}
       onChange={(e) => set(k, e.target.value)} />
   );
+  /* These three acknowledgment lines used to be a plain text input a rep
+     could type into on the customer's behalf — the same gap as the
+     signature. They're read-only here now; a real value only ever
+     arrives from the customer's own portal signature (PortalSignCenter),
+     carried back by TabSignatures' countersign step. */
+  const InitialsStatus = ({ value }) => value ? (
+    <div style={{ ...inputStyle, width: 120, display: "flex", alignItems: "center", fontWeight: 700 }}>{value}</div>
+  ) : (
+    <div style={{ fontSize: 11.5, color: S.sub, lineHeight: 1.4, maxWidth: 220 }}>
+      {job.portalToken
+        ? <>Collected with the signature at <a href={`${window.location.origin}/?portal=${job.portalToken}`} target="_blank" rel="noreferrer" style={{ color: T.accent, fontWeight: 700 }}>the client portal</a></>
+        : "Collected with the signature once a client portal link is published"}
+    </div>
+  );
   const partInput = (p, i) => {
     if (p.t === "t") return <span key={i} style={{ fontSize: 13.5, color: S.ink }}>{p.v}</span>;
     if (p.t === "c") return <AgreementBox key={i} on={!!a[p.k]} disabled={locked} onClick={() => set(p.k, !a[p.k])} />;
@@ -18020,21 +18141,19 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Acknowledgements &amp; schedule</CardTitle>
         <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 8 }}>{AGREEMENT_ACK_INSURANCE}</div>
-        <Field label="Owner initials"><input style={{ ...inputStyle, width: 120 }} value={a.ownerInit1 || ""} disabled={locked}
-          onChange={(e) => set("ownerInit1", e.target.value)} /></Field>
+        <Field label="Owner initials"><InitialsStatus value={a.ownerInit1} /></Field>
         <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 8 }}>
           <span style={{ fontSize: 13.5, fontWeight: 700 }}>HOA approval required</span>
           <AgreementBox on={!!a.hoaYes} disabled={locked} label="Yes" onClick={() => set("hoaYes", !a.hoaYes)} />
           <AgreementBox on={!!a.hoaNo} disabled={locked} label="No" onClick={() => set("hoaNo", !a.hoaNo)} />
         </div>
-        <Field label="Owner initials (HOA)"><input style={{ ...inputStyle, width: 120 }} value={a.ownerInit2 || ""} disabled={locked}
-          onChange={(e) => set("ownerInit2", e.target.value)} /></Field>
+        <Field label="Owner initials (HOA)"><InitialsStatus value={a.ownerInit2} /></Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <Field label="Anticipated start (weeks)">{txt("startWeeks")}</Field>
           <Field label="Anticipated completion (weeks)">{txt("endWeeks")}</Field>
         </div>
         <Field label="Defective decking rate ($ per sheet)" hint="Printed into the Defective Decking and Plywood Policy paragraph.">
-          {txt("deckRate")}
+          <MoneyInput style={inputStyle} value={a.deckRate || ""} disabled={locked} onChange={(v) => set("deckRate", v)} />
         </Field>
       </Card>
 
@@ -18053,8 +18172,7 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
           <input style={inputStyle} value={a.balance || ""} disabled={locked} placeholder={price ? money(price - dep) : ""}
             onChange={(e) => set("balance", e.target.value)} />
         </Field>
-        <Field label="Right-to-cancel initials"><input style={{ ...inputStyle, width: 120 }} value={a.cancelInit || ""} disabled={locked}
-          onChange={(e) => set("cancelInit", e.target.value)} /></Field>
+        <Field label="Right-to-cancel initials"><InitialsStatus value={a.cancelInit} /></Field>
       </Card>
 
       <Btn kind="ghost" style={{ marginTop: 14, width: "100%" }}
@@ -18067,7 +18185,7 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
 
 function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {}, currentUser = null, integrations = {} }) {
   const con = job.contract;
-  const [sigFor, setSigFor] = useState(null); // "client" | "contractor"
+  const [sigFor, setSigFor] = useState(null); // "contractor" — the client line signs via the portal now
   const [fillerOpen, setFillerOpen] = useState(false);
   const locked = con.status === "Signed";
   const setCon = (patch) => mut((j) => ({ ...j, contract: { ...j.contract, ...patch } }));
@@ -18097,7 +18215,15 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
   /* Which paper this job goes out on. The signature, status, attachment and
      portal plumbing is shared — only the body of the document differs. */
   const form = con.form === "agreement" ? "agreement" : "simple";
-  const SigLine = ({ label, value, onSign }) => (
+  /* The Client line no longer opens an internal signature pad — a rep
+     drawing a signature on the customer's behalf is exactly the gap the
+     owner flagged. Real customer signing already exists and is fully
+     wired (PortalSignCenter -> crm_signatures, gated by consent, with
+     signer_ip/user_agent stamped server-side, not client-supplied) — it
+     just wasn't the only path in. Passing no onSign renders a link to
+     that portal instead of a button that draws straight into clientSig.
+     The company/rep line is unaffected; that side still signs here. */
+  const SigLine = ({ label, value, onSign, portalPrompt }) => (
     <div style={{ flex: 1, minWidth: 220 }}>
       <div style={{
         height: 74, border: `1.5px dashed ${S.line}`, borderRadius: 10,
@@ -18107,8 +18233,10 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
           value === "signed"
             ? <span style={{ fontFamily: "cursive", fontSize: 22 }}>{label === "Client" ? job.name : "Supreme Building Group"}</span>
             : <img src={value} alt={`${label} signature`} style={{ maxHeight: 66 }} />
-        ) : (
+        ) : onSign ? (
           <Btn small kind="soft" onClick={onSign} disabled={locked || blockers.length > 0}><PenLine size={13} /> Sign here</Btn>
+        ) : (
+          <div style={{ fontSize: 11.5, color: S.sub, textAlign: "center", padding: "0 10px", lineHeight: 1.4 }}>{portalPrompt}</div>
         )}
       </div>
       <div style={{ fontSize: 12, color: S.sub, marginTop: 6 }}>{label} {con.signedAt && value ? `· ${con.signedAt}` : ""}</div>
@@ -18276,9 +18404,17 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
           </Callout>
         )}
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-          <SigLine label="Client" value={con.clientSig} onSign={() => setSigFor("client")} />
+          <SigLine label="Client" value={con.clientSig} portalPrompt={job.portalToken
+            ? <>Signs at <a href={`${window.location.origin}/?portal=${job.portalToken}`} target="_blank" rel="noreferrer" style={{ color: T.accent, fontWeight: 700 }}>the client portal</a> — open it there for an in-person signature, or send the link</>
+            : "Publish a client portal link (Client portal tab) so the customer can sign there"} />
           <SigLine label={`${brand.company} representative`} value={con.contractorSig} onSign={() => setSigFor("contractor")} />
         </div>
+        {/* con.clientSig can no longer be set by anything in this tab, so
+            this stays reachable only for a contract that already carried
+            both legacy signatures before this change shipped — a new
+            contract executes exclusively through the Signatures
+            countersign flow below, once the portal-recorded customer
+            signature and the company's countersign share a doc hash. */}
         {con.clientSig && con.contractorSig && !locked && blockers.length === 0 && (
           <Btn kind="green" style={{ marginTop: 14, width: "100%" }} onClick={() => {
             setCon({ status: "Signed", signedAt: nowStamp() });
@@ -18308,10 +18444,12 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
           Coverage by state to unlock signing and sending.
         </div>
       )}
+      {/* Company side only now — sigFor can only ever be "contractor";
+          the client line no longer opens this pad (see SigLine above). */}
       <SignaturePad open={!!sigFor} onClose={() => setSigFor(null)}
-        title={sigFor === "client" ? "Client signature" : "Company signature"}
+        title="Company signature"
         onApply={(dataUrl, at) => {
-          setCon(sigFor === "client" ? { clientSig: dataUrl } : { contractorSig: dataUrl });
+          setCon({ contractorSig: dataUrl });
           toast("Signature captured");
         }} />
     </>

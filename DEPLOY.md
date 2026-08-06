@@ -19,6 +19,31 @@ supabase link --project-ref <your-project-ref>   # from the project's URL
 
 ---
 
+## 0. Photo & file storage — fixes "Bucket not found"
+
+**Symptom in the app:** uploading a photo anywhere — job photos, punch
+list, company documents, contract attachments all share one upload path
+— fails with a raw provider error like `{"statusCode":"404","error":
+"Bucket not found"}`.
+
+**Fix:** apply the migration that creates the bucket (idempotent, safe
+to re-run):
+
+```bash
+supabase db push
+```
+
+No secrets needed. Until this is applied, uploads fall back to saving
+the image inline in the database (capped at 3 MB) rather than failing
+outright — real Storage removes that cap and is what production should
+run on. If you'd rather set it up by hand instead: Storage → New bucket
+→ name it exactly `job-files`, mark it **public** (the app calls
+`getPublicUrl()` and stores that link directly — there's no signed-URL
+path), then add the four policies in migration `024` (public read,
+authenticated insert/update/delete).
+
+---
+
 ## 1. CompanyCam — fixes "the connection isn't working"
 
 **Symptom in the app:** connecting CompanyCam shows *"Needs the CompanyCam
