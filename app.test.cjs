@@ -1661,6 +1661,7 @@ var DEFAULT_STAGES = [
   { id: "s11", name: "Lost", cat: "Lost" },
   { id: "s12", name: "Unqualified", cat: "Unqualified" }
 ];
+var JOB_TYPES = ["Retail", "Insurance", "Commercial", "Unknown"];
 var JOB_PATHS = {
   Retail: [
     "Schedule inspection",
@@ -8500,7 +8501,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
           ] }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Assign to", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: f.assignee, onChange: set("assignee"), children: roster.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: t }, t)) }) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Claim type *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: ["Insurance", "Retail", "Commercial", "Unknown"].map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setF({ ...f, claimType: c }), style: {
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Claim type *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: JOB_TYPES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setF({ ...f, claimType: c }), style: {
           border: `1.5px solid ${f.claimType === c ? T.accent : S.line}`,
           background: f.claimType === c ? T.accentSoft : "#fff",
           color: f.claimType === c ? T.accent : S.ink,
@@ -10358,7 +10359,7 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Job type", hint: "Sets which task pathway this job follows.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         PillGroup,
         {
-          options: ["Retail", "Insurance", "Commercial", "Unknown"],
+          options: JOB_TYPES,
           value: job.claimType,
           onPick: (v) => {
             mut((j) => ({ ...j, claimType: v }));
@@ -24000,6 +24001,34 @@ var REVIEW_STEPS = [
     body: (c) => `Hi ${c.first}, last note from us on this. If you were happy with the work: ${c.link}. If you weren't, we would genuinely rather hear it directly \u2014 just reply.`
   }
 ];
+var REVIEW_PLATFORMS = [
+  {
+    id: "google",
+    name: "Google",
+    blurb: "The one that moves the needle locally",
+    label: "Google review link",
+    hint: "Google Business Profile \u2192 Ask for reviews \u2192 copy the short link.",
+    source: "brand",
+    field: "googleReviewLink"
+  },
+  {
+    id: "facebook",
+    name: "Facebook",
+    blurb: "Useful for social proof",
+    label: "Facebook reviews link",
+    placeholder: "https://facebook.com/yourpage/reviews",
+    source: "settings",
+    field: "facebookLink"
+  },
+  {
+    id: "bbb",
+    name: "BBB",
+    blurb: "Matters to older and insurance-minded customers",
+    label: "BBB profile link",
+    source: "settings",
+    field: "bbbLink"
+  }
+];
 function reviewState(job) {
   const r = job.review || {};
   if (r.posted) return { key: "posted", label: "Posted", tone: "green" };
@@ -24122,24 +24151,19 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Where reviews go" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Google review link", hint: "Google Business Profile \u2192 Ask for reviews \u2192 copy the short link.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      REVIEW_PLATFORMS.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: p.label, hint: p.hint, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "input",
         {
           style: inputStyle,
-          value: brand.googleReviewLink || "",
-          onChange: (e) => setBrandFromReviews && setBrandFromReviews({ ...brand, googleReviewLink: e.target.value })
+          placeholder: p.placeholder,
+          value: (p.source === "brand" ? brand[p.field] : settings[p.field]) || "",
+          onChange: (e) => {
+            if (p.source === "brand") {
+              if (setBrandFromReviews) setBrandFromReviews({ ...brand, [p.field]: e.target.value });
+            } else set(p.field)(e.target.value);
+          }
         }
-      ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Facebook reviews link", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "input",
-        {
-          style: inputStyle,
-          value: settings.facebookLink || "",
-          onChange: (e) => set("facebookLink")(e.target.value),
-          placeholder: "https://facebook.com/yourpage/reviews"
-        }
-      ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "BBB profile link", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: settings.bbbLink || "", onChange: (e) => set("bbbLink")(e.target.value) }) }),
+      ) }, p.id)),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "flex-start", gap: 12, borderTop: `1px solid ${S.line}`, paddingTop: 14, marginTop: 4 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14.5, fontWeight: 700, color: S.ink }, children: "Only send happy customers to Google" }),

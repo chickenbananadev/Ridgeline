@@ -1316,7 +1316,12 @@ const DEFAULT_STAGES = [
    an ordered list of the tasks that job type actually works through;
    completing one offers the next. Kept deliberately human — these are
    the steps a rep would tick off, not internal stage ids. */
-const JOB_TYPES = ["Retail", "Insurance", "Commercial"];
+/* The real source for every claim-type picker in the app — previously
+   declared and never referenced, while NewLeadSheet and TabOverview each
+   hand-rolled their own copy of this list in a different order (and
+   neither included "Unknown"), so the two pickers could drift apart
+   without anyone noticing. */
+const JOB_TYPES = ["Retail", "Insurance", "Commercial", "Unknown"];
 const JOB_PATHS = {
   Retail: [
     "Schedule inspection", "Complete inspection", "Build estimate",
@@ -7680,7 +7685,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
       </div>
       <Field label="Claim type *">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {["Insurance", "Retail", "Commercial", "Unknown"].map((c) => (
+          {JOB_TYPES.map((c) => (
             <button key={c} onClick={() => setF({ ...f, claimType: c })} style={{
               border: `1.5px solid ${f.claimType === c ? T.accent : S.line}`,
               background: f.claimType === c ? T.accentSoft : "#fff",
@@ -9090,7 +9095,7 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
         })()}
 
         <Field label="Job type" hint="Sets which task pathway this job follows.">
-          <PillGroup options={["Retail", "Insurance", "Commercial", "Unknown"]} value={job.claimType}
+          <PillGroup options={JOB_TYPES} value={job.claimType}
             onPick={(v) => { mut((j) => ({ ...j, claimType: v })); onLog({ kind: "lead", jobId: job.id, jobName: job.name, text: `set ${job.name} to ${v} path` }); }} />
         </Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -22902,10 +22907,24 @@ const REVIEW_STEPS = [
     label: "Day 14 — last touch",
     body: (c) => `Hi ${c.first}, last note from us on this. If you were happy with the work: ${c.link}. If you weren't, we would genuinely rather hear it directly — just reply.` },
 ];
+/* The real source ReviewSettings' "Where reviews go" section maps over
+   — previously declared and never referenced, while that section
+   hand-rolled the same three platforms inline with no shared list, so a
+   fourth platform could be added to one without the other drifting into
+   sync. Google's link lives on `brand` (it's also used in merge-field
+   templates and elsewhere company-wide); Facebook/BBB are review-
+   settings-only and live in `settings` — a real, deliberate difference,
+   not something to paper over, so each entry says where its own value
+   comes from. */
 const REVIEW_PLATFORMS = [
-  ["google", "Google", "The one that moves the needle locally"],
-  ["facebook", "Facebook", "Useful for social proof"],
-  ["bbb", "BBB", "Matters to older and insurance-minded customers"],
+  { id: "google", name: "Google", blurb: "The one that moves the needle locally",
+    label: "Google review link", hint: "Google Business Profile → Ask for reviews → copy the short link.",
+    source: "brand", field: "googleReviewLink" },
+  { id: "facebook", name: "Facebook", blurb: "Useful for social proof",
+    label: "Facebook reviews link", placeholder: "https://facebook.com/yourpage/reviews",
+    source: "settings", field: "facebookLink" },
+  { id: "bbb", name: "BBB", blurb: "Matters to older and insurance-minded customers",
+    label: "BBB profile link", source: "settings", field: "bbbLink" },
 ];
 
 /* Where each completed job sits in the funnel. */
@@ -23089,17 +23108,16 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
       {/* Where reviews are sent */}
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Where reviews go</CardTitle>
-        <Field label="Google review link" hint="Google Business Profile → Ask for reviews → copy the short link.">
-          <input style={inputStyle} value={brand.googleReviewLink || ""}
-            onChange={(e) => setBrandFromReviews && setBrandFromReviews({ ...brand, googleReviewLink: e.target.value })} />
-        </Field>
-        <Field label="Facebook reviews link">
-          <input style={inputStyle} value={settings.facebookLink || ""} onChange={(e) => set("facebookLink")(e.target.value)}
-            placeholder="https://facebook.com/yourpage/reviews" />
-        </Field>
-        <Field label="BBB profile link">
-          <input style={inputStyle} value={settings.bbbLink || ""} onChange={(e) => set("bbbLink")(e.target.value)} />
-        </Field>
+        {REVIEW_PLATFORMS.map((p) => (
+          <Field key={p.id} label={p.label} hint={p.hint}>
+            <input style={inputStyle} placeholder={p.placeholder}
+              value={(p.source === "brand" ? brand[p.field] : settings[p.field]) || ""}
+              onChange={(e) => {
+                if (p.source === "brand") { if (setBrandFromReviews) setBrandFromReviews({ ...brand, [p.field]: e.target.value }); }
+                else set(p.field)(e.target.value);
+              }} />
+          </Field>
+        ))}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, borderTop: `1px solid ${S.line}`, paddingTop: 14, marginTop: 4 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>Only send happy customers to Google</div>
