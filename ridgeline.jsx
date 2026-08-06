@@ -2823,10 +2823,14 @@ function repSplitValid(job) {
 function computeCapOut(job) {
   const { materials, labor, other, cogs } = computeFin(job.fin);
   /* Approved change orders move the contract. Leaving them out is the
-     most common way a job reads profitable and is not. */
+     most common way a job reads profitable and is not. Approved insurance
+     supplements move it the same way — the carrier approved more scope,
+     which is more contract value, exactly like a signed change order. */
   const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : [])
     .filter((c) => c.status === "Approved").reduce((a2, c) => a2 + coTotal(c), 0);
-  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved;
+  const supApproved = (Array.isArray((job.claim || {}).supplements) ? job.claim.supplements : [])
+    .filter((s) => s.status === "Approved" || s.status === "Paid").reduce((a2, s) => a2 + num(s.amount), 0);
+  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved + supApproved;
   const gross = contract - cogs;
   const structure = job.fin.structure || "grossProfit";
   const rate = job.fin.commissionRate;
@@ -2906,7 +2910,9 @@ function paymentsSummary(job) {
   const paidOut = job.payments.filter((p) => p.type !== "Received").reduce((s, p) => s + p.amt, 0);
   const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : [])
     .filter((c) => c.status === "Approved").reduce((a2, c) => a2 + coTotal(c), 0);
-  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved;
+  const supApproved = (Array.isArray((job.claim || {}).supplements) ? job.claim.supplements : [])
+    .filter((s) => s.status === "Approved" || s.status === "Paid").reduce((a2, s) => a2 + num(s.amount), 0);
+  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved + supApproved;
   return { received, paidOut, contract, balance: contract - received };
 }
 /* Export gate. Reps cannot pull data out — this is what stops a
@@ -14631,7 +14637,7 @@ const STAGE_CHECKS = {
     test: (j) => num(j.contract && j.contract.price) > 0 || num(j.fin && j.fin.contract) > 0,
     fix: "Contract or Financials — a job with no price cannot be capped out." },
   deposit: { label: "Deposit collected or waived",
-    test: (j) => num((j.payments || []).reduce((a, p) => a + num(p.amount), 0)) > 0 || !!j.depositWaived,
+    test: (j) => num((j.payments || []).reduce((a, p) => a + num(p.amt), 0)) > 0 || !!j.depositWaived,
     fix: "Payments section — record the deposit, or tick waived on the approval." },
   measure: { label: "Measurements recorded",
     test: (j) => num(j.measurements && j.measurements.squares) > 0,

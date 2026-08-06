@@ -3515,7 +3515,8 @@ function repSplitValid(job) {
 function computeCapOut(job) {
   const { materials, labor, other, cogs } = computeFin(job.fin);
   const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : []).filter((c) => c.status === "Approved").reduce((a2, c) => a2 + coTotal(c), 0);
-  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved;
+  const supApproved = (Array.isArray((job.claim || {}).supplements) ? job.claim.supplements : []).filter((s) => s.status === "Approved" || s.status === "Paid").reduce((a2, s) => a2 + num(s.amount), 0);
+  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved + supApproved;
   const gross = contract - cogs;
   const structure = job.fin.structure || "grossProfit";
   const rate = job.fin.commissionRate;
@@ -3600,7 +3601,8 @@ function paymentsSummary(job) {
   const received = job.payments.filter((p) => p.type === "Received").reduce((s, p) => s + p.amt, 0);
   const paidOut = job.payments.filter((p) => p.type !== "Received").reduce((s, p) => s + p.amt, 0);
   const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : []).filter((c) => c.status === "Approved").reduce((a2, c) => a2 + coTotal(c), 0);
-  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved;
+  const supApproved = (Array.isArray((job.claim || {}).supplements) ? job.claim.supplements : []).filter((s) => s.status === "Approved" || s.status === "Paid").reduce((a2, s) => a2 + num(s.amount), 0);
+  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved + supApproved;
   return { received, paidOut, contract, balance: contract - received };
 }
 var EXPORT_ALLOWED = false;
@@ -15538,7 +15540,7 @@ var STAGE_CHECKS = {
   },
   deposit: {
     label: "Deposit collected or waived",
-    test: (j) => num((j.payments || []).reduce((a, p) => a + num(p.amount), 0)) > 0 || !!j.depositWaived,
+    test: (j) => num((j.payments || []).reduce((a, p) => a + num(p.amt), 0)) > 0 || !!j.depositWaived,
     fix: "Payments section \u2014 record the deposit, or tick waived on the approval."
   },
   measure: {
