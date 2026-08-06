@@ -15323,7 +15323,7 @@ function CallLog({ jobs, leadSources, calls, setCalls, onOpenJob, onBack, curren
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { textAlign: "right", fontWeight: 700 }, children: money(r.value) })
         ] }, r.src))
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "True per-source tracking numbers (a different phone number on each yard sign and ad) can come later through Twilio \u2014 this report gets its answers from reps asking the question, which costs nothing." })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "True per-source tracking numbers (a different phone number on each yard sign and ad) can come later through a texting provider \u2014 this report gets its answers from reps asking the question, which costs nothing." })
     ] }),
     calls.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Recent calls" }),
@@ -19862,7 +19862,7 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
           const m = e && e.message || "Could not send";
           const notSetUp = /not configured|Function not found|Failed to send a request|non-2xx/i.test(m);
           record(notSetUp ? "Queued \u2014 texting not set up yet" : `Failed \u2014 ${m}`);
-          toast(notSetUp ? "Texting isn't set up on this project yet \u2014 saved to the thread" : `Twilio: ${m}`);
+          toast(notSetUp ? "Texting isn't set up on this project yet \u2014 saved to the thread" : `Texting: ${m}`);
           setCompose(null);
         }
         setSending(false);
@@ -26742,7 +26742,7 @@ function CompanyCamConnect({ onConnect }) {
     cors && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Needs the CompanyCam relay", tone: "amber", children: [
       "The token may be perfectly good \u2014 CompanyCam doesn't send the cross-origin headers a browser needs to call it directly, so the app routes through a small server relay. Deploy the ",
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "companycam-proxy" }),
-      "Edge Function (see DEPLOY.md) and this connects. It's the same shape as the Twilio one."
+      "Edge Function (see DEPLOY.md) and this connects. It's the same shape as the send-sms one."
     ] })
   ] });
 }
@@ -26881,8 +26881,8 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           }
         )
       ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.55 }, children: "One provider account (Twilio or similar) with a dedicated number for the whole company \u2014 texting registration is per business, so this one stays shared. Consent is tracked per customer and sends are blocked without it." }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Before your first send", children: "US carriers require 10DLC brand and campaign registration for business texting. Unregistered traffic gets filtered or blocked outright. Registration takes a few days \u2014 start it before you need it." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.55 }, children: "One provider account (EZ Texting or similar) with a dedicated number for the whole company \u2014 texting registration is per business, so this one stays shared. Consent is tracked per customer and sends are blocked without it." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Before your first send", children: "A standard 10-digit business number requires US carriers' 10DLC brand and campaign registration \u2014 unregistered traffic gets filtered or blocked outright, and registration takes a few days. A shared short code (what EZ Texting sends from by default) is a different carrier category and does not go through 10DLC review at all \u2014 check which one your account uses before assuming this applies to you." }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%", marginTop: 12 }, onClick: () => setConnecting("sms"), children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MessageCircle, { size: 15 }),
           " Connect SMS provider"
@@ -26906,7 +26906,7 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
             setMyGmail({ connected: true, email: addr.trim(), at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) });
             toast("Your Gmail account is recorded");
           } else {
-            setIntegrations({ ...integrations, sms: { connected: true, provider: "Twilio", number: addr.trim() } });
+            setIntegrations({ ...integrations, sms: { connected: true, provider: "EZ Texting", number: addr.trim() } });
             toast("SMS number recorded");
           }
           setConnecting(null);
@@ -27628,19 +27628,19 @@ var SETUP_ITEMS = [
     note: "Never add this with a VITE_ prefix, and never put it in Vercel. VITE_ variables are compiled into the browser bundle and would be public. The key belongs only in the Edge Function, which is why the assistant calls a server function instead of the API directly."
   },
   {
-    id: "twilio",
-    label: "Texting (Twilio)",
+    id: "eztexting",
+    label: "Texting (EZ Texting)",
     secret: true,
     unlocks: "Outbound texts, stage-change notifications, appointment reminders.",
     where: "Supabase \u2192 Edge Functions \u2192 Secrets",
-    keyName: "TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER",
+    keyName: "EZTEXTING_API_KEY",
     steps: [
-      "Twilio console \u2192 rotate the auth token (the old one was pasted in chat).",
-      "Supabase \u2192 Edge Functions \u2192 Secrets \u2192 add all three values.",
-      "Deploy the send-sms function.",
-      "Check toll-free verification status for the sending number."
+      "Log into app.eztexting.com \u2192 Settings \u2192 Integrations / Developer API \u2192 generate an API key.",
+      "Supabase \u2192 Edge Functions \u2192 Secrets \u2192 add EZTEXTING_API_KEY with that value.",
+      "Deploy the send-sms function: supabase functions deploy send-sms",
+      "Send a real test text before relying on this \u2014 the exact request shape in send-sms/index.ts was built from third-party integration guides, not a confirmed read of EZ Texting's own docs (see the comment at the top of that file), because this environment's network policy blocked developers.eztexting.com directly."
     ],
-    config: [["twilioFrom", "Sending number", "+1 855 600 0482"]]
+    config: [["smsFrom", "Sending number", "+1 855 600 0482"]]
   },
   {
     id: "gmail",

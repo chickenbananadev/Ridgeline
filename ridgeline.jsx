@@ -14334,7 +14334,7 @@ function CallLog({ jobs, leadSources, calls, setCalls, onOpenJob, onBack, curren
         )}
         <div style={{ fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
           True per-source tracking numbers (a different phone number on each yard sign and ad) can come later
-          through Twilio — this report gets its answers from reps asking the question, which costs nothing.
+          through a texting provider — this report gets its answers from reps asking the question, which costs nothing.
         </div>
       </Card>
 
@@ -18690,7 +18690,7 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
       }],
     }));
 
-    /* Texts go through the send-sms function, which holds the Twilio
+    /* Texts go through the send-sms function, which holds the EZ Texting
        credentials. Anything client-side would expose them. */
     if (compose === "sms") {
       const auth = AUTH();
@@ -18707,7 +18707,7 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
           record(notSetUp ? "Queued — texting not set up yet" : `Failed — ${m}`);
           toast(notSetUp
             ? "Texting isn't set up on this project yet — saved to the thread"
-            : `Twilio: ${m}`);
+            : `Texting: ${m}`);
           setCompose(null);
         }
         setSending(false);
@@ -25256,7 +25256,7 @@ function CompanyCamConnect({ onConnect }) {
           cross-origin headers a browser needs to call it directly, so the app
           routes through a small server relay. Deploy the <b>companycam-proxy</b>
           Edge Function (see DEPLOY.md) and this connects. It's the same shape
-          as the Twilio one.
+          as the send-sms one.
         </Callout>
       )}
     </div>
@@ -25367,13 +25367,15 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           ) : (
             <>
               <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.55 }}>
-                One provider account (Twilio or similar) with a dedicated number for the whole company — texting
+                One provider account (EZ Texting or similar) with a dedicated number for the whole company — texting
                 registration is per business, so this one stays shared. Consent is tracked per customer and sends are
                 blocked without it.
               </div>
               <Callout label="Before your first send">
-                US carriers require 10DLC brand and campaign registration for business texting. Unregistered traffic
-                gets filtered or blocked outright. Registration takes a few days — start it before you need it.
+                A standard 10-digit business number requires US carriers' 10DLC brand and campaign registration —
+                unregistered traffic gets filtered or blocked outright, and registration takes a few days. A shared
+                short code (what EZ Texting sends from by default) is a different carrier category and does not go
+                through 10DLC review at all — check which one your account uses before assuming this applies to you.
               </Callout>
               <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => setConnecting("sms")}>
                 <MessageCircle size={15} /> Connect SMS provider
@@ -25400,7 +25402,7 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
               setMyGmail({ connected: true, email: addr.trim(), at: new Date().toISOString().slice(0, 10) });
               toast("Your Gmail account is recorded");
             } else {
-              setIntegrations({ ...integrations, sms: { connected: true, provider: "Twilio", number: addr.trim() } });
+              setIntegrations({ ...integrations, sms: { connected: true, provider: "EZ Texting", number: addr.trim() } });
               toast("SMS number recorded");
             }
             setConnecting(null); setAddr("");
@@ -26126,17 +26128,17 @@ const SETUP_ITEMS = [
     note: "Never add this with a VITE_ prefix, and never put it in Vercel. VITE_ variables are compiled into the browser bundle and would be public. The key belongs only in the Edge Function, which is why the assistant calls a server function instead of the API directly.",
   },
   {
-    id: "twilio", label: "Texting (Twilio)", secret: true,
+    id: "eztexting", label: "Texting (EZ Texting)", secret: true,
     unlocks: "Outbound texts, stage-change notifications, appointment reminders.",
     where: "Supabase → Edge Functions → Secrets",
-    keyName: "TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER",
+    keyName: "EZTEXTING_API_KEY",
     steps: [
-      "Twilio console → rotate the auth token (the old one was pasted in chat).",
-      "Supabase → Edge Functions → Secrets → add all three values.",
-      "Deploy the send-sms function.",
-      "Check toll-free verification status for the sending number.",
+      "Log into app.eztexting.com → Settings → Integrations / Developer API → generate an API key.",
+      "Supabase → Edge Functions → Secrets → add EZTEXTING_API_KEY with that value.",
+      "Deploy the send-sms function: supabase functions deploy send-sms",
+      "Send a real test text before relying on this — the exact request shape in send-sms/index.ts was built from third-party integration guides, not a confirmed read of EZ Texting's own docs (see the comment at the top of that file), because this environment's network policy blocked developers.eztexting.com directly.",
     ],
-    config: [["twilioFrom", "Sending number", "+1 855 600 0482"]],
+    config: [["smsFrom", "Sending number", "+1 855 600 0482"]],
   },
   {
     id: "gmail", label: "Email (Gmail OAuth)", secret: true,

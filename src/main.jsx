@@ -280,7 +280,7 @@ if (url && anon) {
     async sendSms({ to, body, jobId }) {
       const { data, error } = await supabase.functions.invoke("send-sms", { body: { to, body, jobId } });
       if (error) {
-        /* Surface Twilio's own wording where we can get at it. */
+        /* Surface the provider's own wording where we can get at it. */
         let detail = error.message || "Could not send";
         try {
           const ctx = await error.context?.json?.();

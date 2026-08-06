@@ -88,7 +88,8 @@
     "test:build80": "node build80.test.cjs",
     "test:build81": "node build81.test.cjs",
     "test:build82": "node build82.test.cjs",
-    "test:build83": "node build83.test.cjs"
+    "test:build83": "node build83.test.cjs",
+    "test:build84": "node build84.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

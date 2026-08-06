@@ -179,7 +179,7 @@ approve. Messages composed on a job then send from their address; replies land
 in their inbox; new appointments booked from a job or the calendar screen get
 pushed to that rep's own Google Calendar. Until this is deployed, email is
 saved to the job thread rather than sent, and the calendar push silently does
-nothing (SMS via Twilio is unaffected either way).
+nothing (SMS via EZ Texting is unaffected either way).
 
 > A rep who connected **before** `calendar.events` was added to the scope has
 > a Gmail-only token — the calendar push for them fails with a message
@@ -257,7 +257,7 @@ These functions exist and just need deploying if you haven't already:
 supabase functions deploy create-checkout-session   # signup → Stripe Checkout
 supabase functions deploy complete-signup           # verifies checkout, creates tenant
 supabase functions deploy stripe-webhook            # keeps status/seats in sync
-supabase functions deploy send-sms                  # Twilio text sending
+supabase functions deploy send-sms                  # EZ Texting text sending
 supabase db push                                    # apply any pending migrations
 ```
 
@@ -270,7 +270,7 @@ Secrets used across these (set the ones you use):
 | `STRIPE_PRICE_UNLIMITED` | checkout | Stripe → Products (Unlimited price ID) |
 | `STRIPE_WEBHOOK_SECRET` | webhook | Stripe → Developers → Webhooks → signing secret |
 | `APP_URL` | checkout, portal | your domain, no trailing slash |
-| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` | send-sms | Twilio console |
+| `EZTEXTING_API_KEY` | send-sms | app.eztexting.com → Settings → Integrations / Developer API |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | gmail-oauth, gmail-send, calendar-push | Google Cloud → Credentials |
 | `ANTHROPIC_API_KEY` | ai-assistant, photo-damage-detect | console.anthropic.com → API keys (never `VITE_`) |
 
