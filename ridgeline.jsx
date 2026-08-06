@@ -3581,7 +3581,13 @@ function Sheet({ open, onClose, title, children, footer, wide, tall, center = tr
     }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
         background: S.card, width: "100%", maxWidth: wide ? 760 : 560,
-        maxHeight: center ? "82vh" : "90vh", minHeight: tall ? "55vh" : undefined,
+        /* `vh` is the layout viewport, which on iOS Safari can be taller
+           than what's actually on screen while the address bar is
+           showing — the footer (the button that submits the sheet) would
+           render below the real visible area with no way to reach it,
+           since this outer overlay has no scroll of its own. `dvh` tracks
+           the real, currently-visible viewport instead. */
+        maxHeight: center ? "82dvh" : "90dvh", minHeight: tall ? "55dvh" : undefined,
         borderRadius: center ? 18 : "18px 18px 0 0", display: "flex", flexDirection: "column",
         boxShadow: center ? "0 24px 60px rgba(17,24,39,.28)" : undefined,
       }}>
@@ -3592,7 +3598,10 @@ function Sheet({ open, onClose, title, children, footer, wide, tall, center = tr
             display: "grid", placeItems: "center", cursor: "pointer", color: S.ink,
           }}><X size={17} /></button>
         </div>
-        <div style={{ overflowY: "auto", padding: "4px 20px 20px", flex: 1 }}>{children}</div>
+        <div style={{
+          overflowY: "auto", padding: "4px 20px 20px", flex: 1,
+          WebkitOverflowScrolling: "touch", overscrollBehavior: "contain",
+        }}>{children}</div>
         {footer && <div style={{ padding: "12px 20px 20px", borderTop: `1px solid ${S.line}` }}>{footer}</div>}
       </div>
     </div>
@@ -27698,7 +27707,7 @@ export default function SupremeCRM() {
   const [changePwOpen, setChangePwOpen] = useState(false);
   const [apptTypes, setApptTypes] = useState([
     "Inspection", "Adjuster meeting", "Estimate presentation", "Production start",
-    "Final walkthrough", "Service issue", "Material delivery", "Trailer / dump run",
+    "Punch list", "Material selection", "Final walkthrough", "Service issue", "Material delivery", "Trailer / dump run",
   ]);
   const [integrations, setIntegrations] = useState({
     /* Gmail is per-user: each rep connects their own mailbox so email

@@ -4225,8 +4225,14 @@ function Sheet({ open, onClose, title, children, footer, wide, tall, center = tr
     background: S.card,
     width: "100%",
     maxWidth: wide ? 760 : 560,
-    maxHeight: center ? "82vh" : "90vh",
-    minHeight: tall ? "55vh" : void 0,
+    /* `vh` is the layout viewport, which on iOS Safari can be taller
+       than what's actually on screen while the address bar is
+       showing — the footer (the button that submits the sheet) would
+       render below the real visible area with no way to reach it,
+       since this outer overlay has no scroll of its own. `dvh` tracks
+       the real, currently-visible viewport instead. */
+    maxHeight: center ? "82dvh" : "90dvh",
+    minHeight: tall ? "55dvh" : void 0,
     borderRadius: center ? 18 : "18px 18px 0 0",
     display: "flex",
     flexDirection: "column",
@@ -4246,7 +4252,13 @@ function Sheet({ open, onClose, title, children, footer, wide, tall, center = tr
         color: S.ink
       }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.X, { size: 17 }) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { overflowY: "auto", padding: "4px 20px 20px", flex: 1 }, children }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      overflowY: "auto",
+      padding: "4px 20px 20px",
+      flex: 1,
+      WebkitOverflowScrolling: "touch",
+      overscrollBehavior: "contain"
+    }, children }),
     footer && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "12px 20px 20px", borderTop: `1px solid ${S.line}` }, children: footer })
   ] }) });
 }
@@ -29248,6 +29260,8 @@ function SupremeCRM() {
     "Adjuster meeting",
     "Estimate presentation",
     "Production start",
+    "Punch list",
+    "Material selection",
     "Final walkthrough",
     "Service issue",
     "Material delivery",

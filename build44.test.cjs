@@ -7,7 +7,7 @@ let fails = 0;
 const ok = (c, l) => { if (!c) { fails++; console.log("FAIL: " + l); } };
 
 /* A1 — taller sheets */
-ok(/minHeight: tall \? "55vh" : undefined/.test(src), "Sheet gains a tall prop");
+ok(/minHeight: tall \? "55dvh" : undefined/.test(src), "Sheet gains a tall prop");
 ok(/title="Estimate templates" tall/.test(src), "Estimate templates sheet opens tall");
 
 /* A2 — address search */
