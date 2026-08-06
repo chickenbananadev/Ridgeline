@@ -8781,7 +8781,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
 }
 function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {
 }, stageRules = {}, onBulkMoveStage = () => {
-} }) {
+}, appointments = [] }) {
   const dragJob = (0, import_react.useRef)(null);
   const focusRef = (0, import_react.useRef)(null);
   (0, import_react.useEffect)(() => {
@@ -8836,6 +8836,12 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
     return out;
   }, [jobs, filters, q]);
   const activeFilterCount = filters.assignees.length + filters.stages.length + filters.sources.length;
+  const exceptionsByJob = (0, import_react.useMemo)(() => {
+    const ctx = { stages, stageRules, appointments };
+    const map = /* @__PURE__ */ new Map();
+    filtered.forEach((j) => map.set(j.id, jobExceptions(j, ctx)));
+    return map;
+  }, [filtered, stages, stageRules, appointments]);
   const JobCard = ({ job }) => {
     const age = stageAge(job, stageRules);
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
@@ -9117,6 +9123,9 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
     }, children: stages.map((stage) => {
       const inStage = filtered.filter((j) => j.stageId === stage.id);
       const total = inStage.reduce((s, j) => s + j.value, 0);
+      const stageExc = inStage.flatMap((j) => exceptionsByJob.get(j.id) || []);
+      const redCount = stageExc.filter((e) => e.tone === "red").length;
+      const amberCount = stageExc.filter((e) => e.tone === "amber").length;
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
         "div",
         {
@@ -9142,24 +9151,36 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
             outlineOffset: 4
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "baseline",
-              padding: "0 2px 10px",
-              borderBottom: `2px solid ${S.line}`,
-              marginBottom: 12
-            }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: [
-                stage.name,
-                " ",
-                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub, fontWeight: 600 }, children: [
-                  "(",
-                  inStage.length,
-                  ")"
-                ] })
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "0 2px 10px", borderBottom: `2px solid ${S.line}`, marginBottom: 12 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: [
+                  stage.name,
+                  " ",
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub, fontWeight: 600 }, children: [
+                    "(",
+                    inStage.length,
+                    ")"
+                  ] })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.sub }, children: money(total) })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.sub }, children: money(total) })
+              (redCount > 0 || amberCount > 0) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                "div",
+                {
+                  style: { display: "flex", gap: 5, marginTop: 6 },
+                  title: `${redCount ? `${redCount} needs attention now` : ""}${redCount && amberCount ? " \xB7 " : ""}${amberCount ? `${amberCount} worth a look` : ""}`,
+                  children: [
+                    redCount > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "red", children: [
+                      redCount,
+                      " at risk"
+                    ] }),
+                    amberCount > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "amber", children: [
+                      amberCount,
+                      " to watch"
+                    ] })
+                  ]
+                }
+              )
             ] }),
             inStage.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(JobCard, { job: j }, j.id)),
             inStage.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
@@ -29530,6 +29551,7 @@ function SupremeCRM() {
         setView: setBoardView,
         stageRules,
         onBulkMoveStage: bulkMoveStage,
+        appointments,
         onBulkUpdate: (ids, patch) => setJobs((prev) => prev.map((j) => ids.includes(j.id) ? { ...j, ...patch } : j))
       }
     ) : nav === "inbox" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(

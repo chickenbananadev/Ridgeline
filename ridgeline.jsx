@@ -7667,7 +7667,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
 /* ================================================================
    JOB BOARD — kanban with drag between stages + tap-to-move
    ================================================================ */
-function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {}, stageRules = {}, onBulkMoveStage = () => {} }) {
+function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {}, stageRules = {}, onBulkMoveStage = () => {}, appointments = [] }) {
   const dragJob = useRef(null);
   const focusRef = useRef(null);
   useEffect(() => {
@@ -7708,6 +7708,17 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
   }, [jobs, filters, q]);
 
   const activeFilterCount = filters.assignees.length + filters.stages.length + filters.sources.length;
+
+  /* Per-column risk rollup — the same exceptions the Dashboard's exception
+     feed already computes per job, aggregated to the stage a rep is
+     actually scanning. A card already shows its own age; this answers
+     "which column needs me" without opening every card in it. */
+  const exceptionsByJob = useMemo(() => {
+    const ctx = { stages, stageRules, appointments };
+    const map = new Map();
+    filtered.forEach((j) => map.set(j.id, jobExceptions(j, ctx)));
+    return map;
+  }, [filtered, stages, stageRules, appointments]);
 
   const JobCard = ({ job }) => {
     const age = stageAge(job, stageRules);
@@ -7888,6 +7899,9 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
           {stages.map((stage) => {
             const inStage = filtered.filter((j) => j.stageId === stage.id);
             const total = inStage.reduce((s, j) => s + j.value, 0);
+            const stageExc = inStage.flatMap((j) => exceptionsByJob.get(j.id) || []);
+            const redCount = stageExc.filter((e) => e.tone === "red").length;
+            const amberCount = stageExc.filter((e) => e.tone === "amber").length;
             return (
               <div key={stage.id} ref={focusStage === stage.id ? focusRef : null}
                 onDragOver={(e) => { e.preventDefault(); setDragOver(stage.id); }}
@@ -7900,14 +7914,20 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
                   minWidth: 296, maxWidth: 316, flexShrink: 0, borderRadius: 12,
                   outline: dragOver === stage.id ? `2px solid ${T.accent}` : "none", outlineOffset: 4,
                 }}>
-                <div style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "baseline",
-                  padding: "0 2px 10px", borderBottom: `2px solid ${S.line}`, marginBottom: 12,
-                }}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>
-                    {stage.name} <span style={{ color: S.sub, fontWeight: 600 }}>({inStage.length})</span>
+                <div style={{ padding: "0 2px 10px", borderBottom: `2px solid ${S.line}`, marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>
+                      {stage.name} <span style={{ color: S.sub, fontWeight: 600 }}>({inStage.length})</span>
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: S.sub }}>{money(total)}</div>
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: S.sub }}>{money(total)}</div>
+                  {(redCount > 0 || amberCount > 0) && (
+                    <div style={{ display: "flex", gap: 5, marginTop: 6 }}
+                      title={`${redCount ? `${redCount} needs attention now` : ""}${redCount && amberCount ? " · " : ""}${amberCount ? `${amberCount} worth a look` : ""}`}>
+                      {redCount > 0 && <Chip tone="red">{redCount} at risk</Chip>}
+                      {amberCount > 0 && <Chip tone="amber">{amberCount} to watch</Chip>}
+                    </div>
+                  )}
                 </div>
                 {inStage.map((j) => <JobCard key={j.id} job={j} />)}
                 {inStage.length === 0 && (
@@ -27687,7 +27707,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onQuickAction={(jobId) => setQuickJobId(jobId)}
           focusStage={boardStage} onClearFocus={() => setBoardStage(null)}
           view={boardView} setView={setBoardView}
-          stageRules={stageRules} onBulkMoveStage={bulkMoveStage}
+          stageRules={stageRules} onBulkMoveStage={bulkMoveStage} appointments={appointments}
           onBulkUpdate={(ids, patch) => setJobs((prev) => prev.map((j) => ids.includes(j.id) ? { ...j, ...patch } : j))} />
       ) : nav === "inbox" ? (
         <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)}
