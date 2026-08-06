@@ -8710,7 +8710,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "checklist": return <TabChecklist job={job} mut={mut} toast={toast} />;
               case "ventilation": return <TabVentilation job={job} mut={mut} toast={toast} />;
               case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
-              case "materials": return <TabMaterials job={job} mut={mut} toast={toast} />;
+              case "materials": return <TabMaterials job={job} mut={mut} toast={toast} brand={brand} />;
               case "estimate": return <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
                 estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} priceList={priceList}
                 docTemplates={docTemplates} setDocTemplates={setDocTemplates} users={users} />;
@@ -16547,7 +16547,7 @@ function TabMeasure({ job, mut, toast }) {
 }
 
 /* ---------- Materials ---------- */
-function TabMaterials({ job, mut, toast }) {
+function TabMaterials({ job, mut, toast, brand }) {
   const list = generateRoofingMaterials(job.measurements);
   const copyText = () => {
     if (!list) return;
@@ -20184,6 +20184,10 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
         <a href={directionsLink(job.address)} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
           <Btn kind="ghost" small style={{ width: "100%", marginTop: 10 }}><MapPin size={13} /> Directions to site</Btn>
         </a>
+        <Btn kind="ghost" small style={{ width: "100%", marginTop: 8 }}
+          onClick={() => openDoc(`Work order — ${job.name}`, brand, workOrderDocHtml(job, brand, crew), toast)}>
+          <Printer size={13} /> Print / PDF
+        </Btn>
       </Card>
 
       {coverage && coverage.lines.length > 0 && (

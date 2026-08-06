@@ -1754,28 +1754,28 @@ function mergeTemplate(text, ctx) {
   if (!text) return "";
   return text.replace(/\{\{(\w+)\}\}/g, (m, k) => ctx[k] != null && ctx[k] !== "" ? String(ctx[k]) : m);
 }
-function templateContext(job, brand2, crew, users) {
+function templateContext(job, brand, crew, users) {
   const pay = paymentsSummary(job);
   const first = (job.name || "").split(" ")[0];
   const rep = (users || []).find((u) => u.name === job.assignee);
-  const loc = rep && rep.locationId && (brand2.locations || []).find((l) => l.id === rep.locationId);
+  const loc = rep && rep.locationId && (brand.locations || []).find((l) => l.id === rep.locationId);
   return {
     customer_name: job.name,
     customer_first: first,
     job_address: job.address,
     rep_name: job.assignee,
-    rep_phone: rep && rep.repPhone || loc && loc.phone || brand2.phone,
-    rep_email: rep && (rep.workEmail || rep.email) || loc && loc.email || brand2.email,
-    office_address: loc && loc.address || brand2.address,
-    office_phone: loc && loc.phone || brand2.phone,
-    office_email: loc && loc.email || brand2.email,
-    company: brand2.company,
+    rep_phone: rep && rep.repPhone || loc && loc.phone || brand.phone,
+    rep_email: rep && (rep.workEmail || rep.email) || loc && loc.email || brand.email,
+    office_address: loc && loc.address || brand.address,
+    office_phone: loc && loc.phone || brand.phone,
+    office_email: loc && loc.email || brand.email,
+    company: brand.company,
     crew_name: crew ? crew.name : "",
     scheduled_date: job.schedDate || "",
     contract_total: pay.contract ? money(pay.contract) : "",
     balance_due: pay.balance ? money(pay.balance) : "",
     claim_number: job.insurance ? job.insurance.claim : "",
-    review_link: brand2.googleReviewLink
+    review_link: brand.googleReviewLink
   };
 }
 var SEED_TEMPLATES = [
@@ -4986,7 +4986,7 @@ function Marketing({ onSignIn, onStartTrial }) {
     ] }) })
   ] });
 }
-function Login({ brand: brand2, users, onLogin, initialMode = "login", selectedPlan = "per_seat", onBackToMarketing }) {
+function Login({ brand, users, onLogin, initialMode = "login", selectedPlan = "per_seat", onBackToMarketing }) {
   const [mode, setMode] = (0, import_react.useState)(initialMode);
   const [suName, setSuName] = (0, import_react.useState)("");
   const [suCompany, setSuCompany] = (0, import_react.useState)("");
@@ -5038,11 +5038,11 @@ function Login({ brand: brand2, users, onLogin, initialMode = "login", selectedP
     setBusy(false);
   };
   if (!live && mode === "account") {
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", background: brand2.primary, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "100%", maxWidth: 420 }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", background: brand.primary, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "100%", maxWidth: 420 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center", marginBottom: 22 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: S.card, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Shield, { size: 28, color: brand2.primary }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800, color: "#fff" }, children: brand2.company }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 4 }, children: brand2.slogan })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: S.card, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Shield, { size: 28, color: brand.primary }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800, color: "#fff" }, children: brand.company }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 4 }, children: brand.slogan })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { padding: 14 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.sub, padding: "4px 6px 10px" }, children: "Continue as" }),
@@ -5063,7 +5063,7 @@ function Login({ brand: brand2, users, onLogin, initialMode = "login", selectedP
             height: 38,
             borderRadius: 999,
             flexShrink: 0,
-            background: u.role === "admin" ? brand2.primary : T.accentSoft,
+            background: u.role === "admin" ? brand.primary : T.accentSoft,
             color: u.role === "admin" ? "#fff" : T.accent,
             display: "grid",
             placeItems: "center",
@@ -5613,7 +5613,7 @@ function Dashboard({
   onNewLead,
   onQuickTask,
   onOpenStage,
-  brand: brand2 = DEFAULT_BRAND,
+  brand = DEFAULT_BRAND,
   appointments = [],
   apptTypes = [],
   crews = [],
@@ -5718,8 +5718,8 @@ function Dashboard({
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, marginTop: 4 }, children: (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { weekday: "long", month: "long", day: "numeric" }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "right", flexShrink: 0, maxWidth: 130 }, children: [
-        brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: brand2.company, style: { height: 40, maxWidth: 130, objectFit: "contain", display: "block", marginLeft: "auto" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 800, color: T.primary }, children: brand2.short }),
-        brand2.address && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10, color: S.sub, marginTop: 3, lineHeight: 1.35 }, children: String(brand2.address).split(",")[1] ? String(brand2.address).split(",").slice(-2).join(",").trim() : brand2.address })
+        brand.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand.logo, alt: brand.company, style: { height: 40, maxWidth: 130, objectFit: "contain", display: "block", marginLeft: "auto" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 800, color: T.primary }, children: brand.short }),
+        brand.address && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10, color: S.sub, marginTop: 3, lineHeight: 1.35 }, children: String(brand.address).split(",")[1] ? String(brand.address).split(",").slice(-2).join(",").trim() : brand.address })
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, marginTop: 16 }, children: [
@@ -8155,7 +8155,7 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject, currentUser, onDelete
     )
   ] });
 }
-function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LEAD_SOURCES, users = [], jobs = [], seed = null }) {
+function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURCES, users = [], jobs = [], seed = null }) {
   const contacts = (0, import_react.useMemo)(() => buildContactDirectory(jobs), [jobs]);
   const roster = (0, import_react.useMemo)(() => {
     const names = (users || []).filter((u) => u.active !== false).map((u) => u.name).filter(Boolean);
@@ -8527,7 +8527,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Text messages." }),
               " I agree to receive texts about my project from ",
-              brand2.company,
+              brand.company,
               ". Msg & data rates may apply. Reply STOP to opt out."
             ] })
           ] }),
@@ -9622,7 +9622,7 @@ var JOB_SECTIONS = [
 function JobDetail({
   job,
   stages,
-  brand: brand2,
+  brand,
   onBack,
   onMoveStage,
   mut,
@@ -9902,7 +9902,7 @@ function JobDetail({
                   mut,
                   toast,
                   reviewSettings,
-                  brand: brand2,
+                  brand,
                   currentUser,
                   onLog,
                   leadSources,
@@ -9914,7 +9914,7 @@ function JobDetail({
                 }
               );
             case "claim":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabClaim, { job, mut, toast, brand: brand2 });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabClaim, { job, mut, toast, brand });
             case "handoff":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                 TabHandoff,
@@ -9930,7 +9930,7 @@ function JobDetail({
                 }
               );
             case "changeorders":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChangeOrders, { job, mut, toast, currentUser, brand: brand2, showMoney });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChangeOrders, { job, mut, toast, currentUser, brand, showMoney });
             case "checklist":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChecklist, { job, mut, toast });
             case "ventilation":
@@ -9938,13 +9938,13 @@ function JobDetail({
             case "measure":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabMeasure, { job, mut, toast });
             case "materials":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabMaterials, { job, mut, toast });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabMaterials, { job, mut, toast, brand });
             case "estimate":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                 TabEstimate,
                 {
                   job,
-                  brand: brand2,
+                  brand,
                   mut,
                   toast,
                   estimateTemplates,
@@ -9961,7 +9961,7 @@ function JobDetail({
                   TabContract,
                   {
                     job,
-                    brand: brand2,
+                    brand,
                     setBrand,
                     mut,
                     toast,
@@ -9971,10 +9971,10 @@ function JobDetail({
                     integrations
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabSignatures, { job, mut, toast, currentUser, brand: brand2 })
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabSignatures, { job, mut, toast, currentUser, brand })
               ] });
             case "report":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabReport, { job, brand: brand2, juris, mut, toast, currentUser, integrations });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabReport, { job, brand, juris, mut, toast, currentUser, integrations });
             case "messages":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                 TabMessages,
@@ -9982,7 +9982,7 @@ function JobDetail({
                   job,
                   mut,
                   toast,
-                  brand: brand2,
+                  brand,
                   templates,
                   crews,
                   integrations,
@@ -9993,7 +9993,7 @@ function JobDetail({
             case "photos":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPhotos, { job, mut, toast, ccToken });
             case "financials":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancialsCombined, { job, mut, toast, isAdmin, currentUser, brand: brand2, integrations, onLog });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancialsCombined, { job, mut, toast, isAdmin, currentUser, brand, integrations, onLog });
             case "workorder":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                 TabWorkOrder,
@@ -10001,7 +10001,7 @@ function JobDetail({
                   job,
                   mut,
                   toast,
-                  brand: brand2,
+                  brand,
                   crews,
                   templates,
                   currentUser,
@@ -10019,7 +10019,7 @@ function JobDetail({
                 TabCertificate,
                 {
                   job,
-                  brand: brand2,
+                  brand,
                   mut,
                   toast,
                   currentUser,
@@ -10033,7 +10033,7 @@ function JobDetail({
                 TabPortal,
                 {
                   job,
-                  brand: brand2,
+                  brand,
                   mut,
                   toast,
                   currentUser,
@@ -10163,7 +10163,7 @@ function JobDetail({
     ] })
   ] });
 }
-function TabOverview({ job, juris, mut, toast, reviewSettings, brand: brand2, currentUser = { name: "Team" }, onLog = () => {
+function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {
 }, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false, onOpenCodeLookup = () => {
 }, integrations = {} }) {
   const notes = job.notes || [];
@@ -10568,7 +10568,7 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand: brand2, cu
             ]
           }
         ),
-        rv.rating >= 4 && !rv.posted && brand2.googleReviewLink && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => mut((j) => ({ ...j, review: { ...j.review || {}, posted: true } })), children: "Mark posted" })
+        rv.rating >= 4 && !rv.posted && brand.googleReviewLink && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => mut((j) => ({ ...j, review: { ...j.review || {}, posted: true } })), children: "Mark posted" })
       ] })
     ] })
   ] });
@@ -10681,9 +10681,9 @@ function AnnouncementManager({ announcements, setAnnouncements, currentUser, onB
     ] }, a.id))
   ] });
 }
-function docShell(title, brand2, bodyHtml, opts = {}) {
+function docShell(title, brand, bodyHtml, opts = {}) {
   const esc2 = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const logo = brand2.logo ? `<img src="${brand2.logo}" style="height:52px;object-fit:contain" alt="">` : `<div style="font:800 22px Georgia,serif;color:${brand2.primary}">${esc2(brand2.company)}</div>`;
+  const logo = brand.logo ? `<img src="${brand.logo}" style="height:52px;object-fit:contain" alt="">` : `<div style="font:800 22px Georgia,serif;color:${brand.primary}">${esc2(brand.company)}</div>`;
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc2(title)}</title>
@@ -10697,9 +10697,9 @@ function docShell(title, brand2, bodyHtml, opts = {}) {
      of the table grid entirely and render as loose boxes. Scoping by tag
      keeps a class-name collision from silently destroying a table. */
   div.head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;
-          border-bottom: 3px solid ${brand2.primary}; padding-bottom: 14px; margin-bottom: 20px; }
+          border-bottom: 3px solid ${brand.primary}; padding-bottom: 14px; margin-bottom: 20px; }
   .co { font-size: 11.5px; color: #6B7280; line-height: 1.5; margin-top: 6px; white-space: pre-line; }
-  .title { font-size: 21px; font-weight: 800; text-align: right; color: ${brand2.primary}; }
+  .title { font-size: 21px; font-weight: 800; text-align: right; color: ${brand.primary}; }
   .meta { font-size: 11.5px; color: #6B7280; text-align: right; margin-top: 5px; line-height: 1.6; }
   h2 { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: #6B7280;
        margin: 22px 0 8px; font-weight: 800; }
@@ -10709,7 +10709,7 @@ function docShell(title, brand2, bodyHtml, opts = {}) {
   td { padding: 8px 6px; border-bottom: 1px solid #F3F4F6; vertical-align: top; font-size: 12.5px; }
   td.r, th.r { text-align: right; white-space: nowrap; }
   div.tot { display: flex; justify-content: space-between; padding: 7px 6px; font-size: 13px; }
-  div.tot.grand { font-weight: 800; font-size: 15px; border-top: 2px solid ${brand2.primary}; margin-top: 6px; padding-top: 10px; }
+  div.tot.grand { font-weight: 800; font-size: 15px; border-top: 2px solid ${brand.primary}; margin-top: 6px; padding-top: 10px; }
   .box { border: 1px solid #E5E7EB; border-radius: 9px; padding: 12px 14px; margin-top: 8px; }
   .muted { color: #6B7280; font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; }
   .sig { display: flex; gap: 26px; margin-top: 26px; page-break-inside: avoid; }
@@ -10733,18 +10733,18 @@ function docShell(title, brand2, bodyHtml, opts = {}) {
 </div>
 ${opts.bare ? "" : `<div class="head">
   <div>${logo}<div class="co">${[
-    brand2.showAddress !== false ? esc2(brand2.address) : "",
-    [brand2.showPhone !== false ? esc2(brand2.phone) : "", brand2.showEmail !== false ? esc2(brand2.email) : ""].filter(Boolean).join("   "),
-    brand2.showLicense !== false && brand2.license ? esc2(brand2.license) : ""
+    brand.showAddress !== false ? esc2(brand.address) : "",
+    [brand.showPhone !== false ? esc2(brand.phone) : "", brand.showEmail !== false ? esc2(brand.email) : ""].filter(Boolean).join("   "),
+    brand.showLicense !== false && brand.license ? esc2(brand.license) : ""
   ].filter(Boolean).join("\n")}</div></div>
   <div><div class="title">${esc2(title)}</div></div>
 </div>`}
 ${bodyHtml}
-${opts.bare ? "" : `<div class="foot">${esc2(brand2.company)}${brand2.showSlogan !== false ? " \xB7 " + esc2(brand2.slogan) : ""}</div>`}
+${opts.bare ? "" : `<div class="foot">${esc2(brand.company)}${brand.showSlogan !== false ? " \xB7 " + esc2(brand.slogan) : ""}</div>`}
 </body></html>`;
 }
-function openDoc(title, brand2, bodyHtml, toast, opts = {}) {
-  const html = docShell(title, brand2, bodyHtml, opts);
+function openDoc(title, brand, bodyHtml, toast, opts = {}) {
+  const html = docShell(title, brand, bodyHtml, opts);
   try {
     const w = window.open("", "_blank");
     if (w) {
@@ -11042,7 +11042,7 @@ function concealedTableHtml(est) {
   if (!rows.length) return "";
   return `<section><h2>Concealed conditions \u2014 unit pricing</h2><div class="muted" style="margin-bottom:8px">Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented.</div><table><thead><tr><th>Condition</th><th>Unit</th><th class="r">Price</th></tr></thead><tbody>` + rows.map((c) => `<tr><td>${esc(c.desc)}</td><td>${esc(c.unit || "")}</td><td class="r">${num(c.price) ? money(num(c.price)) : "\u2014"}</td></tr>`).join("") + `</tbody></table></section>`;
 }
-function tierCardsHtml(est, brand2, doc = {}) {
+function tierCardsHtml(est, brand, doc = {}) {
   const tiers = (est.tiers || []).filter((t) => (t.items || []).length);
   if (tiers.length < 2) return "";
   const chosen = est.selectedTier || (tiers[tiers.length > 2 ? 1 : 0] || {}).id;
@@ -11108,9 +11108,9 @@ function findingsHtml(job) {
     ${shots.length ? `<div class="shots">${shots.map((p) => `<figure><img src="${p.url || p.dataUrl}" alt=""><figcaption>${esc(p.label || "")}</figcaption></figure>`).join("")}</div>` : ""}
   </section>`;
 }
-function credentialsHtml(brand2, contact) {
+function credentialsHtml(brand, contact) {
   const bullets = [
-    brand2.license ? `Licensed \u2014 ${esc(brand2.license)}` : null,
+    brand.license ? `Licensed \u2014 ${esc(brand.license)}` : null,
     "Fully insured. Certificates of liability and workers' compensation available on request.",
     "Our own crews. We do not sell your job to the lowest bidder.",
     "Every roof is inspected by a company representative before we call it finished."
@@ -11122,12 +11122,12 @@ function credentialsHtml(brand2, contact) {
       ${contact.title ? `<div class="rept">${esc(contact.title)}</div>` : ""}
       <div class="repc">${[esc(contact.phone || ""), esc(contact.email || "")].filter(Boolean).join(" \xB7 ")}</div>
     </div>` : "";
-  return `<section class="page"><h2>Why ${esc(brand2.company)}</h2>
+  return `<section class="page"><h2>Why ${esc(brand.company)}</h2>
     <ul class="checks">${bullets.map((b) => `<li>${b}</li>`).join("")}</ul>
     ${rep}
   </section>`;
 }
-function warrantyHtml(job, brand2) {
+function warrantyHtml(job, brand) {
   const w = job.warranty || {};
   const mfr = w.mfr || "";
   const labor = num(w.laborYears) ? `${w.laborYears}-year workmanship guarantee` : "";
@@ -11229,7 +11229,7 @@ function processHtml() {
     <ol class="steps">${PROPOSAL_STEPS.map(([t, d]) => `<li><span class="stept">${esc(t)}</span><span class="stepd">${esc(d)}</span></li>`).join("")}</ol>
   </section>`;
 }
-function estimateDocHtml(job, brand2, users = []) {
+function estimateDocHtml(job, brand, users = []) {
   const est = job.estimate;
   const doc = est.doc || {};
   const total = estimateTotal(est);
@@ -11255,14 +11255,14 @@ function estimateDocHtml(job, brand2, users = []) {
           <div><span class="cml">Date</span><span class="cmv">${esc(est.date || "")}</span></div>
           ${contact.name ? `<div><span class="cml">Your contact</span><span class="cmv">${esc(contact.name)}${contact.phone ? " \xB7 " + esc(contact.phone) : ""}</span></div>` : ""}
         </div>`;
-      const mark = brand2.logo ? `<img class="colgo" src="${brand2.logo}" alt="${esc(brand2.company)}">` : `<div class="coname">${esc(brand2.company)}</div>`;
-      const contactLine = [brand2.phone, brand2.email, brand2.website].filter(Boolean).map(esc).join("  \xB7  ");
+      const mark = brand.logo ? `<img class="colgo" src="${brand.logo}" alt="${esc(brand.company)}">` : `<div class="coname">${esc(brand.company)}</div>`;
+      const contactLine = [brand.phone, brand.email, brand.website].filter(Boolean).map(esc).join("  \xB7  ");
       if (style === "photo" && img) {
         out += `<section class="cover photo" style="background-image:url('${img}')">
           <div class="covershade">
             ${mark}
             <div class="cotitle">${title}</div>
-            <div class="coco">${esc(brand2.slogan || "")}</div>
+            <div class="coco">${esc(brand.slogan || "")}</div>
             ${meta}
             ${contactLine ? `<div class="cocontact">${contactLine}</div>` : ""}
           </div>
@@ -11270,10 +11270,10 @@ function estimateDocHtml(job, brand2, users = []) {
       } else {
         const bold = style === "bold";
         out += `<section class="cover ${bold ? "boldcover" : "plaincover"}">
-          <div class="colead">${mark}${brand2.license ? `<div class="colic">${esc(brand2.license)}</div>` : ""}</div>
+          <div class="colead">${mark}${brand.license ? `<div class="colic">${esc(brand.license)}</div>` : ""}</div>
           ${img ? `<img class="hero" src="${img}" alt="">` : ""}
           <div class="cotitle">${title}</div>
-          <div class="coco">${esc(brand2.slogan || "")}</div>
+          <div class="coco">${esc(brand.slogan || "")}</div>
           ${meta}
           ${contactLine ? `<div class="cocontact">${contactLine}</div>` : ""}
         </section>`;
@@ -11285,11 +11285,11 @@ function estimateDocHtml(job, brand2, users = []) {
       continue;
     }
     if (sec === "why") {
-      out += credentialsHtml(brand2, contact);
+      out += credentialsHtml(brand, contact);
       continue;
     }
     if (sec === "options") {
-      out += tierCardsHtml(est, brand2, doc);
+      out += tierCardsHtml(est, brand, doc);
       continue;
     }
     if (sec === "concealed") {
@@ -11297,7 +11297,7 @@ function estimateDocHtml(job, brand2, users = []) {
       continue;
     }
     if (sec === "warranty") {
-      out += warrantyHtml(job, brand2);
+      out += warrantyHtml(job, brand);
       continue;
     }
     if (sec === "process") {
@@ -11352,15 +11352,15 @@ function estimateDocHtml(job, brand2, users = []) {
       &nbsp;&nbsp;<b>Upgrades:</b> ______________________________</div>` : ""}
     <div class="sig">
       <div><div class="sigline"></div><div class="siglbl">${esc(job.name)} \u2014 signature / date</div></div>
-      <div><div class="sigline"></div><div class="siglbl">${esc(brand2.company)} representative</div></div>
+      <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative</div></div>
     </div>
   </section>
-  <div class="runfoot">${esc(brand2.company)}${est.number ? ` \xB7 ${esc(est.number)}` : ""} \xB7 Prepared for ${esc(job.name)}</div>`;
-  return out + proposalCss(brand2);
+  <div class="runfoot">${esc(brand.company)}${est.number ? ` \xB7 ${esc(est.number)}` : ""} \xB7 Prepared for ${esc(job.name)}</div>`;
+  return out + proposalCss(brand);
 }
-function proposalCss(brand2) {
-  const p = brand2.primary || "#20242A";
-  const a = brand2.accent || "#0A9E98";
+function proposalCss(brand) {
+  const p = brand.primary || "#20242A";
+  const a = brand.accent || "#0A9E98";
   return `<style>
   /* Sections get real page structure. The old proposal was one continuous
      flow, so tables split across pages wherever they happened to land. */
@@ -11524,7 +11524,7 @@ function longDate(iso) {
   if (isNaN(d.getTime())) return s;
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
-function certificateFor(job, brand2) {
+function certificateFor(job, brand) {
   const c = job.certificate || {};
   const ins = job.insurance || {};
   const claim = job.claim || {};
@@ -11559,8 +11559,8 @@ function titleish(s) {
   const map = { roofing: "Residential Roof Replacement", siding: "Residential Siding Replacement", gutter: "Gutter Replacement", window: "Window Replacement", exterior: "Residential Exterior Restoration" };
   return map[String(s || "").toLowerCase()] || "Residential Roof Replacement";
 }
-function certificateGaps(job, brand2) {
-  const a = certificateFor(job, brand2);
+function certificateGaps(job, brand) {
+  const a = certificateFor(job, brand);
   const out = [];
   if (!a.completedAt) out.push("the date the work was completed");
   if (!a.claimNo) out.push("the claim number");
@@ -11570,10 +11570,10 @@ function certificateGaps(job, brand2) {
   if (!a.address) out.push("the property address");
   return out;
 }
-function certificateReady(job, brand2) {
-  return certificateGaps(job, brand2).length === 0;
+function certificateReady(job, brand) {
+  return certificateGaps(job, brand).length === 0;
 }
-function certificateCss(brand2) {
+function certificateCss(brand) {
   const ink = "#111", sub = "#666", rule = "#bbb", band = "#f2f2f2";
   return `<style>
 @page { size: letter; margin: 0.62in 0.62in 0.55in; }
@@ -11605,9 +11605,9 @@ function certificateCss(brand2) {
 @media print { .certfoot { position: fixed; } }
 </style>`;
 }
-function certificateDocHtml(job, brand2) {
-  const a = certificateFor(job, brand2);
-  const co = [brand2.company, brand2.address, brand2.phone, brand2.email].filter(Boolean).map(esc).join(" &nbsp;|&nbsp; ");
+function certificateDocHtml(job, brand) {
+  const a = certificateFor(job, brand);
+  const co = [brand.company, brand.address, brand.phone, brand.email].filter(Boolean).map(esc).join(" &nbsp;|&nbsp; ");
   const row = (k1, v1, k2, v2) => `<tr>
     <td class="k">${esc(k1)}</td><td class="v">${esc(v1) || "&nbsp;"}</td>
     <td class="k">${esc(k2)}</td><td class="v">${esc(v2) || "&nbsp;"}</td></tr>`;
@@ -11637,7 +11637,7 @@ function certificateDocHtml(job, brand2) {
   ${a.note ? `<p class="certnote">${esc(a.note)}</p>` : `<p class="certnote">Amounts per the signed contract for this project, including any approved change orders. Recoverable depreciation and supplements are billed per that contract.</p>`}
 
   <div class="certband">CERTIFICATION</div>
-  <p class="certp">${esc(brand2.company || "The Company")} certifies that all work described above was completed on
+  <p class="certp">${esc(brand.company || "The Company")} certifies that all work described above was completed on
   ${esc(done || "____________")} at ${esc(a.address)} in a good and workmanlike manner, in accordance with the
   approved insurance scope, manufacturer instructions, and applicable building code. All debris was removed and the
   site left in clean condition. The undersigned property owner has inspected the work and accepts it as complete and
@@ -11649,7 +11649,7 @@ function certificateDocHtml(job, brand2) {
       <td class="d"><div class="certink">${esc(done)}</div></td>
     </tr>
     <tr>
-      <td class="certcap">${esc(a.signedBy)} &mdash; ${esc(brand2.company || "")}</td>
+      <td class="certcap">${esc(a.signedBy)} &mdash; ${esc(brand.company || "")}</td>
       <td class="d certcap">Date</td>
     </tr>
     <tr class="gap">
@@ -11663,12 +11663,12 @@ function certificateDocHtml(job, brand2) {
   </table>
 </div>
 <div class="certfoot">
-  <span>${esc(brand2.company || "")} &nbsp;|&nbsp; Certificate of Completion${a.owner ? " &nbsp;|&nbsp; " + esc(a.owner) : ""}${a.claimNo ? " &nbsp;|&nbsp; Claim " + esc(a.claimNo) : ""}</span>
+  <span>${esc(brand.company || "")} &nbsp;|&nbsp; Certificate of Completion${a.owner ? " &nbsp;|&nbsp; " + esc(a.owner) : ""}${a.claimNo ? " &nbsp;|&nbsp; Claim " + esc(a.claimNo) : ""}</span>
   <span>Page 1</span>
 </div>
-${certificateCss(brand2)}`;
+${certificateCss(brand)}`;
 }
-function invoiceDocHtml(job, brand2) {
+function invoiceDocHtml(job, brand) {
   const pay = paymentsSummary(job);
   const est = job.estimate;
   const num2 = job.invoiceNo || (job.contract && job.contract.number ? job.contract.number.replace("CON", "INV") : "INV-DRAFT");
@@ -11703,12 +11703,12 @@ function invoiceDocHtml(job, brand2) {
   if ((job.payments || []).length) {
     out += `<h2>Payment history</h2><table><thead><tr><th>Date</th><th>Method</th><th>Reference</th><th class="r">Amount</th></tr></thead><tbody>` + job.payments.filter((x) => x.type === "Received").map((x) => `<tr><td>${esc(x.date || "")}</td><td>${esc(x.method || "")}</td><td>${esc(x.ref || "")}</td><td class="r">${money(num(x.amt))}</td></tr>`).join("") + `</tbody></table>`;
   }
-  out += `<div class="box" style="margin-top:20px"><b>Remit to</b><div class="muted">${esc(brand2.company)}
-${esc(brand2.address)}
-${esc(brand2.phone)}</div></div>`;
+  out += `<div class="box" style="margin-top:20px"><b>Remit to</b><div class="muted">${esc(brand.company)}
+${esc(brand.address)}
+${esc(brand.phone)}</div></div>`;
   return out;
 }
-function workOrderDocHtml(job, brand2, crew) {
+function workOrderDocHtml(job, brand, crew) {
   const m = job.measurements || {};
   const wo = job.workOrder || {};
   let out = `<div style="display:flex;justify-content:space-between;gap:20px">
@@ -11740,10 +11740,10 @@ function workOrderDocHtml(job, brand2, crew) {
   }
   if (wo.notes) out += `<h2>Instructions</h2><div class="muted">${esc(wo.notes)}</div>`;
   out += `<div class="box" style="margin-top:18px"><b>Pricing is intentionally omitted from work orders.</b>
-    <div class="muted">Questions on scope go to the office at ${esc(brand2.phone)}.</div></div>`;
+    <div class="muted">Questions on scope go to the office at ${esc(brand.phone)}.</div></div>`;
   return out;
 }
-function subInvoiceDocHtml(job, brand2, crew) {
+function subInvoiceDocHtml(job, brand, crew) {
   const inv = job.subInvoice || { lines: [] };
   const total = subInvoiceTotal(inv);
   const pay = crew && crew.payment || {};
@@ -11766,7 +11766,7 @@ function subInvoiceDocHtml(job, brand2, crew) {
   out += `<table style="margin-top:6px"><tbody><tr><td><b>Total due</b></td><td class="r"><b>${money(total)}</b></td></tr></tbody></table>`;
   return out;
 }
-function contractDocHtml(job, brand2) {
+function contractDocHtml(job, brand) {
   const con = job.contract || {};
   const mode = con.depositMode || "pct";
   const deposit = mode === "fixed" ? num(con.depositFixed) : (con.price || 0) * ((con.depositPct || 0) / 100);
@@ -11791,7 +11791,7 @@ function contractDocHtml(job, brand2) {
   }
   out += `<div class="sig">
     <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
-    <div><div class="sigline"></div><div class="siglbl">${esc(brand2.company)} representative / date</div></div>
+    <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative / date</div></div>
   </div>`;
   return out;
 }
@@ -11902,17 +11902,17 @@ var AGREEMENT_TERMS = [
   "You, the consumer, may cancel this transaction at any time prior to midnight of {rescission} after the date of this transaction."
 ];
 var AGREEMENT_DIAGRAM_DEFAULT = "/reference-diagram.jpg";
-function agreementDiagram(brand2) {
-  return brand2 && brand2.agreementDiagram || AGREEMENT_DIAGRAM_DEFAULT;
+function agreementDiagram(brand) {
+  return brand && brand.agreementDiagram || AGREEMENT_DIAGRAM_DEFAULT;
 }
-function agreementTermsFor(brand2) {
-  const custom = brand2 && Array.isArray(brand2.agreementTerms) && brand2.agreementTerms.length ? brand2.agreementTerms : AGREEMENT_TERMS;
+function agreementTermsFor(brand) {
+  const custom = brand && Array.isArray(brand.agreementTerms) && brand.agreementTerms.length ? brand.agreementTerms : AGREEMENT_TERMS;
   return custom;
 }
-function agreementFill(text, brand2, state) {
-  return String(text || "").replace(/\{company\}/g, brand2 && brand2.company || "the Company").replace(/\{state\}/g, stateName(state) || "the property's state").replace(/\{rescission\}/g, "three (3) business days");
+function agreementFill(text, brand, state) {
+  return String(text || "").replace(/\{company\}/g, brand && brand.company || "the Company").replace(/\{state\}/g, stateName(state) || "the property's state").replace(/\{rescission\}/g, "three (3) business days");
 }
-function agreementPrefill(job, brand2) {
+function agreementPrefill(job, brand) {
   const ins = job.insurance || {};
   const cl = job.claim || {};
   const con = job.contract || {};
@@ -11946,8 +11946,8 @@ function agreementPrefill(job, brand2) {
     balance: ""
   };
 }
-function agreementFor(job, brand2) {
-  return { ...agreementPrefill(job, brand2), ...job.agreement || {} };
+function agreementFor(job, brand) {
+  return { ...agreementPrefill(job, brand), ...job.agreement || {} };
 }
 function agMoney(v) {
   const t = String(v == null ? "" : v).trim();
@@ -11967,10 +11967,10 @@ function agRowHtml(parts, a) {
     return `<span class="aglb">${esc(p.v)}</span>`;
   }).join("")}</div>`;
 }
-function agSecHtml(sec, a, brand2) {
+function agSecHtml(sec, a, brand) {
   if (sec.kind === "figure") {
     return `<figure class="agfig">
-      <img src="${esc(agreementDiagram(brand2))}" alt="Roof reference diagram, numbered to the specification">
+      <img src="${esc(agreementDiagram(brand))}" alt="Roof reference diagram, numbered to the specification">
       <figcaption>REFERENCE DIAGRAM &mdash; NUMBERED TO SPECIFICATION</figcaption>
     </figure>`;
   }
@@ -11989,13 +11989,13 @@ function agFieldHtml(f, a) {
     <div class="agfval">${esc(a[f.k] || "")}</div>
   </div>`;
 }
-function agreementDocHtml(job, brand2) {
-  const a = agreementFor(job, brand2);
+function agreementDocHtml(job, brand) {
+  const a = agreementFor(job, brand);
   const con = job.contract || {};
   const st = job.state || "";
   const left = AGREEMENT_SPEC.filter((s) => s.col === "L");
   const right = AGREEMENT_SPEC.filter((s) => s.col === "R");
-  const mark = brand2.logo ? `<img class="aglogo" src="${brand2.logo}" alt="${esc(brand2.company)}">` : `<div class="agmark">${esc(brand2.company)}</div>`;
+  const mark = brand.logo ? `<img class="aglogo" src="${brand.logo}" alt="${esc(brand.company)}">` : `<div class="agmark">${esc(brand.company)}</div>`;
   const price = moneyNum(a.finalPrice);
   const dep = moneyNum(a.deposit);
   const balance = String(a.balance || "").trim() ? agMoney(a.balance) : price ? money(price - dep) : "";
@@ -12008,10 +12008,10 @@ function agreementDocHtml(job, brand2) {
   <div class="agtop">
     <div>${mark}</div>
     <div class="agco">
-      <div class="agconame">${esc(brand2.company)}</div>
-      ${brand2.address ? `<div>${esc(brand2.address)}</div>` : ""}
-      <div>${[brand2.phone ? "Office " + esc(brand2.phone) : "", esc(brand2.email || "")].filter(Boolean).join(" &bull; ")}</div>
-      ${brand2.website ? `<div class="agweb">${esc(brand2.website)}</div>` : ""}
+      <div class="agconame">${esc(brand.company)}</div>
+      ${brand.address ? `<div>${esc(brand.address)}</div>` : ""}
+      <div>${[brand.phone ? "Office " + esc(brand.phone) : "", esc(brand.email || "")].filter(Boolean).join(" &bull; ")}</div>
+      ${brand.website ? `<div class="agweb">${esc(brand.website)}</div>` : ""}
     </div>
   </div>
   <div class="agbar"><span class="agbart">CONSTRUCTION AGREEMENT</span><span class="agbars">INSURANCE RESTORATION &bull; ROOFING &amp; EXTERIORS</span></div>
@@ -12025,8 +12025,8 @@ function agreementDocHtml(job, brand2) {
 
   <div class="agrule"><span>ROOFING SPECIFICATION</span></div>
   <div class="agspec">
-    <div class="agcol">${left.map((s) => agSecHtml(s, a, brand2)).join("")}</div>
-    <div class="agcol">${right.map((s) => agSecHtml(s, a, brand2)).join("")}</div>
+    <div class="agcol">${left.map((s) => agSecHtml(s, a, brand)).join("")}</div>
+    <div class="agcol">${right.map((s) => agSecHtml(s, a, brand)).join("")}</div>
   </div>
 
   <div class="agbox agnotes">
@@ -12048,7 +12048,7 @@ function agreementDocHtml(job, brand2) {
 
   <div class="agterm">
     <p><b>Defective Decking and Plywood Policy</b>&nbsp; ${AGREEMENT_DECK_POLICY.split("%RATE%").map(esc).join(agBlank(a.deckRate, 70))}</p>
-    <p><b>Terms</b>&nbsp; ${esc(agreementFill(AGREEMENT_TERMS_PARA, brand2, st))}</p>
+    <p><b>Terms</b>&nbsp; ${esc(agreementFill(AGREEMENT_TERMS_PARA, brand, st))}</p>
     <p>${esc(AGREEMENT_READ_PARA)}</p>
   </div>
 
@@ -12062,13 +12062,13 @@ function agreementDocHtml(job, brand2) {
     </div>
     <div class="agbox tint agcancel">
       <div class="agboxt">RIGHT TO CANCEL</div>
-      <div class="agcanp">${esc(agreementFill(AGREEMENT_CANCEL_PARA, brand2, st))}</div>
+      <div class="agcanp">${esc(agreementFill(AGREEMENT_CANCEL_PARA, brand, st))}</div>
       <div class="aginit">INITIALS ${agBlank(a.cancelInit, 70)}</div>
     </div>
   </div>
 
   <div class="agsigs">
-    ${sigCell(con.contractorSig && con.contractorSig !== "signed" ? con.contractorSig : null, brand2.company, "REPRESENTATIVE SIGNATURE / DATE")}
+    ${sigCell(con.contractorSig && con.contractorSig !== "signed" ? con.contractorSig : null, brand.company, "REPRESENTATIVE SIGNATURE / DATE")}
     ${sigCell(con.clientSig && con.clientSig !== "signed" ? con.clientSig : null, "PROPERTY OWNER", "SIGNATURE / DATE")}
     ${sigCell(null, "CO-OWNER", "SIGNATURE / DATE")}
   </div>
@@ -12077,14 +12077,14 @@ function agreementDocHtml(job, brand2) {
 <section class="agpage agrev">
   <div class="agrevlogo">${mark}</div>
   <h1 class="agrevh">TERMS AND CONDITIONS</h1>
-  <p class="agrevi">${esc(agreementFill(brand2.agreementIntro || AGREEMENT_TERMS_INTRO, brand2, st))}</p>
-  <ol class="agrevo">${agreementTermsFor(brand2).map((c) => `<li>${esc(agreementFill(c, brand2, st))}</li>`).join("")}</ol>
+  <p class="agrevi">${esc(agreementFill(brand.agreementIntro || AGREEMENT_TERMS_INTRO, brand, st))}</p>
+  <ol class="agrevo">${agreementTermsFor(brand).map((c) => `<li>${esc(agreementFill(c, brand, st))}</li>`).join("")}</ol>
 </section>
-<div class="agfoot">${esc(brand2.company)} &bull; Construction Agreement${a.customerName ? " &bull; " + esc(a.customerName) : ""}</div>
-${agreementCss(brand2)}`;
+<div class="agfoot">${esc(brand.company)} &bull; Construction Agreement${a.customerName ? " &bull; " + esc(a.customerName) : ""}</div>
+${agreementCss(brand)}`;
 }
-function agreementCss(brand2) {
-  const p = brand2.primary || "#2B3440";
+function agreementCss(brand) {
+  const p = brand.primary || "#2B3440";
   return `<style>
   /* The paper form is printed edge-to-edge; the shell's 0.6in document
      margin would cost a full inch of the one page this has to fit on. */
@@ -12196,7 +12196,7 @@ function agreementCss(brand2) {
   @media print { body { padding-bottom: 16px; } }
 </style>`;
 }
-function reportDocHtml(job, brand2) {
+function reportDocHtml(job, brand) {
   const c = job.checklist || {};
   const m = job.measurements || {};
   let out = `<div style="display:flex;justify-content:space-between;gap:20px">
@@ -12589,7 +12589,7 @@ function projectNoun(job) {
   if (has("window")) return "window";
   return "roofing";
 }
-function portalDocuments(job, brand2, portal) {
+function portalDocuments(job, brand, portal) {
   const out = portal.documents ? (job.files || []).filter((file) => file.shared).map((file) => ({
     name: file.name,
     category: file.cat,
@@ -12597,32 +12597,32 @@ function portalDocuments(job, brand2, portal) {
     url: file.url || null
   })) : [];
   const cert = job.certificate || {};
-  if (portal.certificate !== false && cert.shared !== false && certificateReady(job, brand2)) {
-    const a = certificateFor(job, brand2);
+  if (portal.certificate !== false && cert.shared !== false && certificateReady(job, brand)) {
+    const a = certificateFor(job, brand);
     out.unshift({
       name: "Certificate of Completion",
       category: "Insurance",
       date: longDate(a.completedAt),
       url: null,
-      html: certificateDocHtml(job, brand2)
+      html: certificateDocHtml(job, brand)
     });
   }
   return out;
 }
-function buildPortalSnapshot(job, brand2, token, users = []) {
+function buildPortalSnapshot(job, brand, token, users = []) {
   const portal = { ...DEFAULT_PORTAL_SETTINGS, ...job.portal || {} };
   const pay = paymentsSummary(job);
-  const portalDocs = portalDocuments(job, brand2, portal);
+  const portalDocs = portalDocuments(job, brand, portal);
   return {
     token,
     job_id: job.id,
     data: {
-      company: brand2.company,
-      logo: brand2.logo || null,
-      primary: brand2.primary,
-      slogan: brand2.slogan,
-      phone: brand2.phone,
-      email: brand2.email,
+      company: brand.company,
+      logo: brand.logo || null,
+      primary: brand.primary,
+      slogan: brand.slogan,
+      phone: brand.phone,
+      email: brand.email,
       jobId: job.id,
       name: job.name,
       address: job.address,
@@ -12765,8 +12765,8 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
       contract: portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
       invoice: portal.invoice ? { contract: pay.contract, received: pay.received, balance: pay.balance } : null,
       review: portal.review !== false ? {
-        googleLink: brand2.googleReviewLink || "",
-        gateNegative: brand2.gateNegativeReviews === true,
+        googleLink: brand.googleReviewLink || "",
+        gateNegative: brand.gateNegativeReviews === true,
         rating: (job.review || {}).rating || null,
         submitted: !!(job.review || {}).rating
       } : null,
@@ -13022,7 +13022,7 @@ function SignConsent({ checked, onChange, what, accent = "#0A9E98" }) {
     ] })
   ] });
 }
-function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2, estSelection = null }) {
+function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSelection = null }) {
   const [openDoc2, setOpenDoc] = (0, import_react.useState)(null);
   const [sig, setSig] = (0, import_react.useState)(null);
   const [consent, setConsent] = (0, import_react.useState)(false);
@@ -13724,7 +13724,7 @@ function CheckoutReturnScreen({ sessionId, onDone }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.5 }, children: "Confirming with Stripe \u2014 this only takes a moment." })
   ] }) }) });
 }
-function PasswordSetScreen({ brand: brand2, mode, onDone, toast }) {
+function PasswordSetScreen({ brand, mode, onDone, toast }) {
   const [pw, setPw] = (0, import_react.useState)("");
   const [pw2, setPw2] = (0, import_react.useState)("");
   const [busy, setBusy] = (0, import_react.useState)(false);
@@ -13759,19 +13759,19 @@ function PasswordSetScreen({ brand: brand2, mode, onDone, toast }) {
     fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif"
   }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "100%", maxWidth: 380 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center", marginBottom: 22 }, children: [
-      brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "", style: { height: 60, maxWidth: 200, objectFit: "contain", margin: "0 auto 12px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      brand.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand.logo, alt: "", style: { height: 60, maxWidth: 200, objectFit: "contain", margin: "0 auto 12px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
         width: 58,
         height: 58,
         margin: "0 auto 12px",
         borderRadius: 15,
-        background: brand2.primary,
+        background: brand.primary,
         color: "#fff",
         display: "grid",
         placeItems: "center",
         fontWeight: 800
-      }, children: brand2.short }),
+      }, children: brand.short }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800, color: S.ink }, children: mode === "invite" ? "Welcome \u2014 set your password" : mode === "recovery" ? "Choose a new password" : "Change your password" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, marginTop: 5, lineHeight: 1.5 }, children: mode === "invite" ? `You've been added to the ${brand2.company} team. Choose a password to finish setting up your account.` : mode === "recovery" ? "You followed a reset link. Pick a new password to finish signing in." : "Enter a new password for your account." })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, marginTop: 5, lineHeight: 1.5 }, children: mode === "invite" ? `You've been added to the ${brand.company} team. Choose a password to finish setting up your account.` : mode === "recovery" ? "You followed a reset link. Pick a new password to finish signing in." : "Enter a new password for your account." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", { onSubmit: (e) => {
@@ -15925,7 +15925,7 @@ function changeOrderTotals(job) {
     pendingCount: pending.length
   };
 }
-function TabChangeOrders({ job, mut, toast, currentUser, brand: brand2, showMoney = true }) {
+function TabChangeOrders({ job, mut, toast, currentUser, brand, showMoney = true }) {
   const t = changeOrderTotals(job);
   const base = num(job.contract && job.contract.price) || num(job.fin && job.fin.contract);
   const [openId, setOpenId] = (0, import_react.useState)(null);
@@ -16010,7 +16010,7 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand: brand2, showMone
         <div><div class="sigline"></div><div class="siglbl">Homeowner signature / date</div></div>
         <div><div class="sigline"></div><div class="siglbl">Company representative / date</div></div>
       </div>`;
-    openDoc(`Change order - ${job.name}`, brand2, html, toast);
+    openDoc(`Change order - ${job.name}`, brand, html, toast);
     if (co.status === "Draft") editCo(co.id, "status", "Sent");
     editCo(co.id, "sentAt", nowStamp());
   };
@@ -16174,7 +16174,7 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand: brand2, showMone
     ] })
   ] });
 }
-function TabSignatures({ job, mut, toast, currentUser, brand: brand2 }) {
+function TabSignatures({ job, mut, toast, currentUser, brand }) {
   const [rows, setRows] = (0, import_react.useState)([]);
   const [loading, setLoading] = (0, import_react.useState)(true);
   const [signing, setSigning] = (0, import_react.useState)(null);
@@ -16223,7 +16223,7 @@ function TabSignatures({ job, mut, toast, currentUser, brand: brand2 }) {
       signature_type: sig.type,
       signature_data: sig.data,
       consent: true,
-      intent_text: `Countersigned ${signing.doc_title} on behalf of ${brand2?.name || "the company"}.`,
+      intent_text: `Countersigned ${signing.doc_title} on behalf of ${brand?.name || "the company"}.`,
       portal_token: signing.portal_token || null
     };
     const { error } = await db.from("crm_signatures").insert(row);
@@ -16517,7 +16517,7 @@ function StormLookup({ job, dol, onPick, toast }) {
     }) })
   ] });
 }
-function TabClaim({ job, mut, toast, brand: brand2 }) {
+function TabClaim({ job, mut, toast, brand }) {
   const c = job.claim || {};
   const ins = job.insurance || {};
   const m = claimMath(job);
@@ -17480,7 +17480,7 @@ function TabMeasure({ job, mut, toast }) {
     ] })
   ] });
 }
-function TabMaterials({ job, mut, toast }) {
+function TabMaterials({ job, mut, toast, brand }) {
   const list = generateRoofingMaterials(job.measurements);
   const copyText = () => {
     if (!list) return;
@@ -18039,7 +18039,7 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
     ] })
   ] });
 }
-function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast, total, onClose, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
+function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClose, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
 }, users = [] }) {
   const doc = normalizeProposalDoc(est.doc);
   const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
@@ -18127,7 +18127,7 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast, total
           est.number || "Draft"
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => openDoc(`Estimate \u2014 ${job.name}`, brand2, estimateDocHtml(job, brand2, users), toast, { bare: true }), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => openDoc(`Estimate \u2014 ${job.name}`, brand, estimateDocHtml(job, brand, users), toast, { bare: true }), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 14 }),
         " PDF"
       ] })
@@ -18338,7 +18338,7 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast, total
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: { ...chip(false), color: S.sub }, onClick: () => setAddOpen(false), children: "Cancel" })
         ] })
       ] })
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProposalPreview, { job, brand: brand2, est, doc, total, users }) })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProposalPreview, { job, brand, est, doc, total, users }) })
   ] });
 }
 function CoverThumb({ style, accent, primary }) {
@@ -18374,10 +18374,10 @@ function CoverThumb({ style, accent, primary }) {
     ] })
   ] });
 }
-function ProposalPreview({ job, brand: brand2, est, doc, total, users = [] }) {
+function ProposalPreview({ job, brand, est, doc, total, users = [] }) {
   const html = (0, import_react.useMemo)(
-    () => docShell(doc.title || "Roofing Proposal", brand2, estimateDocHtml({ ...job, estimate: { ...est, doc } }, brand2, users), { bare: true }),
-    [job, brand2, est, doc, users]
+    () => docShell(doc.title || "Roofing Proposal", brand, estimateDocHtml({ ...job, estimate: { ...est, doc } }, brand, users), { bare: true }),
+    [job, brand, est, doc, users]
   );
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, padding: "9px 12px", borderBottom: `1px solid ${S.line}` }, children: "Exactly what the customer receives \u2014 same renderer as the PDF." }),
@@ -18470,7 +18470,7 @@ function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
     }, children: "+ Save current" }))
   ] });
 }
-function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {
+function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {
 }, priceList = [], docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
 }, users = [] }) {
   const est = { ...job.estimate, tiers: job.estimate.tiers || [], upgrades: job.estimate.upgrades || [] };
@@ -18849,7 +18849,7 @@ function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], s
       ] }) : "Publish a client portal link (Client portal tab) so the customer can sign there \u2014 in person or remotely." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => openDoc(`Estimate \u2014 ${job.name}`, brand2, estimateDocHtml(job, brand2, users), toast, { bare: true }), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => openDoc(`Estimate \u2014 ${job.name}`, brand, estimateDocHtml(job, brand, users), toast, { bare: true }), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
         " PDF"
       ] }),
@@ -18987,7 +18987,7 @@ function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], s
       ProposalBuilder,
       {
         job,
-        brand: brand2,
+        brand,
         est,
         setEst,
         locked,
@@ -19039,14 +19039,14 @@ function AgreementBox({ on, onClick, label, disabled }) {
     }
   );
 }
-function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
-  const a = agreementFor(job, brand2);
+function AgreementForm({ job, brand, mut, toast, locked }) {
+  const a = agreementFor(job, brand);
   const set = (k, v) => mut((j) => ({
     ...j,
-    agreement: { ...agreementPrefill(j, brand2), ...j.agreement || {}, [k]: v }
+    agreement: { ...agreementPrefill(j, brand), ...j.agreement || {}, [k]: v }
   }));
   const repull = () => {
-    mut((j) => ({ ...j, agreement: { ...j.agreement || {}, ...agreementPrefill(j, brand2) } }));
+    mut((j) => ({ ...j, agreement: { ...j.agreement || {}, ...agreementPrefill(j, brand) } }));
     toast("Re-read the job file into the agreement");
   };
   const txt = (k, extra = {}) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -19176,7 +19176,7 @@ function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
       {
         kind: "ghost",
         style: { marginTop: 14, width: "100%" },
-        onClick: () => openDoc(`Construction Agreement \u2014 ${job.name}`, brand2, agreementDocHtml(job, brand2), toast, { bare: true }),
+        onClick: () => openDoc(`Construction Agreement \u2014 ${job.name}`, brand, agreementDocHtml(job, brand), toast, { bare: true }),
         children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
           " Print the agreement"
@@ -19185,7 +19185,7 @@ function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
     )
   ] });
 }
-function TabContract({ job, brand: brand2, setBrand = () => {
+function TabContract({ job, brand, setBrand = () => {
 }, mut, toast, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
 }, currentUser = null, integrations = {} }) {
   const con = job.contract;
@@ -19233,11 +19233,11 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55 }, children: [
         "This agreement is between ",
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: brand2.company }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: brand.company }),
         ", ",
-        brand2.address,
+        brand.address,
         ", ",
-        brand2.phone,
+        brand.phone,
         ", and",
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("b", { children: [
           " ",
@@ -19372,7 +19372,7 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: depositMode === "fixed" ? "Due at signing (fixed)" : `Due at signing (${con.depositPct}%)`, v: money(deposit) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Due on substantial completion", v: money((con.price || 0) - deposit), strong: true })
     ] }),
-    form === "agreement" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AgreementForm, { job, brand: brand2, mut, toast, locked }),
+    form === "agreement" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AgreementForm, { job, brand, mut, toast, locked }),
     form === "simple" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Terms" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -19397,10 +19397,10 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       ),
       !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => {
-          setBrand({ ...brand2, contractTerms: con.terms });
+          setBrand({ ...brand, contractTerms: con.terms });
           toast("Saved as your default terms for new contracts");
         }, children: "Save as company default" }),
-        brand2.contractTerms && brand2.contractTerms !== con.terms && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => setCon({ terms: brand2.contractTerms }), children: "Load company default" })
+        brand.contractTerms && brand.contractTerms !== con.terms && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => setCon({ terms: brand.contractTerms }), children: "Load company default" })
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
@@ -19468,7 +19468,7 @@ function TabContract({ job, brand: brand2, setBrand = () => {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `${window.location.origin}/?portal=${job.portalToken}`, target: "_blank", rel: "noreferrer", style: { color: T.accent, fontWeight: 700 }, children: "the client portal" }),
           " \u2014 open it there for an in-person signature, or send the link"
         ] }) : "Publish a client portal link (Client portal tab) so the customer can sign there" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SigLine, { label: `${brand2.company} representative`, value: con.contractorSig, onSign: () => setSigFor("contractor") })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SigLine, { label: `${brand.company} representative`, value: con.contractorSig, onSign: () => setSigFor("contractor") })
       ] }),
       con.clientSig && con.contractorSig && !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "green", style: { marginTop: 14, width: "100%" }, onClick: () => {
         setCon({ status: "Signed", signedAt: nowStamp() });
@@ -19484,12 +19484,12 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 14 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => form === "agreement" ? openDoc(`Construction Agreement \u2014 ${job.name}`, brand2, agreementDocHtml(job, brand2), toast, { bare: true }) : openDoc(`Contract \u2014 ${job.name}`, brand2, contractDocHtml(job, brand2), toast), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => form === "agreement" ? openDoc(`Construction Agreement \u2014 ${job.name}`, brand, agreementDocHtml(job, brand), toast, { bare: true }) : openDoc(`Contract \u2014 ${job.name}`, brand, contractDocHtml(job, brand), toast), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
         " PDF"
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => sendClientEmail(job, mut, currentUser, integrations, toast, {
-        subject: `Your contract is ready \u2014 ${brand2.company}`,
+        subject: `Your contract is ready \u2014 ${brand.company}`,
         body: `Hi ${job.name}, your contract for ${job.address} is ready to review and sign. Reply to this email with any questions.`
       }), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }),
@@ -19510,7 +19510,7 @@ function TabContract({ job, brand: brand2, setBrand = () => {
     )
   ] });
 }
-function TabReport({ job, brand: brand2, juris, mut, toast, currentUser = null, integrations = {} }) {
+function TabReport({ job, brand, juris, mut, toast, currentUser = null, integrations = {} }) {
   const c = job.checklist;
   if (!c.complete) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
@@ -19548,14 +19548,14 @@ function TabReport({ job, brand: brand2, juris, mut, toast, currentUser = null, 
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800, margin: "6px 0 2px" }, children: job.name }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, opacity: 0.85 }, children: job.address }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, opacity: 0.7, marginTop: 10 }, children: [
-        brand2.company,
+        brand.company,
         " \xB7 ",
-        brand2.phone
+        brand.phone
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
         "button",
         {
-          onClick: () => openDoc(`Inspection report \u2014 ${job.name}`, brand2, reportDocHtml(job, brand2), toast),
+          onClick: () => openDoc(`Inspection report \u2014 ${job.name}`, brand, reportDocHtml(job, brand), toast),
           style: {
             marginTop: 12,
             border: "1.5px solid rgba(255,255,255,.4)",
@@ -19625,12 +19625,12 @@ function TabReport({ job, brand: brand2, juris, mut, toast, currentUser = null, 
       ] })
     ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => openDoc(`Inspection report \u2014 ${job.name}`, brand2, reportDocHtml(job, brand2), toast), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => openDoc(`Inspection report \u2014 ${job.name}`, brand, reportDocHtml(job, brand), toast), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
         " Print / PDF"
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => sendClientEmail(job, mut, currentUser, integrations, toast, {
-        subject: `Your inspection report \u2014 ${brand2.company}`,
+        subject: `Your inspection report \u2014 ${brand.company}`,
         body: `Hi ${job.name}, your roof inspection report for ${job.address} is ready. Reply to this email with any questions.`
       }), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }),
@@ -19737,13 +19737,13 @@ async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, in
   const to = kind === "sms" ? job.phone : job.email;
   return deliverMessage({ to, kind, subject, body, jobId: job.id }, integrations, currentUser);
 }
-function TabMessages({ job, mut, toast, brand: brand2, templates, crews, integrations, currentUser, users }) {
+function TabMessages({ job, mut, toast, brand, templates, crews, integrations, currentUser, users }) {
   const [compose, setCompose] = (0, import_react.useState)(null);
   const [to, setTo] = (0, import_react.useState)("Customer");
   const [subject, setSubject] = (0, import_react.useState)("");
   const [body, setBody] = (0, import_react.useState)("");
   const crew = crews.find((c) => c.id === job.crewId) || null;
-  const ctx = templateContext(job, brand2, crew, users);
+  const ctx = templateContext(job, brand, crew, users);
   const thread = job.messages || [];
   const consentOk = (channel, audience) => {
     if (audience === "Crew") return true;
@@ -20486,7 +20486,7 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
     ] })
   ] });
 }
-function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand: brand2, integrations = {}, onLog = () => {
+function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, integrations = {}, onLog = () => {
 } }) {
   const [sub, setSub] = (0, import_react.useState)("costs");
   const SUBS = [["costs", "Costs & profit"], ["payments", "Payments"], ["invoice", "Invoice"]];
@@ -20503,12 +20503,12 @@ function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand: b
       cursor: "pointer",
       fontFamily: "inherit"
     }, children: label }, id)) }),
-    sub === "costs" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancials, { job, mut, toast, isAdmin, currentUser, brand: brand2 }),
+    sub === "costs" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancials, { job, mut, toast, isAdmin, currentUser, brand }),
     sub === "payments" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPayments, { job, mut, toast, onLog }),
-    sub === "invoice" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabInvoice, { job, brand: brand2, mut, toast, currentUser, integrations })
+    sub === "invoice" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabInvoice, { job, brand, mut, toast, currentUser, integrations })
   ] });
 }
-function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand: brand2 = DEFAULT_BRAND }) {
+function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_BRAND }) {
   const cap = computeCapOut(job);
   const fin = job.fin;
   const structure = fin.structure || "grossProfit";
@@ -20606,7 +20606,7 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand: brand2 = 
         table.cap td.muted{color:#667085}
         table.cap tr{page-break-inside:avoid}
       </style>`;
-    openDoc(`Cap out \u2014 ${job.name}`, brand2, html, toast);
+    openDoc(`Cap out \u2014 ${job.name}`, brand, html, toast);
   };
   const exportCsv = () => {
     downloadCsv(`capout-${job.name.replace(/\s+/g, "-").toLowerCase()}.csv`, [
@@ -20995,9 +20995,9 @@ function TabPayments({ job, mut, toast, onLog = () => {
     )
   ] });
 }
-function TabCertificate({ job, brand: brand2, mut, toast, currentUser = null, integrations = {} }) {
-  const a = certificateFor(job, brand2);
-  const gaps = certificateGaps(job, brand2);
+function TabCertificate({ job, brand, mut, toast, currentUser = null, integrations = {} }) {
+  const a = certificateFor(job, brand);
+  const gaps = certificateGaps(job, brand);
   const ready = gaps.length === 0;
   const cert = job.certificate || {};
   const set = (k) => (v) => mut((j) => ({ ...j, certificate: { ...j.certificate || {}, [k]: v } }));
@@ -21116,7 +21116,7 @@ function TabCertificate({ job, brand: brand2, mut, toast, currentUser = null, in
         {
           kind: "ghost",
           style: { flex: 1 },
-          onClick: () => openDoc(docTitle, brand2, certificateDocHtml(job, brand2), toast, { bare: true }),
+          onClick: () => openDoc(docTitle, brand, certificateDocHtml(job, brand), toast, { bare: true }),
           children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
             " PDF"
@@ -21142,7 +21142,7 @@ function TabCertificate({ job, brand: brand2, mut, toast, currentUser = null, in
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: ready ? "Print it for a wet signature from the homeowner, or email it as it stands. The owner's signature line is left blank on purpose." : "Printing a draft works so you can see what is still blank. Emailing is off until it is complete." })
   ] });
 }
-function TabInvoice({ job, brand: brand2, mut, toast, currentUser = null, integrations = {} }) {
+function TabInvoice({ job, brand, mut, toast, currentUser = null, integrations = {} }) {
   const pay = paymentsSummary(job);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
@@ -21177,11 +21177,11 @@ function TabInvoice({ job, brand: brand2, mut, toast, currentUser = null, integr
       ) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 14 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 18, fontWeight: 800 }, children: brand2.company }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 18, fontWeight: 800 }, children: brand.company }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 3, whiteSpace: "pre-line" }, children: [
-            brand2.address,
+            brand.address,
             "\n",
-            brand2.phone
+            brand.phone
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "right" }, children: [
@@ -21203,7 +21203,7 @@ function TabInvoice({ job, brand: brand2, mut, toast, currentUser = null, integr
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 12 }, children: "Balances unpaid 30 days after completion accrue 1.5% monthly. Thank you for your business." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 14 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => openDoc(`Invoice \u2014 ${job.name}`, brand2, invoiceDocHtml(job, brand2), toast), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => openDoc(`Invoice \u2014 ${job.name}`, brand, invoiceDocHtml(job, brand), toast), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
         " PDF"
       ] }),
@@ -21217,7 +21217,7 @@ function TabInvoice({ job, brand: brand2, mut, toast, currentUser = null, integr
     ] })
   ] });
 }
-function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand: brand2 }) {
+function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
   const [menuOpen, setMenuOpen] = (0, import_react.useState)(false);
   const [menuQ, setMenuQ] = (0, import_react.useState)("");
   const inv = job.subInvoice || null;
@@ -21247,7 +21247,7 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand: brand2 }) {
     toast(docAlerts.length ? `Confirmed \u2014 heads up: ${crew.name} has ${docAlerts.length} expired/expiring doc(s)` : "Sub invoice confirmed");
   };
   const submitInv = () => {
-    const acct = brand2 && brand2.accountingEmail || "";
+    const acct = brand && brand.accountingEmail || "";
     mut((j) => {
       const amt = subInvoiceTotal(j.subInvoice);
       return {
@@ -21361,7 +21361,7 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand: brand2 }) {
         money(total),
         " to job costs"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => openDoc(`Sub invoice \u2014 ${crew.name} \u2014 ${job.name}`, brand2, subInvoiceDocHtml(job, brand2, crew), toast), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => openDoc(`Sub invoice \u2014 ${crew.name} \u2014 ${job.name}`, brand, subInvoiceDocHtml(job, brand, crew), toast), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 13 }),
         " Export / PDF"
       ] })
@@ -21431,7 +21431,7 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand: brand2 }) {
     ] })
   ] });
 }
-function TabWorkOrder({ job, mut, toast, brand: brand2, crews, templates, currentUser, users }) {
+function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, users }) {
   const [picking, setPicking] = (0, import_react.useState)(false);
   const [sending, setSending] = (0, import_react.useState)(false);
   const [notes, setNotes] = (0, import_react.useState)(job.workOrder ? job.workOrder.notes : "");
@@ -21451,9 +21451,9 @@ function TabWorkOrder({ job, mut, toast, brand: brand2, crews, templates, curren
     toast(`${c.name} assigned`);
   };
   const openSend = () => {
-    const ctx = templateContext(job, brand2, crew, users);
+    const ctx = templateContext(job, brand, crew, users);
     const t = templates.find((x) => x.kind === "email" && x.audience === "Crew");
-    setSubject(t ? mergeTemplate(t.subject, ctx) : `${brand2.company} \u2014 work order for ${job.address}`);
+    setSubject(t ? mergeTemplate(t.subject, ctx) : `${brand.company} \u2014 work order for ${job.address}`);
     setBody(t ? mergeTemplate(t.body, ctx) : "");
     setSending(true);
   };
@@ -21524,7 +21524,7 @@ function TabWorkOrder({ job, mut, toast, brand: brand2, crews, templates, curren
         ] })
       ] })
     ] }),
-    crew && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubInvoiceCard, { job, crew, mut, toast, currentUser, brand: brand2 }),
+    crew && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubInvoiceCard, { job, crew, mut, toast, currentUser, brand }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "No pricing" }), children: [
         "Work order \u2014 ",
@@ -21546,7 +21546,20 @@ function TabWorkOrder({ job, mut, toast, brand: brand2, crews, templates, curren
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: directionsLink(job.address), target: "_blank", rel: "noreferrer", style: { textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { width: "100%", marginTop: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 13 }),
         " Directions to site"
-      ] }) })
+      ] }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+        Btn,
+        {
+          kind: "ghost",
+          small: true,
+          style: { width: "100%", marginTop: 8 },
+          onClick: () => openDoc(`Work order \u2014 ${job.name}`, brand, workOrderDocHtml(job, brand, crew), toast),
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 13 }),
+            " Print / PDF"
+          ]
+        }
+      )
     ] }),
     coverage && coverage.lines.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
@@ -22217,12 +22230,12 @@ function PortalContactApprovals({ token, job, mut, toast }) {
     ] }, r.id))
   ] });
 }
-function TabPortal({ job, brand: brand2, mut, toast, currentUser, stageLabel = "", users = [] }) {
+function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "", users = [] }) {
   const [busy, setBusy] = (0, import_react.useState)(false);
   const portalUrl = (tok) => `${window.location.origin}/?portal=${tok}`;
   const portalSettings = { ...DEFAULT_PORTAL_SETTINGS, ...job.portal || {} };
   const progress = portalProgressFor({ ...job, stageLabel });
-  const snapshot = (tok) => buildPortalSnapshot({ ...job, stageLabel }, brand2, tok, users);
+  const snapshot = (tok) => buildPortalSnapshot({ ...job, stageLabel }, brand, tok, users);
   const contact = repContactFor(users, job);
   const publishPortal = async () => {
     const db = DB();
@@ -22488,7 +22501,7 @@ function TabPortal({ job, brand: brand2, mut, toast, currentUser, stageLabel = "
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "Client view" }), children: "Portal preview" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: T.primary, padding: "16px 16px 14px", color: "#fff" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, opacity: 0.75 }, children: brand2.company }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, opacity: 0.75 }, children: brand.company }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, marginTop: 3 }, children: "Your project" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, opacity: 0.75, marginTop: 2 }, children: job.address })
         ] }),
@@ -22508,9 +22521,9 @@ function TabPortal({ job, brand: brand2, mut, toast, currentUser, stageLabel = "
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 14 }, children: [
             "Questions? ",
-            brand2.phone,
+            brand.phone,
             " \xB7 ",
-            brand2.email
+            brand.email
           ] })
         ] })
       ] })
@@ -23877,7 +23890,7 @@ function nextReviewStep(job, settings) {
   d.setDate(d.getDate() + step.delay);
   return { step, due: isoLocal(d) };
 }
-function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, setBrandFromReviews, mut, toast }) {
+function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFromReviews, mut, toast }) {
   const [rating, setRating] = (0, import_react.useState)({});
   const [fbOpen, setFbOpen] = (0, import_react.useState)(null);
   const [fbText, setFbText] = (0, import_react.useState)("");
@@ -23970,7 +23983,7 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: st.label }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: st.channel === "sms" ? "Text" : "Email" })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 3, lineHeight: 1.5 }, children: st.body({ first: "Sarah", company: brand2.company || "your company", link: "[review link]" }) })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 3, lineHeight: 1.5 }, children: st.body({ first: "Sarah", company: brand.company || "your company", link: "[review link]" }) })
         ] })
       ] }, st.id)),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "The sequence stops as soon as someone reviews, and pauses entirely for anyone who rates three or below so a human can call first." })
@@ -23981,8 +23994,8 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
         "input",
         {
           style: inputStyle,
-          value: brand2.googleReviewLink || "",
-          onChange: (e) => setBrandFromReviews && setBrandFromReviews({ ...brand2, googleReviewLink: e.target.value })
+          value: brand.googleReviewLink || "",
+          onChange: (e) => setBrandFromReviews && setBrandFromReviews({ ...brand, googleReviewLink: e.target.value })
         }
       ) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Facebook reviews link", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -24003,12 +24016,12 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           Toggle,
           {
-            on: brand2.gateNegativeReviews === true,
-            onClick: () => setBrandFromReviews && setBrandFromReviews({ ...brand2, gateNegativeReviews: !(brand2.gateNegativeReviews === true) })
+            on: brand.gateNegativeReviews === true,
+            onClick: () => setBrandFromReviews && setBrandFromReviews({ ...brand, gateNegativeReviews: !(brand.gateNegativeReviews === true) })
           }
         )
       ] }),
-      brand2.gateNegativeReviews === true && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Heads up \u2014 this is review gating", tone: "red", children: "Google's review policies prohibit soliciting reviews only from customers you expect to be positive, and the FTC treats suppressing negative reviews as a deceptive practice \u2014 it can get reviews removed or your Business Profile penalized. Asking for feedback first is fine and good business; hiding the public link from unhappy customers is the part that carries risk. Leave this off unless you understand that trade-off." })
+      brand.gateNegativeReviews === true && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Heads up \u2014 this is review gating", tone: "red", children: "Google's review policies prohibit soliciting reviews only from customers you expect to be positive, and the FTC treats suppressing negative reviews as a deceptive practice \u2014 it can get reviews removed or your Business Profile penalized. Asking for feedback first is fine and good business; hiding the public link from unhappy customers is the part that carries risk. Leave this off unless you understand that trade-off." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
@@ -24019,8 +24032,8 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
         "input",
         {
           style: inputStyle,
-          value: brand2.googleReviewLink,
-          onChange: (e) => setBrandFromReviews && setBrandFromReviews({ ...brand2, googleReviewLink: e.target.value })
+          value: brand.googleReviewLink,
+          onChange: (e) => setBrandFromReviews && setBrandFromReviews({ ...brand, googleReviewLink: e.target.value })
         }
       ) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 6, lineHeight: 1.5 }, children: `Every job in "Job completed." Toggle what's been sent and what's posted. Log the customer's rating when they answer the "how did we do?" message \u2014 anything under 5 opens the internal feedback form so you can make it right first.` }),
@@ -24076,11 +24089,11 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
                 setFbText(j.review.feedback || "");
               }
             }, style: { border: "none", background: "none", cursor: "pointer", padding: 2 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Star, { size: 19, color: n <= r ? "#D3860A" : "#D6D9DE", fill: n <= r ? "#D3860A" : "none" }) }, n)),
-            r === 5 && brand2.googleReviewLink && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            r === 5 && brand.googleReviewLink && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                 "a",
                 {
-                  href: brand2.googleReviewLink,
+                  href: brand.googleReviewLink,
                   target: "_blank",
                   rel: "noreferrer",
                   style: { fontSize: 12.5, color: T.accent, fontWeight: 700, marginLeft: 6 },
@@ -24089,11 +24102,11 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
               ),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: { ...linkBtn, fontSize: 12.5, marginLeft: 8 }, onClick: () => {
                 const first = (j.name || "").split(" ")[0];
-                const body = `Hi ${first}, thank you again for trusting ${brand2.company} with your roof. If you have a moment, a short Google review helps our small team more than you know: ${brand2.googleReviewLink}`;
+                const body = `Hi ${first}, thank you again for trusting ${brand.company} with your roof. If you have a moment, a short Google review helps our small team more than you know: ${brand.googleReviewLink}`;
                 if (j.consent.sms.granted && j.phone) {
                   window.location.href = `sms:${String(j.phone).replace(/\D/g, "")}&body=${encodeURIComponent(body)}`;
                 } else if (j.consent.email.granted && j.email) {
-                  window.location.href = `mailto:${j.email}?subject=${encodeURIComponent("Thank you from " + brand2.company)}&body=${encodeURIComponent(body)}`;
+                  window.location.href = `mailto:${j.email}?subject=${encodeURIComponent("Thank you from " + brand.company)}&body=${encodeURIComponent(body)}`;
                 } else {
                   if (navigator.clipboard) navigator.clipboard.writeText(body);
                   toast("No consent on file \u2014 message copied instead");
@@ -24179,7 +24192,7 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
         ", ",
         "{review_link}",
         ". Review link: ",
-        brand2.googleReviewLink
+        brand.googleReviewLink
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
@@ -24979,12 +24992,12 @@ function LeadSourceManager({ sources, setSources, jobs, onBack, toast }) {
     ] }) }, src))
   ] });
 }
-function AgreementBranding({ brand: brand2, setBrand, toast }) {
+function AgreementBranding({ brand, setBrand, toast }) {
   const diagRef = (0, import_react.useRef)(null);
   const [openTerms, setOpenTerms] = (0, import_react.useState)(false);
-  const terms = agreementTermsFor(brand2);
-  const custom = Array.isArray(brand2.agreementTerms) && brand2.agreementTerms.length;
-  const setClause = (i, v) => setBrand({ ...brand2, agreementTerms: terms.map((c, x) => x === i ? v : c) });
+  const terms = agreementTermsFor(brand);
+  const custom = Array.isArray(brand.agreementTerms) && brand.agreementTerms.length;
+  const setClause = (i, v) => setBrand({ ...brand, agreementTerms: terms.map((c, x) => x === i ? v : c) });
   const onDiagram = async (e) => {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
@@ -24998,7 +25011,7 @@ function AgreementBranding({ brand: brand2, setBrand, toast }) {
       toast("Couldn't read that image");
       return;
     }
-    setBrand({ ...brand2, agreementDiagram: url });
+    setBrand({ ...brand, agreementDiagram: url });
     toast(`Reference diagram updated (${Math.round(url.length / 1024)} KB)`);
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
@@ -25013,7 +25026,7 @@ function AgreementBranding({ brand: brand2, setBrand, toast }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "img",
         {
-          src: agreementDiagram(brand2),
+          src: agreementDiagram(brand),
           alt: "Agreement reference diagram",
           style: { width: 130, borderRadius: 8, border: `1px solid ${S.line}`, background: "#fff" }
         }
@@ -25022,17 +25035,17 @@ function AgreementBranding({ brand: brand2, setBrand, toast }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => diagRef.current && diagRef.current.click(), children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
           " ",
-          brand2.agreementDiagram ? "Replace" : "Upload"
+          brand.agreementDiagram ? "Replace" : "Upload"
         ] }),
-        brand2.agreementDiagram && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setBrand({ ...brand2, agreementDiagram: null }), children: "Reset" })
+        brand.agreementDiagram && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setBrand({ ...brand, agreementDiagram: null }), children: "Reset" })
       ] })
     ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Opening paragraph", hint: "Sets out who the parties are and which state's law applies.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       "textarea",
       {
         style: { ...inputStyle, minHeight: 90, resize: "vertical", fontSize: 13, lineHeight: 1.6 },
-        value: brand2.agreementIntro === void 0 ? AGREEMENT_TERMS_INTRO : brand2.agreementIntro,
-        onChange: (e) => setBrand({ ...brand2, agreementIntro: e.target.value })
+        value: brand.agreementIntro === void 0 ? AGREEMENT_TERMS_INTRO : brand.agreementIntro,
+        onChange: (e) => setBrand({ ...brand, agreementIntro: e.target.value })
       }
     ) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 8, borderTop: `1px solid ${S.line}` }, children: [
@@ -25066,20 +25079,20 @@ function AgreementBranding({ brand: brand2, setBrand, toast }) {
         }
       ) }, i)),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => setBrand({ ...brand2, agreementTerms: [...terms, ""] }), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => setBrand({ ...brand, agreementTerms: [...terms, ""] }), children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
           " Add a clause"
         ] }),
         custom && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => {
-          setBrand({ ...brand2, agreementTerms: null, agreementIntro: void 0 });
+          setBrand({ ...brand, agreementTerms: null, agreementIntro: void 0 });
           toast("Terms reset to the supplied text");
         }, children: "Reset to supplied text" })
       ] })
     ] })
   ] });
 }
-function BrandingEditor({ brand: brand2, setBrand, onBack, toast, brandErr = "" }) {
-  const set = (k) => (e) => setBrand({ ...brand2, [k]: e.target.value });
+function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
+  const set = (k) => (e) => setBrand({ ...brand, [k]: e.target.value });
   const logoRef = (0, import_react.useRef)(null);
   const onLogo = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -25104,15 +25117,15 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast, brandErr = "" 
           ctx.drawImage(img, 0, 0, w, h);
           const out = canvas.toDataURL("image/png");
           const chosen = out.length < String(r.result).length ? out : String(r.result);
-          setBrand({ ...brand2, logo: chosen });
+          setBrand({ ...brand, logo: chosen });
           toast(`Logo updated (${Math.round(chosen.length / 1024)} KB)`);
         } catch {
-          setBrand({ ...brand2, logo: String(r.result) });
+          setBrand({ ...brand, logo: String(r.result) });
           toast("Logo updated");
         }
       };
       img.onerror = () => {
-        setBrand({ ...brand2, logo: String(r.result) });
+        setBrand({ ...brand, logo: String(r.result) });
         toast("Logo updated");
       };
       img.src = String(r.result);
@@ -25120,13 +25133,13 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast, brandErr = "" 
     r.readAsDataURL(file);
     e.target.value = "";
   };
-  const locations = brand2.locations || [];
+  const locations = brand.locations || [];
   const setLoc = (i, k, v) => {
     const next = locations.map((l, x) => x === i ? { ...l, [k]: v } : l);
-    setBrand({ ...brand2, locations: next });
+    setBrand({ ...brand, locations: next });
   };
-  const addLoc = () => setBrand({ ...brand2, locations: [...locations, { id: uid("loc"), label: "", phone: "", address: "" }] });
-  const rmLoc = (i) => setBrand({ ...brand2, locations: locations.filter((_, x) => x !== i) });
+  const addLoc = () => setBrand({ ...brand, locations: [...locations, { id: uid("loc"), label: "", phone: "", address: "" }] });
+  const rmLoc = (i) => setBrand({ ...brand, locations: locations.filter((_, x) => x !== i) });
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: logoRef, type: "file", accept: "image/*", onChange: onLogo, style: { display: "none" } }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Company branding", onBack }),
@@ -25143,35 +25156,35 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast, brandErr = "" 
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 14 }, children: "One place for company identity. Login, documents, the client portal, and review messages all read from here \u2014 colors repaint the whole app the moment you change them." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Logo", hint: "Shows on the login screen, the loading screen, and document headers. PNG with a transparent background works best.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 14 }, children: [
-        brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "Company logo", style: { height: 56, maxWidth: 160, objectFit: "contain", borderRadius: 8, border: `1px solid ${S.line}`, padding: 4, background: S.card } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: T.primary, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }, children: brand2.short }),
+        brand.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand.logo, alt: "Company logo", style: { height: 56, maxWidth: 160, objectFit: "contain", borderRadius: 8, border: `1px solid ${S.line}`, padding: 4, background: S.card } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: T.primary, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }, children: brand.short }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => logoRef.current && logoRef.current.click(), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
             " ",
-            brand2.logo ? "Replace" : "Upload"
+            brand.logo ? "Replace" : "Upload"
           ] }),
-          brand2.logo && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setBrand({ ...brand2, logo: null }), children: "Remove" })
+          brand.logo && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setBrand({ ...brand, logo: null }), children: "Remove" })
         ] })
       ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Company name", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.company, onChange: set("company") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Short mark (fallback when no logo)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.short, onChange: set("short") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Slogan", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.slogan, onChange: set("slogan") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Main phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.phone, onChange: set("phone") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.email, onChange: set("email") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Accounting email", hint: "Where sub-invoice payment notices are sent when a sub invoice is submitted.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: brand2.accountingEmail || "", onChange: set("accountingEmail"), placeholder: "accounting@yourcompany.com" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Company name", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.company, onChange: set("company") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Short mark (fallback when no logo)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.short, onChange: set("short") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Slogan", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.slogan, onChange: set("slogan") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Main phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.phone, onChange: set("phone") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.email, onChange: set("email") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Accounting email", hint: "Where sub-invoice payment notices are sent when a sub invoice is submitted.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: brand.accountingEmail || "", onChange: set("accountingEmail"), placeholder: "accounting@yourcompany.com" }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Head office address", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         AddressAutocomplete,
         {
-          value: brand2.address,
+          value: brand.address,
           placeholder: "Start typing the address\u2026",
-          onChange: (v) => setBrand({ ...brand2, address: v }),
-          onPick: (p2) => setBrand({ ...brand2, address: p2.formatted || p2.street || brand2.address })
+          onChange: (v) => setBrand({ ...brand, address: v }),
+          onPick: (p2) => setBrand({ ...brand, address: p2.formatted || p2.street || brand.address })
         }
       ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Google review link", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.googleReviewLink, onChange: set("googleReviewLink") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Google review link", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.googleReviewLink, onChange: set("googleReviewLink") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Primary color", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "color", value: brand2.primary, onChange: set("primary"), style: { ...inputStyle, height: 46, padding: 4 } }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Accent color", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "color", value: brand2.accent, onChange: set("accent"), style: { ...inputStyle, height: 46, padding: 4 } }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Primary color", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "color", value: brand.primary, onChange: set("primary"), style: { ...inputStyle, height: 46, padding: 4 } }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Accent color", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "color", value: brand.accent, onChange: set("accent"), style: { ...inputStyle, height: 46, padding: 4 } }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: "The soft accent (chips, highlights) is derived from the accent automatically." })
     ] }),
@@ -25185,10 +25198,10 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast, brandErr = "" 
         ["showLicense", "License number"],
         ["showSlogan", "Slogan in the footer"]
       ].map(([k, label]) => {
-        const on = brand2[k] !== false;
+        const on = brand[k] !== false;
         return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${S.line}` }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14 }, children: label }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setBrand({ ...brand2, [k]: !on }), style: {
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setBrand({ ...brand, [k]: !on }), style: {
             width: 46,
             height: 27,
             borderRadius: 99,
@@ -25200,7 +25213,7 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast, brandErr = "" 
         ] }, k);
       })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AgreementBranding, { brand: brand2, setBrand, toast }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AgreementBranding, { brand, setBrand, toast }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: addLoc, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
@@ -25695,7 +25708,7 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
     )
   ] });
 }
-function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, brand: brand2 }) {
+function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, brand }) {
   const [kind, setKind] = (0, import_react.useState)("email");
   const [aud, setAud] = (0, import_react.useState)("All");
   const [editing, setEditing] = (0, import_react.useState)(null);
@@ -27213,7 +27226,7 @@ function JobImport({ jobs, setJobs, stages, users, onBack, toast, currentUser })
     )
   ] });
 }
-function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand: brand2 }) {
+function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand }) {
   const [editing, setEditing] = (0, import_react.useState)(null);
   const isAdmin = canManageSeats(currentUser);
   const blank = { name: "", email: "", phone: "", role: "rep", title: "Sales Rep", commissionRate: 60, active: true };
@@ -27369,7 +27382,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand:
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55 }, children: [
         "Every active seat is a login for ",
-        brand2.company,
+        brand.company,
         ". Adding a seat emails an invite to set a password. Deactivating keeps the person's job history intact but blocks sign-in immediately.",
         !liveAuth() && " Demo mode \u2014 no backend connected, so invites are not actually sent."
       ] }),
@@ -27472,9 +27485,9 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand:
           }, children: ROLES.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: r.id, children: r.label }, r.id)) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: T.accentSoft, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.primary, marginBottom: 14, lineHeight: 1.5 }, children: (ROLES.find((r) => r.id === f.role) || {}).blurb }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Job title (shown in the app)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.title, onChange: set("title") }) }),
-          (brand2.locations || []).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Location", hint: "Documents and messages for this rep's jobs show this office's phone and address.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: f.locationId || "", onChange: (e) => setF((p2) => ({ ...p2, locationId: e.target.value || null })), children: [
+          (brand.locations || []).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Location", hint: "Documents and messages for this rep's jobs show this office's phone and address.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: f.locationId || "", onChange: (e) => setF((p2) => ({ ...p2, locationId: e.target.value || null })), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Head office" }),
-            (brand2.locations || []).map((l) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: l.id, children: l.label || l.address }, l.id))
+            (brand.locations || []).map((l) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: l.id, children: l.label || l.address }, l.id))
           ] }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Direct phone", hint: "Shows on this rep's documents.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.repPhone || "", inputMode: "tel", onChange: (e) => setF((p2) => ({ ...p2, repPhone: formatPhone(e.target.value) })) }) }),
@@ -28521,7 +28534,7 @@ function HelpBody({ body }) {
     return null;
   }) });
 }
-function HelpDesk({ onBack, brand: brand2 }) {
+function HelpDesk({ onBack, brand }) {
   const [q, setQ] = (0, import_react.useState)("");
   const [open, setOpen] = (0, import_react.useState)(null);
   const needle = q.trim().toLowerCase();
@@ -28642,7 +28655,7 @@ function HelpDesk({ onBack, brand: brand2 }) {
     })
   ] });
 }
-function MoreMenu({ onNav, onLogout, brand: brand2, currentUser, theme = "light", setTheme = () => {
+function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setTheme = () => {
 } }) {
   const admin = currentUser && currentUser.role === "admin";
   const groups = [
@@ -28696,7 +28709,7 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser, theme = "light"
   const matches = needle ? groups.flatMap(([, items]) => items.filter(Boolean).filter(([, , label, sub]) => (label + " " + (sub || "")).toLowerCase().includes(needle))) : null;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 24, fontWeight: 800, color: S.ink, marginBottom: 4 }, children: "More" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 4 }, children: brand2.company }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 4 }, children: brand.company }),
     currentUser && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, fontWeight: 700, color: S.ink }, children: currentUser.name }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: currentUser.role === "admin" ? "slate" : "blue", children: currentUser.title })
@@ -28922,7 +28935,7 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
 var DB = () => typeof window !== "undefined" ? window.__SUPABASE__ || null : null;
 var liveDb = () => !!DB();
 var EMPTY_FIN = () => ({ costLines: [], reimbursements: [] });
-function useBrandSync(brand2, setBrand, hasSession, tenantId) {
+function useBrandSync(brand, setBrand, hasSession, tenantId) {
   const lastSaved = (0, import_react.useRef)(null);
   const timer = (0, import_react.useRef)(null);
   const [loaded, setLoaded] = (0, import_react.useState)(!DB());
@@ -28957,10 +28970,10 @@ function useBrandSync(brand2, setBrand, hasSession, tenantId) {
   (0, import_react.useEffect)(() => {
     const db = DB();
     if (!db || !hasSession || !loaded) return;
-    if (JSON.stringify(brand2) === JSON.stringify(lastSaved.current)) return;
+    if (JSON.stringify(brand) === JSON.stringify(lastSaved.current)) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
-      const payload = brand2;
+      const payload = brand;
       const write = tenantId ? db.from("crm_brand").upsert({ tenant_id: tenantId, data: payload, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "tenant_id" }) : db.from("crm_brand").upsert({ id: 1, data: payload, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
       write.then(({ error }) => {
         if (error) {
@@ -28979,7 +28992,7 @@ function useBrandSync(brand2, setBrand, hasSession, tenantId) {
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [brand2, hasSession, loaded, tenantId]);
+  }, [brand, hasSession, loaded, tenantId]);
   return brandErr;
 }
 function useDbSync(st) {
@@ -29426,7 +29439,7 @@ function SupremeCRM() {
     sms: { connected: false, provider: "", number: "" }
   });
   const [ccToken, setCcToken] = (0, import_react.useState)(null);
-  const [brand2, setBrand] = (0, import_react.useState)(DEFAULT_BRAND);
+  const [brand, setBrand] = (0, import_react.useState)(DEFAULT_BRAND);
   const [stages, setStages] = (0, import_react.useState)(DEFAULT_STAGES);
   const [stageRules, setStageRules] = (0, import_react.useState)(DEFAULT_STAGE_RULES);
   const [jobs, setJobs] = (0, import_react.useState)(() => liveDb() ? [] : seedJobs);
@@ -29583,7 +29596,7 @@ function SupremeCRM() {
     if (d.security) setSecurity(d.security);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
-  const brandErr = useBrandSync(brand2, setBrand, liveAuth() ? !!currentUser : true, currentUser && currentUser.tenantId);
+  const brandErr = useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true, currentUser && currentUser.tenantId);
   const { hydrated, syncErr } = useDbSync({
     ready: liveAuth() ? !!currentUser : true,
     isCrew: !!(currentUser && currentUser.role === "crew"),
@@ -29600,13 +29613,13 @@ function SupremeCRM() {
     orgPack,
     unpackOrg,
     orgDeps,
-    brandRef: brand2,
+    brandRef: brand,
     stagesRef: stages,
     usersRef: users
   });
-  T.primary = brand2.primary || "#28373E";
-  T.accent = brand2.accent || "#0A9E98";
-  T.accentSoft = brand2.accentSoft && brand2.accentSoftCustom ? brand2.accentSoft : softOf(T.accent);
+  T.primary = brand.primary || "#28373E";
+  T.accent = brand.accent || "#0A9E98";
+  T.accentSoft = brand.accentSoft && brand.accentSoftCustom ? brand.accentSoft : softOf(T.accent);
   (0, import_react.useEffect)(() => {
     let alive = true;
     if (!currentUser || !currentUser.id) {
@@ -29947,7 +29960,7 @@ function SupremeCRM() {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       PasswordSetScreen,
       {
-        brand: brand2,
+        brand,
         mode: authFlow === "invite" ? "invite" : "recovery",
         toast,
         onDone: () => {
@@ -29961,21 +29974,21 @@ function SupremeCRM() {
     );
   }
   if (changePwOpen) {
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PasswordSetScreen, { brand: brand2, mode: "change", toast, onDone: () => setChangePwOpen(false) });
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PasswordSetScreen, { brand, mode: "change", toast, onDone: () => setChangePwOpen(false) });
   }
   if (booting || liveAuth() && currentUser && !hydrated) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", background: S.card }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center" }, children: [
-      brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: brand2.company, style: { height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      brand.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand.logo, alt: brand.company, style: { height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
         width: 56,
         height: 56,
         borderRadius: 14,
-        background: brand2.primary,
+        background: brand.primary,
         color: "#fff",
         display: "grid",
         placeItems: "center",
         fontWeight: 800,
         margin: "0 auto 14px"
-      }, children: brand2.short }),
+      }, children: brand.short }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub }, children: "Loading\u2026" })
     ] }) });
   }
@@ -30000,7 +30013,7 @@ function SupremeCRM() {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         Login,
         {
-          brand: brand2,
+          brand,
           users,
           onLogin: setCurrentUser,
           initialMode: authMode,
@@ -30090,7 +30103,7 @@ function SupremeCRM() {
       {
         job: openJob,
         stages,
-        brand: brand2,
+        brand,
         onBack: backToBoard,
         onMoveStage: moveStage,
         mut: mutJob(openJob.id),
@@ -30139,7 +30152,7 @@ function SupremeCRM() {
             setBoardStage(id);
             setNav("jobs");
           },
-          brand: brand2,
+          brand,
           appointments,
           apptTypes,
           crews,
@@ -30216,7 +30229,7 @@ function SupremeCRM() {
         integrations,
         onSendQueued: sendQueuedMessage
       }
-    ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand: brand2, onNav: (id) => {
+    ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand, onNav: (id) => {
       if (id === "password") return setChangePwOpen(true);
       if (id === "workflow") return setWorkflowOpen(true);
       if (id === "insurance:ask") {
@@ -30314,7 +30327,7 @@ function SupremeCRM() {
         setSettings: setReviewSettings,
         jobs,
         onBack: () => setNav("more"),
-        brand: brand2,
+        brand,
         setBrandFromReviews: setBrand,
         mut: mutJob,
         toast
@@ -30419,7 +30432,7 @@ function SupremeCRM() {
         currentUser: liveUser,
         onBack: () => setNav("more"),
         toast,
-        brand: brand2
+        brand
       }
     ) : nav === "crews" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       CrewManager,
@@ -30483,9 +30496,9 @@ function SupremeCRM() {
         jobs,
         onBack: () => setNav("more"),
         toast,
-        brand: brand2
+        brand
       }
-    ) : nav === "help" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelpDesk, { onBack: () => setNav("more"), brand: brand2 }) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand: brand2, setBrand, onBack: () => setNav("more"), toast, brandErr }) : null }),
+    ) : nav === "help" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelpDesk, { onBack: () => setNav("more"), brand }) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand, setBrand, onBack: () => setNav("more"), toast, brandErr }) : null }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
       flexShrink: 0,
       zIndex: 50,
@@ -30601,7 +30614,7 @@ function SupremeCRM() {
           setLeadSeed(null);
         },
         onCreate: createLead,
-        brand: brand2,
+        brand,
         leadSources,
         users,
         jobs,
