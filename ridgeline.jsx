@@ -12013,7 +12013,7 @@ function SignConsent({ checked, onChange, what, accent = "#0A9E98" }) {
    signed. The signature row is written by the portal itself so the
    server stamps the time and IP; nothing about the timestamp comes
    from the customer's device. */
-function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSelection = null }) {
+function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estimate = null, estSelection = null }) {
   const [openDoc, setOpenDoc] = useState(null);
   const [sig, setSig] = useState(null);
   const [consent, setConsent] = useState(false);
@@ -12041,27 +12041,57 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
 
   const isSigned = (d) => signed.some((s) => s.doc_type === d.type && String(s.doc_id) === String(d.id) && s.signer_role === "customer");
 
+  /* The exact record that will be stored and hashed if the customer signs
+     right now — computed once, here, and used for BOTH what's displayed
+     (lines/total/hash below) and what submit() actually inserts. Before
+     this, the displayed hash was always docHash(openDoc.snapshot) — the
+     static, office-authored snapshot — while submit() hashed a DIFFERENT,
+     live-substituted object (the customer's actual tier/upgrade pick, or
+     their just-typed initials). A customer could review and attest to one
+     document while a materially different one got permanently recorded
+     under their signature. Deriving both from the same value makes that
+     divergence structurally impossible. */
+  const effectiveSnapshot = useMemo(() => {
+    if (!openDoc) return null;
+    if (openDoc.type === "estimate" && estSelection) {
+      return { ...openDoc.snapshot, selection: estSelection, total: estSelection.total };
+    }
+    if (openDoc.needsInitials) {
+      return { ...openDoc.snapshot, initials: { owner: initials.owner.trim(), hoa: initials.hoa.trim(), cancel: initials.cancel.trim() } };
+    }
+    return openDoc.snapshot;
+  }, [openDoc, estSelection, initials]);
+
+  /* Same idea for the itemized lines/total shown above the signature pad:
+     for an estimate with tiers, rebuild them from the customer's live
+     selection (using the exact label/value shape buildPortalSnapshot uses
+     for a flat estimate) instead of the office's default-tier snapshot. */
+  const effectiveDoc = useMemo(() => {
+    if (!openDoc) return null;
+    if (openDoc.type !== "estimate" || !estSelection || !estimate) return openDoc;
+    const tierObj = (estimate.tiers || []).find((t) => t.id === estSelection.tierId) || null;
+    if (!tierObj) return openDoc;
+    const upgradeObjs = (estimate.upgrades || []).filter((u) => (estSelection.upgradeIds || []).includes(u.id));
+    const lines = [
+      ...(tierObj.items || []).map((it) => ({ label: `${it.desc} — ${it.qty} ${it.unit}`, value: money(num(it.qty) * num(it.price)) })),
+      ...upgradeObjs.map((u) => ({ label: u.desc, value: `+${money(num(u.price))}` })),
+    ];
+    return { ...openDoc, lines, total: estSelection.total };
+  }, [openDoc, estSelection, estimate]);
+
   const submit = async () => {
     if (!openDoc || !sig || !consent) return;
     const db = DB();
     if (!db) { setErr("No connection. Please try again in a moment."); return; }
     setBusy(true); setErr("");
-    /* Bind an estimate signature to the option the customer actually chose in
-       the proposal above, not the rep's default, so what they sign is what
-       they picked and the team can apply it on countersign. */
-    const snapshot = (openDoc.type === "estimate" && estSelection)
-      ? { ...openDoc.snapshot, selection: estSelection, total: estSelection.total }
-      : openDoc.needsInitials
-        ? { ...openDoc.snapshot, initials: { owner: initials.owner.trim(), hoa: initials.hoa.trim(), cancel: initials.cancel.trim() } }
-        : openDoc.snapshot;
     const row = {
       id: uid("sig"),
       job_id: jobId,
       doc_type: openDoc.type,
       doc_id: String(openDoc.id || ""),
       doc_title: openDoc.title,
-      doc_hash: docHash(snapshot),
-      doc_snapshot: snapshot,
+      doc_hash: docHash(effectiveSnapshot),
+      doc_snapshot: effectiveSnapshot,
       signer_role: "customer",
       signer_name: customer.name || "Customer",
       signer_email: customer.email || null,
@@ -12146,18 +12176,21 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
         }>
         {openDoc && (
           <div>
-            {/* What they are agreeing to, in full, above the signature. */}
+            {/* What they are agreeing to, in full, above the signature —
+                effectiveDoc, not openDoc: for an estimate this reflects
+                the tier/upgrades actually picked above, not the office's
+                default snapshot. */}
             <div style={{ border: `1px solid ${S.line}`, borderRadius: 11, padding: 14, marginBottom: 14, background: S.card }}>
-              {(openDoc.lines || []).map((l, i2) => (
+              {(effectiveDoc.lines || []).map((l, i2) => (
                 <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5, padding: "6px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }}>
                   <span style={{ color: S.ink }}>{l.label}</span>
                   <span style={{ color: S.ink, fontWeight: 600, whiteSpace: "nowrap" }}>{l.value}</span>
                 </div>
               ))}
-              {openDoc.total != null && (
+              {effectiveDoc.total != null && (
                 <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: `2px solid ${S.line}` }}>
                   <span style={{ fontSize: 14.5, fontWeight: 800, color: S.ink }}>Total</span>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: S.ink }}>{money(openDoc.total)}</span>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: S.ink }}>{money(effectiveDoc.total)}</span>
                 </div>
               )}
             </div>
@@ -12203,7 +12236,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
               The date, time and network address of your signature are recorded
               by our system when you sign, not by your device, so the record
               cannot be altered afterwards. Document reference{" "}
-              <b>{docHash(openDoc.snapshot)}</b>.
+              <b>{docHash(effectiveSnapshot)}</b>.
             </div>
           </div>
         )}
@@ -12685,7 +12718,7 @@ function PublicPortal({ token }) {
 
           if (sid === "sign") return wrap(
             <PortalSignCenter token={token} jobId={d.jobId || null} customer={d.customer || {}}
-              docs={d.signDocs || []} accent={prim} brand={d} estSelection={estSel} />
+              docs={d.signDocs || []} accent={prim} brand={d} estimate={d.estimate || null} estSelection={estSel} />
           );
 
           if (sid === "yourinfo") return wrap(

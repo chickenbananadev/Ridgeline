@@ -13044,7 +13044,7 @@ function SignConsent({ checked, onChange, what, accent = "#0A9E98" }) {
     ] })
   ] });
 }
-function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSelection = null }) {
+function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estimate = null, estSelection = null }) {
   const [openDoc2, setOpenDoc] = (0, import_react.useState)(null);
   const [sig, setSig] = (0, import_react.useState)(null);
   const [consent, setConsent] = (0, import_react.useState)(false);
@@ -13064,6 +13064,28 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
     };
   }, [token]);
   const isSigned = (d) => signed.some((s) => s.doc_type === d.type && String(s.doc_id) === String(d.id) && s.signer_role === "customer");
+  const effectiveSnapshot = (0, import_react.useMemo)(() => {
+    if (!openDoc2) return null;
+    if (openDoc2.type === "estimate" && estSelection) {
+      return { ...openDoc2.snapshot, selection: estSelection, total: estSelection.total };
+    }
+    if (openDoc2.needsInitials) {
+      return { ...openDoc2.snapshot, initials: { owner: initials.owner.trim(), hoa: initials.hoa.trim(), cancel: initials.cancel.trim() } };
+    }
+    return openDoc2.snapshot;
+  }, [openDoc2, estSelection, initials]);
+  const effectiveDoc = (0, import_react.useMemo)(() => {
+    if (!openDoc2) return null;
+    if (openDoc2.type !== "estimate" || !estSelection || !estimate) return openDoc2;
+    const tierObj = (estimate.tiers || []).find((t) => t.id === estSelection.tierId) || null;
+    if (!tierObj) return openDoc2;
+    const upgradeObjs = (estimate.upgrades || []).filter((u) => (estSelection.upgradeIds || []).includes(u.id));
+    const lines = [
+      ...(tierObj.items || []).map((it) => ({ label: `${it.desc} \u2014 ${it.qty} ${it.unit}`, value: money(num(it.qty) * num(it.price)) })),
+      ...upgradeObjs.map((u) => ({ label: u.desc, value: `+${money(num(u.price))}` }))
+    ];
+    return { ...openDoc2, lines, total: estSelection.total };
+  }, [openDoc2, estSelection, estimate]);
   const submit = async () => {
     if (!openDoc2 || !sig || !consent) return;
     const db = DB();
@@ -13073,15 +13095,14 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
     }
     setBusy(true);
     setErr("");
-    const snapshot = openDoc2.type === "estimate" && estSelection ? { ...openDoc2.snapshot, selection: estSelection, total: estSelection.total } : openDoc2.needsInitials ? { ...openDoc2.snapshot, initials: { owner: initials.owner.trim(), hoa: initials.hoa.trim(), cancel: initials.cancel.trim() } } : openDoc2.snapshot;
     const row = {
       id: uid("sig"),
       job_id: jobId,
       doc_type: openDoc2.type,
       doc_id: String(openDoc2.id || ""),
       doc_title: openDoc2.title,
-      doc_hash: docHash(snapshot),
-      doc_snapshot: snapshot,
+      doc_hash: docHash(effectiveSnapshot),
+      doc_snapshot: effectiveSnapshot,
       signer_role: "customer",
       signer_name: customer.name || "Customer",
       signer_email: customer.email || null,
@@ -13175,13 +13196,13 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
         ] }),
         children: openDoc2 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 11, padding: 14, marginBottom: 14, background: S.card }, children: [
-            (openDoc2.lines || []).map((l, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5, padding: "6px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }, children: [
+            (effectiveDoc.lines || []).map((l, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5, padding: "6px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.ink }, children: l.label }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.ink, fontWeight: 600, whiteSpace: "nowrap" }, children: l.value })
             ] }, i2)),
-            openDoc2.total != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: `2px solid ${S.line}` }, children: [
+            effectiveDoc.total != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: `2px solid ${S.line}` }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14.5, fontWeight: 800, color: S.ink }, children: "Total" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 18, fontWeight: 800, color: S.ink }, children: money(openDoc2.total) })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 18, fontWeight: 800, color: S.ink }, children: money(effectiveDoc.total) })
             ] })
           ] }),
           openDoc2.terms && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.6, marginBottom: 14 }, children: openDoc2.terms }),
@@ -13252,7 +13273,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11, color: S.sub, marginTop: 12, lineHeight: 1.55 }, children: [
             "The date, time and network address of your signature are recorded by our system when you sign, not by your device, so the record cannot be altered afterwards. Document reference",
             " ",
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: docHash(openDoc2.snapshot) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: docHash(effectiveSnapshot) }),
             "."
           ] })
         ] })
@@ -13698,6 +13719,7 @@ function PublicPortal({ token }) {
               docs: d.signDocs || [],
               accent: prim,
               brand: d,
+              estimate: d.estimate || null,
               estSelection: estSel
             }
           )
