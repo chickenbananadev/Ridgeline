@@ -4242,7 +4242,7 @@ function Sheet({ open, onClose, title, children, footer, wide, tall, center = tr
   }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 12px" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 700, color: S.ink }, children: title }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onClose, style: {
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onClose, "aria-label": "Close", style: {
         border: "none",
         background: S.soft,
         borderRadius: 999,
@@ -7013,7 +7013,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
 function SubHeader({ title, onBack, right }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 12 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onBack, style: {
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onBack, "aria-label": "Back", style: {
         border: `1px solid ${S.line}`,
         background: S.card,
         borderRadius: 999,

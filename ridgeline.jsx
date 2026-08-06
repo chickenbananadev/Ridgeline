@@ -3599,7 +3599,7 @@ function Sheet({ open, onClose, title, children, footer, wide, tall, center = tr
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 12px" }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: S.ink }}>{title}</div>
-          <button onClick={onClose} style={{
+          <button onClick={onClose} aria-label="Close" style={{
             border: "none", background: S.soft, borderRadius: 999, width: 34, height: 34,
             display: "grid", placeItems: "center", cursor: "pointer", color: S.ink,
           }}><X size={17} /></button>
@@ -6315,7 +6315,7 @@ function SubHeader({ title, onBack, right }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <button onClick={onBack} style={{
+        <button onClick={onBack} aria-label="Back" style={{
           border: `1px solid ${S.line}`, background: S.card, borderRadius: 999,
           width: 36, height: 36, display: "grid", placeItems: "center", cursor: "pointer",
         }}><ChevronLeft size={18} /></button>
