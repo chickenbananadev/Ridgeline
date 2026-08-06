@@ -28509,9 +28509,32 @@ export default function SupremeCRM() {
   return (
     <div className="rl-shell" style={{ fontFamily: "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif", background: S.bg }}>
       {/* Everything above the nav scrolls in here rather than in the document.
-          See .rl-shell in index.html for why. Sheets, toasts and the banners
-          stay position:fixed — overflow doesn't create a containing block for
-          them, so they still cover the whole viewport including the nav. */}
+          See .rl-shell in index.html for why. Sheets and toasts stay
+          position:fixed — overflow doesn't create a containing block for
+          them, so they still cover the whole viewport including the nav.
+          The banners below are deliberately NOT position:fixed: they used
+          to float over the top of every screen with no compensating
+          padding on .rl-scroll, which silently ate real taps on every
+          SubHeader back button and header action underneath them. As
+          in-flow flex children of .rl-shell, .rl-scroll's flex:1 shrinks
+          around them automatically — nothing to keep in sync. */}
+      {!liveDb() && (
+        <div style={{
+          flexShrink: 0,
+          background: "#7A1D12", color: "#fff", fontSize: 12.5, lineHeight: 1.45,
+          padding: "9px 14px", textAlign: "center",
+        }}>
+          Demo mode — not connected to the database. Nothing saves, no emails send.
+          Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to this Vercel project, then redeploy.
+        </div>
+      )}
+      {(syncErr || brandErr) && (
+        <div style={{
+          flexShrink: 0,
+          background: "#7A1D12", color: "#fff", fontSize: 12.5, lineHeight: 1.45,
+          padding: "9px 14px", textAlign: "center",
+        }}>{brandErr || syncErr}</div>
+      )}
       <div className="rl-scroll" ref={scrollPane}>
       {openJob ? (
         <JobDetail job={openJob} stages={stages} brand={brand} onBack={backToBoard}
@@ -28682,24 +28705,6 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} brandErr={brandErr} />
       ) : null}
       </div>
-
-      {!liveDb() && (
-        <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, zIndex: 95,
-          background: "#7A1D12", color: "#fff", fontSize: 12.5, lineHeight: 1.45,
-          padding: "9px 14px", textAlign: "center",
-        }}>
-          Demo mode — not connected to the database. Nothing saves, no emails send.
-          Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to this Vercel project, then redeploy.
-        </div>
-      )}
-      {(syncErr || brandErr) && (
-        <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, zIndex: 90,
-          background: "#7A1D12", color: "#fff", fontSize: 12.5, lineHeight: 1.45,
-          padding: "9px 14px", textAlign: "center",
-        }}>{brandErr || syncErr}</div>
-      )}
 
       {/* Bottom navigation — five equal, flat tab buttons, all the same
          height with no elevation. Earlier this had "New lead" as a

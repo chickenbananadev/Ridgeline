@@ -30067,6 +30067,24 @@ function SupremeCRM() {
     setNav("insurance");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "rl-shell", style: { fontFamily: "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif", background: S.bg }, children: [
+    !liveDb() && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      flexShrink: 0,
+      background: "#7A1D12",
+      color: "#fff",
+      fontSize: 12.5,
+      lineHeight: 1.45,
+      padding: "9px 14px",
+      textAlign: "center"
+    }, children: "Demo mode \u2014 not connected to the database. Nothing saves, no emails send. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to this Vercel project, then redeploy." }),
+    (syncErr || brandErr) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      flexShrink: 0,
+      background: "#7A1D12",
+      color: "#fff",
+      fontSize: 12.5,
+      lineHeight: 1.45,
+      padding: "9px 14px",
+      textAlign: "center"
+    }, children: brandErr || syncErr }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "rl-scroll", ref: scrollPane, children: openJob ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       JobDetail,
       {
@@ -30468,32 +30486,6 @@ function SupremeCRM() {
         brand: brand2
       }
     ) : nav === "help" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelpDesk, { onBack: () => setNav("more"), brand: brand2 }) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand: brand2, setBrand, onBack: () => setNav("more"), toast, brandErr }) : null }),
-    !liveDb() && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 95,
-      background: "#7A1D12",
-      color: "#fff",
-      fontSize: 12.5,
-      lineHeight: 1.45,
-      padding: "9px 14px",
-      textAlign: "center"
-    }, children: "Demo mode \u2014 not connected to the database. Nothing saves, no emails send. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to this Vercel project, then redeploy." }),
-    (syncErr || brandErr) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 90,
-      background: "#7A1D12",
-      color: "#fff",
-      fontSize: 12.5,
-      lineHeight: 1.45,
-      padding: "9px 14px",
-      textAlign: "center"
-    }, children: brandErr || syncErr }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
       flexShrink: 0,
       zIndex: 50,
