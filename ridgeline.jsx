@@ -7817,7 +7817,12 @@ const linkBtn = { border: "none", background: "none", color: T.accent, fontWeigh
 /* ================================================================
    WORKFLOW EDITOR — rename / reorder / add / remove stages
    ================================================================ */
-function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, setStageRules = () => {} }) {
+function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, setStageRules = () => {}, currentUser = null }) {
+  /* Renaming, reordering, adding or removing a stage restructures the
+     pipeline every job and every rep depends on, app-wide, the moment
+     Save is clicked. This took no role prop and performed no check at
+     all — any signed-in rep who opened it could do this. */
+  const canEdit = !currentUser || currentUser.role === "admin" || currentUser.role === "manager";
   const [local, setLocal] = useState(stages);
   const [rules, setRules] = useState(stageRules);
   const [openRule, setOpenRule] = useState(null);
@@ -7865,13 +7870,27 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
 
   return (
     <Sheet open={open} onClose={onClose} title="Customize workflow" tall
-      footer={
+      footer={canEdit ? (
         <div style={{ display: "flex", gap: 10 }}>
           <Btn kind="ghost" style={{ flex: 1 }} onClick={onClose}>Cancel</Btn>
           <Btn style={{ flex: 1 }} disabled={local.length === 0}
             onClick={() => { setStages(local); setStageRules(rules); onClose(); }}>Save workflow</Btn>
         </div>
-      }>
+      ) : (
+        <Btn kind="ghost" style={{ width: "100%" }} onClick={onClose}>Close</Btn>
+      )}>
+      {!canEdit ? (
+        <Card>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <Lock size={18} color={S.sub} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
+              Pipeline stages are admin/manager-only — every job and every rep depends on this
+              structure. Ask the office to make a change.
+            </div>
+          </div>
+        </Card>
+      ) : (
+        <>
       <div style={{ fontSize: 14, color: S.sub, marginBottom: 14, lineHeight: 1.5 }}>
         Rename, reorder, add, or remove pipeline stages. Open <strong style={{ color: S.ink }}>Automate</strong> on
         a stage to say how long a job should sit there, what has to be true before it can arrive,
@@ -8002,6 +8021,8 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
         onClick={() => setLocal([...local, { id: uid("s"), name: "New stage" }])}>
         <Plus size={14} /> Add stage
       </Btn>
+        </>
+      )}
     </Sheet>
   );
 }
@@ -23854,7 +23875,7 @@ function AgreementBranding({ brand, setBrand, toast }) {
   );
 }
 
-function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
+function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", currentUser = null }) {
   const set = (k) => (e) => setBrand({ ...brand, [k]: e.target.value });
   const logoRef = useRef(null);
   const onLogo = (e) => {
@@ -23900,6 +23921,30 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
   };
   const addLoc = () => setBrand({ ...brand, locations: [...locations, { id: uid("loc"), label: "", phone: "", address: "" }] });
   const rmLoc = (i) => setBrand({ ...brand, locations: locations.filter((_, x) => x !== i) });
+
+  /* Every field below writes to the tenant's brand record — logo, colors,
+     and what prints on every document — app-wide, for every job and every
+     rep, the instant it's changed. VendorManager and the other Setup
+     managers already restrict their own writes to admin/manager; this
+     screen took no role prop at all and performed no check, so any
+     signed-in rep who found the nav entry could repaint the company. */
+  const canEdit = !currentUser || currentUser.role === "admin" || currentUser.role === "manager";
+  if (!canEdit) {
+    return (
+      <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
+        <SubHeader title="Company branding" onBack={onBack} />
+        <Card style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <Lock size={18} color={S.sub} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
+              Branding is admin/manager-only — it controls the logo, colors, and company name on every
+              document and the login screen. Ask the office to make a change.
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
@@ -25905,7 +25950,17 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
     setSaving(false);
   };
 
+  /* Deactivating is reversible in principle — another admin can flip it
+     back — but deactivating the LAST active admin leaves no one able to
+     do that. The adjacent Remove button already guards against removing
+     your own seat; Deactivate had no equivalent guard at all. */
+  const activeAdmins = users.filter((u) => u.active && u.role === "admin");
+  const [confirmDeactivate, setConfirmDeactivate] = useState(null);
   const toggleActive = async (u) => {
+    if (u.active && u.role === "admin" && activeAdmins.length === 1 && activeAdmins[0].id === u.id) {
+      toast(`Can't deactivate ${u.name} — they're the only active admin. Make someone else an admin first.`);
+      return;
+    }
     const auth = AUTH();
     const next = { ...u, active: !u.active };
     try {
@@ -26023,7 +26078,10 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => open(u)}><Pencil size={13} /> Edit</Btn>
-              <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => toggleActive(u)}>
+              <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => {
+                if (u.active && u.id === currentUser.id) { setConfirmDeactivate(u); return; }
+                toggleActive(u);
+              }}>
                 {u.active ? "Deactivate" : "Reactivate"}
               </Btn>
               {u.id !== currentUser.id && (
@@ -26127,6 +26185,21 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
           <input type="checkbox" checked={f.active} onChange={set("active")} style={{ width: 18, height: 18 }} />
           Seat active (can sign in)
         </label>
+      </Sheet>
+
+      <Sheet open={!!confirmDeactivate} onClose={() => setConfirmDeactivate(null)} title="Deactivate your own seat?"
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setConfirmDeactivate(null)}>Cancel</Btn>
+            <Btn kind="danger" style={{ flex: 1 }}
+              onClick={() => { const u = confirmDeactivate; setConfirmDeactivate(null); toggleActive(u); }}>
+              Deactivate my seat
+            </Btn>
+          </div>
+        }>
+        <Callout label="This signs you out immediately" tone="red">
+          You'll be logged out right away and won't be able to sign back in until another admin reactivates you.
+        </Callout>
       </Sheet>
     </div>
   );
@@ -28833,7 +28906,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "help" ? (
         <HelpDesk onBack={() => setNav("more")} brand={brand} />
       ) : nav === "branding" ? (
-        <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} brandErr={brandErr} />
+        <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} brandErr={brandErr} currentUser={liveUser} />
       ) : null}
       </div>
 
@@ -28922,7 +28995,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           ...jobs.map((j) => j.assignee)].filter(Boolean))].sort()}
         leadSources={leadSources} />
       <WorkflowEditor open={workflowOpen} onClose={() => setWorkflowOpen(false)} stages={stages}
-        setStages={applyRemovedStages} stageRules={stageRules} setStageRules={setStageRules} />
+        setStages={applyRemovedStages} stageRules={stageRules} setStageRules={setStageRules} currentUser={liveUser} />
       <StageGateSheet prompt={gatePrompt} isAdmin={isAdmin} currentUser={liveUser}
         onClose={() => setGatePrompt(null)}
         onConfirm={({ patch, override }) => {

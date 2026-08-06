@@ -8665,7 +8665,8 @@ function FiltersSheet({ open, onClose, stages, filters, setFilters, assignees = 
 }
 var linkBtn = { border: "none", background: "none", color: T.accent, fontWeight: 700, fontSize: 13, cursor: "pointer", padding: 0 };
 function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, setStageRules = () => {
-} }) {
+}, currentUser = null }) {
+  const canEdit = !currentUser || currentUser.role === "admin" || currentUser.role === "manager";
   const [local, setLocal] = (0, import_react.useState)(stages);
   const [rules, setRules] = (0, import_react.useState)(stageRules);
   const [openRule, setOpenRule] = (0, import_react.useState)(null);
@@ -8708,14 +8709,14 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
     if (p.tasks && !p.tasks.every((t) => r.tasks.some((x) => String(x.label).toLowerCase() === String(t.label).toLowerCase()))) return false;
     return true;
   }).length;
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
     Sheet,
     {
       open,
       onClose,
       title: "Customize workflow",
       tall: true,
-      footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+      footer: canEdit ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: onClose, children: "Cancel" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           Btn,
@@ -8730,8 +8731,11 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
             children: "Save workflow"
           }
         )
-      ] }),
-      children: [
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%" }, onClick: onClose, children: "Close" }),
+      children: !canEdit ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Lock, { size: 18, color: S.sub, style: { flexShrink: 0, marginTop: 2 } }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: "Pipeline stages are admin/manager-only \u2014 every job and every rep depends on this structure. Ask the office to make a change." })
+      ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14, color: S.sub, marginBottom: 14, lineHeight: 1.5 }, children: [
           "Rename, reorder, add, or remove pipeline stages. Open ",
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { style: { color: S.ink }, children: "Automate" }),
@@ -8926,7 +8930,7 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
             ]
           }
         )
-      ]
+      ] })
     }
   );
 }
@@ -25172,7 +25176,7 @@ function AgreementBranding({ brand, setBrand, toast }) {
     ] })
   ] });
 }
-function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
+function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", currentUser = null }) {
   const set = (k) => (e) => setBrand({ ...brand, [k]: e.target.value });
   const logoRef = (0, import_react.useRef)(null);
   const onLogo = (e) => {
@@ -25221,6 +25225,16 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
   };
   const addLoc = () => setBrand({ ...brand, locations: [...locations, { id: uid("loc"), label: "", phone: "", address: "" }] });
   const rmLoc = (i) => setBrand({ ...brand, locations: locations.filter((_, x) => x !== i) });
+  const canEdit = !currentUser || currentUser.role === "admin" || currentUser.role === "manager";
+  if (!canEdit) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Company branding", onBack }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Lock, { size: 18, color: S.sub, style: { flexShrink: 0, marginTop: 2 } }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: "Branding is admin/manager-only \u2014 it controls the logo, colors, and company name on every document and the login screen. Ask the office to make a change." })
+      ] }) })
+    ] });
+  }
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: logoRef, type: "file", accept: "image/*", onChange: onLogo, style: { display: "none" } }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Company branding", onBack }),
@@ -27409,7 +27423,13 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
     }
     setSaving(false);
   };
+  const activeAdmins = users.filter((u) => u.active && u.role === "admin");
+  const [confirmDeactivate, setConfirmDeactivate] = (0, import_react.useState)(null);
   const toggleActive = async (u) => {
+    if (u.active && u.role === "admin" && activeAdmins.length === 1 && activeAdmins[0].id === u.id) {
+      toast(`Can't deactivate ${u.name} \u2014 they're the only active admin. Make someone else an admin first.`);
+      return;
+    }
     const auth = AUTH();
     const next = { ...u, active: !u.active };
     try {
@@ -27534,7 +27554,13 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Pencil, { size: 13 }),
             " Edit"
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => toggleActive(u), children: u.active ? "Deactivate" : "Reactivate" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => {
+            if (u.active && u.id === currentUser.id) {
+              setConfirmDeactivate(u);
+              return;
+            }
+            toggleActive(u);
+          }, children: u.active ? "Deactivate" : "Reactivate" }),
           u.id !== currentUser.id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => remove(u), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 13 }) })
         ] })
       ] }, u.id);
@@ -27628,6 +27654,31 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
             "Seat active (can sign in)"
           ] })
         ]
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      Sheet,
+      {
+        open: !!confirmDeactivate,
+        onClose: () => setConfirmDeactivate(null),
+        title: "Deactivate your own seat?",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => setConfirmDeactivate(null), children: "Cancel" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            Btn,
+            {
+              kind: "danger",
+              style: { flex: 1 },
+              onClick: () => {
+                const u = confirmDeactivate;
+                setConfirmDeactivate(null);
+                toggleActive(u);
+              },
+              children: "Deactivate my seat"
+            }
+          )
+        ] }),
+        children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "This signs you out immediately", tone: "red", children: "You'll be logged out right away and won't be able to sign back in until another admin reactivates you." })
       }
     )
   ] });
@@ -30579,7 +30630,7 @@ function SupremeCRM() {
         toast,
         brand
       }
-    ) : nav === "help" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelpDesk, { onBack: () => setNav("more"), brand }) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand, setBrand, onBack: () => setNav("more"), toast, brandErr }) : null }),
+    ) : nav === "help" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelpDesk, { onBack: () => setNav("more"), brand }) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand, setBrand, onBack: () => setNav("more"), toast, brandErr, currentUser: liveUser }) : null }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
       flexShrink: 0,
       zIndex: 50,
@@ -30784,7 +30835,8 @@ function SupremeCRM() {
         stages,
         setStages: applyRemovedStages,
         stageRules,
-        setStageRules
+        setStageRules,
+        currentUser: liveUser
       }
     ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
