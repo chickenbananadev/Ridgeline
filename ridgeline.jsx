@@ -9515,6 +9515,7 @@ function docShell(title, brand, bodyHtml, opts = {}) {
 </style></head><body>
 <div class="bar noprint">
   <button onclick="window.print()">Save as PDF / Print</button>
+  <button onclick="window.close()">Close</button>
   <span>Choose "Save to Files" or "Save as PDF" in the print dialog.</span>
 </div>
 ${opts.bare ? "" : `<div class="head">
@@ -10267,7 +10268,6 @@ function estimateDocHtml(job, brand, users = []) {
       ${qr ? `<div class="qr">${qr}</div>` : ""}
       <div class="qrtext">
         <div class="qrh">Accept and sign online</div>
-        <div class="qru">${esc(portalUrl)}</div>
         <div class="qrn">Opens your private project page — no login or account needed.</div>
       </div>
     </div>` : ""}
@@ -10425,7 +10425,6 @@ function proposalCss(brand) {
       border: 1.5px solid ${a}; border-radius: 12px; padding: 14px 16px; }
   .accepton .qr { flex-shrink: 0; line-height: 0; }
   .qrh { font-size: 14px; font-weight: 800; color: ${p}; }
-  .qru { font-size: 11px; color: ${a}; word-break: break-all; margin-top: 3px; }
   .qrn { font-size: 11.5px; color: #6B7280; margin-top: 5px; line-height: 1.45; }
 
   /* A fixed element repeats on every printed page in Chrome and Safari, which
