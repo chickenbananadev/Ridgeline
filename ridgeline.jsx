@@ -11213,6 +11213,7 @@ function reportDocHtml(job, brand) {
 function PortalThread({ token, meRole, meName, accent }) {
   const [msgs, setMsgs] = useState([]);
   const [txt, setTxt] = useState("");
+  const [sendErr, setSendErr] = useState("");
   /* Staff (meRole "team") already have a real session and stay on the
      tenant-scoped table policy — that path was never the problem. An
      anonymous customer has no session, only a token, so their read and
@@ -11268,11 +11269,14 @@ function PortalThread({ token, meRole, meName, accent }) {
   }, [token]); // eslint-disable-line
   const send = async () => {
     const db = DB(); const t = txt.trim();
-    if (!db || !t) return;
+    if (!t) return;
+    if (!db) { setSendErr("Not connected — try again in a moment."); return; }
+    setSendErr("");
     const row = { id: uid("pm"), token, by_role: meRole, by_name: meName, body: t };
-    setTxt("");
     const { error } = await db.from("crm_portal_msgs").insert(row);
-    if (!error) setMsgs((prev) => prev.some((m) => m.id === row.id) ? prev : [...prev, { ...row, at: new Date().toISOString() }]);
+    if (error) { setSendErr("Couldn't send that message. Try again."); return; }
+    setTxt("");
+    setMsgs((prev) => prev.some((m) => m.id === row.id) ? prev : [...prev, { ...row, at: new Date().toISOString() }]);
   };
   return (
     <>
@@ -11303,6 +11307,7 @@ function PortalThread({ token, meRole, meName, accent }) {
           );
         })}
       </div>
+      {sendErr && <div style={{ fontSize: 12, color: "#B42318", marginTop: 8 }}>{sendErr}</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
         <input style={{ ...inputStyle, flex: 1 }} value={txt} placeholder="Write a message…"
           onChange={(e) => setTxt(e.target.value)}
@@ -11372,18 +11377,35 @@ function PortalReview({ token, jobId, review, accent, company }) {
   const link = (review && review.googleLink) || "";
   const gate = review ? review.gateNegative !== false : true;
   const happy = rating >= 4;
+  const [logErr, setLogErr] = useState(false);
 
+  /* Returns whether the write actually landed. The happy path's real
+     deliverable is the public Google review — opened regardless, since a
+     failed internal log shouldn't block that. The unhappy path's ENTIRE
+     deliverable is this row: it is the private message to the team, so
+     "Thank you, someone will reach out" must not be shown unless it's
+     true. */
   const log = async () => {
-    if (!db || !token) return;
+    if (!db || !token) return false;
     const row = {
       id: uid("rev"), token, job_id: jobId, request_type: "review_feedback",
       category: `Rated ${rating}★`, details: text.trim() || (happy ? "Positive rating" : ""),
       status: "New", requested_by: "Customer",
     };
-    try { await db.from("crm_portal_requests").insert(row); } catch (e) { /* non-fatal */ }
+    const { error } = await db.from("crm_portal_requests").insert(row);
+    return !error;
   };
-  const finishHappy = async () => { setBusy(true); await log(); setBusy(false); setDone(true); if (link) window.open(link, "_blank", "noopener"); };
-  const finishUnhappy = async () => { if (!text.trim()) return; setBusy(true); await log(); setBusy(false); setDone(true); };
+  const finishHappy = async () => {
+    setBusy(true); const ok = await log(); setBusy(false);
+    setDone(true); if (!ok) setLogErr(true);
+    if (link) window.open(link, "_blank", "noopener");
+  };
+  const finishUnhappy = async () => {
+    if (!text.trim()) return;
+    setBusy(true); const ok = await log(); setBusy(false);
+    if (!ok) { setLogErr(true); return; }
+    setLogErr(false); setDone(true);
+  };
 
   if (review && review.submitted && !done) {
     return (
@@ -11437,7 +11459,8 @@ function PortalReview({ token, jobId, review, accent, company }) {
           <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4}
             placeholder="What could we have done better?"
             style={{ ...inputStyle, width: "100%", minHeight: 90, marginBottom: 10 }} />
-          <Btn onClick={finishUnhappy} disabled={busy || !text.trim()} style={{ background: accent, borderColor: accent }}>
+          {logErr && <Callout tone="red" label="Couldn't send that">Your connection dropped before this reached us — nothing was lost, just try again.</Callout>}
+          <Btn onClick={finishUnhappy} disabled={busy || !text.trim()} style={{ background: accent, borderColor: accent, marginTop: logErr ? 10 : 0 }}>
             Send private feedback
           </Btn>
           {!gate && link && (
@@ -12465,11 +12488,20 @@ function PortalEnRoute({ er, accent }) {
 }
 
 function PublicPortal({ token }) {
-  const [state, setState] = useState({ loading: true, data: null, err: "" });
+  const [state, setState] = useState({ loading: true, data: null, err: "", hint: "" });
   const [estSel, setEstSel] = useState(null);
   useEffect(() => {
     const db = DB();
-    if (!db) { setState({ loading: false, data: null, err: "This link needs a live connection." }); return; }
+    /* Two genuinely different failures need genuinely different advice:
+       a missing database connection is a site configuration problem no
+       new link would fix, while an invalid or revoked token is exactly
+       what a fresh link from the contractor DOES fix. A single generic
+       "contact your contractor for a new one" used to follow both. */
+    if (!db) {
+      setState({ loading: false, data: null, err: "This link needs a live connection.",
+        hint: "This looks like a site configuration issue, not something a new link would fix — please contact your contractor directly." });
+      return;
+    }
     /* Goes through a security-definer function, not a direct table
        read — see migration 018. The old direct SELECT worked fine for
        a well-behaved client (it always filtered by token), but RLS
@@ -12480,8 +12512,12 @@ function PublicPortal({ token }) {
        actually passed in. */
     db.rpc("portal_get_data", { p_token: token }).then(({ data, error }) => {
       const row = Array.isArray(data) ? data[0] : data;
-      if (error || !row) { setState({ loading: false, data: null, err: "This link isn't valid or has been turned off." }); return; }
-      setState({ loading: false, data: row.data, err: "" });
+      if (error || !row) {
+        setState({ loading: false, data: null, err: "This link isn't valid or has been turned off.",
+          hint: "Please contact your contractor for a new one." });
+        return;
+      }
+      setState({ loading: false, data: row.data, err: "", hint: "" });
     });
   }, [token]);
 
@@ -12493,7 +12529,7 @@ function PublicPortal({ token }) {
       <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: S.bg, padding: 24, fontFamily: "'Inter',system-ui,sans-serif" }}>
         <div style={{ textAlign: "center", maxWidth: 340 }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: S.ink }}>Link unavailable</div>
-          <div style={{ fontSize: 14, color: S.sub, marginTop: 8, lineHeight: 1.55 }}>{state.err} Please contact your contractor for a new one.</div>
+          <div style={{ fontSize: 14, color: S.sub, marginTop: 8, lineHeight: 1.55 }}>{state.err} {state.hint}</div>
         </div>
       </div>
     );
@@ -20836,7 +20872,12 @@ function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "", users
     const tok = job.portalToken || (uid("p") + Math.random().toString(36).slice(2, 10));
     if (!db) {
       mut((j) => ({ ...j, portalToken: tok }));
-      toast("Link created — it goes live once the app is connected to the database");
+      /* The button reads "Update & copy link" — honor that even in demo
+         mode, not just on the live-database path below. */
+      const copied = navigator.clipboard ? await navigator.clipboard.writeText(portalUrl(tok)).then(() => true, () => false) : false;
+      toast(copied
+        ? "Link copied — it goes live once the app is connected to the database"
+        : "Link created — it goes live once the app is connected to the database");
       return;
     }
     setBusy(true);

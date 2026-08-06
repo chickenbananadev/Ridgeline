@@ -12240,6 +12240,7 @@ function reportDocHtml(job, brand) {
 function PortalThread({ token, meRole, meName, accent }) {
   const [msgs, setMsgs] = (0, import_react.useState)([]);
   const [txt, setTxt] = (0, import_react.useState)("");
+  const [sendErr, setSendErr] = (0, import_react.useState)("");
   const load = () => {
     const db = DB();
     if (!db || !token) return;
@@ -12297,11 +12298,20 @@ function PortalThread({ token, meRole, meName, accent }) {
   const send = async () => {
     const db = DB();
     const t = txt.trim();
-    if (!db || !t) return;
+    if (!t) return;
+    if (!db) {
+      setSendErr("Not connected \u2014 try again in a moment.");
+      return;
+    }
+    setSendErr("");
     const row = { id: uid("pm"), token, by_role: meRole, by_name: meName, body: t };
-    setTxt("");
     const { error } = await db.from("crm_portal_msgs").insert(row);
-    if (!error) setMsgs((prev) => prev.some((m) => m.id === row.id) ? prev : [...prev, { ...row, at: (/* @__PURE__ */ new Date()).toISOString() }]);
+    if (error) {
+      setSendErr("Couldn't send that message. Try again.");
+      return;
+    }
+    setTxt("");
+    setMsgs((prev) => prev.some((m) => m.id === row.id) ? prev : [...prev, { ...row, at: (/* @__PURE__ */ new Date()).toISOString() }]);
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { maxHeight: 260, overflowY: "auto" }, children: [
@@ -12322,6 +12332,7 @@ function PortalThread({ token, meRole, meName, accent }) {
         ] }) }, m.id);
       })
     ] }),
+    sendErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "#B42318", marginTop: 8 }, children: sendErr }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 10 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "input",
@@ -12402,8 +12413,9 @@ function PortalReview({ token, jobId, review, accent, company }) {
   const link = review && review.googleLink || "";
   const gate = review ? review.gateNegative !== false : true;
   const happy = rating >= 4;
+  const [logErr, setLogErr] = (0, import_react.useState)(false);
   const log = async () => {
-    if (!db || !token) return;
+    if (!db || !token) return false;
     const row = {
       id: uid("rev"),
       token,
@@ -12414,23 +12426,27 @@ function PortalReview({ token, jobId, review, accent, company }) {
       status: "New",
       requested_by: "Customer"
     };
-    try {
-      await db.from("crm_portal_requests").insert(row);
-    } catch (e) {
-    }
+    const { error } = await db.from("crm_portal_requests").insert(row);
+    return !error;
   };
   const finishHappy = async () => {
     setBusy(true);
-    await log();
+    const ok = await log();
     setBusy(false);
     setDone(true);
+    if (!ok) setLogErr(true);
     if (link) window.open(link, "_blank", "noopener");
   };
   const finishUnhappy = async () => {
     if (!text.trim()) return;
     setBusy(true);
-    await log();
+    const ok = await log();
     setBusy(false);
+    if (!ok) {
+      setLogErr(true);
+      return;
+    }
+    setLogErr(false);
     setDone(true);
   };
   if (review && review.submitted && !done) {
@@ -12480,7 +12496,8 @@ function PortalReview({ token, jobId, review, accent, company }) {
           style: { ...inputStyle, width: "100%", minHeight: 90, marginBottom: 10 }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { onClick: finishUnhappy, disabled: busy || !text.trim(), style: { background: accent, borderColor: accent }, children: "Send private feedback" }),
+      logErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { tone: "red", label: "Couldn't send that", children: "Your connection dropped before this reached us \u2014 nothing was lost, just try again." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { onClick: finishUnhappy, disabled: busy || !text.trim(), style: { background: accent, borderColor: accent, marginTop: logErr ? 10 : 0 }, children: "Send private feedback" }),
       !gate && link && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 10, fontSize: 12.5 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: link, target: "_blank", rel: "noreferrer", style: { color: accent }, children: "Or leave a public review anyway \u2192" }) })
     ] })
   ] });
@@ -13483,21 +13500,31 @@ function PortalEnRoute({ er, accent }) {
   ] });
 }
 function PublicPortal({ token }) {
-  const [state, setState] = (0, import_react.useState)({ loading: true, data: null, err: "" });
+  const [state, setState] = (0, import_react.useState)({ loading: true, data: null, err: "", hint: "" });
   const [estSel, setEstSel] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
     const db = DB();
     if (!db) {
-      setState({ loading: false, data: null, err: "This link needs a live connection." });
+      setState({
+        loading: false,
+        data: null,
+        err: "This link needs a live connection.",
+        hint: "This looks like a site configuration issue, not something a new link would fix \u2014 please contact your contractor directly."
+      });
       return;
     }
     db.rpc("portal_get_data", { p_token: token }).then(({ data, error }) => {
       const row = Array.isArray(data) ? data[0] : data;
       if (error || !row) {
-        setState({ loading: false, data: null, err: "This link isn't valid or has been turned off." });
+        setState({
+          loading: false,
+          data: null,
+          err: "This link isn't valid or has been turned off.",
+          hint: "Please contact your contractor for a new one."
+        });
         return;
       }
-      setState({ loading: false, data: row.data, err: "" });
+      setState({ loading: false, data: row.data, err: "", hint: "" });
     });
   }, [token]);
   if (state.loading) {
@@ -13508,7 +13535,8 @@ function PublicPortal({ token }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 16, fontWeight: 700, color: S.ink }, children: "Link unavailable" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14, color: S.sub, marginTop: 8, lineHeight: 1.55 }, children: [
         state.err,
-        " Please contact your contractor for a new one."
+        " ",
+        state.hint
       ] })
     ] }) });
   }
@@ -22259,7 +22287,8 @@ function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "", users
     const tok = job.portalToken || uid("p") + Math.random().toString(36).slice(2, 10);
     if (!db) {
       mut((j) => ({ ...j, portalToken: tok }));
-      toast("Link created \u2014 it goes live once the app is connected to the database");
+      const copied = navigator.clipboard ? await navigator.clipboard.writeText(portalUrl(tok)).then(() => true, () => false) : false;
+      toast(copied ? "Link copied \u2014 it goes live once the app is connected to the database" : "Link created \u2014 it goes live once the app is connected to the database");
       return;
     }
     setBusy(true);
