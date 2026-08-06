@@ -7069,7 +7069,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
           </Field>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Field label="Date *"><input style={inputStyle} type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
+          <Field label="Date *"><input style={dateInputStyle} type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
           <Field label="Time"><input style={inputStyle} type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} /></Field>
         </div>
         {scheduleChecks.map((check) => (
@@ -8112,7 +8112,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
       {mode === "task" && <>
         <Field label="Task"><input autoFocus style={inputStyle} value={task.label} onChange={(e) => setTask({ ...task, label: e.target.value })} /></Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Field label="Due date"><input style={inputStyle} type="date" value={task.due} onChange={(e) => setTask({ ...task, due: e.target.value })} /></Field>
+          <Field label="Due date"><input style={dateInputStyle} type="date" value={task.due} onChange={(e) => setTask({ ...task, due: e.target.value })} /></Field>
           <Field label="Time"><input style={inputStyle} type="time" value={task.time} onChange={(e) => setTask({ ...task, time: e.target.value })} /></Field>
         </div>
         <Btn style={{ width: "100%" }} disabled={!task.label.trim()} onClick={addTask}>Add task</Btn>
@@ -8120,7 +8120,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
       {mode === "appointment" && <>
         <Field label="Type"><select style={selStyle} value={appt.type} onChange={(e) => setAppt({ ...appt, type: e.target.value })}>{apptTypes.map((type) => <option key={type}>{type}</option>)}</select></Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Field label="Date"><input style={inputStyle} type="date" value={appt.date} onChange={(e) => setAppt({ ...appt, date: e.target.value })} /></Field>
+          <Field label="Date"><input style={dateInputStyle} type="date" value={appt.date} onChange={(e) => setAppt({ ...appt, date: e.target.value })} /></Field>
           <Field label="Time"><input style={inputStyle} type="time" value={appt.time} onChange={(e) => setAppt({ ...appt, time: e.target.value })} /></Field>
         </div>
         <Field label="Duration"><select style={selStyle} value={appt.durationMin} onChange={(e) => setAppt({ ...appt, durationMin: Number(e.target.value) })}>
@@ -19885,7 +19885,7 @@ function TabInvoice({ job, brand, mut, toast, currentUser = null, integrations =
               onChange={(e) => mut((j) => ({ ...j, invoiceNo: e.target.value }))} />
           </Field>
           <Field label="Due date">
-            <input style={inputStyle} type="date" value={job.invoiceDue || ""}
+            <input style={dateInputStyle} type="date" value={job.invoiceDue || ""}
               onChange={(e) => mut((j) => ({ ...j, invoiceDue: e.target.value }))} />
           </Field>
         </div>
@@ -20606,7 +20606,7 @@ function TabTasks({ job, mut, toast }) {
         <input style={{ ...inputStyle, flex: 1, minWidth: 160 }} placeholder="Add a task" value={txt}
           onChange={(e) => setTxt(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && txt.trim()) { mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: txt.trim(), done: false, due: due || null, time: time || null }] })); setTxt(""); setDue(""); setTime(""); } }} />
-        <input style={{ ...inputStyle, width: 138 }} type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+        <input style={{ ...dateInputStyle, width: 138 }} type="date" value={due} onChange={(e) => setDue(e.target.value)} />
         <input style={{ ...inputStyle, width: 108 }} type="time" value={time} onChange={(e) => setTime(e.target.value)} />
         <Btn small disabled={!txt.trim()} onClick={() => { mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: txt.trim(), done: false, due: due || null, time: time || null }] })); setTxt(""); setDue(""); setTime(""); }}>
           <Plus size={14} />
@@ -24096,7 +24096,7 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
           </select>
         </Field>
         <Field label="Expiration date" hint="Optional. Certificates and licenses get an expiry warning 60 days out.">
-          <input style={inputStyle} type="date" value={f.expires} onChange={(e) => setF({ ...f, expires: e.target.value })} />
+          <input style={dateInputStyle} type="date" value={f.expires} onChange={(e) => setF({ ...f, expires: e.target.value })} />
         </Field>
         {err && <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 4 }}>{err}</div>}
       </Sheet>
@@ -28809,7 +28809,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <Field label="Task"><input style={inputStyle} value={qt.label} onChange={(e) => setQt({ ...qt, label: e.target.value })} placeholder="Call adjuster back, order materials…" /></Field>
         <Field label="Deadline (optional)" hint="Tasks with deadlines show on the calendar.">
           <div style={{ display: "flex", gap: 8 }}>
-            <input style={{ ...inputStyle, flex: 1 }} type="date" value={qt.due} onChange={(e) => setQt({ ...qt, due: e.target.value })} />
+            <input style={{ ...dateInputStyle, flex: 1 }} type="date" value={qt.due} onChange={(e) => setQt({ ...qt, due: e.target.value })} />
             <input style={{ ...inputStyle, width: 110 }} type="time" value={qt.time || ""} onChange={(e) => setQt({ ...qt, time: e.target.value })} />
           </div>
         </Field>

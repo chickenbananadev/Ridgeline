@@ -7831,7 +7831,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
             ] }) })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "date", value: f.date, onChange: (e) => setF({ ...f, date: e.target.value }) }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: f.date, onChange: (e) => setF({ ...f, date: e.target.value }) }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Time", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "time", value: f.time, onChange: (e) => setF({ ...f, time: e.target.value }) }) })
           ] }),
           scheduleChecks.map((check) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: check.overlap ? "Scheduling conflict" : "Travel-time warning", tone: check.overlap ? "red" : "amber", children: [
@@ -9082,7 +9082,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
     mode === "task" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Task", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { autoFocus: true, style: inputStyle, value: task.label, onChange: (e) => setTask({ ...task, label: e.target.value }) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Due date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "date", value: task.due, onChange: (e) => setTask({ ...task, due: e.target.value }) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Due date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: task.due, onChange: (e) => setTask({ ...task, due: e.target.value }) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Time", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "time", value: task.time, onChange: (e) => setTask({ ...task, time: e.target.value }) }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, disabled: !task.label.trim(), onClick: addTask, children: "Add task" })
@@ -9090,7 +9090,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
     mode === "appointment" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Type", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: appt.type, onChange: (e) => setAppt({ ...appt, type: e.target.value }), children: apptTypes.map((type) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: type }, type)) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "date", value: appt.date, onChange: (e) => setAppt({ ...appt, date: e.target.value }) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: appt.date, onChange: (e) => setAppt({ ...appt, date: e.target.value }) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Time", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "time", value: appt.time, onChange: (e) => setAppt({ ...appt, time: e.target.value }) }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Duration", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: appt.durationMin, onChange: (e) => setAppt({ ...appt, durationMin: Number(e.target.value) }), children: [
@@ -21176,7 +21176,7 @@ function TabInvoice({ job, brand, mut, toast, currentUser = null, integrations =
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Due date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "input",
           {
-            style: inputStyle,
+            style: dateInputStyle,
             type: "date",
             value: job.invoiceDue || "",
             onChange: (e) => mut((j) => ({ ...j, invoiceDue: e.target.value }))
@@ -22038,7 +22038,7 @@ function TabTasks({ job, mut, toast }) {
           }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 138 }, type: "date", value: due, onChange: (e) => setDue(e.target.value) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...dateInputStyle, width: 138 }, type: "date", value: due, onChange: (e) => setDue(e.target.value) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 108 }, type: "time", value: time, onChange: (e) => setTime(e.target.value) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, disabled: !txt.trim(), onClick: () => {
         mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: txt.trim(), done: false, due: due || null, time: time || null }] }));
@@ -25469,7 +25469,7 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
         children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "File name", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.name, onChange: (e) => setF({ ...f, name: e.target.value }) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Category", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: f.cat, onChange: (e) => setF({ ...f, cat: e.target.value }), children: DOC_CATEGORIES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: c }, c)) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Expiration date", hint: "Optional. Certificates and licenses get an expiry warning 60 days out.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "date", value: f.expires, onChange: (e) => setF({ ...f, expires: e.target.value }) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Expiration date", hint: "Optional. Certificates and licenses get an expiry warning 60 days out.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: f.expires, onChange: (e) => setF({ ...f, expires: e.target.value }) }) }),
           err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginTop: 4 }, children: err })
         ]
       }
@@ -30691,7 +30691,7 @@ function SupremeCRM() {
           ] }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Task", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: qt.label, onChange: (e) => setQt({ ...qt, label: e.target.value }), placeholder: "Call adjuster back, order materials\u2026" }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deadline (optional)", hint: "Tasks with deadlines show on the calendar.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, flex: 1 }, type: "date", value: qt.due, onChange: (e) => setQt({ ...qt, due: e.target.value }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...dateInputStyle, flex: 1 }, type: "date", value: qt.due, onChange: (e) => setQt({ ...qt, due: e.target.value }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 110 }, type: "time", value: qt.time || "", onChange: (e) => setQt({ ...qt, time: e.target.value }) })
           ] }) })
         ]
