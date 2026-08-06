@@ -16195,6 +16195,7 @@ function supplementJustification(f, job) {
 function SupplementCheck({ job, mut, toast, locked = false }) {
   const [open, setOpen] = useState(true);
   const [done, setDone] = useState({}); // title -> "estimate" | "supplement"
+  const [tagging, setTagging] = useState(null); // finding title currently picking a photo for
   const found = supplementFindings(job);
   const items = ((job.estimate || {}).items || []);
   if (items.length === 0) return null; // No estimate yet — nothing to audit.
@@ -16242,6 +16243,24 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
     if (navigator.clipboard) navigator.clipboard.writeText(text);
     toast && toast("Justification copied — paste it into your supplement email or portal message");
   };
+  /* Tagging a photo to a finding is what turns the album from a generic
+     gallery into claim evidence — a photo that shows up next to "Ice &
+     water shield — eaves [R905.1.2]" in the album is legible as proof of
+     that specific gap, not just "a roof photo." Storing the tag on the
+     photo itself (not a separate join table) keeps it visible everywhere
+     the album already renders, including the portal share view. */
+  const tagPhoto = (f, photoId) => {
+    if (!mut) return;
+    const cf = asFact(f);
+    mut((j) => ({
+      ...j,
+      photos: (j.photos || []).map((p) => p.id === photoId
+        ? { ...p, findingTag: { title: f.title, cite: printable(cf) ? cf.value : null } }
+        : p),
+    }));
+    setTagging(null);
+    toast && toast(`Tagged a photo as evidence for "${f.title}"`);
+  };
 
   return (
     <Card style={{ marginBottom: 12 }}>
@@ -16271,16 +16290,31 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
                 </div>
               </div>
               {!locked && mut && (done[f.title] || f.line || isClaim) && (
-                <div style={{ display: "flex", gap: 7, marginTop: 8, marginLeft: 0, flexWrap: "wrap" }}>
-                  {done[f.title] ? (
-                    <Chip tone="green">{done[f.title] === "estimate" ? "✓ Added to estimate" : "✓ Added as supplement"}</Chip>
-                  ) : (
-                    <>
-                      {f.line && <Btn kind="soft" small onClick={() => addToEstimate(f)}><Plus size={12} /> Add to estimate</Btn>}
-                      {isClaim && <Btn kind="ghost" small onClick={() => addAsSupplement(f)}><Plus size={12} /> Add as supplement</Btn>}
-                      {isClaim && <Btn kind="ghost" small onClick={() => copyJustification(f)}><Copy size={12} /> Copy justification</Btn>}
-                    </>
+                <div style={{ display: "flex", gap: 7, marginTop: 8, marginLeft: 0, flexWrap: "wrap", alignItems: "center" }}>
+                  {done[f.title] && <Chip tone="green">{done[f.title] === "estimate" ? "✓ Added to estimate" : "✓ Added as supplement"}</Chip>}
+                  {!done[f.title] && f.line && <Btn kind="soft" small onClick={() => addToEstimate(f)}><Plus size={12} /> Add to estimate</Btn>}
+                  {!done[f.title] && isClaim && <Btn kind="ghost" small onClick={() => addAsSupplement(f)}><Plus size={12} /> Add as supplement</Btn>}
+                  {!done[f.title] && isClaim && <Btn kind="ghost" small onClick={() => copyJustification(f)}><Copy size={12} /> Copy justification</Btn>}
+                  {isClaim && job.photos.length > 0 && (
+                    <Btn kind="ghost" small onClick={() => setTagging(tagging === f.title ? null : f.title)}>
+                      <ImageIcon size={12} /> Tag a photo
+                    </Btn>
                   )}
+                </div>
+              )}
+              {tagging === f.title && (
+                <div style={{ display: "flex", gap: 6, marginTop: 8, overflowX: "auto" }}>
+                  {job.photos.map((p) => {
+                    const active = p.findingTag && p.findingTag.title === f.title;
+                    return (
+                      <button key={p.id} onClick={() => tagPhoto(f, p.id)} title={p.label} style={{
+                        border: `1.5px solid ${active ? T.accent : S.line}`, borderRadius: 8, padding: 0,
+                        width: 52, height: 52, overflow: "hidden", flexShrink: 0, cursor: "pointer", background: "#EEF1F4",
+                      }}>
+                        {p.url ? <img src={p.url} alt={p.label} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -18252,6 +18286,9 @@ function TabPhotos({ job, mut, toast, ccToken }) {
   const [geoErr, setGeoErr] = useState("");
   const [uploading, setUploading] = useState(false);
   const [upErr, setUpErr] = useState("");
+  const [pairBefore, setPairBefore] = useState("");
+  const [pairAfter, setPairAfter] = useState("");
+  const [pairLabel, setPairLabel] = useState("");
   const fileRef = useRef(null);
   const pendingLabel = useRef("");
 
@@ -18321,6 +18358,22 @@ function TabPhotos({ job, mut, toast, ccToken }) {
   };
 
   const shotsDone = new Set(job.photos.map((p) => p.label));
+
+  /* Before/after is a join over the photo album, not a new kind of photo —
+     a pair is just two existing photo ids with a label, the same shape the
+     app already uses for other lightweight registries (punch list items,
+     supplements) instead of mutating the photo record itself. */
+  const createPair = () => {
+    if (!pairBefore || !pairAfter || pairBefore === pairAfter) return;
+    mut((j) => ({
+      ...j,
+      photoPairs: [...(j.photoPairs || []), { id: uid("pp"), label: pairLabel.trim() || "Before / after", beforeId: pairBefore, afterId: pairAfter }],
+    }));
+    setPairBefore(""); setPairAfter(""); setPairLabel("");
+    toast("Before/after pair saved");
+  };
+  const deletePair = (id) => mut((j) => ({ ...j, photoPairs: (j.photoPairs || []).filter((pp) => pp.id !== id) }));
+  const photoById = (id) => job.photos.find((p) => p.id === id);
 
   return (
     <>
@@ -18408,6 +18461,11 @@ function TabPhotos({ job, mut, toast, ccToken }) {
               <div style={{ padding: "8px 10px" }}>
                 <div style={{ fontSize: 12, fontWeight: 700 }}>{p.label}</div>
                 <div style={{ fontSize: 11, color: S.sub, marginTop: 2 }}>{p.at}</div>
+                {p.findingTag && (
+                  <div style={{ marginTop: 5 }} title={p.findingTag.cite ? `Cite: ${p.findingTag.cite}` : "Cite not verified for this state"}>
+                    <Chip tone="blue">Evidence: {p.findingTag.title}</Chip>
+                  </div>
+                )}
                 {p.lat != null ? (
                   <a href={mapLinkForCoords(p.lat, p.lng)} target="_blank" rel="noreferrer" style={{
                     display: "inline-flex", alignItems: "center", gap: 4, marginTop: 5,
@@ -18437,6 +18495,59 @@ function TabPhotos({ job, mut, toast, ccToken }) {
             toast("Photo log exported");
           }}><Download size={13} /> Export photo log (CSV)</Btn>
         )}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={<Chip tone="gray">{(job.photoPairs || []).length}</Chip>}>Before / after</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Pair a before shot with an after shot of the same area — the comparison is what a homeowner,
+          and an adjuster, actually reads as proof of the work.
+        </div>
+        {job.photos.length < 2 ? (
+          <div style={{ fontSize: 13, color: S.sub }}>Add at least two photos to create a pair.</div>
+        ) : (
+          <>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <select style={{ ...selStyle, flex: 1, minWidth: 130 }} value={pairBefore} onChange={(e) => setPairBefore(e.target.value)}>
+                <option value="">Before photo…</option>
+                {job.photos.map((p) => <option key={p.id} value={p.id}>{p.label} — {p.at}</option>)}
+              </select>
+              <select style={{ ...selStyle, flex: 1, minWidth: 130 }} value={pairAfter} onChange={(e) => setPairAfter(e.target.value)}>
+                <option value="">After photo…</option>
+                {job.photos.map((p) => <option key={p.id} value={p.id}>{p.label} — {p.at}</option>)}
+              </select>
+            </div>
+            <input style={{ ...inputStyle, marginTop: 8 }} placeholder="Area label (optional) — e.g. Front slope"
+              value={pairLabel} onChange={(e) => setPairLabel(e.target.value)} />
+            <Btn small style={{ marginTop: 8 }} disabled={!pairBefore || !pairAfter || pairBefore === pairAfter} onClick={createPair}>
+              <Plus size={13} /> Save pair
+            </Btn>
+          </>
+        )}
+        {(job.photoPairs || []).map((pp) => {
+          const before = photoById(pp.beforeId), after = photoById(pp.afterId);
+          if (!before || !after) return null;
+          return (
+            <div key={pp.id} style={{ marginTop: 14, borderTop: `1px solid ${S.line}`, paddingTop: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: S.ink }}>{pp.label}</div>
+                <button onClick={() => deletePair(pp.id)} style={{ border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}>
+                  <Trash2 size={14} color="#B42318" />
+                </button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {[["BEFORE", before], ["AFTER", after]].map(([tag, p]) => (
+                  <div key={tag}>
+                    <div style={{ height: 110, background: "#EEF1F4", borderRadius: 10, overflow: "hidden", display: "grid", placeItems: "center" }}>
+                      {p.url ? <img src={p.url} alt={tag} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <ImageIcon size={20} color="#9CA3AF" />}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: S.sub, marginTop: 4, textAlign: "center", fontWeight: 800, letterSpacing: ".04em" }}>{tag}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </Card>
     </>
   );

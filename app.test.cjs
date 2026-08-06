@@ -17299,6 +17299,7 @@ function supplementJustification(f, job) {
 function SupplementCheck({ job, mut, toast, locked = false }) {
   const [open, setOpen] = (0, import_react.useState)(true);
   const [done, setDone] = (0, import_react.useState)({});
+  const [tagging, setTagging] = (0, import_react.useState)(null);
   const found = supplementFindings(job);
   const items = (job.estimate || {}).items || [];
   if (items.length === 0) return null;
@@ -17344,6 +17345,16 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
     if (navigator.clipboard) navigator.clipboard.writeText(text);
     toast && toast("Justification copied \u2014 paste it into your supplement email or portal message");
   };
+  const tagPhoto = (f, photoId) => {
+    if (!mut) return;
+    const cf = asFact(f);
+    mut((j) => ({
+      ...j,
+      photos: (j.photos || []).map((p) => p.id === photoId ? { ...p, findingTag: { title: f.title, cite: printable(cf) ? cf.value : null } } : p)
+    }));
+    setTagging(null);
+    toast && toast(`Tagged a photo as evidence for "${f.title}"`);
+  };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 12 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: found.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Clear" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: found.some((f) => f.sev === "HIGH") ? "red" : "amber", children: found.length }), children: "Supplement check" }),
     found.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.55 }, children: "Every documented condition and measurement is reflected in a line item. Nothing obviously missing." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -17360,20 +17371,39 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
             f.cite && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 5 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: f, compact: true }) })
           ] })
         ] }),
-        !locked && mut && (done[f.title] || f.line || isClaim) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, marginTop: 8, marginLeft: 0, flexWrap: "wrap" }, children: done[f.title] ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: done[f.title] === "estimate" ? "\u2713 Added to estimate" : "\u2713 Added as supplement" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-          f.line && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => addToEstimate(f), children: [
+        !locked && mut && (done[f.title] || f.line || isClaim) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 7, marginTop: 8, marginLeft: 0, flexWrap: "wrap", alignItems: "center" }, children: [
+          done[f.title] && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: done[f.title] === "estimate" ? "\u2713 Added to estimate" : "\u2713 Added as supplement" }),
+          !done[f.title] && f.line && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => addToEstimate(f), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 12 }),
             " Add to estimate"
           ] }),
-          isClaim && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => addAsSupplement(f), children: [
+          !done[f.title] && isClaim && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => addAsSupplement(f), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 12 }),
             " Add as supplement"
           ] }),
-          isClaim && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => copyJustification(f), children: [
+          !done[f.title] && isClaim && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => copyJustification(f), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Copy, { size: 12 }),
             " Copy justification"
+          ] }),
+          isClaim && job.photos.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => setTagging(tagging === f.title ? null : f.title), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Image, { size: 12 }),
+            " Tag a photo"
           ] })
-        ] }) })
+        ] }),
+        tagging === f.title && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginTop: 8, overflowX: "auto" }, children: job.photos.map((p) => {
+          const active = p.findingTag && p.findingTag.title === f.title;
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => tagPhoto(f, p.id), title: p.label, style: {
+            border: `1.5px solid ${active ? T.accent : S.line}`,
+            borderRadius: 8,
+            padding: 0,
+            width: 52,
+            height: 52,
+            overflow: "hidden",
+            flexShrink: 0,
+            cursor: "pointer",
+            background: "#EEF1F4"
+          }, children: p.url ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: p.url, alt: p.label, style: { width: "100%", height: "100%", objectFit: "cover" } }) : null }, p.id);
+        }) })
       ] }, i)),
       found.length > 3 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setOpen(!open), style: {
         border: "none",
@@ -19643,6 +19673,9 @@ function TabPhotos({ job, mut, toast, ccToken }) {
   const [geoErr, setGeoErr] = (0, import_react.useState)("");
   const [uploading, setUploading] = (0, import_react.useState)(false);
   const [upErr, setUpErr] = (0, import_react.useState)("");
+  const [pairBefore, setPairBefore] = (0, import_react.useState)("");
+  const [pairAfter, setPairAfter] = (0, import_react.useState)("");
+  const [pairLabel, setPairLabel] = (0, import_react.useState)("");
   const fileRef = (0, import_react.useRef)(null);
   const pendingLabel = (0, import_react.useRef)("");
   const getFix = async () => {
@@ -19713,6 +19746,19 @@ function TabPhotos({ job, mut, toast, ccToken }) {
     e.target.value = "";
   };
   const shotsDone = new Set(job.photos.map((p) => p.label));
+  const createPair = () => {
+    if (!pairBefore || !pairAfter || pairBefore === pairAfter) return;
+    mut((j) => ({
+      ...j,
+      photoPairs: [...j.photoPairs || [], { id: uid("pp"), label: pairLabel.trim() || "Before / after", beforeId: pairBefore, afterId: pairAfter }]
+    }));
+    setPairBefore("");
+    setPairAfter("");
+    setPairLabel("");
+    toast("Before/after pair saved");
+  };
+  const deletePair = (id) => mut((j) => ({ ...j, photoPairs: (j.photoPairs || []).filter((pp) => pp.id !== id) }));
+  const photoById = (id) => job.photos.find((p) => p.id === id);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       "input",
@@ -19827,6 +19873,10 @@ function TabPhotos({ job, mut, toast, ccToken }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "8px 10px" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 700 }, children: p.label }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub, marginTop: 2 }, children: p.at }),
+          p.findingTag && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 5 }, title: p.findingTag.cite ? `Cite: ${p.findingTag.cite}` : "Cite not verified for this state", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
+            "Evidence: ",
+            p.findingTag.title
+          ] }) }),
           p.lat != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: mapLinkForCoords(p.lat, p.lng), target: "_blank", rel: "noreferrer", style: {
             display: "inline-flex",
             alignItems: "center",
@@ -19872,6 +19922,57 @@ function TabPhotos({ job, mut, toast, ccToken }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Download, { size: 13 }),
         " Export photo log (CSV)"
       ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: (job.photoPairs || []).length }), children: "Before / after" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Pair a before shot with an after shot of the same area \u2014 the comparison is what a homeowner, and an adjuster, actually reads as proof of the work." }),
+      job.photos.length < 2 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "Add at least two photos to create a pair." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: { ...selStyle, flex: 1, minWidth: 130 }, value: pairBefore, onChange: (e) => setPairBefore(e.target.value), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Before photo\u2026" }),
+            job.photos.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: p.id, children: [
+              p.label,
+              " \u2014 ",
+              p.at
+            ] }, p.id))
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: { ...selStyle, flex: 1, minWidth: 130 }, value: pairAfter, onChange: (e) => setPairAfter(e.target.value), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "After photo\u2026" }),
+            job.photos.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: p.id, children: [
+              p.label,
+              " \u2014 ",
+              p.at
+            ] }, p.id))
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            style: { ...inputStyle, marginTop: 8 },
+            placeholder: "Area label (optional) \u2014 e.g. Front slope",
+            value: pairLabel,
+            onChange: (e) => setPairLabel(e.target.value)
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, style: { marginTop: 8 }, disabled: !pairBefore || !pairAfter || pairBefore === pairAfter, onClick: createPair, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+          " Save pair"
+        ] })
+      ] }),
+      (job.photoPairs || []).map((pp) => {
+        const before = photoById(pp.beforeId), after = photoById(pp.afterId);
+        if (!before || !after) return null;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14, borderTop: `1px solid ${S.line}`, paddingTop: 12 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.ink }, children: pp.label }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => deletePair(pp.id), style: { border: "none", background: "none", cursor: "pointer", lineHeight: 0 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14, color: "#B42318" }) })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }, children: [["BEFORE", before], ["AFTER", after]].map(([tag, p]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 110, background: "#EEF1F4", borderRadius: 10, overflow: "hidden", display: "grid", placeItems: "center" }, children: p.url ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: p.url, alt: tag, style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Image, { size: 20, color: "#9CA3AF" }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, marginTop: 4, textAlign: "center", fontWeight: 800, letterSpacing: ".04em" }, children: tag })
+          ] }, tag)) })
+        ] }, pp.id);
+      })
     ] })
   ] });
 }
