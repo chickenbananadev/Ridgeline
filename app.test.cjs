@@ -6950,6 +6950,14 @@ function timeMinutes(value) {
   const [hours, minutes] = value.split(":").map(Number);
   return hours * 60 + minutes;
 }
+function apptWindowISO(date, time, durationMin) {
+  if (!date || !time) return null;
+  const start = /* @__PURE__ */ new Date(`${date}T${time}:00`);
+  if (isNaN(start.getTime())) return null;
+  const end = new Date(start.getTime() + (Number(durationMin) || 60) * 6e4);
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:00`;
+  return { start: fmt(start), end: fmt(end) };
+}
 function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage, onLog = () => {
 }, users = [], embedded = false }) {
   const today = /* @__PURE__ */ new Date();
@@ -7048,9 +7056,27 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `updated ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
       toast("Appointment updated");
     } else {
-      setAppointments([...appointments, { ...payload, id: uid("ap") }]);
+      const newId = uid("ap");
+      setAppointments([...appointments, { ...payload, id: newId }]);
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `scheduled ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
       toast(notified ? `Appointment added \u2014 ${notified === "sms" ? "text" : "email"} ready to send from the Inbox` : "Appointment added");
+      const auth = AUTH();
+      const win = apptWindowISO(f.date, f.time, payload.durationMin);
+      if (auth && auth.pushToCalendar && win) {
+        auth.pushToCalendar({
+          summary: `${f.type}${jb ? ` \u2014 ${jb.name}` : ""}`,
+          description: jb ? `RoofStride \u2014 ${f.type} for ${jb.name}` : `RoofStride \u2014 ${f.type}`,
+          location: jb ? jb.address : "",
+          start: win.start,
+          end: win.end,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        }).then((res) => {
+          if (res && res.eventId) {
+            setAppointments((prev) => prev.map((ap) => ap.id === newId ? { ...ap, googleEventId: res.eventId } : ap));
+          }
+        }).catch(() => {
+        });
+      }
     }
     setAdding(false);
     setEditingId(null);
@@ -8774,8 +8800,10 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
   const addAppointment = () => {
     if (!appt.date) return;
     const category = categoryForAppointment(appt.type);
+    const newId = uid("ap");
+    const durationMin = Number(appt.durationMin) || 60;
     setAppointments([...appointments, {
-      id: uid("ap"),
+      id: newId,
       jobId: job.id,
       type: appt.type,
       date: appt.date,
@@ -8783,11 +8811,28 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
       notes: "",
       category,
       assignedTo: job.assignee,
-      durationMin: Number(appt.durationMin) || 60,
+      durationMin,
       status: "Scheduled"
     }]);
     onLog({ kind: "appointment", jobId: job.id, jobName: job.name, text: `scheduled ${appt.type.toLowerCase()} for ${job.name} on ${appt.date}` });
     finish("Appointment added");
+    const auth = AUTH();
+    const win = apptWindowISO(appt.date, appt.time, durationMin);
+    if (auth && auth.pushToCalendar && win) {
+      auth.pushToCalendar({
+        summary: `${appt.type} \u2014 ${job.name}`,
+        description: `RoofStride \u2014 ${appt.type} for ${job.name}`,
+        location: job.address,
+        start: win.start,
+        end: win.end,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      }).then((res) => {
+        if (res && res.eventId) {
+          setAppointments((prev) => prev.map((ap) => ap.id === newId ? { ...ap, googleEventId: res.eventId } : ap));
+        }
+      }).catch(() => {
+      });
+    }
   };
   const actions = [
     ["note", "Note"],

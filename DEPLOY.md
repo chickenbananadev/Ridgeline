@@ -102,14 +102,18 @@ the feed is public and gated by a long per-seat token in the URL (stored in
 `crm_user_integrations`). No secrets needed. `supabase/config.toml` already
 records the `verify_jwt = false` setting for CLI/CI deploys.
 
-## 5. Email sending — per-rep Gmail
+## 5. Email sending — per-rep Gmail (and outbound Google Calendar sync)
 
 Each rep sends from their **own** Gmail; there's no shared company sender.
-One Google Cloud OAuth client serves everyone.
+One Google Cloud OAuth client serves everyone. The same connection now also
+covers a one-way outbound sync — a newly booked appointment gets pushed to
+the rep's own Google Calendar — since both use the same Google account
+connection and refresh token.
 
 **One-time (office):**
-1. console.cloud.google.com → new project → enable the **Gmail API**.
-2. **OAuth consent screen** → Internal (if you use Google Workspace) or External; add the `gmail.send` scope.
+1. console.cloud.google.com → new project → enable the **Gmail API** and the
+   **Google Calendar API**.
+2. **OAuth consent screen** → Internal (if you use Google Workspace) or External; add the `gmail.send` and `calendar.events` scopes.
 3. **Credentials → OAuth client ID → Web application.** Add your app origin **with a trailing slash** as an Authorized redirect URI (e.g. `https://roofstride.com/`, plus preview origins).
 4. Set the Client ID and Secret:
    ```bash
@@ -118,16 +122,27 @@ One Google Cloud OAuth client serves everyone.
    supabase secrets set GOOGLE_CLIENT_ID=<client id> GOOGLE_CLIENT_SECRET=<client secret>
    supabase functions deploy gmail-oauth
    supabase functions deploy gmail-send
+   supabase functions deploy calendar-push
    ```
 
 **Then each rep:** Integrations → **Connect my Gmail** → pick their account →
 approve. Messages composed on a job then send from their address; replies land
-in their inbox. Until this is deployed, email is saved to the job thread rather
-than sent (SMS via Twilio is unaffected).
+in their inbox; new appointments booked from a job or the calendar screen get
+pushed to that rep's own Google Calendar. Until this is deployed, email is
+saved to the job thread rather than sent, and the calendar push silently does
+nothing (SMS via Twilio is unaffected either way).
+
+> A rep who connected **before** `calendar.events` was added to the scope has
+> a Gmail-only token — the calendar push for them fails with a message
+> telling them to reconnect from Integrations, rather than failing silently
+> or against the wrong permission. Reconnecting re-runs the same consent
+> screen with both scopes and replaces their stored token.
 
 > Note: *immediate* emails send now. Scheduled day-before reminders are still
 > queued in the thread — delivering those on a timer needs a small scheduled
-> function (a follow-up), since a schedule has to run server-side.
+> function (a follow-up), since a schedule has to run server-side. Calendar
+> sync is one-way (app → Google) only; edits made in Google Calendar don't
+> come back.
 
 ## 6. Roofing assistant — optional, and optional on purpose
 
@@ -182,7 +197,7 @@ Secrets used across these (set the ones you use):
 | `STRIPE_WEBHOOK_SECRET` | webhook | Stripe → Developers → Webhooks → signing secret |
 | `APP_URL` | checkout, portal | your domain, no trailing slash |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` | send-sms | Twilio console |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | gmail-oauth, gmail-send | Google Cloud → Credentials |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | gmail-oauth, gmail-send, calendar-push | Google Cloud → Credentials |
 | `ANTHROPIC_API_KEY` | ai-assistant | console.anthropic.com → API keys (never `VITE_`) |
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are

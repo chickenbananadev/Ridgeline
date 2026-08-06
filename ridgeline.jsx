@@ -6182,6 +6182,22 @@ function timeMinutes(value) {
   return hours * 60 + minutes;
 }
 
+/* A start/end window for the calendar-push edge function, as naive local
+   timestamps (no "Z", no offset) paired with an IANA zone name — Google
+   Calendar interprets a dateTime that way rather than needing this code
+   to compute a UTC offset itself. Real Date arithmetic for the end time
+   so a late-evening appointment with a long duration correctly rolls
+   into the next day instead of the minutes just being added as text. */
+function apptWindowISO(date, time, durationMin) {
+  if (!date || !time) return null;
+  const start = new Date(`${date}T${time}:00`);
+  if (isNaN(start.getTime())) return null;
+  const end = new Date(start.getTime() + (Number(durationMin) || 60) * 60000);
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` +
+    `T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:00`;
+  return { start: fmt(start), end: fmt(end) };
+}
+
 function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage, onLog = () => {}, users = [], embedded = false }) {
   const today = new Date();
   const [month, setMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -6284,11 +6300,33 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `updated ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
       toast("Appointment updated");
     } else {
-      setAppointments([...appointments, { ...payload, id: uid("ap") }]);
+      const newId = uid("ap");
+      setAppointments([...appointments, { ...payload, id: newId }]);
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `scheduled ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
       toast(notified
         ? `Appointment added — ${notified === "sms" ? "text" : "email"} ready to send from the Inbox`
         : "Appointment added");
+      /* Best-effort, one-way sync to the rep's own Google Calendar — the
+         app calendar is still the system of record. Never blocks the
+         booking and never surfaces its own error toast; a rep who hasn't
+         connected Google, or connected before this shipped, just doesn't
+         get a synced event, the same silent degrade the AI assistant
+         already uses when it isn't configured. */
+      const auth = AUTH();
+      const win = apptWindowISO(f.date, f.time, payload.durationMin);
+      if (auth && auth.pushToCalendar && win) {
+        auth.pushToCalendar({
+          summary: `${f.type}${jb ? ` — ${jb.name}` : ""}`,
+          description: jb ? `RoofStride — ${f.type} for ${jb.name}` : `RoofStride — ${f.type}`,
+          location: jb ? jb.address : "",
+          start: win.start, end: win.end,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }).then((res) => {
+          if (res && res.eventId) {
+            setAppointments((prev) => prev.map((ap) => ap.id === newId ? { ...ap, googleEventId: res.eventId } : ap));
+          }
+        }).catch(() => {});
+      }
     }
     setAdding(false); setEditingId(null);
     setF({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "", assignedTo: "", durationMin: 60, status: "Scheduled" });
@@ -7716,12 +7754,32 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
   const addAppointment = () => {
     if (!appt.date) return;
     const category = categoryForAppointment(appt.type);
+    const newId = uid("ap");
+    const durationMin = Number(appt.durationMin) || 60;
     setAppointments([...appointments, {
-      id: uid("ap"), jobId: job.id, type: appt.type, date: appt.date, time: appt.time,
-      notes: "", category, assignedTo: job.assignee, durationMin: Number(appt.durationMin) || 60, status: "Scheduled",
+      id: newId, jobId: job.id, type: appt.type, date: appt.date, time: appt.time,
+      notes: "", category, assignedTo: job.assignee, durationMin, status: "Scheduled",
     }]);
     onLog({ kind: "appointment", jobId: job.id, jobName: job.name, text: `scheduled ${appt.type.toLowerCase()} for ${job.name} on ${appt.date}` });
     finish("Appointment added");
+    /* Same best-effort, one-way Google Calendar sync as the full booking
+       sheet — a rep shouldn't get a different experience depending on
+       which of the two places they booked from. */
+    const auth = AUTH();
+    const win = apptWindowISO(appt.date, appt.time, durationMin);
+    if (auth && auth.pushToCalendar && win) {
+      auth.pushToCalendar({
+        summary: `${appt.type} — ${job.name}`,
+        description: `RoofStride — ${appt.type} for ${job.name}`,
+        location: job.address,
+        start: win.start, end: win.end,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }).then((res) => {
+        if (res && res.eventId) {
+          setAppointments((prev) => prev.map((ap) => ap.id === newId ? { ...ap, googleEventId: res.eventId } : ap));
+        }
+      }).catch(() => {});
+    }
   };
   const actions = [
     ["note", "Note"], ["call", "Call"], ["text", "Text"], ["task", "Task"], ["appointment", "Appointment"],
