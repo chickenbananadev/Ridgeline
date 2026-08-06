@@ -4278,7 +4278,12 @@ function Toast({ msg }) {
     fontSize: 14,
     fontWeight: 600,
     zIndex: 90,
-    whiteSpace: "nowrap"
+    whiteSpace: "nowrap",
+    /* Purely informational, never itself tappable — without this its
+       screen rect can sit on top of a Sheet's footer button (e.g. an
+       Add-appointment save) and silently swallow a real tap meant for
+       what's underneath. */
+    pointerEvents: "none"
   }, children: msg });
 }
 function SignaturePad({ open, onClose, title, onApply }) {
@@ -7168,7 +7173,7 @@ function apptWindowISO(date, time, durationMin) {
   return { start: fmt(start), end: fmt(end) };
 }
 function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage, onLog = () => {
-}, users = [], embedded = false }) {
+}, users = [], crews = [], embedded = false }) {
   const today = /* @__PURE__ */ new Date();
   const [month, setMonth] = (0, import_react.useState)(new Date(today.getFullYear(), today.getMonth(), 1));
   const [view, setView] = (0, import_react.useState)("all");
@@ -7243,7 +7248,13 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     const travelRisk = !overlap && gap < 90 && selectedJob?.zip && apJob?.zip && selectedJob.zip !== apJob.zip;
     return overlap || travelRisk ? { ap, job: apJob, overlap, gap } : null;
   }).filter(Boolean);
-  const hardConflicts = scheduleChecks.filter((check) => check.overlap);
+  const productionConflicts = f.date ? jobs.filter((j) => {
+    if (j.id === f.jobId || !j.schedDate || j.schedDate !== f.date) return false;
+    if (!resolvedAssignedTo) return false;
+    const crewName = j.crewId ? (crews.find((c) => c.id === j.crewId) || {}).name : null;
+    return j.assignee === resolvedAssignedTo || crewName && crewName === resolvedAssignedTo;
+  }).map((j) => ({ job: j, overlap: true, gap: 0, production: true })) : [];
+  const hardConflicts = [...scheduleChecks.filter((check) => check.overlap), ...productionConflicts];
   const save = () => {
     const jb = jobs.find((x) => x.id === f.jobId);
     if (hardConflicts.length) {
@@ -7846,6 +7857,14 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
             ".",
             check.overlap ? " These appointments overlap and cannot be double-booked." : ` There is only about ${check.gap} minutes between different service areas.`
           ] }, check.ap.id)),
+          productionConflicts.map((check) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Scheduling conflict", tone: "red", children: [
+            resolvedAssignedTo,
+            " is already booked for a full production day on ",
+            check.job.name,
+            "'s job on ",
+            f.date,
+            ". That cannot be double-booked with a timed appointment."
+          ] }, check.job.id)),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Notes", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { style: { ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" }, value: f.notes, onChange: (e) => setF({ ...f, notes: e.target.value }) }) })
         ]
       }
@@ -30449,6 +30468,7 @@ function SupremeCRM() {
         toast,
         onLog: logAct,
         users,
+        crews,
         onQueueMessage: (jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))
       }
     ) : nav === "contacts" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(

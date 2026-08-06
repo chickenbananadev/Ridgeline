@@ -3621,6 +3621,11 @@ function Toast({ msg }) {
       position: "fixed", bottom: 96, left: "50%", transform: "translateX(-50%)",
       background: "#111827", color: "#fff", borderRadius: 999, padding: "10px 18px",
       fontSize: 14, fontWeight: 600, zIndex: 90, whiteSpace: "nowrap",
+      /* Purely informational, never itself tappable — without this its
+         screen rect can sit on top of a Sheet's footer button (e.g. an
+         Add-appointment save) and silently swallow a real tap meant for
+         what's underneath. */
+      pointerEvents: "none",
     }}>{msg}</div>
   );
 }
@@ -6505,7 +6510,7 @@ function apptWindowISO(date, time, durationMin) {
   return { start: fmt(start), end: fmt(end) };
 }
 
-function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage, onLog = () => {}, users = [], embedded = false }) {
+function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage, onLog = () => {}, users = [], crews = [], embedded = false }) {
   const today = new Date();
   const [month, setMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [view, setView] = useState("all");
@@ -6588,7 +6593,19 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       const travelRisk = !overlap && gap < 90 && selectedJob?.zip && apJob?.zip && selectedJob.zip !== apJob.zip;
       return overlap || travelRisk ? { ap, job: apJob, overlap, gap } : null;
     }).filter(Boolean);
-  const hardConflicts = scheduleChecks.filter((check) => check.overlap);
+  /* Dispatch books a crew onto a production install with only a date
+     (job.schedDate, job.crewId) — no time. That's a full-day commitment,
+     so any timed appointment for the same person on that date is a hard
+     conflict, same as two overlapping appointments. "Person" here can be
+     a rep (job.assignee) or a crew (assignedTo is free text — "Rep, crew,
+     or driver" — matched against the crew's own name via crewId). */
+  const productionConflicts = f.date ? jobs.filter((j) => {
+    if (j.id === f.jobId || !j.schedDate || j.schedDate !== f.date) return false;
+    if (!resolvedAssignedTo) return false;
+    const crewName = j.crewId ? (crews.find((c) => c.id === j.crewId) || {}).name : null;
+    return j.assignee === resolvedAssignedTo || (crewName && crewName === resolvedAssignedTo);
+  }).map((j) => ({ job: j, overlap: true, gap: 0, production: true })) : [];
+  const hardConflicts = [...scheduleChecks.filter((check) => check.overlap), ...productionConflicts];
 
   const save = () => {
     const jb = jobs.find((x) => x.id === f.jobId);
@@ -7082,6 +7099,11 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
           <Callout key={check.ap.id} label={check.overlap ? "Scheduling conflict" : "Travel-time warning"} tone={check.overlap ? "red" : "amber"}>
             {resolvedAssignedTo} already has {check.ap.type}{check.job ? ` for ${check.job.name}` : ""} at {check.ap.time}.
             {check.overlap ? " These appointments overlap and cannot be double-booked." : ` There is only about ${check.gap} minutes between different service areas.`}
+          </Callout>
+        ))}
+        {productionConflicts.map((check) => (
+          <Callout key={check.job.id} label="Scheduling conflict" tone="red">
+            {resolvedAssignedTo} is already booked for a full production day on {check.job.name}'s job on {f.date}. That cannot be double-booked with a timed appointment.
           </Callout>
         ))}
         <Field label="Notes"><textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
@@ -28855,7 +28877,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "calendar" ? (
         <CalendarView jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}
           appointments={appointments} setAppointments={setAppointments}
-          apptTypes={apptTypes} setApptTypes={setApptTypes} toast={toast} onLog={logAct} users={users}
+          apptTypes={apptTypes} setApptTypes={setApptTypes} toast={toast} onLog={logAct} users={users} crews={crews}
           onQueueMessage={(jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))} />
       ) : nav === "contacts" ? (
         <Contacts jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}

@@ -49,7 +49,7 @@ ok(/function apptWindowISO\(date, time, durationMin\) \{/.test(src),
 ok(/const end = new Date\(start\.getTime\(\) \+ \(Number\(durationMin\) \|\| 60\) \* 60000\);/.test(src),
   "the end time is real Date arithmetic so a late appointment with a long duration rolls into the next day correctly");
 
-const calendarViewBody = src.slice(src.indexOf("function CalendarView("), src.indexOf("function CalendarView(") + 8000);
+const calendarViewBody = src.slice(src.indexOf("function CalendarView("), src.indexOf("function CalendarView(") + 9000);
 ok(/const newId = uid\("ap"\);\s*\n\s*setAppointments\(\[\.\.\.appointments, \{ \.\.\.payload, id: newId \}\]\);/.test(calendarViewBody),
   "the main booking sheet keeps a handle on the new appointment's id so a later successful push can attach the Google event id");
 ok(/const auth = AUTH\(\);\s*\n\s*const win = apptWindowISO\(f\.date, f\.time, payload\.durationMin\);\s*\n\s*if \(auth && auth\.pushToCalendar && win\) \{/.test(calendarViewBody),
