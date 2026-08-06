@@ -2729,6 +2729,16 @@ const money = (n) =>
    price; "$20,911.00" reads as an invoice line. */
 const money0 = (n) =>
   (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
+/* For labels that sit inside something narrow — a chart bar, a column —
+   where "$30,870.00" is more precision than the space, or the reader,
+   needs. */
+const moneyCompact = (n) => {
+  const sign = n < 0 ? "-$" : "$";
+  const v = Math.abs(n);
+  if (v >= 1000000) return `${sign}${(v / 1000000).toFixed(v >= 10000000 ? 0 : 1)}M`;
+  if (v >= 1000) return `${sign}${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`;
+  return `${sign}${Math.round(v)}`;
+};
 const pct1 = (n) => `${n.toFixed(2)}%`;
 
 /* ==================================================================
@@ -5468,7 +5478,7 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
 /* ================================================================
    PERFORMANCE — rep scoreboard + funnel, computed from live jobs
    ================================================================ */
-function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [] }) {
+function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [], setUsers }) {
   const [scope, setScope] = useState(isAdmin ? "company" : currentUser.name);
   const [range, setRange] = useState("all");
   const [tab, setTab] = useState("summary");
@@ -5572,6 +5582,38 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
     .map((j) => ({ job: j, cap: computeCapOut(j) }))
     .sort((a2, b2) => b2.cap.payout - a2.cap.payout), [scoped]);
 
+  /* Trailing 6 months, bucketed on the same date the QuickBooks export
+     already uses as the invoice date (contract.signedAt, falling back to
+     the job's last stage move) — every other number on this screen is a
+     point-in-time snapshot, this is the one place a rep can see whether
+     revenue is moving up or down rather than re-deriving it by memory
+     across visits. */
+  const trend = useMemo(() => {
+    const MONTHS_BACK = 6;
+    const now = new Date();
+    const buckets = [];
+    for (let i = MONTHS_BACK - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      buckets.push({
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+        label: d.toLocaleString(undefined, { month: "short" }),
+        revenue: 0, won: 0,
+      });
+    }
+    const byKey = Object.fromEntries(buckets.map((b) => [b.key, b]));
+    scoped.filter((j) => WON_STAGES.includes(j.stageId)).forEach((j) => {
+      const raw = (j.contract && j.contract.signedAt) || j.stageAt;
+      const d = parseAnyStamp(raw);
+      if (!d) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const b = byKey[key];
+      if (!b) return; // outside the trailing window
+      b.revenue += computeCapOut(j).contract;
+      b.won += 1;
+    });
+    return buckets;
+  }, [scoped]);
+
   const Stat = ({ label, value, sub, tone }) => (
     <Card pad={14}>
       <div style={{ fontSize: 19, fontWeight: 800, color: tone || S.ink }}>{value}</div>
@@ -5579,6 +5621,37 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
       {sub && <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2 }}>{sub}</div>}
     </Card>
   );
+
+  /* Stored raw on the user record, same convention MoneyInput's other
+     callers already use (c.rcv, c.deductible, …) — parsed with num() at
+     the point it's read, not coerced on every keystroke. */
+  const setGoal = (name, val) => setUsers && setUsers((prev) => prev.map((u) => u.name === name ? { ...u, goal: val } : u));
+
+  /* Plain flexbox bars, not a charting library — six values never need
+     axes, ticks, or zoom, and a bar that's visibly taller than the one
+     next to it is the entire point. */
+  const TrendChart = ({ data, valueKey, formatValue, tone }) => {
+    const max = Math.max(1, ...data.map((d) => d[valueKey]));
+    return (
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginTop: 4 }}>
+        {data.map((d) => {
+          const v = d[valueKey];
+          const h = v > 0 ? Math.max(6, Math.round((v / max) * 72)) : 0;
+          return (
+            <div key={d.key} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 0 }}>
+              <div style={{ fontSize: 10, color: S.sub, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
+                {v > 0 ? formatValue(v) : ""}
+              </div>
+              <div style={{ width: "100%", height: 72, display: "flex", alignItems: "flex-end" }}>
+                <div style={{ width: "100%", height: h, background: tone || T.accent, borderRadius: "4px 4px 0 0" }} />
+              </div>
+              <div style={{ fontSize: 10.5, color: S.sub, fontWeight: 700 }}>{d.label}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   const exportCommission = () => {
     const rows = [
@@ -5650,6 +5723,17 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
             <Stat label="Open pipeline" value={money(stat.openValue)} sub={`${stat.open} active jobs`} />
             <Stat label="Receivable" value={money(stat.ar)} sub={`${money(stat.collected)} collected`} tone={stat.ar > 0 ? "#B42318" : undefined} />
           </div>
+
+          {trend.some((d) => d.won > 0) && (
+            <Card style={{ marginTop: 12 }}>
+              <CardTitle>Trend — last 6 months</CardTitle>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: S.sub, marginBottom: 2 }}>SIGNED REVENUE</div>
+              <TrendChart data={trend} valueKey="revenue" formatValue={moneyCompact} />
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: S.sub, marginTop: 16, marginBottom: 2 }}>JOBS WON</div>
+              <TrendChart data={trend} valueKey="won" formatValue={(v) => String(v)} tone="#5B8DEF" />
+            </Card>
+          )}
+
           <Card style={{ marginTop: 12 }}>
             <CardTitle>Job mix</CardTitle>
             <KV k="Insurance" v={`${stat.insurance} job${stat.insurance === 1 ? "" : "s"}`} />
@@ -5820,6 +5904,32 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
                 <span style={{ fontSize: 13, color: S.sub }}>Commission {money(r.commission)} + reimb {money(r.reimb)}</span>
                 <span style={{ fontSize: 14, fontWeight: 800, color: T.accent }}>{money(r.payout)}</span>
               </div>
+              {(() => {
+                const u = users.find((x) => x.name === r.name);
+                const goal = u ? num(u.goal) : 0;
+                const progress = goal > 0 ? Math.min(100, (r.revenue / goal) * 100) : 0;
+                return (
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".05em", color: S.sub }}>GOAL</span>
+                      {goal > 0 && (
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: progress >= 100 ? "#177245" : S.ink }}>
+                          {pct1(progress)} of {money(goal)}{progress >= 100 ? " — hit" : ""}
+                        </span>
+                      )}
+                    </div>
+                    {goal > 0 && (
+                      <div style={{ height: 6, background: S.line, borderRadius: 99, overflow: "hidden", marginBottom: 8 }}>
+                        <div style={{ width: `${progress}%`, height: "100%", background: progress >= 100 ? "#177245" : T.accent }} />
+                      </div>
+                    )}
+                    {setUsers && (
+                      <MoneyInput style={{ ...inputStyle, width: "100%" }} placeholder="Set a revenue goal"
+                        value={u ? u.goal || "" : ""} onChange={(v) => setGoal(r.name, v)} />
+                    )}
+                  </div>
+                );
+              })()}
             </Card>
           ))}
         </div>
@@ -21227,6 +21337,22 @@ function parseNowStamp(s) {
   return d;
 }
 
+/* Timestamp fields in this codebase come in at least three shapes
+   depending on which code path wrote them: an ISO date from todayIso()
+   ("2026-07-15"), a long date with a year ("Jul 15, 2026" — how the
+   seed data and several document renderers write it), or nowStamp()'s
+   year-less display string. Only the last one defeats a native Date
+   parse, so try that specific shape first and fall through to the
+   browser's own parser for everything else — one helper, instead of
+   every caller having to know which shape it might be holding. */
+function parseAnyStamp(raw) {
+  if (!raw) return null;
+  const viaNowStamp = parseNowStamp(raw);
+  if (viaNowStamp) return viaNowStamp;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 /* Supplement queue — every job's claim.supplements[] flattened into one
    cross-job pipeline instead of a status buried on each job's own claim
    tab. This is the same thing "Supplement Tracker" and "SuppTrax" exist to
@@ -28025,7 +28151,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           seed={codeSeed} onConsumeSeed={() => setCodeSeed(null)} />
       ) : nav === "performance" ? (
         <Performance jobs={jobs} stages={stages} users={users} onBack={() => setNav("more")}
-          isAdmin={isAdmin} currentUser={liveUser} toast={toast} crews={crews} />
+          isAdmin={isAdmin} currentUser={liveUser} toast={toast} crews={crews} setUsers={setUsers} />
       ) : nav === "calendar" ? (
         <CalendarView jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}
           appointments={appointments} setAppointments={setAppointments}

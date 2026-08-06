@@ -3484,6 +3484,13 @@ var fmtStamp = (iso) => {
 };
 var money = (n) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 var money0 = (n) => (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
+var moneyCompact = (n) => {
+  const sign = n < 0 ? "-$" : "$";
+  const v = Math.abs(n);
+  if (v >= 1e6) return `${sign}${(v / 1e6).toFixed(v >= 1e7 ? 0 : 1)}M`;
+  if (v >= 1e3) return `${sign}${(v / 1e3).toFixed(v >= 1e4 ? 0 : 1)}k`;
+  return `${sign}${Math.round(v)}`;
+};
 var pct1 = (n) => `${n.toFixed(2)}%`;
 var FACT_TIERS = ["unknown", "seeded", "derived", "verified"];
 function fact(value, opts = {}) {
@@ -6295,7 +6302,7 @@ function Dashboard({
     ] })
   ] });
 }
-function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [] }) {
+function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [], setUsers }) {
   const [scope, setScope] = (0, import_react.useState)(isAdmin ? "company" : currentUser.name);
   const [range, setRange] = (0, import_react.useState)("all");
   const [tab, setTab] = (0, import_react.useState)("summary");
@@ -6410,11 +6417,50 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
     return Object.values(map).sort((a2, b2) => b2.revenue - a2.revenue || b2.leads - a2.leads);
   }, [scoped]);
   const commissionRows = (0, import_react.useMemo)(() => scoped.filter((j) => WON_STAGES.includes(j.stageId)).map((j) => ({ job: j, cap: computeCapOut(j) })).sort((a2, b2) => b2.cap.payout - a2.cap.payout), [scoped]);
+  const trend = (0, import_react.useMemo)(() => {
+    const MONTHS_BACK = 6;
+    const now = /* @__PURE__ */ new Date();
+    const buckets = [];
+    for (let i = MONTHS_BACK - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      buckets.push({
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+        label: d.toLocaleString(void 0, { month: "short" }),
+        revenue: 0,
+        won: 0
+      });
+    }
+    const byKey = Object.fromEntries(buckets.map((b) => [b.key, b]));
+    scoped.filter((j) => WON_STAGES.includes(j.stageId)).forEach((j) => {
+      const raw = j.contract && j.contract.signedAt || j.stageAt;
+      const d = parseAnyStamp(raw);
+      if (!d) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const b = byKey[key];
+      if (!b) return;
+      b.revenue += computeCapOut(j).contract;
+      b.won += 1;
+    });
+    return buckets;
+  }, [scoped]);
   const Stat = ({ label, value, sub, tone }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 14, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 19, fontWeight: 800, color: tone || S.ink }, children: value }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.ink, marginTop: 3 }, children: label }),
     sub && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 2 }, children: sub })
   ] });
+  const setGoal = (name, val) => setUsers && setUsers((prev) => prev.map((u) => u.name === name ? { ...u, goal: val } : u));
+  const TrendChart = ({ data, valueKey, formatValue, tone }) => {
+    const max = Math.max(1, ...data.map((d) => d[valueKey]));
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", alignItems: "flex-end", gap: 8, marginTop: 4 }, children: data.map((d) => {
+      const v = d[valueKey];
+      const h = v > 0 ? Math.max(6, Math.round(v / max * 72)) : 0;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10, color: S.sub, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }, children: v > 0 ? formatValue(v) : "" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: "100%", height: 72, display: "flex", alignItems: "flex-end" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: "100%", height: h, background: tone || T.accent, borderRadius: "4px 4px 0 0" } }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, fontWeight: 700 }, children: d.label })
+      ] }, d.key);
+    }) });
+  };
   const exportCommission = () => {
     const rows = [
       [`Commission report \u2014 ${scope === "company" ? "Company-wide" : scope}`],
@@ -6501,6 +6547,13 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Average job", value: money(stat.avgJob), sub: "Signed jobs only" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Open pipeline", value: money(stat.openValue), sub: `${stat.open} active jobs` }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Receivable", value: money(stat.ar), sub: `${money(stat.collected)} collected`, tone: stat.ar > 0 ? "#B42318" : void 0 })
+      ] }),
+      trend.some((d) => d.won > 0) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Trend \u2014 last 6 months" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 700, color: S.sub, marginBottom: 2 }, children: "SIGNED REVENUE" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TrendChart, { data: trend, valueKey: "revenue", formatValue: moneyCompact }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 700, color: S.sub, marginTop: 16, marginBottom: 2 }, children: "JOBS WON" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TrendChart, { data: trend, valueKey: "won", formatValue: (v) => String(v), tone: "#5B8DEF" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Job mix" }),
@@ -6666,7 +6719,33 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
           money(r.reimb)
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 800, color: T.accent }, children: money(r.payout) })
-      ] })
+      ] }),
+      (() => {
+        const u = users.find((x) => x.name === r.name);
+        const goal = u ? num(u.goal) : 0;
+        const progress = goal > 0 ? Math.min(100, r.revenue / goal * 100) : 0;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}` }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11, fontWeight: 800, letterSpacing: ".05em", color: S.sub }, children: "GOAL" }),
+            goal > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 12.5, fontWeight: 700, color: progress >= 100 ? "#177245" : S.ink }, children: [
+              pct1(progress),
+              " of ",
+              money(goal),
+              progress >= 100 ? " \u2014 hit" : ""
+            ] })
+          ] }),
+          goal > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 6, background: S.line, borderRadius: 99, overflow: "hidden", marginBottom: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: `${progress}%`, height: "100%", background: progress >= 100 ? "#177245" : T.accent } }) }),
+          setUsers && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            MoneyInput,
+            {
+              style: { ...inputStyle, width: "100%" },
+              placeholder: "Set a revenue goal",
+              value: u ? u.goal || "" : "",
+              onChange: (v) => setGoal(r.name, v)
+            }
+          )
+        ] });
+      })()
     ] }, r.name)) }),
     tab === "sources" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Lead source performance" }),
@@ -22697,6 +22776,13 @@ function parseNowStamp(s) {
   if (d.getTime() - now.getTime() > 864e5) d.setFullYear(d.getFullYear() - 1);
   return d;
 }
+function parseAnyStamp(raw) {
+  if (!raw) return null;
+  const viaNowStamp = parseNowStamp(raw);
+  if (viaNowStamp) return viaNowStamp;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+}
 function SupplementPipeline({ jobs, onOpenJob, embedded = false, onBack }) {
   const [stage, setStage] = (0, import_react.useState)("all");
   const rows = jobs.flatMap((j) => ((j.claim || {}).supplements || []).map((s) => ({ job: j, s })));
@@ -29862,7 +29948,8 @@ function SupremeCRM() {
         isAdmin,
         currentUser: liveUser,
         toast,
-        crews
+        crews,
+        setUsers
       }
     ) : nav === "calendar" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       CalendarView,
