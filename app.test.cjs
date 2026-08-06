@@ -17101,6 +17101,62 @@ function bytesToDataUrl(bytes, mime) {
   for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
   return `data:${mime};base64,${btoa(bin)}`;
 }
+function pdfRowsFromItems(items, tolerance = 2.5) {
+  const points = (items || []).filter((it) => it.str && it.str.trim()).map((it) => ({ x: it.transform[4], y: it.transform[5], str: it.str }));
+  points.sort((a, b) => b.y - a.y || a.x - b.x);
+  const rows = [];
+  points.forEach((p) => {
+    const last = rows[rows.length - 1];
+    if (last && Math.abs(last.y - p.y) <= tolerance) last.items.push(p);
+    else rows.push({ y: p.y, items: [p] });
+  });
+  return rows.map((r) => r.items.sort((a, b) => a.x - b.x).map((p) => p.str.trim()).join(" ").replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+async function extractSubSheetRowsFromPdf(file) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf");
+  const workerSrc = (await import("pdfjs-dist/legacy/build/pdf.worker.min.js?url")).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjs.getDocument({ data: buf }).promise;
+  const pageCount = Math.min(doc.numPages, 20);
+  let rows = [];
+  let hadText = false;
+  for (let i = 1; i <= pageCount; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    if (content.items.some((it) => it.str && it.str.trim())) hadText = true;
+    rows = rows.concat(pdfRowsFromItems(content.items));
+  }
+  return { rows, noText: !hadText };
+}
+var SUB_PDF_LABEL_STOPWORDS = /\b(insur|indemnif|arbitrat|agree|hereby|shall|warrant|liabilit|attorney|govern|terminat|severab|jurisdiction|witness|notary|claus|provision|covenant|pursuant|aggregate|occurrence|per annum|state of|effective|operating at|policy|address|suite|\bste\b|\bllc\b|\binc\b)/i;
+var SUB_PDF_NOISE_SHAPES = [/,\s*[A-Z]{2}\b/, /\|/, /\bLLC\b/i];
+var SUB_PDF_UNIT_TOKENS = ["SQ", "EA", "LF", "SF", "SHT", "HR", "JOB", "YD", "GAL", "BOX", "ROLL", "BUNDLE", "EACH", "DAY", "PAIL", "CAN", "TUBE", "BAG", "PALLET"];
+function parseSubSheetPdfRows(rows) {
+  const out = [];
+  (rows || []).forEach((raw) => {
+    const row = String(raw || "").trim();
+    if (!row || row.length > 90) return;
+    const m = row.match(/\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)\s*$/);
+    if (!m) return;
+    const price = num(m[1].replace(/,/g, ""));
+    if (!(price > 0 && price < 5e4)) return;
+    let rest = row.slice(0, m.index).trim().replace(/[-–—:]+$/, "").trim();
+    if (!rest) return;
+    let unit = "flat";
+    const words = rest.split(/\s+/);
+    const lastWord = words[words.length - 1].toUpperCase().replace(/[^A-Z]/g, "");
+    if (SUB_PDF_UNIT_TOKENS.includes(lastWord)) {
+      unit = lastWord;
+      rest = words.slice(0, -1).join(" ").trim();
+    }
+    if (!rest || rest.length < 3 || SUB_PDF_LABEL_STOPWORDS.test(rest) || !/[a-zA-Z]{3}/.test(rest)) return;
+    if (SUB_PDF_NOISE_SHAPES.some((re) => re.test(rest))) return;
+    const code = subCodeFor(rest);
+    out.push({ id: uid("rc"), category: "Other", code: code || "custom", label: rest, unit, price, notes: "" });
+  });
+  return out;
+}
 function PdfFiller({ open, onClose, onExport }) {
   const [buf, setBuf] = (0, import_react.useState)(null);
   const [name, setName] = (0, import_react.useState)("");
@@ -25816,6 +25872,8 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const priceRef = (0, import_react.useRef)(null);
   const [docBusy, setDocBusy] = (0, import_react.useState)(false);
   const [docErr, setDocErr] = (0, import_react.useState)("");
+  const [pdfBusy, setPdfBusy] = (0, import_react.useState)(false);
+  const [pdfImport, setPdfImport] = (0, import_react.useState)(null);
   const parseSubSheet = (text) => {
     const rows0 = String(text).split(/\r?\n/).filter((l) => l.trim());
     if (!rows0.length) return [];
@@ -25866,9 +25924,35 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
       };
     }).filter((r) => r.label && r.price > 0);
   };
+  const onPdfImportDone = (fileName, patch) => setPdfImport({ fileName, mode: "replace", ...patch });
+  const applyPdfImport = (mode) => {
+    if (!pdfImport || pdfImport.error) return;
+    setF((prev) => ({
+      ...prev,
+      rateCard: mode === "append" ? [...prev.rateCard || [], ...pdfImport.candidates] : pdfImport.candidates,
+      docs: [
+        ...(prev.docs || []).filter((d) => d.type !== "Pricing sheet"),
+        { id: uid("cd"), name: pdfImport.fileName, at: todayIso(), type: "Pricing sheet", expires: "", rows: pdfImport.candidates.length }
+      ]
+    }));
+    toast(mode === "append" ? `${pdfImport.candidates.length} rows added` : `Price sheet replaced \u2014 ${pdfImport.candidates.length} rows`);
+    setPdfImport(null);
+  };
   const onPriceFile = (e) => {
     const file = e.target.files && e.target.files[0];
+    e.target.value = "";
     if (!file) return;
+    if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
+      setPdfBusy(true);
+      extractSubSheetRowsFromPdf(file).then(({ rows, noText }) => {
+        setPdfBusy(false);
+        onPdfImportDone(file.name, { candidates: parseSubSheetPdfRows(rows), noText });
+      }).catch((ex) => {
+        setPdfBusy(false);
+        onPdfImportDone(file.name, { error: ex && ex.message || "Couldn't read that PDF." });
+      });
+      return;
+    }
     const r = new FileReader();
     r.onload = () => {
       const rows = parseSubSheet(String(r.result));
@@ -25887,7 +25971,6 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
       } else toast("Couldn't read that sheet \u2014 needs an item column and a price column");
     };
     r.readAsText(file);
-    e.target.value = "";
   };
   const paidFor = (crewId) => {
     const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 864e5;
@@ -26120,8 +26203,8 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, marginTop: 8 }, placeholder: "Tax ID / W-9 (EIN \u2014 never store a full SSN)", value: pay.taxId || "", onChange: (e) => setPay({ taxId: e.target.value }) })
             ] });
           })() }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Pricing sheet", hint: "Upload this sub's full price menu (CSV: category, labor_type, price, unit, notes). Install/steep/tear-off/chimney lines auto-fill a job's sub invoice; every other row is on the menu to add by hand.", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: priceRef, type: "file", accept: ".csv,text/csv", style: { display: "none" }, onChange: onPriceFile }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Pricing sheet", hint: "Upload this sub's full price menu \u2014 a CSV (category, labor_type, price, unit, notes), or their signed agreement/rate sheet as a PDF. Install/steep/tear-off/chimney lines auto-fill a job's sub invoice; every other row is on the menu to add by hand.", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: priceRef, type: "file", accept: ".csv,text/csv,.pdf,application/pdf", style: { display: "none" }, onChange: onPriceFile }),
             (f.rateCard || []).length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 10, overflow: "hidden", marginBottom: 8 }, children: [...new Set((f.rateCard || []).map((r) => r.category || "Other"))].map((cat) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, background: S.soft, padding: "6px 11px" }, children: cat }),
               (f.rateCard || []).filter((r) => (r.category || "Other") === cat).map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: `1px solid ${S.line}` }, children: [
@@ -26151,12 +26234,12 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             ] }, cat)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }, children: [
               "No price sheet yet. Upload a CSV with columns like ",
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "category, labor_type, price, unit, notes" }),
-              " \u2014 every row becomes a priced menu item you can add to a job's sub invoice."
+              ", or their signed agreement as a PDF \u2014 every row becomes a priced menu item you can add to a job's sub invoice."
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => priceRef.current && priceRef.current.click(), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, disabled: pdfBusy, onClick: () => priceRef.current && priceRef.current.click(), children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
               " ",
-              (f.rateCard || []).length ? "Replace price sheet" : "Upload price sheet"
+              pdfBusy ? "Reading PDF\u2026" : (f.rateCard || []).length ? "Replace price sheet" : "Upload price sheet"
             ] })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Trades", children: [
@@ -26215,6 +26298,83 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
                 t
               );
             }) })
+          ] })
+        ]
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+      Sheet,
+      {
+        open: !!pdfImport,
+        onClose: () => setPdfImport(null),
+        title: "Review price sheet from PDF",
+        footer: pdfImport && !pdfImport.error && pdfImport.candidates.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => applyPdfImport("append"), children: "Add to price sheet" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 1 }, onClick: () => applyPdfImport("replace"), children: "Replace price sheet" })
+        ] }),
+        children: [
+          pdfImport && pdfImport.error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Could not read that PDF", tone: "red", children: pdfImport.error }),
+          pdfImport && !pdfImport.error && pdfImport.noText && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "No readable text found", tone: "amber", children: "This looks like a scanned or image-only PDF \u2014 there's no text layer to pull from, so nothing came through automatically. A CSV export, or typing the rates in below, will work instead." }),
+          pdfImport && !pdfImport.error && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }, children: [
+              pdfImport.candidates.length,
+              " possible price ",
+              pdfImport.candidates.length === 1 ? "row" : "rows",
+              " found in ",
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: pdfImport.fileName }),
+              ". Every sub's PDF is laid out differently, so check these landed right before adding \u2014 fix, remove, or add anything the parser missed."
+            ] }),
+            pdfImport.candidates.map((r, i) => {
+              const setRow = (patch) => setPdfImport((prev) => ({
+                ...prev,
+                candidates: prev.candidates.map((x, xi) => xi === i ? { ...x, ...patch } : x)
+              }));
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", padding: "8px 0", borderTop: `1px solid ${S.line}` }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    style: { ...inputStyle, flex: 1 },
+                    value: r.label,
+                    placeholder: "Item",
+                    onChange: (e) => setRow({ label: e.target.value, code: subCodeFor(e.target.value) || "custom" })
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    style: { ...inputStyle, width: 58 },
+                    value: r.unit,
+                    placeholder: "Unit",
+                    onChange: (e) => setRow({ unit: e.target.value })
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: { ...inputStyle, width: 96 }, value: r.price, onChange: (v) => setRow({ price: num(v) }) }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "button",
+                  {
+                    onClick: () => setPdfImport((prev) => ({ ...prev, candidates: prev.candidates.filter((_, xi) => xi !== i) })),
+                    style: { border: "none", background: "none", cursor: "pointer" },
+                    children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14, color: "#B42318" })
+                  }
+                )
+              ] }, r.id);
+            }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+              Btn,
+              {
+                kind: "ghost",
+                small: true,
+                style: { marginTop: 10 },
+                onClick: () => setPdfImport((prev) => ({
+                  ...prev,
+                  candidates: [...prev.candidates, { id: uid("rc"), category: "Other", code: "custom", label: "", unit: "flat", price: 0, notes: "" }]
+                })),
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+                  " Add row"
+                ]
+              }
+            )
           ] })
         ]
       }

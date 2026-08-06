@@ -16209,6 +16209,90 @@ function bytesToDataUrl(bytes, mime) {
   return `data:${mime};base64,${btoa(bin)}`;
 }
 
+/* ------------------------------------------------------------------
+   Subcontractor pricing from a PDF, not just a CSV.
+
+   A sub's rate sheet is usually an exhibit buried inside their signed
+   agreement, not a clean two-column export — and pdf.js's own text
+   order often pulls a table apart into column blocks (every label,
+   then every unit, then every price) rather than reading order,
+   because that is drawing order on the page, not visual layout. Text
+   position (x/y) is what actually says which cells belong to which
+   row, so rows are rebuilt from position instead of trusting
+   extraction order — this is what makes it work across differently
+   laid-out PDFs rather than only the one sub whose table happened to
+   already read top-to-bottom.
+
+   Nothing here writes to a crew's rate card directly: every row is a
+   candidate the office reviews, edits, or drops before it becomes a
+   real pay rate — a wrong number here changes what a sub gets paid.
+------------------------------------------------------------------- */
+function pdfRowsFromItems(items, tolerance = 2.5) {
+  const points = (items || [])
+    .filter((it) => it.str && it.str.trim())
+    .map((it) => ({ x: it.transform[4], y: it.transform[5], str: it.str }));
+  points.sort((a, b) => b.y - a.y || a.x - b.x);
+  const rows = [];
+  points.forEach((p) => {
+    const last = rows[rows.length - 1];
+    if (last && Math.abs(last.y - p.y) <= tolerance) last.items.push(p);
+    else rows.push({ y: p.y, items: [p] });
+  });
+  return rows
+    .map((r) => r.items.sort((a, b) => a.x - b.x).map((p) => p.str.trim()).join(" ").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+async function extractSubSheetRowsFromPdf(file) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf");
+  const workerSrc = (await import("pdfjs-dist/legacy/build/pdf.worker.min.js?url")).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjs.getDocument({ data: buf }).promise;
+  const pageCount = Math.min(doc.numPages, 20);
+  let rows = [];
+  let hadText = false;
+  for (let i = 1; i <= pageCount; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    if (content.items.some((it) => it.str && it.str.trim())) hadText = true;
+    rows = rows.concat(pdfRowsFromItems(content.items));
+  }
+  return { rows, noText: !hadText };
+}
+/* Words that show up in the surrounding legal text (insurance limits,
+   liquidated-damages clauses, effective dates) but never in a real
+   pricing line — without this, a wrapped sentence that happens to end
+   in a number reads exactly like a price row. */
+const SUB_PDF_LABEL_STOPWORDS = /\b(insur|indemnif|arbitrat|agree|hereby|shall|warrant|liabilit|attorney|govern|terminat|severab|jurisdiction|witness|notary|claus|provision|covenant|pursuant|aggregate|occurrence|per annum|state of|effective|operating at|policy|address|suite|\bste\b|\bllc\b|\binc\b)/i;
+/* Row reconstruction pulls in the letterhead and exhibit headers the
+   same as any other row on the page — an address or a policy number
+   ends in digits exactly like a price does. These shapes only ever
+   show up in that boilerplate, never in a real labor-item label. */
+const SUB_PDF_NOISE_SHAPES = [/,\s*[A-Z]{2}\b/, /\|/, /\bLLC\b/i];
+const SUB_PDF_UNIT_TOKENS = ["SQ", "EA", "LF", "SF", "SHT", "HR", "JOB", "YD", "GAL", "BOX", "ROLL", "BUNDLE", "EACH", "DAY", "PAIL", "CAN", "TUBE", "BAG", "PALLET"];
+function parseSubSheetPdfRows(rows) {
+  const out = [];
+  (rows || []).forEach((raw) => {
+    const row = String(raw || "").trim();
+    if (!row || row.length > 90) return;
+    const m = row.match(/\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)\s*$/);
+    if (!m) return;
+    const price = num(m[1].replace(/,/g, ""));
+    if (!(price > 0 && price < 50000)) return;
+    let rest = row.slice(0, m.index).trim().replace(/[-–—:]+$/, "").trim();
+    if (!rest) return;
+    let unit = "flat";
+    const words = rest.split(/\s+/);
+    const lastWord = words[words.length - 1].toUpperCase().replace(/[^A-Z]/g, "");
+    if (SUB_PDF_UNIT_TOKENS.includes(lastWord)) { unit = lastWord; rest = words.slice(0, -1).join(" ").trim(); }
+    if (!rest || rest.length < 3 || SUB_PDF_LABEL_STOPWORDS.test(rest) || !/[a-zA-Z]{3}/.test(rest)) return;
+    if (SUB_PDF_NOISE_SHAPES.some((re) => re.test(rest))) return;
+    const code = subCodeFor(rest);
+    out.push({ id: uid("rc"), category: "Other", code: code || "custom", label: rest, unit, price, notes: "" });
+  });
+  return out;
+}
+
 /* True PDF form-filler. Upload a PDF (a carrier form, a T&C, a permit
    application), render it, tap to drop text or ✓ fields anywhere on the page,
    type, then export a real filled PDF with the text embedded via pdf-lib. The
@@ -24376,6 +24460,8 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const priceRef = useRef(null);
   const [docBusy, setDocBusy] = useState(false);
   const [docErr, setDocErr] = useState("");
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfImport, setPdfImport] = useState(null); // {fileName, candidates, noText} | {fileName, error} | null
   /* Read a subcontractor's uploaded price sheet (CSV: an item/description
      column and a price/rate column) and map each row to a known pay code so
      it drives pay automatically. Unrecognized rows are kept as flat add-ons. */
@@ -24410,9 +24496,41 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
       };
     }).filter((r) => r.label && r.price > 0);
   };
+  /* A PDF's pricing table always lands in the review sheet, never
+     straight into rateCard — a CSV's columns are unambiguous, but a
+     position-reconstructed PDF row is a guess, and it is real pay
+     rates riding on it being right. */
+  const onPdfImportDone = (fileName, patch) => setPdfImport({ fileName, mode: "replace", ...patch });
+  const applyPdfImport = (mode) => {
+    if (!pdfImport || pdfImport.error) return;
+    setF((prev) => ({
+      ...prev,
+      rateCard: mode === "append" ? [...(prev.rateCard || []), ...pdfImport.candidates] : pdfImport.candidates,
+      docs: [
+        ...((prev.docs || []).filter((d) => d.type !== "Pricing sheet")),
+        { id: uid("cd"), name: pdfImport.fileName, at: todayIso(), type: "Pricing sheet", expires: "", rows: pdfImport.candidates.length },
+      ],
+    }));
+    toast(mode === "append" ? `${pdfImport.candidates.length} rows added` : `Price sheet replaced — ${pdfImport.candidates.length} rows`);
+    setPdfImport(null);
+  };
   const onPriceFile = (e) => {
     const file = e.target.files && e.target.files[0];
+    e.target.value = "";
     if (!file) return;
+    if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
+      setPdfBusy(true);
+      extractSubSheetRowsFromPdf(file)
+        .then(({ rows, noText }) => {
+          setPdfBusy(false);
+          onPdfImportDone(file.name, { candidates: parseSubSheetPdfRows(rows), noText });
+        })
+        .catch((ex) => {
+          setPdfBusy(false);
+          onPdfImportDone(file.name, { error: (ex && ex.message) || "Couldn't read that PDF." });
+        });
+      return;
+    }
     const r = new FileReader();
     r.onload = () => {
       const rows = parseSubSheet(String(r.result));
@@ -24431,7 +24549,6 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
       } else toast("Couldn't read that sheet — needs an item column and a price column");
     };
     r.readAsText(file);
-    e.target.value = "";
   };
   const paidFor = (crewId) => {
     const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 86400000;
@@ -24598,8 +24715,8 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             );
           })()}
         </Field>
-        <Field label="Pricing sheet" hint="Upload this sub's full price menu (CSV: category, labor_type, price, unit, notes). Install/steep/tear-off/chimney lines auto-fill a job's sub invoice; every other row is on the menu to add by hand.">
-          <input ref={priceRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={onPriceFile} />
+        <Field label="Pricing sheet" hint="Upload this sub's full price menu — a CSV (category, labor_type, price, unit, notes), or their signed agreement/rate sheet as a PDF. Install/steep/tear-off/chimney lines auto-fill a job's sub invoice; every other row is on the menu to add by hand.">
+          <input ref={priceRef} type="file" accept=".csv,text/csv,.pdf,application/pdf" style={{ display: "none" }} onChange={onPriceFile} />
           {(f.rateCard || []).length > 0 ? (
             <div style={{ border: `1px solid ${S.line}`, borderRadius: 10, overflow: "hidden", marginBottom: 8 }}>
               {[...new Set((f.rateCard || []).map((r) => r.category || "Other"))].map((cat) => (
@@ -24629,11 +24746,12 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             </div>
           ) : (
             <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
-              No price sheet yet. Upload a CSV with columns like <b>category, labor_type, price, unit, notes</b> — every row becomes a priced menu item you can add to a job's sub invoice.
+              No price sheet yet. Upload a CSV with columns like <b>category, labor_type, price, unit, notes</b>,
+              or their signed agreement as a PDF — every row becomes a priced menu item you can add to a job's sub invoice.
             </div>
           )}
-          <Btn kind="ghost" small onClick={() => priceRef.current && priceRef.current.click()}>
-            <Upload size={13} /> {(f.rateCard || []).length ? "Replace price sheet" : "Upload price sheet"}
+          <Btn kind="ghost" small disabled={pdfBusy} onClick={() => priceRef.current && priceRef.current.click()}>
+            <Upload size={13} /> {pdfBusy ? "Reading PDF…" : (f.rateCard || []).length ? "Replace price sheet" : "Upload price sheet"}
           </Btn>
         </Field>
         <Field label="Trades">
@@ -24665,6 +24783,54 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             })}
           </div>
         </Field>
+      </Sheet>
+
+      <Sheet open={!!pdfImport} onClose={() => setPdfImport(null)} title="Review price sheet from PDF"
+        footer={pdfImport && !pdfImport.error && pdfImport.candidates.length > 0 && (
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={() => applyPdfImport("append")}>Add to price sheet</Btn>
+            <Btn style={{ flex: 1 }} onClick={() => applyPdfImport("replace")}>Replace price sheet</Btn>
+          </div>
+        )}>
+        {pdfImport && pdfImport.error && <Callout label="Could not read that PDF" tone="red">{pdfImport.error}</Callout>}
+        {pdfImport && !pdfImport.error && pdfImport.noText && (
+          <Callout label="No readable text found" tone="amber">
+            This looks like a scanned or image-only PDF — there's no text layer to pull from, so nothing came
+            through automatically. A CSV export, or typing the rates in below, will work instead.
+          </Callout>
+        )}
+        {pdfImport && !pdfImport.error && (
+          <>
+            <div style={{ fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
+              {pdfImport.candidates.length} possible price {pdfImport.candidates.length === 1 ? "row" : "rows"} found
+              in <b>{pdfImport.fileName}</b>. Every sub's PDF is laid out differently, so check these landed right
+              before adding — fix, remove, or add anything the parser missed.
+            </div>
+            {pdfImport.candidates.map((r, i) => {
+              const setRow = (patch) => setPdfImport((prev) => ({
+                ...prev, candidates: prev.candidates.map((x, xi) => (xi === i ? { ...x, ...patch } : x)),
+              }));
+              return (
+                <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
+                  <input style={{ ...inputStyle, flex: 1 }} value={r.label} placeholder="Item"
+                    onChange={(e) => setRow({ label: e.target.value, code: subCodeFor(e.target.value) || "custom" })} />
+                  <input style={{ ...inputStyle, width: 58 }} value={r.unit} placeholder="Unit"
+                    onChange={(e) => setRow({ unit: e.target.value })} />
+                  <MoneyInput style={{ ...inputStyle, width: 96 }} value={r.price} onChange={(v) => setRow({ price: num(v) })} />
+                  <button onClick={() => setPdfImport((prev) => ({ ...prev, candidates: prev.candidates.filter((_, xi) => xi !== i) }))}
+                    style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={14} color="#B42318" /></button>
+                </div>
+              );
+            })}
+            <Btn kind="ghost" small style={{ marginTop: 10 }}
+              onClick={() => setPdfImport((prev) => ({
+                ...prev,
+                candidates: [...prev.candidates, { id: uid("rc"), category: "Other", code: "custom", label: "", unit: "flat", price: 0, notes: "" }],
+              }))}>
+              <Plus size={13} /> Add row
+            </Btn>
+          </>
+        )}
       </Sheet>
     </div>
   );
