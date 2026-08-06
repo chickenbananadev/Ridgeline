@@ -8485,7 +8485,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Carrier", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.carrier, onChange: set("carrier"), placeholder: "State Farm, Allstate\u2026" }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Policy number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.policy, onChange: set("policy") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Claim number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.claim, onChange: set("claim") }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deductible ($)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.deductible, onChange: set("deductible") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deductible ($)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: f.deductible, onChange: set("deductible") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Adjuster name", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.adjusterName, onChange: set("adjusterName") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Adjuster phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.adjusterPhone, onChange: set("adjusterPhone") }) })
           ] }),
@@ -11856,7 +11856,7 @@ var AGREEMENT_HEADER = [
   { box: "INSURANCE & CLAIM", tint: true, rows: [
     [{ k: "carrier", label: "INSURANCE CARRIER" }],
     [{ k: "claimNumber", label: "CLAIM NUMBER" }, { k: "dateOfLoss", label: "DATE OF LOSS" }],
-    [{ k: "outOfPocket", label: "OUT OF POCKET" }, { k: "agreementDate", label: "DATE" }],
+    [{ k: "outOfPocket", label: "OUT OF POCKET", t: "money" }, { k: "agreementDate", label: "DATE" }],
     [{ k: "projectAddress", label: "PROJECT ADDRESS (IF DIFFERENT)" }]
   ] }
 ];
@@ -11936,7 +11936,7 @@ function agreementPrefill(job, brand) {
     carrier: ins.carrier || "",
     claimNumber: ins.claim || "",
     dateOfLoss: cl.dateOfLoss || "",
-    outOfPocket: ins.deductible ? money(num(ins.deductible)) : "",
+    outOfPocket: ins.deductible ? String(num(ins.deductible)) : "",
     agreementDate: todayIso(),
     projectAddress: "",
     tearoffLayers: layers,
@@ -11984,9 +11984,10 @@ function agSecHtml(sec, a, brand) {
   return `<div class="agsec">${head}${note}${body}</div>`;
 }
 function agFieldHtml(f, a) {
+  const val = f.t === "money" ? agMoney(a[f.k]) : esc(a[f.k] || "");
   return `<div class="agfield" style="flex:${f.flex || 1}">
     <div class="agflb">${esc(f.label)}</div>
-    <div class="agfval">${esc(a[f.k] || "")}</div>
+    <div class="agfval">${val}</div>
   </div>`;
 }
 function agreementDocHtml(job, brand) {
@@ -19058,6 +19059,7 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
       onChange: (e) => set(k, e.target.value)
     }
   );
+  const moneyTxt = (k) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: a[k] || "", disabled: locked, onChange: (v) => set(k, v) });
   const InitialsStatus = ({ value }) => value ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { ...inputStyle, width: 120, display: "flex", alignItems: "center", fontWeight: 700 }, children: value }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, lineHeight: 1.4, maxWidth: 220 }, children: job.portalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     "Collected with the signature at ",
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `${window.location.origin}/?portal=${job.portalToken}`, target: "_blank", rel: "noreferrer", style: { color: T.accent, fontWeight: 700 }, children: "the client portal" })
@@ -19089,7 +19091,7 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
     ] }),
     AGREEMENT_HEADER.map((box) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: box.box.charAt(0) + box.box.slice(1).toLowerCase() }),
-      box.rows.map((row, ri) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }, children: row.map((f) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: f.label.charAt(0) + f.label.slice(1).toLowerCase(), children: txt(f.k) }, f.k)) }, ri))
+      box.rows.map((row, ri) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }, children: row.map((f) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: f.label.charAt(0) + f.label.slice(1).toLowerCase(), children: f.t === "money" ? moneyTxt(f.k) : txt(f.k) }, f.k)) }, ri))
     ] }, box.box)),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Roofing specification" }),

@@ -7645,7 +7645,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
             <Field label="Carrier"><input style={inputStyle} value={f.carrier} onChange={set("carrier")} placeholder="State Farm, Allstate…" /></Field>
             <Field label="Policy number"><input style={inputStyle} value={f.policy} onChange={set("policy")} /></Field>
             <Field label="Claim number"><input style={inputStyle} value={f.claim} onChange={set("claim")} /></Field>
-            <Field label="Deductible ($)"><input style={inputStyle} value={f.deductible} onChange={set("deductible")} /></Field>
+            <Field label="Deductible ($)"><MoneyInput style={inputStyle} value={f.deductible} onChange={set("deductible")} /></Field>
             <Field label="Adjuster name"><input style={inputStyle} value={f.adjusterName} onChange={set("adjusterName")} /></Field>
             <Field label="Adjuster phone"><input style={inputStyle} value={f.adjusterPhone} onChange={set("adjusterPhone")} /></Field>
           </div>
@@ -10757,7 +10757,7 @@ const AGREEMENT_HEADER = [
   { box: "INSURANCE & CLAIM", tint: true, rows: [
     [{ k: "carrier", label: "INSURANCE CARRIER" }],
     [{ k: "claimNumber", label: "CLAIM NUMBER" }, { k: "dateOfLoss", label: "DATE OF LOSS" }],
-    [{ k: "outOfPocket", label: "OUT OF POCKET" }, { k: "agreementDate", label: "DATE" }],
+    [{ k: "outOfPocket", label: "OUT OF POCKET", t: "money" }, { k: "agreementDate", label: "DATE" }],
     [{ k: "projectAddress", label: "PROJECT ADDRESS (IF DIFFERENT)" }],
   ] },
 ];
@@ -10878,7 +10878,7 @@ function agreementPrefill(job, brand) {
     carrier: ins.carrier || "",
     claimNumber: ins.claim || "",
     dateOfLoss: cl.dateOfLoss || "",
-    outOfPocket: ins.deductible ? money(num(ins.deductible)) : "",
+    outOfPocket: ins.deductible ? String(num(ins.deductible)) : "",
     agreementDate: todayIso(),
     projectAddress: "",
     tearoffLayers: layers,
@@ -10934,9 +10934,10 @@ function agSecHtml(sec, a, brand) {
   return `<div class="agsec">${head}${note}${body}</div>`;
 }
 function agFieldHtml(f, a) {
+  const val = f.t === "money" ? agMoney(a[f.k]) : esc(a[f.k] || "");
   return `<div class="agfield" style="flex:${f.flex || 1}">
     <div class="agflb">${esc(f.label)}</div>
-    <div class="agfval">${esc(a[f.k] || "")}</div>
+    <div class="agfval">${val}</div>
   </div>`;
 }
 
@@ -17953,6 +17954,9 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
     <input style={{ ...inputStyle, ...extra }} value={a[k] || ""} disabled={locked}
       onChange={(e) => set(k, e.target.value)} />
   );
+  const moneyTxt = (k) => (
+    <MoneyInput style={inputStyle} value={a[k] || ""} disabled={locked} onChange={(v) => set(k, v)} />
+  );
   /* These three acknowledgment lines used to be a plain text input a rep
      could type into on the customer's behalf — the same gap as the
      signature. They're read-only here now; a real value only ever
@@ -18002,7 +18006,7 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
           {box.rows.map((row, ri) => (
             <div key={ri} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
               {row.map((f) => (
-                <Field key={f.k} label={f.label.charAt(0) + f.label.slice(1).toLowerCase()}>{txt(f.k)}</Field>
+                <Field key={f.k} label={f.label.charAt(0) + f.label.slice(1).toLowerCase()}>{f.t === "money" ? moneyTxt(f.k) : txt(f.k)}</Field>
               ))}
             </div>
           ))}
