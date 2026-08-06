@@ -4948,7 +4948,10 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
   const wonCount = approvedPlus.length;
   const avgSale = wonCount ? signedValue / wonCount : 0;
   const collected = jobs.reduce((s, j) => s + paymentsSummary(j).received, 0);
-  const closeRate = jobs.length ? wonCount / jobs.length : 0;
+  /* pct1() expects an already-0-100-scaled value, same as every other
+     caller in the file — this is the sole exception; leaving it as a raw
+     0-1 fraction displays 50% won as "0.50%". */
+  const closeRate = jobs.length ? (wonCount / jobs.length) * 100 : 0;
   /* Reviews in the daily workflow: real funnel status across sold/completed
      jobs. "Posted" is who has actually left one; "recover" is a 1–3★ that
      needs a call before anything public. */
@@ -5550,7 +5553,7 @@ const DEFAULT_DASHBOARD_LAYOUT = [
 /* ================================================================
    PERFORMANCE — rep scoreboard + funnel, computed from live jobs
    ================================================================ */
-function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [], setUsers }) {
+function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [], setUsers, dashLayout, setDashLayout }) {
   const [scope, setScope] = useState(isAdmin ? "company" : currentUser.name);
   const [range, setRange] = useState("all");
   const [tab, setTab] = useState("summary");
@@ -5561,7 +5564,14 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
      there) and falls back to a default board that mirrors the fixed Summary
      tab, so a rep who never customizes anything sees the same numbers they
      always did. */
-  const [layout, setLayout] = useState(DEFAULT_DASHBOARD_LAYOUT);
+  /* Lifted to the top-level App component the same way users/integrations/
+     features already are — a local useState here reset to the default on
+     every unmount, so in demo mode (no real backend to round-trip through
+     dashLoadLayout/dashSaveLayout) any add/remove/reorder was silently
+     discarded the moment the rep navigated away, despite the screen's own
+     caption claiming it was "saved to your own account." */
+  const layout = dashLayout;
+  const setLayout = setDashLayout;
   const [editingBoard, setEditingBoard] = useState(false);
   useEffect(() => {
     let alive = true;
@@ -28217,6 +28227,10 @@ export default function SupremeCRM() {
      ZIP. Kept in company settings so one person's phone call becomes
      everyone's. */
   const [jurisContacts, setJurisContacts] = useState({});
+  /* "My dashboard" widget layout, lifted here (not local to Performance)
+     so it survives navigating away and back in demo mode — same as
+     users/integrations/features. */
+  const [dashLayout, setDashLayout] = useState(DEFAULT_DASHBOARD_LAYOUT);
   /* ZIPs looked up on demand. The jurisdiction table grows with use
      rather than needing every ZIP shipped up front. */
   const [learnedJuris, setLearnedJuris] = useState({});
@@ -28873,7 +28887,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           seed={codeSeed} onConsumeSeed={() => setCodeSeed(null)} />
       ) : nav === "performance" ? (
         <Performance jobs={jobs} stages={stages} users={users} onBack={() => setNav("more")}
-          isAdmin={isAdmin} currentUser={liveUser} toast={toast} crews={crews} setUsers={setUsers} />
+          isAdmin={isAdmin} currentUser={liveUser} toast={toast} crews={crews} setUsers={setUsers}
+          dashLayout={dashLayout} setDashLayout={setDashLayout} />
       ) : nav === "calendar" ? (
         <CalendarView jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}
           appointments={appointments} setAppointments={setAppointments}

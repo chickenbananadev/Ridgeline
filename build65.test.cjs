@@ -59,9 +59,9 @@ ok(/const setGoal = \(name, val\) => setUsers && setUsers\(\(prev\) => prev\.map
   "goal is stored raw on the user record, same convention every other MoneyInput field in the app already uses");
 ok(/const progress = goal > 0 \? Math\.min\(100, \(r\.revenue \/ goal\) \* 100\) : 0;/.test(src),
   "progress is computed against r.revenue — a number the leaderboard already computes, not a new metric");
-ok(/function Performance\(\{ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = \[\], setUsers \}\) \{/.test(src),
+ok(/function Performance\(\{ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = \[\], setUsers/.test(src),
   "Performance actually accepts setUsers rather than silently no-oping");
-ok(/<Performance jobs=\{jobs\} stages=\{stages\} users=\{users\} onBack=\{\(\) => setNav\("more"\)\}\s*\n\s*isAdmin=\{isAdmin\} currentUser=\{liveUser\} toast=\{toast\} crews=\{crews\} setUsers=\{setUsers\} \/>/.test(src),
+ok(/<Performance jobs=\{jobs\} stages=\{stages\} users=\{users\} onBack=\{\(\) => setNav\("more"\)\}\s*\n\s*isAdmin=\{isAdmin\} currentUser=\{liveUser\} toast=\{toast\} crews=\{crews\} setUsers=\{setUsers\}/.test(src),
   "setUsers is actually threaded through at the call site, not just accepted and unused");
 ok(/\{setUsers && \(\s*\n\s*<MoneyInput style=\{\{ \.\.\.inputStyle, width: "100%" \}\} placeholder="Set a revenue goal"/.test(src),
   "the goal input only renders when there's actually a way to persist it");

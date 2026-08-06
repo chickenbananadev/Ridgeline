@@ -5702,7 +5702,7 @@ function Dashboard({
   const wonCount = approvedPlus.length;
   const avgSale = wonCount ? signedValue / wonCount : 0;
   const collected = jobs.reduce((s, j) => s + paymentsSummary(j).received, 0);
-  const closeRate = jobs.length ? wonCount / jobs.length : 0;
+  const closeRate = jobs.length ? wonCount / jobs.length * 100 : 0;
   const reviewJobs = jobs.filter((j) => WON_STAGES.includes(j.stageId) || j.stageId === "s10");
   const rev = { posted: 0, recover: 0, rated: 0, asked: 0, notasked: 0 };
   reviewJobs.forEach((j) => {
@@ -6326,11 +6326,12 @@ var DEFAULT_DASHBOARD_LAYOUT = [
   { id: "jobMix", w: 2 },
   { id: "collections", w: 2 }
 ];
-function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [], setUsers }) {
+function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [], setUsers, dashLayout, setDashLayout }) {
   const [scope, setScope] = (0, import_react.useState)(isAdmin ? "company" : currentUser.name);
   const [range, setRange] = (0, import_react.useState)("all");
   const [tab, setTab] = (0, import_react.useState)("summary");
-  const [layout, setLayout] = (0, import_react.useState)(DEFAULT_DASHBOARD_LAYOUT);
+  const layout = dashLayout;
+  const setLayout = setDashLayout;
   const [editingBoard, setEditingBoard] = (0, import_react.useState)(false);
   (0, import_react.useEffect)(() => {
     let alive = true;
@@ -29683,6 +29684,7 @@ function SupremeCRM() {
   const [apiSetup, setApiSetup] = (0, import_react.useState)({});
   const [ccAutoCreate, setCcAutoCreate] = (0, import_react.useState)(true);
   const [jurisContacts, setJurisContacts] = (0, import_react.useState)({});
+  const [dashLayout, setDashLayout] = (0, import_react.useState)(DEFAULT_DASHBOARD_LAYOUT);
   const [learnedJuris, setLearnedJuris] = (0, import_react.useState)({});
   const [features, setFeatures] = (0, import_react.useState)({});
   const [security, setSecurity] = (0, import_react.useState)({ anomalyLogout: true });
@@ -30453,7 +30455,9 @@ function SupremeCRM() {
         currentUser: liveUser,
         toast,
         crews,
-        setUsers
+        setUsers,
+        dashLayout,
+        setDashLayout
       }
     ) : nav === "calendar" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       CalendarView,

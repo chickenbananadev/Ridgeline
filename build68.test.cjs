@@ -30,7 +30,11 @@ ok(/async function dashLoadLayout\(userId\) \{/.test(src) && /async function das
 ok(/crm_user_integrations.*dashLayout|dashLayout.*crm_user_integrations/s.test(src.slice(src.indexOf("async function dashLoadLayout"), src.indexOf("async function dashSaveLayout") + 800)),
   "the layout rides in the existing crm_user_integrations JSON column — no new table or migration needed");
 
-ok(/const \[layout, setLayout\] = useState\(DEFAULT_DASHBOARD_LAYOUT\);/.test(src),
+/* Build 91 lifted this state to the top-level App component (so it
+   survives navigating away and back in demo mode) — Performance now
+   aliases dashLayout/setDashLayout instead of owning a local useState,
+   but DEFAULT_DASHBOARD_LAYOUT is still the shared starting point. */
+ok(/const \[dashLayout, setDashLayout\] = useState\(DEFAULT_DASHBOARD_LAYOUT\);/.test(src),
   "the board state starts from the shared default");
 ok(/const \[editingBoard, setEditingBoard\] = useState\(false\);/.test(src),
   "the board opens in view mode, not mid-edit");
