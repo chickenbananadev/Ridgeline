@@ -12394,14 +12394,29 @@ var PORTAL_STEPS = [
   "Installation",
   "Complete"
 ];
+var DEFAULT_STAGE_PORTAL_STEP = {
+  s1: 0,
+  s2: 0,
+  s3: 1,
+  s4: 1,
+  s5: 2,
+  s6: 2,
+  s7: 4,
+  s8: 5,
+  s9: 6,
+  s10: 6
+};
 function portalProgressFor(job) {
   if (Number.isInteger(job.portalProgress)) return Math.max(0, Math.min(PORTAL_STEPS.length - 1, job.portalProgress));
+  if (job.stageId && Object.prototype.hasOwnProperty.call(DEFAULT_STAGE_PORTAL_STEP, job.stageId)) {
+    return DEFAULT_STAGE_PORTAL_STEP[job.stageId];
+  }
   const stage = String(job.stageLabel || "").toLowerCase();
   if (/complete|closed/.test(stage)) return 6;
   if (/install|production/.test(stage)) return 5;
-  if (/scheduled/.test(stage)) return 4;
   if (/material|order/.test(stage)) return 3;
   if (/approved|deposit|won|sold/.test(stage)) return 2;
+  if (/scheduled/.test(stage)) return 4;
   if (/estimate|inspect|follow/.test(stage)) return 1;
   return 0;
 }

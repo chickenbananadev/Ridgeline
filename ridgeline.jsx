@@ -11391,14 +11391,28 @@ const PORTAL_STEPS = [
   "Appointment scheduled", "Inspection & estimating", "Quote approved",
   "Materials ordered", "Installation scheduled", "Installation", "Complete",
 ];
+/* The app's own default pipeline (STAGES, ~:1302-1313), mapped straight
+   to a portal step by id — id survives a company renaming a stage's
+   label in the Workflow editor, which a label-regex can't. A company
+   that adds a genuinely custom stage falls through to the regex chain
+   below, which still covers anything the id map doesn't recognize. */
+const DEFAULT_STAGE_PORTAL_STEP = {
+  s1: 0, s2: 0, s3: 1, s4: 1, s5: 2, s6: 2, s7: 4, s8: 5, s9: 6, s10: 6,
+};
 function portalProgressFor(job) {
   if (Number.isInteger(job.portalProgress)) return Math.max(0, Math.min(PORTAL_STEPS.length - 1, job.portalProgress));
+  if (job.stageId && Object.prototype.hasOwnProperty.call(DEFAULT_STAGE_PORTAL_STEP, job.stageId)) {
+    return DEFAULT_STAGE_PORTAL_STEP[job.stageId];
+  }
   const stage = String(job.stageLabel || "").toLowerCase();
   if (/complete|closed/.test(stage)) return 6;
   if (/install|production/.test(stage)) return 5;
-  if (/scheduled/.test(stage)) return 4;
   if (/material|order/.test(stage)) return 3;
+  /* Checked before /scheduled/ — "Deposit paid, job scheduled" and similar
+     custom labels should read as approved/won, not jump straight to
+     "Installation scheduled" just because the word "scheduled" appears. */
   if (/approved|deposit|won|sold/.test(stage)) return 2;
+  if (/scheduled/.test(stage)) return 4;
   if (/estimate|inspect|follow/.test(stage)) return 1;
   return 0;
 }
