@@ -2034,6 +2034,43 @@ const seedJobs = [
   },
 ];
 
+/* Demo mode has no database to load a real activity history from, so
+   without this the stage-move log a fresh session starts with is empty —
+   every history-dependent feature (predicted stall risk, chief among them)
+   would look broken rather than merely quiet on a brand-new demo. This
+   backfills the moves the seed jobs would have logged getting to where
+   they sit today. A real tenant's own crm_activity load overwrites this
+   the moment it hydrates (see the `liveDb()` guard where it's used), so
+   it's seed-only and never a source of truth once a backend is connected. */
+function buildSeedActivity() {
+  const now = Date.now();
+  const chain = (jobId, jobName, steps) => {
+    const totalPastDays = steps.reduce((sum, [, days]) => sum + days, 0);
+    let t = now - totalPastDays * 86400000;
+    return steps.map(([stageName, days]) => {
+      const entry = {
+        id: uid("act"), kind: "stage", jobId, jobName, by: "Jacob Henderson",
+        at: new Date(t).toISOString().slice(0, 16).replace("T", " "),
+        text: `moved ${jobName} to "${stageName}"`,
+      };
+      t += days * 86400000;
+      return entry;
+    });
+  };
+  return [
+    ...chain("j1", "Rob Kennard", [["New lead", 3], ["Appointment scheduled", 0]]),
+    ...chain("j2", "Omkar Hirekhan", [["New lead", 2], ["Appointment scheduled", 5], ["Estimate sent / Follow up", 0]]),
+    ...chain("j3", "Roger Perry", [["New lead", 2], ["Appointment scheduled", 4], ["Estimate sent / Follow up", 5],
+      ["Claim filed", 3], ["Job approved", 4], ["Supplementing", 3], ["Deposit paid — job scheduled", 4], ["Production", 5],
+      ["Payments / Invoicing / Cap out", 0]]),
+    ...chain("j4", "Jill Neitzel", [["New lead", 2], ["Appointment scheduled", 3], ["Estimate sent / Follow up", 4],
+      ["Claim filed", 3], ["Job approved", 0]]),
+    ...chain("j6", "Dale Whitfield", [["New lead", 2], ["Appointment scheduled", 4], ["Estimate sent / Follow up", 5],
+      ["Claim filed", 3], ["Job approved", 4], ["Supplementing", 3], ["Deposit paid — job scheduled", 4], ["Production", 5],
+      ["Payments / Invoicing / Cap out", 3], ["Job completed", 0]]),
+  ].sort((a, b) => (b.at || "").localeCompare(a.at || ""));
+}
+
 /* ================================================================
    HELPERS
    ================================================================ */
@@ -4821,6 +4858,78 @@ function exceptionFeed(jobs, ctx) {
   return all.sort((a, b) => (a.tone === b.tone ? 0 : a.tone === "red" ? -1 : 1));
 }
 
+/* ==================================================================
+   PREDICTIVE STAGE RISK
+
+   Every other "this job needs attention" signal in the app compares a
+   job against a rule someone configured (an SLA day count, a gate
+   check). This compares a job against what actually happened to every
+   other job that passed through the same stage — a genuinely different
+   kind of signal, so it gets its own function and its own surface
+   rather than folding into jobExceptions.
+
+   The only historical record of how long a job actually sat in a stage
+   is the activity feed: moveStage logs one "moved X to \"Stage\""
+   entry per move, with a real timestamp, and nothing else persists a
+   job's stage history once it moves on. Reconstructing "how long did
+   job J spend in stage S" means pairing up a job's own consecutive
+   stage-move log entries and reading the gap between them — the
+   duration between move N and move N+1 is how long the job sat in
+   whichever stage move N put it into.
+================================================================== */
+const STAGE_MOVE_RE = / to "([^"]*)"$/;
+
+/* Per-stage historical duration samples, in days, keyed by stage id.
+   Parses the stage NAME back out of the log text (that's all it ever
+   recorded) and resolves it against the tenant's current stage list —
+   a stage renamed since some of these jobs moved through it will just
+   fail to resolve for those older entries, which undercounts the
+   sample rather than mis-attributing it to the wrong stage. */
+function stageDurationSamples(activity, stages) {
+  const byName = new Map((stages || []).map((s) => [s.name, s.id]));
+  const moves = (activity || [])
+    .filter((a) => a.kind === "stage" && a.jobId && STAGE_MOVE_RE.test(a.text || ""))
+    .map((a) => ({ jobId: a.jobId, at: a.at, stageId: byName.get(STAGE_MOVE_RE.exec(a.text)[1]) }))
+    .filter((m) => m.stageId)
+    .sort((a, b) => (a.at || "").localeCompare(b.at || ""));
+  const byJob = new Map();
+  moves.forEach((m) => { if (!byJob.has(m.jobId)) byJob.set(m.jobId, []); byJob.get(m.jobId).push(m); });
+  const samples = {}; // stageId -> days[]
+  byJob.forEach((seq) => {
+    for (let i = 0; i < seq.length - 1; i++) {
+      const days = (Date.parse(seq[i + 1].at) - Date.parse(seq[i].at)) / 86400000;
+      if (!(days >= 0)) continue; // clock skew / bad data — skip rather than pollute the sample
+      (samples[seq[i].stageId] || (samples[seq[i].stageId] = [])).push(days);
+    }
+  });
+  return samples;
+}
+
+/* Jobs sitting in their current stage longer than half of historical
+   jobs took to move on — median, not mean, so one job that sat for
+   four months while permits cleared doesn't drag the bar up for
+   everyone after it. Stages with fewer than MIN_SAMPLE data points
+   report nothing rather than a prediction with no real basis, the same
+   "unknown beats a confident guess" discipline citeFor already uses. */
+const STALL_MIN_SAMPLE = 3;
+function predictedStallRisk(jobs, activity, stages) {
+  const samples = stageDurationSamples(activity, stages);
+  const median = (arr) => { const s = [...arr].sort((a, b) => a - b); const mid = Math.floor(s.length / 2); return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2; };
+  const done = ["s10", "s11", "s12"];
+  return (jobs || [])
+    .filter((j) => !done.includes(j.stageId))
+    .map((j) => {
+      const pool = samples[j.stageId];
+      if (!pool || pool.length < STALL_MIN_SAMPLE) return null;
+      const typicalDays = median(pool);
+      const daysIn = stageDays(j);
+      if (daysIn <= typicalDays) return null;
+      return { job: j, stageId: j.stageId, daysIn, typicalDays: Math.round(typicalDays * 10) / 10, sampleSize: pool.length };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.daysIn - b.typicalDays) - (a.daysIn - a.typicalDays));
+}
+
 function FocusList({ jobs, onOpenJob, stages = [] }) {
   const ranked = jobs
     .map((j) => ({ j, f: focusScore(j) }))
@@ -4875,7 +4984,7 @@ function FocusList({ jobs, onOpenJob, stages = [] }) {
 
 function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND,
   appointments = [], apptTypes = [], crews = [], setAppointments, setApptTypes, toast, onQueueMessage, onLog, users = [], mutJob, onToggleTask,
-  chatMsgs = [], onSendChat, stageRules = {}, currentUser = null, showMoney = true, isAdmin = true }) {
+  chatMsgs = [], onSendChat, stageRules = {}, currentUser = null, showMoney = true, isAdmin = true, activity = [] }) {
   /* Scope. An owner wants the company; a rep wants their own book and is
      actively hurt by a feed full of other people's problems. Reps land on
      "Mine" and can look wider; admins land on the company. The prop is
@@ -4887,6 +4996,11 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
     if (scope !== "mine" || !currentUser) return allJobs;
     return allJobs.filter((j) => j.assignee === currentUser.name);
   }, [allJobs, scope, currentUser]);
+  /* Historical pattern is a company-wide fact regardless of who's looking —
+     a rep's own stage history is too sparse to be a meaningful baseline —
+     but which jobs get flagged still respects the Mine/All toggle like
+     everything else on this screen. */
+  const stallRisk = useMemo(() => predictedStallRisk(jobs, activity, stages), [jobs, activity, stages]);
   const [homeBoard, setHomeBoard] = useState("calendar");
   const [showAllBlockers, setShowAllBlockers] = useState(false);
   const [quick, setQuick] = useState(null);        // "note" | "call" | "task"
@@ -5142,6 +5256,43 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
 
       {/* Team chat lives in the Inbox, not on the home page. */}
       <FocusList jobs={jobs} onOpenJob={onOpenJob} stages={stages} />
+
+      {/* Likely to stall — a different kind of signal than FocusList or the
+          exception feed: not a broken rule, a job trending past how long
+          jobs like it actually took historically. Only ever shows up once
+          there's enough real history to say so. */}
+      {stallRisk.length > 0 && (
+        <Card style={{ marginTop: 16 }}>
+          <CardTitle right={<Chip tone="amber">{stallRisk.length}</Chip>}>Likely to stall</CardTitle>
+          <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
+            Sitting longer than half of past jobs took to move past this stage.
+          </div>
+          {stallRisk.slice(0, 5).map(({ job: j, stageId, daysIn, typicalDays, sampleSize }, i) => {
+            const stage = stages.find((s) => s.id === stageId);
+            return (
+              <button key={j.id} onClick={() => onOpenJob(j.id)} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%",
+                border: "none", background: "none", cursor: "pointer", textAlign: "left", fontFamily: "inherit",
+                padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none",
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{j.name}</div>
+                  <div style={{ fontSize: 12, color: S.sub, marginTop: 1 }}>
+                    {stage ? stage.name : "this stage"} · based on {sampleSize} past {sampleSize === 1 ? "job" : "jobs"}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 10 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: "#9A6B00" }}>{daysIn}d</div>
+                  <div style={{ fontSize: 11, color: S.sub }}>typically {typicalDays}d</div>
+                </div>
+              </button>
+            );
+          })}
+          {stallRisk.length > 5 && (
+            <div style={{ fontSize: 12, color: S.sub, paddingTop: 8 }}>+ {stallRisk.length - 5} more</div>
+          )}
+        </Card>
+      )}
 
       {/* Week ahead — the next seven days of appointments and crew
           assignments, so the calendar and the dispatch board are answered
@@ -27424,7 +27575,7 @@ export default function SupremeCRM() {
      terms & conditions, and scope of work. Each kind is a list of
      { id, name, body }; a picker on each editor inserts one. */
   const [docTemplates, setDocTemplates] = useState({ notes: [], terms: [], scope: [] });
-  const [activity, setActivity] = useState([]);
+  const [activity, setActivity] = useState(() => (liveDb() ? [] : buildSeedActivity()));
   const [chatMsgs, setChatMsgs] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [calls, setCalls] = useState([]);
@@ -28127,7 +28278,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             setAppointments={setAppointments} setApptTypes={setApptTypes} toast={toast}
             onQueueMessage={(jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))}
             onLog={logAct} users={users} mutJob={mutJob}
-            stageRules={stageRules} currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
+            stageRules={stageRules} currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin} activity={activity}
             onToggleTask={(jobId, taskId) => mutJob(jobId, (j) => ({ ...j, tasks: j.tasks.map((x) => x.id === taskId ? { ...x, done: !x.done, doneAt: !x.done ? new Date().toISOString().slice(0, 16).replace("T", " ") : null } : x) }))}
             chatMsgs={chatMsgs}
             onSendChat={(text) => {

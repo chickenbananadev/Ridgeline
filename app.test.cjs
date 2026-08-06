@@ -2617,6 +2617,60 @@ var seedJobs = [
     }]
   }
 ];
+function buildSeedActivity() {
+  const now = Date.now();
+  const chain = (jobId, jobName, steps) => {
+    const totalPastDays = steps.reduce((sum, [, days]) => sum + days, 0);
+    let t = now - totalPastDays * 864e5;
+    return steps.map(([stageName, days]) => {
+      const entry = {
+        id: uid("act"),
+        kind: "stage",
+        jobId,
+        jobName,
+        by: "Jacob Henderson",
+        at: new Date(t).toISOString().slice(0, 16).replace("T", " "),
+        text: `moved ${jobName} to "${stageName}"`
+      };
+      t += days * 864e5;
+      return entry;
+    });
+  };
+  return [
+    ...chain("j1", "Rob Kennard", [["New lead", 3], ["Appointment scheduled", 0]]),
+    ...chain("j2", "Omkar Hirekhan", [["New lead", 2], ["Appointment scheduled", 5], ["Estimate sent / Follow up", 0]]),
+    ...chain("j3", "Roger Perry", [
+      ["New lead", 2],
+      ["Appointment scheduled", 4],
+      ["Estimate sent / Follow up", 5],
+      ["Claim filed", 3],
+      ["Job approved", 4],
+      ["Supplementing", 3],
+      ["Deposit paid \u2014 job scheduled", 4],
+      ["Production", 5],
+      ["Payments / Invoicing / Cap out", 0]
+    ]),
+    ...chain("j4", "Jill Neitzel", [
+      ["New lead", 2],
+      ["Appointment scheduled", 3],
+      ["Estimate sent / Follow up", 4],
+      ["Claim filed", 3],
+      ["Job approved", 0]
+    ]),
+    ...chain("j6", "Dale Whitfield", [
+      ["New lead", 2],
+      ["Appointment scheduled", 4],
+      ["Estimate sent / Follow up", 5],
+      ["Claim filed", 3],
+      ["Job approved", 4],
+      ["Supplementing", 3],
+      ["Deposit paid \u2014 job scheduled", 4],
+      ["Production", 5],
+      ["Payments / Invoicing / Cap out", 3],
+      ["Job completed", 0]
+    ])
+  ].sort((a, b) => (b.at || "").localeCompare(a.at || ""));
+}
 var ZIP_PREFIX_STATE = [
   { lo: 10, hi: 27, state: "MA" },
   { lo: 28, hi: 29, state: "RI" },
@@ -5616,6 +5670,43 @@ function exceptionFeed(jobs, ctx) {
   const all = (jobs || []).flatMap((j) => jobExceptions(j, ctx));
   return all.sort((a, b) => a.tone === b.tone ? 0 : a.tone === "red" ? -1 : 1);
 }
+var STAGE_MOVE_RE = / to "([^"]*)"$/;
+function stageDurationSamples(activity, stages) {
+  const byName = new Map((stages || []).map((s) => [s.name, s.id]));
+  const moves = (activity || []).filter((a) => a.kind === "stage" && a.jobId && STAGE_MOVE_RE.test(a.text || "")).map((a) => ({ jobId: a.jobId, at: a.at, stageId: byName.get(STAGE_MOVE_RE.exec(a.text)[1]) })).filter((m) => m.stageId).sort((a, b) => (a.at || "").localeCompare(b.at || ""));
+  const byJob = /* @__PURE__ */ new Map();
+  moves.forEach((m) => {
+    if (!byJob.has(m.jobId)) byJob.set(m.jobId, []);
+    byJob.get(m.jobId).push(m);
+  });
+  const samples = {};
+  byJob.forEach((seq) => {
+    for (let i = 0; i < seq.length - 1; i++) {
+      const days = (Date.parse(seq[i + 1].at) - Date.parse(seq[i].at)) / 864e5;
+      if (!(days >= 0)) continue;
+      (samples[seq[i].stageId] || (samples[seq[i].stageId] = [])).push(days);
+    }
+  });
+  return samples;
+}
+var STALL_MIN_SAMPLE = 3;
+function predictedStallRisk(jobs, activity, stages) {
+  const samples = stageDurationSamples(activity, stages);
+  const median = (arr) => {
+    const s = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  };
+  const done = ["s10", "s11", "s12"];
+  return (jobs || []).filter((j) => !done.includes(j.stageId)).map((j) => {
+    const pool = samples[j.stageId];
+    if (!pool || pool.length < STALL_MIN_SAMPLE) return null;
+    const typicalDays = median(pool);
+    const daysIn = stageDays(j);
+    if (daysIn <= typicalDays) return null;
+    return { job: j, stageId: j.stageId, daysIn, typicalDays: Math.round(typicalDays * 10) / 10, sampleSize: pool.length };
+  }).filter(Boolean).sort((a, b) => b.daysIn - b.typicalDays - (a.daysIn - a.typicalDays));
+}
 function FocusList({ jobs, onOpenJob, stages = [] }) {
   const ranked = jobs.map((j) => ({ j, f: focusScore(j) })).filter((x) => x.f).sort((a, b) => b.f.score - a.f.score).slice(0, 5);
   if (ranked.length === 0) return null;
@@ -5691,7 +5782,8 @@ function Dashboard({
   stageRules = {},
   currentUser = null,
   showMoney = true,
-  isAdmin = true
+  isAdmin = true,
+  activity = []
 }) {
   const isRep = !!currentUser && currentUser.role === "rep";
   const [scope, setScope] = (0, import_react.useState)(isRep ? "mine" : "all");
@@ -5699,6 +5791,7 @@ function Dashboard({
     if (scope !== "mine" || !currentUser) return allJobs;
     return allJobs.filter((j) => j.assignee === currentUser.name);
   }, [allJobs, scope, currentUser]);
+  const stallRisk = (0, import_react.useMemo)(() => predictedStallRisk(jobs, activity, stages), [jobs, activity, stages]);
   const [homeBoard, setHomeBoard] = (0, import_react.useState)("calendar");
   const [showAllBlockers, setShowAllBlockers] = (0, import_react.useState)(false);
   const [quick, setQuick] = (0, import_react.useState)(null);
@@ -5952,6 +6045,53 @@ function Dashboard({
       ] });
     })(),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FocusList, { jobs, onOpenJob, stages }),
+    stallRisk.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: stallRisk.length }), children: "Likely to stall" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }, children: "Sitting longer than half of past jobs took to move past this stage." }),
+      stallRisk.slice(0, 5).map(({ job: j, stageId, daysIn, typicalDays, sampleSize }, i) => {
+        const stage = stages.find((s) => s.id === stageId);
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          width: "100%",
+          border: "none",
+          background: "none",
+          cursor: "pointer",
+          textAlign: "left",
+          fontFamily: "inherit",
+          padding: "9px 0",
+          borderTop: i ? `1px solid ${S.line}` : "none"
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, color: S.ink }, children: j.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 1 }, children: [
+              stage ? stage.name : "this stage",
+              " \xB7 based on ",
+              sampleSize,
+              " past ",
+              sampleSize === 1 ? "job" : "jobs"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "right", flexShrink: 0, marginLeft: 10 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13.5, fontWeight: 800, color: "#9A6B00" }, children: [
+              daysIn,
+              "d"
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11, color: S.sub }, children: [
+              "typically ",
+              typicalDays,
+              "d"
+            ] })
+          ] })
+        ] }, j.id);
+      }),
+      stallRisk.length > 5 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, paddingTop: 8 }, children: [
+        "+ ",
+        stallRisk.length - 5,
+        " more"
+      ] })
+    ] }),
     (() => {
       const days = [];
       for (let i = 0; i < 7; i++) {
@@ -29096,7 +29236,7 @@ function SupremeCRM() {
   const [appointments, setAppointments] = (0, import_react.useState)([]);
   const [estimateTemplates, setEstimateTemplates] = (0, import_react.useState)([]);
   const [docTemplates, setDocTemplates] = (0, import_react.useState)({ notes: [], terms: [], scope: [] });
-  const [activity, setActivity] = (0, import_react.useState)([]);
+  const [activity, setActivity] = (0, import_react.useState)(() => liveDb() ? [] : buildSeedActivity());
   const [chatMsgs, setChatMsgs] = (0, import_react.useState)([]);
   const [announcements, setAnnouncements] = (0, import_react.useState)([]);
   const [calls, setCalls] = (0, import_react.useState)([]);
@@ -29852,6 +29992,7 @@ function SupremeCRM() {
           currentUser: liveUser,
           showMoney,
           isAdmin,
+          activity,
           onToggleTask: (jobId, taskId) => mutJob(jobId, (j) => ({ ...j, tasks: j.tasks.map((x) => x.id === taskId ? { ...x, done: !x.done, doneAt: !x.done ? (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ") : null } : x) })),
           chatMsgs,
           onSendChat: (text) => {
