@@ -63,7 +63,6 @@
     "test:build54": "node build54.test.cjs",
     "test:build55": "node build55.test.cjs",
     "test:build56": "node build56.test.cjs",
-    "test:build57": "node build57.test.cjs",
     "test:build58": "node build58.test.cjs",
     "test:build59": "node build59.test.cjs",
     "test:build60": "node build60.test.cjs",
@@ -78,7 +77,8 @@
     "test:build69": "node build69.test.cjs",
     "test:build70": "node build70.test.cjs",
     "test:build71": "node build71.test.cjs",
-    "test:build72": "node build72.test.cjs"
+    "test:build72": "node build72.test.cjs",
+    "test:build73": "node build73.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

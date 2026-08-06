@@ -1460,165 +1460,6 @@ ${f.note || ""}`.trim() : "[your state's department of insurance \u2014 address 
   const blocking = used.filter((u) => !printable(u.fact));
   return { body, used, blocking, ready: blocking.length === 0 };
 }
-var NAAG_DIRECTORY = "https://www.naag.org/find-my-ag/";
-var NASCLA_DIRECTORY = "https://www.nascla.org/page/licensing_boards";
-var LEGAL_AUTHORITIES = {
-  ag: { name: "State attorney general \u2014 consumer protection division", url: NAAG_DIRECTORY },
-  doi: { name: "State department of insurance", url: NAIC_DIRECTORY },
-  lic: { name: "State contractor licensing board", url: NASCLA_DIRECTORY }
-};
-var LEGAL_FIELDS = [
-  {
-    key: "choiceOfLaw",
-    label: "Governing law",
-    authority: "ag",
-    binding: true,
-    help: "Which state's law the agreement is written under. Reciting the wrong one is the defect that started this."
-  },
-  {
-    key: "rescission",
-    label: "Right to cancel",
-    authority: "ag",
-    binding: true,
-    help: "How long the owner has to cancel, and whether the clock runs in business or calendar days."
-  },
-  {
-    key: "noticeOfCancellation",
-    label: "Notice of Cancellation",
-    authority: "ag",
-    binding: true,
-    help: "Whether a separate cancellation notice must be handed over, in how many copies, and at what type size."
-  },
-  {
-    key: "insuranceRescission",
-    label: "Insurance-restoration cancellation",
-    authority: "doi",
-    binding: true,
-    help: "Several states give a separate right to cancel once the carrier denies the claim. Where one exists it must be in the contract."
-  },
-  {
-    key: "deductibleNotice",
-    label: "Deductible-rebate notice",
-    authority: "doi",
-    binding: true,
-    help: "The statutory notice that the insured is responsible for the deductible and it cannot be waived or absorbed."
-  },
-  {
-    key: "financeCharge",
-    label: "Finance-charge ceiling",
-    authority: "ag",
-    binding: true,
-    help: "The maximum late charge on an unpaid balance. The supplied terms assert 1.5% per month, which exceeds the cap in some states."
-  },
-  {
-    key: "downPayment",
-    label: "Down-payment cap",
-    authority: "ag",
-    binding: true,
-    help: "The most that may be collected before work starts. The supplied terms say half down."
-  },
-  {
-    key: "cancellationFee",
-    label: "Cancellation-fee limit",
-    authority: "ag",
-    binding: true,
-    help: "Whether a liquidated-damages fee on late cancellation is enforceable, and at what ceiling. The supplied terms assert 15% of the insurance proceeds."
-  },
-  {
-    key: "warrantyFloor",
-    label: "Workmanship warranty floor",
-    authority: "ag",
-    binding: true,
-    help: "Any statutory minimum the written warranty has to meet."
-  },
-  {
-    key: "licenceOnContract",
-    label: "Licence number on the contract",
-    authority: "lic",
-    binding: true,
-    help: "Where a licence number must be printed on the agreement, omitting it can void the contract or bar a lien."
-  },
-  {
-    key: "licensing",
-    label: "Licence or registration required",
-    authority: "lic",
-    binding: false,
-    help: "Whether roofing work needs a state licence, a registration, or neither \u2014 and who issues it."
-  },
-  {
-    key: "consumerIndemnity",
-    label: "Consumer indemnity permissible",
-    authority: "ag",
-    binding: false,
-    help: "The supplied terms have the homeowner indemnify the company. Several states will not enforce that against a consumer."
-  },
-  {
-    key: "aob",
-    label: "Assignment of benefits",
-    authority: "doi",
-    binding: false,
-    help: "Whether an AOB is permitted, restricted, or prohibited for residential property claims."
-  }
-];
-var LEGAL_FIELD_KEYS = LEGAL_FIELDS.map((f) => f.key);
-var BINDING_LEGAL_FIELDS = LEGAL_FIELDS.filter((f) => f.binding).map((f) => f.key);
-var LEGAL_PACK_SEED = {
-  OH: {
-    choiceOfLaw: { value: "Ohio", note: "The property is in Ohio, so Ohio law governs the agreement.", srcId: "ORC1345" },
-    rescission: {
-      value: "Three (3) business days from the date of the transaction",
-      note: "Ohio's Home Solicitation Sales Act. Confirm the current text and whether this sale is within its scope before relying on it.",
-      srcId: "ORC1345"
-    }
-  }
-};
-function legalPackFor(state, overrides = {}) {
-  const st = String(state || "").toUpperCase();
-  const seed = LEGAL_PACK_SEED[st] || {};
-  const conf = overrides && overrides[st] || {};
-  const pack = {};
-  LEGAL_FIELDS.forEach((f) => {
-    const auth = LEGAL_AUTHORITIES[f.authority];
-    const c = conf[f.key];
-    if (c && c.value) {
-      pack[f.key] = fact(c.value, {
-        note: c.note || "",
-        sourceUrl: c.sourceUrl || auth.url,
-        sourceName: c.sourceName || auth.name,
-        asOf: c.at || null,
-        verifiedBy: c.by || null,
-        confidence: "verified"
-      });
-      return;
-    }
-    const s = seed[f.key];
-    if (s) {
-      const src = s.srcId ? SOURCES[s.srcId] : null;
-      pack[f.key] = fact(s.value, {
-        note: s.note || "",
-        srcId: s.srcId || "",
-        sourceUrl: src && src.url || auth.url,
-        sourceName: src && src.name || auth.name,
-        confidence: "derived"
-      });
-      return;
-    }
-    pack[f.key] = fact("", {
-      note: st ? `Not established for ${st}. ${auth.name} is the body that settles this \u2014 check it and confirm here.` : "Pick the property's state.",
-      sourceUrl: auth.url,
-      sourceName: auth.name,
-      confidence: "unknown"
-    });
-  });
-  return pack;
-}
-function legalPackGaps(state, overrides = {}) {
-  const pack = legalPackFor(state, overrides);
-  return LEGAL_FIELDS.filter((f) => f.binding && !printable(pack[f.key]));
-}
-function legalPackReady(state, overrides = {}) {
-  return !!String(state || "").trim() && legalPackGaps(state, overrides).length === 0;
-}
 function regulatorFor(state) {
   const r = STATE_REGULATORS[state];
   if (r) {
@@ -3241,19 +3082,6 @@ function stateForZip(zip) {
 var JURIS_OVERRIDES = {};
 function setJurisOverrides(map) {
   JURIS_OVERRIDES = map || {};
-}
-var LEGAL_OVERRIDES = {};
-function setLegalOverrides(map) {
-  LEGAL_OVERRIDES = map || {};
-}
-function legalPack(state) {
-  return legalPackFor(state, LEGAL_OVERRIDES);
-}
-function legalGaps(state) {
-  return legalPackGaps(state, LEGAL_OVERRIDES);
-}
-function legalReady(state) {
-  return legalPackReady(state, LEGAL_OVERRIDES);
 }
 var LEARNED_JURISDICTIONS = {};
 function setLearnedJurisdictions(map) {
@@ -12069,35 +11897,8 @@ function agreementTermsFor(brand2) {
   const custom = brand2 && Array.isArray(brand2.agreementTerms) && brand2.agreementTerms.length ? brand2.agreementTerms : AGREEMENT_TERMS;
   return custom;
 }
-var LEGAL_TOKENS = { state: "choiceOfLaw", rescission: "rescission" };
-function agreementFillLegal(text, brand2, state) {
-  const pack = legalPack(state);
-  const unresolved = [];
-  let out = String(text || "").replace(/\{company\}/g, brand2 && brand2.company || "the Company");
-  out = out.replace(/\{(\w+)\}/g, (m, key) => {
-    const field = LEGAL_TOKENS[key];
-    if (!field) return m;
-    const f = pack[field];
-    if (printable(f)) return f.value;
-    const spec = LEGAL_FIELDS.find((x) => x.key === field);
-    unresolved.push({ token: key, field, label: spec && spec.label || field, fact: f });
-    return `[${spec && spec.label || field} for ${state || "this state"} \u2014 not confirmed]`;
-  });
-  return { text: out, unresolved };
-}
 function agreementFill(text, brand2, state) {
-  return agreementFillLegal(text, brand2, state).text;
-}
-var LEGAL_PACK_VERSION = 1;
-function renderedLegalText(job) {
-  const st = job && job.state || "";
-  const pack = legalPack(st);
-  return LEGAL_FIELDS.filter((f) => f.binding).map((f) => `${f.label}: ${printable(pack[f.key]) ? pack[f.key].value : "[not confirmed]"}`).join("\n");
-}
-function agreementBlockers(job) {
-  const st = job && job.state || "";
-  if (!st) return [{ key: "state", label: "Property state", note: "The job has no state, so no legal pack applies." }];
-  return legalGaps(st);
+  return String(text || "").replace(/\{company\}/g, brand2 && brand2.company || "the Company").replace(/\{state\}/g, stateName(state) || "the property's state").replace(/\{rescission\}/g, "three (3) business days");
 }
 function agreementPrefill(job, brand2) {
   const ins = job.insurance || {};
@@ -12844,7 +12645,7 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
           });
         }
         const con = job.contract;
-        if (con && con.price && con.status !== "Signed" && portal.contract && legalReady(job.state)) {
+        if (con && con.price && con.status !== "Signed" && portal.contract) {
           out.push({
             type: "contract",
             id: con.number || "con",
@@ -12870,19 +12671,7 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
                points at the signed agreement, which carries the notice that
                actually applies, rather than naming the wrong statute. */
             terms: "By signing you enter into a binding agreement for the work described, at the price shown. Your signed agreement sets out your right to cancel and the notice period that applies where the property is located.",
-            /* The rendered legal text travels with the signature, not just
-               a reference to the pack. Editing a state's pack later must
-               not retroactively change what a past signature appears to
-               have covered — the hash has to bind to the words the
-               homeowner actually read. */
-            snapshot: {
-              number: con.number,
-              price: con.price,
-              address: job.address,
-              legalPackState: job.state || "",
-              legalPackVersion: LEGAL_PACK_VERSION,
-              renderedLegalText: renderedLegalText(job)
-            }
+            snapshot: { number: con.number, price: con.price, address: job.address }
           });
         }
         (job.changeOrders || []).filter((c) => c.status === "Sent").forEach((c) => {
@@ -19350,7 +19139,6 @@ function TabContract({ job, brand: brand2, setBrand = () => {
     r.readAsDataURL(file);
   };
   const removeAttachment = (id) => setCon({ attachments: (con.attachments || []).filter((a) => a.id !== id) });
-  const blockers = agreementBlockers(job);
   const estTotal = estimateTotal(job.estimate);
   const depositMode = con.depositMode || "pct";
   const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
@@ -19364,7 +19152,7 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       placeItems: "center",
       background: "#FAFBFC",
       overflow: "hidden"
-    }, children: value ? value === "signed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontFamily: "cursive", fontSize: 22 }, children: label === "Client" ? job.name : "Supreme Building Group" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: value, alt: `${label} signature`, style: { maxHeight: 66 } }) : onSign ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", onClick: onSign, disabled: locked || blockers.length > 0, children: [
+    }, children: value ? value === "signed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontFamily: "cursive", fontSize: 22 }, children: label === "Client" ? job.name : "Supreme Building Group" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: value, alt: `${label} signature`, style: { maxHeight: 66 } }) : onSign ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", onClick: onSign, disabled: locked, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.PenLine, { size: 13 }),
       " Sign here"
     ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, textAlign: "center", padding: "0 10px", lineHeight: 1.4 }, children: portalPrompt }) }),
@@ -19611,16 +19399,6 @@ function TabContract({ job, brand: brand2, setBrand = () => {
     ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Signatures" }),
-      !locked && blockers.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { tone: "amber", label: `Not ready to sign in ${stateName(job.state) || "an unknown state"}`, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { lineHeight: 1.55 }, children: [
-        "This contract states rights that are set by state law, and nobody has confirmed them for ",
-        stateName(job.state) || "this property's state",
-        " yet. Until they are confirmed the agreement prints a labelled placeholder wherever one of those clauses belongs, and it cannot be signed or sent.",
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8 }, children: blockers.map((b) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, marginTop: 3 }, children: [
-          "\u2022 ",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: b.label }),
-          b.help ? ` \u2014 ${b.help}` : ""
-        ] }, b.key)) })
-      ] }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 14, flexWrap: "wrap" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SigLine, { label: "Client", value: con.clientSig, portalPrompt: job.portalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
           "Signs at ",
@@ -19629,7 +19407,7 @@ function TabContract({ job, brand: brand2, setBrand = () => {
         ] }) : "Publish a client portal link (Client portal tab) so the customer can sign there" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SigLine, { label: `${brand2.company} representative`, value: con.contractorSig, onSign: () => setSigFor("contractor") })
       ] }),
-      con.clientSig && con.contractorSig && !locked && blockers.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "green", style: { marginTop: 14, width: "100%" }, onClick: () => {
+      con.clientSig && con.contractorSig && !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "green", style: { marginTop: 14, width: "100%" }, onClick: () => {
         setCon({ status: "Signed", signedAt: nowStamp() });
         toast("Contract executed and locked");
       }, children: [
@@ -19647,18 +19425,13 @@ function TabContract({ job, brand: brand2, setBrand = () => {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
         " PDF"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", disabled: blockers.length > 0, onClick: () => sendClientEmail(job, mut, currentUser, integrations, toast, {
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => sendClientEmail(job, mut, currentUser, integrations, toast, {
         subject: `Your contract is ready \u2014 ${brand2.company}`,
         body: `Hi ${job.name}, your contract for ${job.address} is ready to review and sign. Reply to this email with any questions.`
       }), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }),
         " Email to client"
       ] })
-    ] }),
-    blockers.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: [
-      "Printing the draft still works so you can see exactly which clauses are unfilled. Confirm ",
-      stateName(job.state) || "the state",
-      "'s contract law under More \u2192 Insurance & resources \u2192 Coverage by state to unlock signing and sending."
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       SignaturePad,
@@ -23151,158 +22924,6 @@ function ClaimAssistant({ job = null, defaultState = "" }) {
     ] })
   ] });
 }
-function CoverageByState({ jobs = [], stateFacts = {}, onConfirm, onClear, toast = () => {
-} }) {
-  const active = (0, import_react.useMemo)(() => {
-    const set = /* @__PURE__ */ new Set();
-    (jobs || []).forEach((j) => {
-      if (j && j.state) set.add(j.state);
-    });
-    Object.keys(stateFacts || {}).forEach((s) => set.add(s));
-    return [...set].sort();
-  }, [jobs, stateFacts]);
-  const [sel, setSel] = (0, import_react.useState)(active[0] || "");
-  (0, import_react.useEffect)(() => {
-    if (!sel && active.length) setSel(active[0]);
-  }, [active.length]);
-  const [draft, setDraft] = (0, import_react.useState)({});
-  const [openField, setOpenField] = (0, import_react.useState)(null);
-  (0, import_react.useEffect)(() => {
-    setDraft({});
-    setOpenField(null);
-  }, [sel]);
-  const pack = legalPackFor(sel, stateFacts);
-  const gaps = legalPackGaps(sel, stateFacts);
-  const ready = legalPackReady(sel, stateFacts);
-  const jobCount = (jobs || []).filter((j) => j && j.state === sel).length;
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }, children: "A contract states rights that are set by the state the property is in. This is where those get confirmed. Until a state's binding fields are confirmed, its contracts print a labelled placeholder where the clause belongs and cannot be signed or sent \u2014 which is the point: the app does not know your states' law and will not pretend to." }),
-    !active.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: "No jobs with a state on file yet. A state appears here as soon as there is a job in it." }) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 14 }, children: active.map((st) => {
-        const on = st === sel;
-        const good = legalPackReady(st, stateFacts);
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setSel(st), style: {
-          border: `1px solid ${on ? T.accent : S.line}`,
-          background: on ? T.accentSoft : S.card,
-          color: on ? T.accent : S.ink,
-          borderRadius: 999,
-          padding: "7px 14px",
-          fontSize: 13,
-          fontWeight: 700,
-          cursor: "pointer",
-          fontFamily: "inherit",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6
-        }, children: [
-          stateName(st) || st,
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
-            width: 8,
-            height: 8,
-            borderRadius: 99,
-            background: good ? "var(--rl-green-fg)" : "var(--rl-amber-fg)"
-          } })
-        ] }, st);
-      }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: ready ? "green" : "amber", children: ready ? "Contracts can be signed" : `${gaps.length} to confirm` }), children: stateName(sel) || sel }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: [
-          jobCount,
-          " ",
-          jobCount === 1 ? "job" : "jobs",
-          " on file.",
-          ready ? " Every binding field has been confirmed, so agreements here render and sign normally." : " Agreements in this state are blocked from signing until the fields marked below are confirmed."
-        ] })
-      ] }),
-      LEGAL_FIELDS.map((f) => {
-        const cur = pack[f.key];
-        const conf = ((stateFacts || {})[sel] || {})[f.key];
-        const open = openField === f.key;
-        const val = draft[f.key] !== void 0 ? draft[f.key] : conf ? conf.value : cur.value;
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 10 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 180 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14.5, fontWeight: 800, color: S.ink, lineHeight: 1.3 }, children: [
-              f.label,
-              f.binding && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--rl-amber-fg)", marginLeft: 6, fontSize: 11.5, fontWeight: 800 }, children: "BINDING" })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 3 }, children: f.help })
-          ] }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: cur, style: { marginTop: 8 } }),
-          cur.value && cur.note && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 6 }, children: cur.note }),
-          cur.value && cur.sourceUrl && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-            "a",
-            {
-              href: cur.sourceUrl,
-              target: "_blank",
-              rel: "noreferrer",
-              style: { display: "inline-block", fontSize: 12.5, fontWeight: 700, color: T.accent, textDecoration: "none", marginTop: 6 },
-              children: [
-                cur.sourceName || "Open the source",
-                " \u2192"
-              ]
-            }
-          ),
-          conf && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 6 }, children: [
-            "Confirmed by ",
-            conf.by,
-            " on ",
-            conf.at,
-            "."
-          ] }),
-          !open ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => setOpenField(f.key), children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.PenLine, { size: 13 }),
-              " ",
-              conf ? "Update" : "Confirm for " + (stateName(sel) || sel)
-            ] }),
-            conf && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => onClear(sel, f.key), children: "Withdraw" })
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 10 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              Field,
-              {
-                label: `What ${stateName(sel) || sel} requires`,
-                hint: "Write it as it should read to a homeowner. This text goes into the contract wherever this clause belongs.",
-                children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                  "textarea",
-                  {
-                    style: { ...inputStyle, minHeight: 72, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.55 },
-                    value: val,
-                    onChange: (e) => setDraft({ ...draft, [f.key]: e.target.value })
-                  }
-                )
-              }
-            ),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, lineHeight: 1.5, marginBottom: 8 }, children: "Confirming records your name and today's date against this field. Only confirm what you have actually read at the source \u2014 the whole gate is worthless if it is clicked through." }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-                Btn,
-                {
-                  kind: "green",
-                  small: true,
-                  disabled: !String(val || "").trim(),
-                  onClick: () => {
-                    onConfirm(sel, f.key, { value: String(val).trim(), sourceUrl: cur.sourceUrl, sourceName: cur.sourceName });
-                    setOpenField(null);
-                    setDraft({ ...draft, [f.key]: void 0 });
-                  },
-                  children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 14 }),
-                    " I've read the source \u2014 confirm"
-                  ]
-                }
-              ),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => {
-                setOpenField(null);
-                setDraft({ ...draft, [f.key]: void 0 });
-              }, children: "Cancel" })
-            ] })
-          ] })
-        ] }, f.key);
-      }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, lineHeight: 1.5, marginTop: 14 }, children: "This is a record of what your office has checked. It is not legal advice, and confirming a field here does not make it correct \u2014 it records that a named person read the source on a date." })
-    ] })
-  ] });
-}
 function parseNowStamp(s) {
   const m = /^([A-Za-z]{3})\s+(\d{1,2}),\s+(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(String(s || "").trim());
   if (!m) return null;
@@ -23399,8 +23020,6 @@ function SupplementPipeline({ jobs, onOpenJob, embedded = false, onBack }) {
 }
 function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
 }, onSaveJurisdiction = () => {
-}, stateFacts = {}, onConfirmLegal = () => {
-}, onClearLegal = () => {
 }, seed = null, onConsumeSeed = () => {
 } }) {
   const [tab, setTab] = (0, import_react.useState)(seed && seed.tab ? seed.tab : seed && seed.zip ? "codes" : "clients");
@@ -23425,7 +23044,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
   }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["supqueue", "Supplement queue"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Wording library"], ["codes", "Code lookup"], ["coverage", "Coverage"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["supqueue", "Supplement queue"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Wording library"], ["codes", "Code lookup"], ["resources", "Resources"]];
   const kbHits = (() => {
     const q = kbQ.trim().toLowerCase();
     if (!q) return null;
@@ -23460,16 +23079,6 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
       color: tab === id ? "#fff" : S.ink
     }, children: label }, id)) }),
     tab === "ask" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimAssistant, { defaultState: tplState }),
-    tab === "coverage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-      CoverageByState,
-      {
-        jobs,
-        stateFacts,
-        toast,
-        onConfirm: onConfirmLegal,
-        onClear: onClearLegal
-      }
-    ),
     tab === "storm" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StormScout, { toast }),
     tab === "search" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -28897,7 +28506,6 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser, theme = "light"
       ["insurance:ask", import_lucide_react.MessageCircle, "Roofing assistant", "Code, manufacturers, NRCA, claims \u2014 cited answers"],
       ["insurance", import_lucide_react.Shield, "Insurance & claims", "Clients, claims, supplements & depreciation"],
       ["insurance:codes", import_lucide_react.ScrollText, "Code lookup", "Adopted code & building department by zip"],
-      ["insurance:coverage", import_lucide_react.MapPin, "Coverage by state", "Confirm the contract law for every state you work"],
       ["insurance:resources", import_lucide_react.BookOpen, "Roofing resources", "Manufacturer specs, policy provisions, letters, playbook"]
     ]],
     ["Customers & documents", [
@@ -29734,7 +29342,6 @@ function SupremeCRM() {
   const [apiSetup, setApiSetup] = (0, import_react.useState)({});
   const [ccAutoCreate, setCcAutoCreate] = (0, import_react.useState)(true);
   const [jurisContacts, setJurisContacts] = (0, import_react.useState)({});
-  const [stateFacts, setStateFacts] = (0, import_react.useState)({});
   const [learnedJuris, setLearnedJuris] = (0, import_react.useState)({});
   const [features, setFeatures] = (0, import_react.useState)({});
   const [security, setSecurity] = (0, import_react.useState)({ anomalyLogout: true });
@@ -29758,7 +29365,7 @@ function SupremeCRM() {
       setNav("home");
     }
   };
-  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, stateFacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
     announcements,
     calls,
@@ -29779,7 +29386,6 @@ function SupremeCRM() {
     features,
     security,
     jurisContacts,
-    stateFacts,
     learnedJuris,
     version: 1
   });
@@ -29804,10 +29410,6 @@ function SupremeCRM() {
     if (d.jurisContacts) {
       setJurisContacts(d.jurisContacts);
       setJurisOverrides(d.jurisContacts);
-    }
-    if (d.stateFacts) {
-      setStateFacts(d.stateFacts);
-      setLegalOverrides(d.stateFacts);
     }
     if (d.learnedJuris) {
       setLearnedJuris(d.learnedJuris);
@@ -30446,10 +30048,6 @@ function SupremeCRM() {
         setCodeSeed({ tab: "resources" });
         return setNav("insurance");
       }
-      if (id === "insurance:coverage") {
-        setCodeSeed({ tab: "coverage" });
-        return setNav("insurance");
-      }
       return setNav(id);
     }, onLogout: async () => {
       const a = AUTH();
@@ -30480,23 +30078,6 @@ function SupremeCRM() {
           setLearnedJurisdictions(next);
           logAct({ type: "code", text: `Added ${rec.city || rec.zip}, ${rec.county} to the jurisdiction list` });
           toast(rec.needsContact ? "Saved \u2014 add the permit office when you have it" : "Saved with its building department");
-        },
-        stateFacts,
-        onConfirmLegal: (st, key, rec) => {
-          const next = { ...stateFacts, [st]: { ...stateFacts[st] || {}, [key]: { ...rec, at: todayIso(), by: userName } } };
-          setStateFacts(next);
-          setLegalOverrides(next);
-          logAct({ type: "code", text: `Confirmed ${key} for ${st}` });
-          toast("Confirmed for the whole company");
-        },
-        onClearLegal: (st, key) => {
-          const rest = { ...stateFacts[st] || {} };
-          delete rest[key];
-          const next = { ...stateFacts, [st]: rest };
-          setStateFacts(next);
-          setLegalOverrides(next);
-          logAct({ type: "code", text: `Withdrew the confirmation of ${key} for ${st}` });
-          toast("Withdrawn \u2014 contracts in that state are blocked again");
         },
         seed: codeSeed,
         onConsumeSeed: () => setCodeSeed(null)
