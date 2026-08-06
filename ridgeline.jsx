@@ -16180,7 +16180,7 @@ function TabChecklist({ job, mut, toast }) {
           })()}
         </Field>
         <Field label="Inspection method"><PillGroup multi options={["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"]} value={c.method} onPick={set("method")} /></Field>
-        <Field label="Layers"><PillGroup multi options={["1 Layer", "2 Layers", "3+ Layers"]} value={c.layers} onPick={set("layers")} /></Field>
+        <Field label="Layers"><PillGroup options={["1 Layer", "2 Layers", "3+ Layers"]} value={c.layers} onPick={set("layers")} /></Field>
         <Field label="Roof covering"><PillGroup multi options={ROOF_COVERING_OPTIONS} value={c.roofType} onPick={set("roofType")} /></Field>
         <Field label={isFlatRoof ? "Pitch / drainage slope (optional for flat roof)" : "Pitch (primary)"}>
           <PillGroup options={["Flat / low slope", "1/12", "2/12", "3/12", "4/12", "5/12", "6/12", "7/12", "8/12", "9/12+"]} value={c.pitch} onPick={set("pitch")} />
@@ -18480,6 +18480,11 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
 }
 
 /* ---------- Inspection report (fed from checklist) ---------- */
+/* A multi-select checklist field can legitimately hold several values
+   (shingle main roof + metal porch section); JSX renders an array of
+   strings back-to-back with no separator, which reads as one garbled
+   word. Every multi-select field routes display through this. */
+const listVal = (v) => (Array.isArray(v) ? v.join(", ") : v);
 function TabReport({ job, brand, juris, mut, toast, currentUser = null, integrations = {} }) {
   const c = job.checklist;
   if (!c.complete) {
@@ -18534,11 +18539,11 @@ function TabReport({ job, brand, juris, mut, toast, currentUser = null, integrat
       </Card>
       <Section n={1} title="Overview & property facts">
         <KV k="Structure" v={c.structure} />
-        <KV k="Roof covering" v={c.roofType} />
+        <KV k="Roof covering" v={listVal(c.roofType)} />
         <KV k="Approximate age" v={`${c.roofAge} years`} />
-        <KV k="Layers" v={c.layers} />
+        <KV k="Layers" v={listVal(c.layers)} />
         <KV k="Predominant pitch" v={c.pitch} />
-        <KV k="Method" v={c.method || "Visual, non-invasive"} />
+        <KV k="Method" v={listVal(c.method) || "Visual, non-invasive"} />
       </Section>
       <Section n={2} title="Summary of findings">
         {findings.map((f, i) => (
@@ -18552,9 +18557,9 @@ function TabReport({ job, brand, juris, mut, toast, currentUser = null, integrat
         ))}
       </Section>
       <Section n={3} title="Decking & structure">
-        <KV k="Decking type" v={c.deckingType || "—"} />
+        <KV k="Decking type" v={listVal(c.deckingType) || "—"} />
         <KV k="Condition (surface)" v={c.deckingCond || "—"} />
-        <KV k="Condition (attic view)" v={c.atticDecking || "—"} />
+        <KV k="Condition (attic view)" v={listVal(c.atticDecking) || "—"} />
         <KV k="Daylight through decking" v={c.lightCheck || "—"} />
       </Section>
       <Section n={4} title="Ventilation">

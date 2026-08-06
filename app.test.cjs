@@ -17044,7 +17044,7 @@ function TabChecklist({ job, mut, toast }) {
         })()
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Inspection method", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"], value: c.method, onPick: set("method") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Layers", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ["1 Layer", "2 Layers", "3+ Layers"], value: c.layers, onPick: set("layers") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Layers", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["1 Layer", "2 Layers", "3+ Layers"], value: c.layers, onPick: set("layers") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Roof covering", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ROOF_COVERING_OPTIONS, value: c.roofType, onPick: set("roofType") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: isFlatRoof ? "Pitch / drainage slope (optional for flat roof)" : "Pitch (primary)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Flat / low slope", "1/12", "2/12", "3/12", "4/12", "5/12", "6/12", "7/12", "8/12", "9/12+"], value: c.pitch, onPick: set("pitch") }) }),
       isFlatRoof && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: "#ECFDF3", borderRadius: 10, padding: "10px 12px", marginTop: -4, marginBottom: 12, fontSize: 12.5, color: "#176B3A" }, children: "Pitch is not required to complete a flat-roof inspection." })
@@ -19605,6 +19605,7 @@ function TabContract({ job, brand, setBrand = () => {
     )
   ] });
 }
+var listVal = (v) => Array.isArray(v) ? v.join(", ") : v;
 function TabReport({ job, brand, juris, mut, toast, currentUser = null, integrations = {} }) {
   const c = job.checklist;
   if (!c.complete) {
@@ -19674,11 +19675,11 @@ function TabReport({ job, brand, juris, mut, toast, currentUser = null, integrat
     ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Section, { n: 1, title: "Overview & property facts", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Structure", v: c.structure }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Roof covering", v: c.roofType }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Roof covering", v: listVal(c.roofType) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Approximate age", v: `${c.roofAge} years` }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Layers", v: c.layers }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Layers", v: listVal(c.layers) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Predominant pitch", v: c.pitch }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Method", v: c.method || "Visual, non-invasive" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Method", v: listVal(c.method) || "Visual, non-invasive" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Section, { n: 2, title: "Summary of findings", children: findings.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, padding: "10px 0", borderBottom: `1px solid ${S.line}` }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: pTone[f.p], children: f.p }),
@@ -19688,9 +19689,9 @@ function TabReport({ job, brand, juris, mut, toast, currentUser = null, integrat
       ] })
     ] }, i)) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Section, { n: 3, title: "Decking & structure", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Decking type", v: c.deckingType || "\u2014" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Decking type", v: listVal(c.deckingType) || "\u2014" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Condition (surface)", v: c.deckingCond || "\u2014" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Condition (attic view)", v: c.atticDecking || "\u2014" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Condition (attic view)", v: listVal(c.atticDecking) || "\u2014" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Daylight through decking", v: c.lightCheck || "\u2014" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Section, { n: 4, title: "Ventilation", children: [
