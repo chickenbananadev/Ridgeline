@@ -15204,16 +15204,30 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand, showMoney = true
                     {CO_STATUS.map((st) => {
                       const on = (c.status || "Draft") === st;
                       const col = st === "Declined" ? "#B3261E" : st === "Approved" ? "#177245" : T.accent;
+                      /* Approved changes what's billed, so — same as Contract
+                         and Estimate — it is never a status a staff member
+                         clicks into directly. It only ever lands here via
+                         countersign() below, once the homeowner has actually
+                         signed for this change order in the portal. */
+                      const gated = st === "Approved";
                       return (
-                        <button key={st} onClick={() => editCo(c.id, "status", st)} style={{
+                        <button key={st} disabled={gated} onClick={gated ? undefined : () => editCo(c.id, "status", st)} style={{
                           border: `1.5px solid ${on ? col : S.line}`,
                           background: on ? (st === "Declined" ? "#FDECEA" : st === "Approved" ? "#EAF6EE" : T.accentSoft) : "#fff",
                           color: on ? col : S.sub, borderRadius: 8, padding: "5px 11px",
-                          fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+                          fontSize: 12, fontWeight: 800, cursor: gated ? "default" : "pointer", fontFamily: "inherit",
+                          opacity: gated && !on ? 0.45 : 1,
                         }}>{st}</button>
                       );
                     })}
                   </div>
+                  {c.status !== "Approved" && (
+                    <div style={{ fontSize: 12, color: S.sub, marginTop: 6, lineHeight: 1.5 }}>
+                      {job.portalToken
+                        ? <>Approval happens when the homeowner signs at <a href={`${window.location.origin}/?portal=${job.portalToken}`} target="_blank" rel="noreferrer" style={{ color: T.accent, fontWeight: 700 }}>the client portal</a> — open it there for an in-person signature, or send the link.</>
+                        : "Publish a client portal link (Client portal tab) so the homeowner can sign there."}
+                    </div>
+                  )}
 
                   <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
                     <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => delCo(c.id)}>Delete</Btn>
@@ -15327,6 +15341,18 @@ function TabSignatures({ job, mut, toast, currentUser, brand }) {
         const withEst = { ...j, estimate: est };
         return { ...withEst, contract: convertEstimateToContract(withEst) };
       });
+    }
+    /* Change orders had no branch here at all — the customer's portal
+       signature landed in crm_signatures same as any other doc, but
+       nothing ever flipped the change order's own status, so it sat at
+       "Sent" forever even once fully executed. doc_id is the change
+       order's id (see portalDocuments' signDocs, which sets id: c.id). */
+    if (signing.doc_type === "change_order") {
+      mut((j) => ({
+        ...j,
+        changeOrders: (j.changeOrders || []).map((c) =>
+          c.id === signing.doc_id ? { ...c, status: "Approved", approvedAt: todayIso() } : c),
+      }));
     }
     toast(signing.doc_type === "estimate" ? "Estimate accepted — contract ready" : "Countersigned");
     setSigning(null); setSig(null); setConsent(false);

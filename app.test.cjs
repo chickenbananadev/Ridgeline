@@ -16166,7 +16166,8 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand, showMoney = true
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 5, marginTop: 11, flexWrap: "wrap" }, children: CO_STATUS.map((st) => {
               const on = (c.status || "Draft") === st;
               const col = st === "Declined" ? "#B3261E" : st === "Approved" ? "#177245" : T.accent;
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => editCo(c.id, "status", st), style: {
+              const gated = st === "Approved";
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { disabled: gated, onClick: gated ? void 0 : () => editCo(c.id, "status", st), style: {
                 border: `1.5px solid ${on ? col : S.line}`,
                 background: on ? st === "Declined" ? "#FDECEA" : st === "Approved" ? "#EAF6EE" : T.accentSoft : "#fff",
                 color: on ? col : S.sub,
@@ -16174,10 +16175,16 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand, showMoney = true
                 padding: "5px 11px",
                 fontSize: 12,
                 fontWeight: 800,
-                cursor: "pointer",
-                fontFamily: "inherit"
+                cursor: gated ? "default" : "pointer",
+                fontFamily: "inherit",
+                opacity: gated && !on ? 0.45 : 1
               }, children: st }, st);
             }) }),
+            c.status !== "Approved" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 6, lineHeight: 1.5 }, children: job.portalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+              "Approval happens when the homeowner signs at ",
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `${window.location.origin}/?portal=${job.portalToken}`, target: "_blank", rel: "noreferrer", style: { color: T.accent, fontWeight: 700 }, children: "the client portal" }),
+              " \u2014 open it there for an in-person signature, or send the link."
+            ] }) : "Publish a client portal link (Client portal tab) so the homeowner can sign there." }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 11 }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => delCo(c.id), children: "Delete" }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
@@ -16295,6 +16302,12 @@ function TabSignatures({ job, mut, toast, currentUser, brand }) {
         const withEst = { ...j, estimate: est };
         return { ...withEst, contract: convertEstimateToContract(withEst) };
       });
+    }
+    if (signing.doc_type === "change_order") {
+      mut((j) => ({
+        ...j,
+        changeOrders: (j.changeOrders || []).map((c) => c.id === signing.doc_id ? { ...c, status: "Approved", approvedAt: todayIso() } : c)
+      }));
     }
     toast(signing.doc_type === "estimate" ? "Estimate accepted \u2014 contract ready" : "Countersigned");
     setSigning(null);
