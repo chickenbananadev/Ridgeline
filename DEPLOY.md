@@ -175,6 +175,31 @@ function returns a soft failure and the app falls back to the cited entries it
 always showed. Nothing in the UI reports an error, because there is nothing
 the rep could do about it.
 
+## 6b. AI damage detection on photos — shares the assistant's key
+
+Every photo with real image data (uploaded through the app, not a legacy
+record) gets a **Scan for damage** button in the album. It sends that one
+photo to the model and gets back what's visibly documented — hail impact,
+wind/lifted shingles, granule loss, cracking, flashing damage — each with a
+confidence and a one-line description. A finding a rep trusts becomes the
+same photo evidence tag the manual "Tag a photo" flow already writes, so it
+feeds straight into the supplement checker.
+
+```bash
+supabase functions deploy photo-damage-detect
+```
+
+Uses the same `ANTHROPIC_API_KEY` secret as the roofing assistant above — no
+separate key to provision. With no key deployed, the **Scan for damage**
+button still appears (any photo can be scanned) but tapping it tells the rep
+plainly that detection isn't available yet, rather than failing silently.
+
+Same sandbox as the assistant: the model sees exactly one photo's bytes and
+nothing else about the job or tenant. The prompt is explicit that this
+assists a rep who verifies in person — it never estimates damage that isn't
+visibly in the frame, and it never states a dollar value or a claim
+determination.
+
 ## 7. Everything else already in the repo
 
 These functions exist and just need deploying if you haven't already:
@@ -198,7 +223,7 @@ Secrets used across these (set the ones you use):
 | `APP_URL` | checkout, portal | your domain, no trailing slash |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` | send-sms | Twilio console |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | gmail-oauth, gmail-send, calendar-push | Google Cloud → Credentials |
-| `ANTHROPIC_API_KEY` | ai-assistant | console.anthropic.com → API keys (never `VITE_`) |
+| `ANTHROPIC_API_KEY` | ai-assistant, photo-damage-detect | console.anthropic.com → API keys (never `VITE_`) |
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are
 injected into every function automatically — don't set them by hand.

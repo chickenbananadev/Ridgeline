@@ -20144,8 +20144,43 @@ function TabPhotos({ job, mut, toast, ccToken }) {
   const [pairBefore, setPairBefore] = (0, import_react.useState)("");
   const [pairAfter, setPairAfter] = (0, import_react.useState)("");
   const [pairLabel, setPairLabel] = (0, import_react.useState)("");
+  const [scanning, setScanning] = (0, import_react.useState)(null);
   const fileRef = (0, import_react.useRef)(null);
   const pendingLabel = (0, import_react.useRef)("");
+  const scanPhoto = async (p) => {
+    const a = AUTH();
+    if (!a || !a.detectPhotoDamage) {
+      toast("Damage detection isn't available in demo mode");
+      return;
+    }
+    if (!p.url) {
+      toast("This photo has no image to scan");
+      return;
+    }
+    setScanning(p.id);
+    try {
+      const split = splitDataUrl(await dataUrlFromImageUrl(p.url));
+      if (!split) {
+        toast("Couldn't read that photo");
+        return;
+      }
+      const findings = await a.detectPhotoDamage({ imageBase64: split.base64, mimeType: split.mime });
+      if (!findings) {
+        toast("Damage detection isn't available right now");
+        return;
+      }
+      mut((j) => ({ ...j, photos: j.photos.map((x) => x.id === p.id ? { ...x, aiScan: { at: nowStamp(), findings } } : x) }));
+      toast(findings.length ? `${findings.length} possible finding${findings.length === 1 ? "" : "s"} \u2014 verify in person before using` : "No damage detected in this photo");
+    } catch (e) {
+      toast("Couldn't scan that photo");
+    } finally {
+      setScanning(null);
+    }
+  };
+  const useAiFinding = (p, finding) => {
+    mut((j) => ({ ...j, photos: j.photos.map((x) => x.id === p.id ? { ...x, findingTag: { title: finding.type, cite: null } } : x) }));
+    toast(`Tagged as evidence for "${finding.type}"`);
+  };
   const getFix = async () => {
     setLocating(true);
     setGeoErr("");
@@ -20376,6 +20411,46 @@ function TabPhotos({ job, mut, toast, ccToken }) {
             p.shared ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Check, { size: 10 }) : null,
             " ",
             p.shared ? "Shared" : "Share"
+          ] }),
+          p.url && !p.aiScan && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => scanPhoto(p), disabled: scanning === p.id, style: {
+            marginTop: 7,
+            marginLeft: 6,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            border: `1px solid ${S.line}`,
+            background: S.card,
+            color: S.sub,
+            borderRadius: 999,
+            padding: "4px 10px",
+            fontSize: 10.5,
+            fontWeight: 700,
+            cursor: scanning === p.id ? "default" : "pointer",
+            opacity: scanning === p.id ? 0.6 : 1
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Sparkles, { size: 10 }),
+            " ",
+            scanning === p.id ? "Scanning\u2026" : "Scan for damage"
+          ] }),
+          p.aiScan && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10, fontWeight: 800, letterSpacing: ".03em", color: S.sub, marginBottom: 4 }, children: "AI SCAN \xB7 VERIFY IN PERSON" }),
+            p.aiScan.findings.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub }, children: "No damage detected." }) : p.aiScan.findings.map((f, fi) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 6, paddingBottom: 6, borderBottom: fi < p.aiScan.findings.length - 1 ? `1px solid ${S.line}` : "none" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 5 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: f.confidence === "high" ? "amber" : "gray", children: f.confidence }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11, fontWeight: 700, color: S.ink }, children: f.type })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, lineHeight: 1.4, marginTop: 2 }, children: f.description }),
+              (!p.findingTag || p.findingTag.title !== f.type) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => useAiFinding(p, f), style: {
+                marginTop: 4,
+                border: "none",
+                background: "none",
+                color: T.accent,
+                fontSize: 10.5,
+                fontWeight: 700,
+                cursor: "pointer",
+                padding: 0
+              }, children: "Use as evidence" })
+            ] }, fi))
           ] })
         ] })
       ] }, p.id)) }),
@@ -22051,6 +22126,16 @@ function readAsDataUrl(file) {
     r.onerror = () => reject(new Error("read failed"));
     r.readAsDataURL(file);
   });
+}
+async function dataUrlFromImageUrl(url) {
+  if (String(url).startsWith("data:")) return url;
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return readAsDataUrl(blob);
+}
+function splitDataUrl(dataUrl) {
+  const m = /^data:([^;]+);base64,([\s\S]*)$/.exec(dataUrl || "");
+  return m ? { mime: m[1], base64: m[2] } : null;
 }
 async function uploadJobFile(jobId, file) {
   const db = DB();

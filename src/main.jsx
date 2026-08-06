@@ -211,6 +211,23 @@ if (url && anon) {
         return null;
       }
     },
+    /* AI damage detection on a single photo. Sends exactly one image's
+       bytes and gets back what's visibly documented in it — nothing else
+       about the job or tenant reaches the model. Same degrade-silently
+       contract as pushToCalendar/askAssistant: a rep on a phone with no
+       backend, or a key that isn't deployed, should just not see results,
+       not see a broken feature. */
+    async detectPhotoDamage({ imageBase64, mimeType }) {
+      try {
+        const { data, error } = await supabase.functions.invoke("photo-damage-detect", {
+          body: { imageBase64, mimeType },
+        });
+        if (error || !data || !data.ok || !Array.isArray(data.findings)) return null;
+        return data.findings;
+      } catch {
+        return null;
+      }
+    },
     /* Knowledge assistant. Retrieval happens in the app — it already holds
        the whole reference library — so only the matched records travel. The
        API key lives in the Edge Function and never in this bundle.

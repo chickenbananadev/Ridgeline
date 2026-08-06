@@ -8,7 +8,7 @@ import {
   BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat, CloudRain,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
   Scale, Lightbulb, ExternalLink, Lock, Layers, Smile
-, Filter , Megaphone, Clock, Zap, Sun, Moon, Navigation, Award, ClipboardCheck } from "lucide-react";
+, Filter , Megaphone, Clock, Zap, Sun, Moon, Navigation, Award, ClipboardCheck, Sparkles } from "lucide-react";
 
 /* ================================================================
    BRANDING — single source of company identity. Everything company-
@@ -18848,8 +18848,40 @@ function TabPhotos({ job, mut, toast, ccToken }) {
   const [pairBefore, setPairBefore] = useState("");
   const [pairAfter, setPairAfter] = useState("");
   const [pairLabel, setPairLabel] = useState("");
+  const [scanning, setScanning] = useState(null); // photo id currently being scanned
   const fileRef = useRef(null);
   const pendingLabel = useRef("");
+
+  /* AI damage detection — one photo at a time, results written onto the
+     photo record itself (not ephemeral local state) so a scan survives a
+     reload same as every other fact on the job. A finding a rep trusts
+     becomes the exact same findingTag the manual "Tag a photo" flow in
+     SupplementCheck writes, so it's real claim evidence from here on, not
+     a second parallel system. */
+  const scanPhoto = async (p) => {
+    const a = AUTH();
+    if (!a || !a.detectPhotoDamage) { toast("Damage detection isn't available in demo mode"); return; }
+    if (!p.url) { toast("This photo has no image to scan"); return; }
+    setScanning(p.id);
+    try {
+      const split = splitDataUrl(await dataUrlFromImageUrl(p.url));
+      if (!split) { toast("Couldn't read that photo"); return; }
+      const findings = await a.detectPhotoDamage({ imageBase64: split.base64, mimeType: split.mime });
+      if (!findings) { toast("Damage detection isn't available right now"); return; }
+      mut((j) => ({ ...j, photos: j.photos.map((x) => (x.id === p.id ? { ...x, aiScan: { at: nowStamp(), findings } } : x)) }));
+      toast(findings.length
+        ? `${findings.length} possible finding${findings.length === 1 ? "" : "s"} — verify in person before using`
+        : "No damage detected in this photo");
+    } catch (e) {
+      toast("Couldn't scan that photo");
+    } finally {
+      setScanning(null);
+    }
+  };
+  const useAiFinding = (p, finding) => {
+    mut((j) => ({ ...j, photos: j.photos.map((x) => (x.id === p.id ? { ...x, findingTag: { title: finding.type, cite: null } } : x)) }));
+    toast(`Tagged as evidence for "${finding.type}"`);
+  };
 
   const getFix = async () => {
     setLocating(true); setGeoErr("");
@@ -19040,6 +19072,38 @@ function TabPhotos({ job, mut, toast, ccToken }) {
                   color: p.shared ? T.accent : S.sub,
                   borderRadius: 999, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer",
                 }}>{p.shared ? <Check size={10} /> : null} {p.shared ? "Shared" : "Share"}</button>
+                {p.url && !p.aiScan && (
+                  <button onClick={() => scanPhoto(p)} disabled={scanning === p.id} style={{
+                    marginTop: 7, marginLeft: 6, display: "inline-flex", alignItems: "center", gap: 5,
+                    border: `1px solid ${S.line}`, background: S.card, color: S.sub,
+                    borderRadius: 999, padding: "4px 10px", fontSize: 10.5, fontWeight: 700,
+                    cursor: scanning === p.id ? "default" : "pointer", opacity: scanning === p.id ? 0.6 : 1,
+                  }}><Sparkles size={10} /> {scanning === p.id ? "Scanning…" : "Scan for damage"}</button>
+                )}
+                {p.aiScan && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".03em", color: S.sub, marginBottom: 4 }}>
+                      AI SCAN · VERIFY IN PERSON
+                    </div>
+                    {p.aiScan.findings.length === 0 ? (
+                      <div style={{ fontSize: 11, color: S.sub }}>No damage detected.</div>
+                    ) : p.aiScan.findings.map((f, fi) => (
+                      <div key={fi} style={{ marginBottom: 6, paddingBottom: 6, borderBottom: fi < p.aiScan.findings.length - 1 ? `1px solid ${S.line}` : "none" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                          <Chip tone={f.confidence === "high" ? "amber" : "gray"}>{f.confidence}</Chip>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: S.ink }}>{f.type}</span>
+                        </div>
+                        <div style={{ fontSize: 10.5, color: S.sub, lineHeight: 1.4, marginTop: 2 }}>{f.description}</div>
+                        {(!p.findingTag || p.findingTag.title !== f.type) && (
+                          <button onClick={() => useAiFinding(p, f)} style={{
+                            marginTop: 4, border: "none", background: "none", color: T.accent,
+                            fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0,
+                          }}>Use as evidence</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -20541,6 +20605,21 @@ function readAsDataUrl(file) {
     r.onerror = () => reject(new Error("read failed"));
     r.readAsDataURL(file);
   });
+}
+
+/* A stored photo's url is either an inline data: URL (demo / no Storage
+   configured) or a real https Supabase Storage URL — AI damage detection
+   needs base64 bytes either way, since the edge function takes exactly
+   what it's handed rather than fetching a tenant's storage itself. */
+async function dataUrlFromImageUrl(url) {
+  if (String(url).startsWith("data:")) return url;
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return readAsDataUrl(blob);
+}
+function splitDataUrl(dataUrl) {
+  const m = /^data:([^;]+);base64,([\s\S]*)$/.exec(dataUrl || "");
+  return m ? { mime: m[1], base64: m[2] } : null;
 }
 
 async function uploadJobFile(jobId, file) {
