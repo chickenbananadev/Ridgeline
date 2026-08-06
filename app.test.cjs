@@ -17288,6 +17288,14 @@ function supplementFindings(job) {
   }
   return out;
 }
+function supplementJustification(f, job) {
+  const cf = asFact(f);
+  const citeClause = printable(cf) ? ` per ${cf.value}` : "";
+  const addr = job.address || "the property";
+  const claimNo = (job.claim || {}).claim || (job.insurance || {}).claim || "";
+  const claimClause = claimNo ? ` (claim #${claimNo})` : "";
+  return `${f.title} \u2014 ${f.why}${citeClause}. This is part of the necessary and reasonable scope of repair at ${addr}${claimClause} and should be included as an approved supplement.`;
+}
 function SupplementCheck({ job, mut, toast, locked = false }) {
   const [open, setOpen] = (0, import_react.useState)(true);
   const [done, setDone] = (0, import_react.useState)({});
@@ -17324,11 +17332,17 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
       at: nowStamp(),
       cite: cf.value || "",
       citeConfidence: cf.confidence,
-      citeState: f.state || ""
+      citeState: f.state || "",
+      justification: supplementJustification(f, job)
     };
     mut((j) => ({ ...j, claim: { ...j.claim || {}, supplements: [...(j.claim || {}).supplements || [], row] } }));
     setDone((d) => ({ ...d, [f.title]: "supplement" }));
     toast && toast(printable(cf) || !cf.value ? `Added "${f.title}" to the claim supplements` : `Added "${f.title}" \u2014 the code cite was left off because it is not verified for this state`);
+  };
+  const copyJustification = (f) => {
+    const text = supplementJustification(f, job);
+    if (navigator.clipboard) navigator.clipboard.writeText(text);
+    toast && toast("Justification copied \u2014 paste it into your supplement email or portal message");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 12 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: found.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Clear" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: found.some((f) => f.sev === "HIGH") ? "red" : "amber", children: found.length }), children: "Supplement check" }),
@@ -17354,6 +17368,10 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
           isClaim && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => addAsSupplement(f), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 12 }),
             " Add as supplement"
+          ] }),
+          isClaim && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => copyJustification(f), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Copy, { size: 12 }),
+            " Copy justification"
           ] })
         ] }) })
       ] }, i)),
@@ -22565,6 +22583,93 @@ function CoverageByState({ jobs = [], stateFacts = {}, onConfirm, onClear, toast
     ] })
   ] });
 }
+function parseNowStamp(s) {
+  const m = /^([A-Za-z]{3})\s+(\d{1,2}),\s+(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(String(s || "").trim());
+  if (!m) return null;
+  const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+  const [, mon, day, hh, mm, ap] = m;
+  if (!(mon in MONTHS)) return null;
+  let hour = parseInt(hh, 10) % 12;
+  if (ap.toUpperCase() === "PM") hour += 12;
+  const now = /* @__PURE__ */ new Date();
+  const d = new Date(now.getFullYear(), MONTHS[mon], parseInt(day, 10), hour, parseInt(mm, 10));
+  if (d.getTime() - now.getTime() > 864e5) d.setFullYear(d.getFullYear() - 1);
+  return d;
+}
+function SupplementPipeline({ jobs, onOpenJob, embedded = false, onBack }) {
+  const [stage, setStage] = (0, import_react.useState)("all");
+  const rows = jobs.flatMap((j) => ((j.claim || {}).supplements || []).map((s) => ({ job: j, s })));
+  const daysOld = (s) => {
+    const d = parseNowStamp(s.at);
+    if (!d) return null;
+    return Math.max(0, Math.round((Date.now() - d.getTime()) / 864e5));
+  };
+  const shown = stage === "all" ? rows : rows.filter(({ s }) => (s.status || "Draft") === stage);
+  const atTime = (s) => {
+    const d = parseNowStamp(s.at);
+    return d ? d.getTime() : 0;
+  };
+  const sorted = [...shown].sort((a, b) => atTime(b.s) - atTime(a.s));
+  const totalFor = (st) => rows.filter(({ s }) => (s.status || "Draft") === st).reduce((a, { s }) => a + num(s.amount), 0);
+  const grandTotal = rows.reduce((a, { s }) => a + num(s.amount), 0);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: embedded ? 0 : "20px 16px 28px", background: embedded ? "transparent" : S.bg, minHeight: embedded ? void 0 : "100%" }, children: [
+    !embedded && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Supplement queue", onBack }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: embedded ? 0 : 14, borderLeft: `4px solid ${grandTotal > 0 ? "#E8B931" : S.line}` }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }, children: "ACROSS THE WHOLE QUEUE" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 30, fontWeight: 800, color: grandTotal > 0 ? "#9A6B00" : S.ink, marginTop: 4, lineHeight: 1.1 }, children: money(grandTotal) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 6 }, children: [
+        rows.length,
+        " ",
+        rows.length === 1 ? "supplement" : "supplements",
+        " across every open claim, whichever job they belong to."
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, overflowX: "auto", margin: "14px 0 4px", paddingBottom: 2 }, children: ["all", ...SUPPLEMENT_STATUS].map((id) => {
+      const n = id === "all" ? rows.length : rows.filter(({ s }) => (s.status || "Draft") === id).length;
+      const amt = id === "all" ? grandTotal : totalFor(id);
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setStage(id), style: {
+        border: `1.5px solid ${stage === id ? T.accent : S.line}`,
+        background: stage === id ? T.accentSoft : "#fff",
+        color: stage === id ? T.accent : S.ink,
+        borderRadius: 999,
+        padding: "7px 12px",
+        fontSize: 12.5,
+        fontWeight: 700,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        fontFamily: "inherit"
+      }, children: [
+        id === "all" ? "All" : id,
+        n > 0 ? ` \xB7 ${n}` : "",
+        amt > 0 ? ` \xB7 ${money(amt)}` : ""
+      ] }, id);
+    }) }),
+    sorted.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 18, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "Nothing in this part of the queue." }) }),
+    sorted.map(({ job, s }) => {
+      const age = daysOld(s);
+      const tone = s.status === "Denied" ? "red" : s.status === "Approved" || s.status === "Paid" ? "green" : "amber";
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 10 }, pad: 0, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onOpenJob(job.id, "claim"), style: {
+        width: "100%",
+        textAlign: "left",
+        border: "none",
+        background: "none",
+        cursor: "pointer",
+        padding: 15,
+        fontFamily: "inherit"
+      }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700, color: S.ink }, children: job.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 2 }, children: s.desc || "Untitled supplement" }),
+          age != null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 4 }, children: age === 0 ? "added today" : `${age} ${age === 1 ? "day" : "days"} in this status` })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "right", flexShrink: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone, children: s.status || "Draft" }),
+          num(s.amount) > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 800, color: S.ink, marginTop: 6 }, children: money(num(s.amount)) })
+        ] })
+      ] }) }) }, s.id);
+    })
+  ] });
+}
 function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
 }, onSaveJurisdiction = () => {
 }, stateFacts = {}, onConfirmLegal = () => {
@@ -22593,7 +22698,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
   }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["coverage", "Coverage"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["supqueue", "Supplement queue"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Wording library"], ["codes", "Code lookup"], ["coverage", "Coverage"], ["resources", "Resources"]];
   const kbHits = (() => {
     const q = kbQ.trim().toLowerCase();
     if (!q) return null;
@@ -22814,6 +22919,7 @@ Reference: ${c.cite} (confirm before citing)` : c.supplement;
       insJobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, marginTop: 8 }, children: "No insurance jobs yet." })
     ] }),
     tab === "claims" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimsDashboard, { jobs, onOpenJob, embedded: true }) }),
+    tab === "supqueue" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupplementPipeline, { jobs, onOpenJob, embedded: true }) }),
     tab === "supplements" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 14, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10 }, children: "One template library, every state \u2014 pick the job's state and every template renders with the right code citation." }),

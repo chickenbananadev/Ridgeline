@@ -16175,6 +16175,23 @@ function supplementFindings(job) {
   return out;
 }
 
+/* A ready-to-send paragraph for a single supplement finding, phrased the
+   way an adjuster reads a scope: what it is, why it's owed, and the code
+   basis — but only when that citation is actually verified for this job's
+   state. A rep writing this from scratch is exactly what gets a supplement
+   waved off on presentation regardless of merit; this hands back the same
+   "never assert an unconfirmed cite" wording the letter-template library
+   already follows, scoped to this job's own finding instead of a generic
+   template. */
+function supplementJustification(f, job) {
+  const cf = asFact(f);
+  const citeClause = printable(cf) ? ` per ${cf.value}` : "";
+  const addr = job.address || "the property";
+  const claimNo = (job.claim || {}).claim || (job.insurance || {}).claim || "";
+  const claimClause = claimNo ? ` (claim #${claimNo})` : "";
+  return `${f.title} — ${f.why}${citeClause}. This is part of the necessary and reasonable scope of repair at ${addr}${claimClause} and should be included as an approved supplement.`;
+}
+
 function SupplementCheck({ job, mut, toast, locked = false }) {
   const [open, setOpen] = useState(true);
   const [done, setDone] = useState({}); // title -> "estimate" | "supplement"
@@ -16212,12 +16229,18 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
     const cf = asFact(f);
     const cite = printable(cf) && cf.value ? ` [${cf.value}]` : "";
     const row = { id: uid("sup"), desc: `${f.title}${cite}`, amount: "", status: "Draft", at: nowStamp(),
-      cite: cf.value || "", citeConfidence: cf.confidence, citeState: f.state || "" };
+      cite: cf.value || "", citeConfidence: cf.confidence, citeState: f.state || "",
+      justification: supplementJustification(f, job) };
     mut((j) => ({ ...j, claim: { ...(j.claim || {}), supplements: [...((j.claim || {}).supplements || []), row] } }));
     setDone((d) => ({ ...d, [f.title]: "supplement" }));
     toast && toast(printable(cf) || !cf.value
       ? `Added "${f.title}" to the claim supplements`
       : `Added "${f.title}" — the code cite was left off because it is not verified for this state`);
+  };
+  const copyJustification = (f) => {
+    const text = supplementJustification(f, job);
+    if (navigator.clipboard) navigator.clipboard.writeText(text);
+    toast && toast("Justification copied — paste it into your supplement email or portal message");
   };
 
   return (
@@ -16255,6 +16278,7 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
                     <>
                       {f.line && <Btn kind="soft" small onClick={() => addToEstimate(f)}><Plus size={12} /> Add to estimate</Btn>}
                       {isClaim && <Btn kind="ghost" small onClick={() => addAsSupplement(f)}><Plus size={12} /> Add as supplement</Btn>}
+                      {isClaim && <Btn kind="ghost" small onClick={() => copyJustification(f)}><Copy size={12} /> Copy justification</Btn>}
                     </>
                   )}
                 </div>
@@ -21069,6 +21093,119 @@ function CoverageByState({ jobs = [], stateFacts = {}, onConfirm, onClear, toast
   );
 }
 
+/* nowStamp() writes "Aug 6, 11:47 PM" — a display string with no year,
+   because every place that reads it today only ever displays it back.
+   This is the first place that needs to do arithmetic on it, and
+   Date.parse() on that string is not reliable: with no year, engines
+   default to inconsistent guesses (V8 lands on 2001), which turns "added
+   an hour ago" into "9,131 days old". Reconstruct the actual date instead
+   of trusting a generic parse of a format never meant to be machine-read. */
+function parseNowStamp(s) {
+  const m = /^([A-Za-z]{3})\s+(\d{1,2}),\s+(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(String(s || "").trim());
+  if (!m) return null;
+  const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+  const [, mon, day, hh, mm, ap] = m;
+  if (!(mon in MONTHS)) return null;
+  let hour = parseInt(hh, 10) % 12;
+  if (ap.toUpperCase() === "PM") hour += 12;
+  const now = new Date();
+  const d = new Date(now.getFullYear(), MONTHS[mon], parseInt(day, 10), hour, parseInt(mm, 10));
+  /* A stamp from December read back in January is a year old, not from
+     the future — roll back once rather than showing a negative age. */
+  if (d.getTime() - now.getTime() > 86400000) d.setFullYear(d.getFullYear() - 1);
+  return d;
+}
+
+/* Supplement queue — every job's claim.supplements[] flattened into one
+   cross-job pipeline instead of a status buried on each job's own claim
+   tab. This is the same thing "Supplement Tracker" and "SuppTrax" exist to
+   bolt onto other CRMs as a paid spreadsheet: proof that even a full-CRM
+   claim tab doesn't give a supplement-heavy office a real view of where
+   its money is once volume grows past what one job screen at a time can
+   show. Nothing new is tracked here — it's a rollup of the same rows the
+   claim tab already writes. */
+function SupplementPipeline({ jobs, onOpenJob, embedded = false, onBack }) {
+  const [stage, setStage] = useState("all");
+  const rows = jobs.flatMap((j) => ((j.claim || {}).supplements || []).map((s) => ({ job: j, s })));
+  const daysOld = (s) => {
+    const d = parseNowStamp(s.at);
+    if (!d) return null;
+    return Math.max(0, Math.round((Date.now() - d.getTime()) / 86400000));
+  };
+  const shown = stage === "all" ? rows : rows.filter(({ s }) => (s.status || "Draft") === stage);
+  /* Not a string sort — "Oct" < "Sep" alphabetically but not chronologically,
+     so the same real-date parse used for aging also orders the list. */
+  const atTime = (s) => { const d = parseNowStamp(s.at); return d ? d.getTime() : 0; };
+  const sorted = [...shown].sort((a, b) => atTime(b.s) - atTime(a.s));
+  const totalFor = (st) => rows.filter(({ s }) => (s.status || "Draft") === st).reduce((a, { s }) => a + num(s.amount), 0);
+  const grandTotal = rows.reduce((a, { s }) => a + num(s.amount), 0);
+
+  return (
+    <div style={{ padding: embedded ? 0 : "20px 16px 28px", background: embedded ? "transparent" : S.bg, minHeight: embedded ? undefined : "100%" }}>
+      {!embedded && <SubHeader title="Supplement queue" onBack={onBack} />}
+
+      <Card style={{ marginTop: embedded ? 0 : 14, borderLeft: `4px solid ${grandTotal > 0 ? "#E8B931" : S.line}` }}>
+        <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }}>ACROSS THE WHOLE QUEUE</div>
+        <div style={{ fontSize: 30, fontWeight: 800, color: grandTotal > 0 ? "#9A6B00" : S.ink, marginTop: 4, lineHeight: 1.1 }}>
+          {money(grandTotal)}
+        </div>
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 6 }}>
+          {rows.length} {rows.length === 1 ? "supplement" : "supplements"} across every open claim, whichever job they belong to.
+        </div>
+      </Card>
+
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", margin: "14px 0 4px", paddingBottom: 2 }}>
+        {["all", ...SUPPLEMENT_STATUS].map((id) => {
+          const n = id === "all" ? rows.length : rows.filter(({ s }) => (s.status || "Draft") === id).length;
+          const amt = id === "all" ? grandTotal : totalFor(id);
+          return (
+            <button key={id} onClick={() => setStage(id)} style={{
+              border: `1.5px solid ${stage === id ? T.accent : S.line}`,
+              background: stage === id ? T.accentSoft : "#fff", color: stage === id ? T.accent : S.ink,
+              borderRadius: 999, padding: "7px 12px", fontSize: 12.5, fontWeight: 700,
+              cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit",
+            }}>{id === "all" ? "All" : id}{n > 0 ? ` · ${n}` : ""}{amt > 0 ? ` · ${money(amt)}` : ""}</button>
+          );
+        })}
+      </div>
+
+      {sorted.length === 0 && (
+        <Card pad={18}><div style={{ fontSize: 13.5, color: S.sub }}>Nothing in this part of the queue.</div></Card>
+      )}
+      {sorted.map(({ job, s }) => {
+        const age = daysOld(s);
+        const tone = s.status === "Denied" ? "red" : s.status === "Approved" || s.status === "Paid" ? "green" : "amber";
+        return (
+          <Card key={s.id} style={{ marginTop: 10 }} pad={0}>
+            <button onClick={() => onOpenJob(job.id, "claim")} style={{
+              width: "100%", textAlign: "left", border: "none", background: "none",
+              cursor: "pointer", padding: 15, fontFamily: "inherit",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{job.name}</div>
+                  <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>{s.desc || "Untitled supplement"}</div>
+                  {age != null && (
+                    <div style={{ fontSize: 11.5, color: S.sub, marginTop: 4 }}>
+                      {age === 0 ? "added today" : `${age} ${age === 1 ? "day" : "days"} in this status`}
+                    </div>
+                  )}
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <Chip tone={tone}>{s.status || "Draft"}</Chip>
+                  {num(s.amount) > 0 && (
+                    <div style={{ fontSize: 15, fontWeight: 800, color: S.ink, marginTop: 6 }}>{money(num(s.amount))}</div>
+                  )}
+                </div>
+              </div>
+            </button>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
 function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {}, stateFacts = {}, onConfirmLegal = () => {}, onClearLegal = () => {}, seed = null, onConsumeSeed = () => {} }) {
   const [tab, setTab] = useState(seed && seed.tab ? seed.tab : (seed && seed.zip ? "codes" : "clients"));
   const [zip, setZip] = useState(seed ? seed.zip || "" : "");
@@ -21095,7 +21232,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
   }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["coverage", "Coverage"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["supqueue", "Supplement queue"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Wording library"], ["codes", "Code lookup"], ["coverage", "Coverage"], ["resources", "Resources"]];
 
   /* One index across codes, terms and supplement triggers, so a rep
      types what they half-remember rather than guessing which tab it
@@ -21308,6 +21445,12 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
       {tab === "claims" && (
         <div style={{ marginTop: 14 }}>
           <ClaimsDashboard jobs={jobs} onOpenJob={onOpenJob} embedded />
+        </div>
+      )}
+
+      {tab === "supqueue" && (
+        <div style={{ marginTop: 14 }}>
+          <SupplementPipeline jobs={jobs} onOpenJob={onOpenJob} embedded />
         </div>
       )}
 
