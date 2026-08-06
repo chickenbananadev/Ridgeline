@@ -30,12 +30,18 @@ const deployMd = fs.readFileSync(path.join(__dirname, "DEPLOY.md"), "utf8");
 let fails = 0;
 const ok = (c, l) => { if (!c) { fails++; console.log("FAIL: " + l); } };
 
-/* ---------- no Twilio references remain in anything user-facing or operational ---------- */
+/* ---------- no stale/operational Twilio references remain ---------- */
 ok(!/Twilio|TWILIO/.test(src), "ridgeline.jsx has no remaining Twilio references");
-ok(!/Twilio|TWILIO/.test(deployMd), "DEPLOY.md has no remaining Twilio references");
-/* The Edge Function's own header explains the swap by name — that's
-   documentation of the change, not a live reference to fix. */
+/* The Edge Function's own header and DEPLOY.md's §7 both explain the
+   swap by name — that's documentation of why the change happened, not
+   a live operational reference telling someone to configure Twilio. No
+   TWILIO_* secret name or Twilio setup instruction may remain, though. */
 ok(/Was Twilio\. Switched because/.test(smsFn), "the Edge Function documents why it moved off Twilio");
+ok(!/TWILIO_/.test(smsFn), "no TWILIO_* secret name remains in the Edge Function");
+ok(/this project's original Twilio\s*number never cleared review/.test(deployMd),
+  "DEPLOY.md explains why EZ Texting was chosen, by name, same as the Edge Function's own comment");
+ok(!/TWILIO_/.test(deployMd), "no TWILIO_* secret name remains in DEPLOY.md");
+ok(!/twilio console|Twilio console/i.test(deployMd), "no Twilio setup instruction remains in DEPLOY.md");
 
 /* ---------- send-sms/index.ts: real EZ Texting request shape, contract preserved ---------- */
 ok(/EZTEXTING_API_KEY/.test(smsFn), "the function reads an EZTEXTING_API_KEY secret");
@@ -67,9 +73,14 @@ ok(/network policy blocked developers\.eztexting\.com directly\./.test(src),
   "the in-app setup steps also carry the same honesty about the unverified request shape, not just the code comment");
 ok(/provider: "EZ Texting", number: addr\.trim\(\) \}/.test(src), "connecting SMS in the admin panel now records EZ Texting as the provider");
 
-/* ---------- DEPLOY.md ---------- */
-ok(/EZTEXTING_API_KEY.*send-sms.*app\.eztexting\.com/.test(deployMd), "DEPLOY.md's secrets table points at the real EZ Texting dashboard location");
-ok(/EZ Texting text sending/.test(deployMd), "DEPLOY.md's function-deploy list describes send-sms correctly");
+/* ---------- DEPLOY.md: texting gets its own full section, like every other integration ---------- */
+ok(/## 7\. Texting — EZ Texting/.test(deployMd), "texting has its own numbered section, not a line buried in a generic 'everything else' list");
+ok(/supabase secrets set EZTEXTING_API_KEY=\.\.\.\s*# app\.eztexting\.com → Settings → Integrations \/ Developer API/.test(deployMd),
+  "DEPLOY.md gives the real dashboard location for the secret, not just its name");
+ok(/supabase functions deploy send-sms/.test(deployMd), "DEPLOY.md gives the real deploy command");
+ok(/network policy blocked outbound\s*access to `developers\.eztexting\.com`/.test(deployMd),
+  "DEPLOY.md carries the same unverified-wire-format honesty as the code comment and the in-app setup steps");
+ok(/checks `crm_jobs\.data\.consent\.sms\.granted`/.test(deployMd), "DEPLOY.md documents the server-side consent gate, not just how to turn sending on");
 
 if (fails) { console.log("\nbuild 84: " + fails + " FAILED"); process.exit(1); }
 console.log("build 84 tests passed");

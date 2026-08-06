@@ -132,7 +132,7 @@ the invite/reset links land back on the app.
 `my_tenant()` (migration `021`). Adding a seat past the plan's allowance is
 blocked with a prompt to add seats in Manage billing. To actually bill for the
 extra seat, raise the subscription quantity in the Stripe customer portal (or,
-as a follow-up, wire the checkout quantity — see §9).
+as a follow-up, wire the checkout quantity — see §10).
 
 ---
 
@@ -249,42 +249,90 @@ assists a rep who verifies in person — it never estimates damage that isn't
 visibly in the frame, and it never states a dollar value or a claim
 determination.
 
-## 7. Everything else already in the repo
+## 7. Texting — EZ Texting
 
-These functions exist and just need deploying if you haven't already:
+**Symptom in the app:** texting a customer (a job's Messages tab, an
+appointment-confirmation text, the "share ETA" en-route text, or any
+automated stage-change text) either does nothing or shows *"Texting
+isn't set up on this project yet — saved to the thread."*
+
+**Fix:** generate an API key and deploy the function.
+
+```bash
+supabase secrets set EZTEXTING_API_KEY=...   # app.eztexting.com → Settings → Integrations / Developer API
+supabase functions deploy send-sms
+```
+
+Then send one real test text — a job's Messages tab, to a recipient
+who has SMS consent on file — before relying on this for real
+customers. The exact request EZ Texting's REST API expects (endpoint,
+auth header, body field names) is built into
+`supabase/functions/send-sms/index.ts` from cross-checked third-party
+integration guides, **not** a direct read of EZ Texting's own
+reference docs — this environment's network policy blocked outbound
+access to `developers.eztexting.com` while writing it (see the comment
+at the top of that file). If EZ Texting has a different shape, the
+test send fails with EZ Texting's own error message surfaced back into
+the app's toast, and
+`https://www.eztexting.com/developers/sms-api-documentation/rest` —
+reachable from your own machine, not from this build environment — is
+where to reconcile it.
+
+Every automated text and every rep-composed text funnels through this
+one function, so nothing above it needs to change if the provider
+changes again later.
+
+**Why EZ Texting instead of a standard 10-digit business number:** a
+standard long code needs the carriers' A2P 10DLC campaign
+registration — a self-service process that can take days and doesn't
+always clear on the first attempt (this project's original Twilio
+number never cleared review). EZ Texting sends over a shared short
+code by default, a different carrier category that skips 10DLC review
+entirely, which is the main reason it was faster to stand up.
+
+**Consent is enforced server-side, not just in the UI:** the function
+checks `crm_jobs.data.consent.sms.granted` before sending anything
+tied to a job and refuses with `403` if it isn't set — a rep can't
+bypass this by editing the request from the browser.
+
+---
+
+## 8. Signup & checkout — Stripe
+
+These three functions run the marketing site's "Start your free trial"
+flow end to end: Checkout → verify → create the tenant, then keep
+subscription status and seat count in sync afterward.
 
 ```bash
 supabase functions deploy create-checkout-session   # signup → Stripe Checkout
 supabase functions deploy complete-signup           # verifies checkout, creates tenant
 supabase functions deploy stripe-webhook            # keeps status/seats in sync
-supabase functions deploy send-sms                  # EZ Texting text sending
 supabase db push                                    # apply any pending migrations
 ```
 
-Secrets used across these (set the ones you use):
+```bash
+supabase secrets set STRIPE_SECRET_KEY=sk_live_...          # Stripe → Developers → API keys
+supabase secrets set STRIPE_PRICE_PER_SEAT=price_...         # Stripe → Products → Team price ID
+supabase secrets set STRIPE_PRICE_UNLIMITED=price_...        # Stripe → Products → Unlimited price ID
+supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...          # set after creating the webhook endpoint below
+supabase secrets set APP_URL=https://roofstride.com          # your domain, no trailing slash
+```
 
-| Secret | Used by | Where to get it |
-| --- | --- | --- |
-| `STRIPE_SECRET_KEY` | checkout, portal, webhook | Stripe → Developers → API keys |
-| `STRIPE_PRICE_PER_SEAT` | checkout | Stripe → Products (Team price ID) |
-| `STRIPE_PRICE_UNLIMITED` | checkout | Stripe → Products (Unlimited price ID) |
-| `STRIPE_WEBHOOK_SECRET` | webhook | Stripe → Developers → Webhooks → signing secret |
-| `APP_URL` | checkout, portal | your domain, no trailing slash |
-| `EZTEXTING_API_KEY` | send-sms | app.eztexting.com → Settings → Integrations / Developer API |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | gmail-oauth, gmail-send, calendar-push | Google Cloud → Credentials |
-| `ANTHROPIC_API_KEY` | ai-assistant, photo-damage-detect | console.anthropic.com → API keys (never `VITE_`) |
+Then, in the Stripe dashboard: **Developers → Webhooks → Add endpoint**,
+pointing at `https://<project-ref>.functions.supabase.co/stripe-webhook`,
+subscribed to `customer.subscription.updated`,
+`customer.subscription.deleted`, and `checkout.session.completed`. Stripe
+shows the signing secret once the endpoint is created — that's the
+`STRIPE_WEBHOOK_SECRET` value above.
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are
 injected into every function automatically — don't set them by hand.
-
-For the Stripe **webhook**, add an endpoint in the Stripe dashboard pointing at
-`https://<project-ref>.functions.supabase.co/stripe-webhook` and subscribe to
-`customer.subscription.updated`, `customer.subscription.deleted`, and
-`checkout.session.completed`.
+`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (§5) and `ANTHROPIC_API_KEY`
+(§6) are documented in their own sections above, not repeated here.
 
 ---
 
-## 8. Front-end environment variables (Vercel)
+## 9. Front-end environment variables (Vercel)
 
 Set these in the Vercel project (Project → Settings → Environment Variables),
 then redeploy:
@@ -302,7 +350,7 @@ missing key never white-screens the site.
 
 ---
 
-## 9. Optional follow-up: sync Stripe seat quantity
+## 10. Optional follow-up: sync Stripe seat quantity
 
 `create-checkout-session` currently starts every subscription at
 `quantity: 1`. To bill per active seat automatically, update the subscription
