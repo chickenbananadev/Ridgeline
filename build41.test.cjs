@@ -95,8 +95,14 @@ clickText("Financials"); // close it back up
 check("Overview open, 'Activity on this job' is not sitting inline by default",
   !document.body.textContent.includes("Activity on this job"));
 check("Activity log button (the clock) opens the Activity sheet on demand", clickAriaLabel("Activity log"));
+/* Demo mode now seeds real stage-move history (build 67, so predictive
+   stall risk has something to compute from) instead of always starting
+   empty, so Omkar Hirekhan legitimately has logged entries here now — the
+   check accepts either the real empty state or real logged content,
+   rather than assuming the log is always empty. */
 check("activity content appears once opened via the clock",
-  document.body.textContent.includes("Nothing logged") || document.body.textContent.includes("logged on this job"));
+  document.body.textContent.includes("Nothing logged") || document.body.textContent.includes("logged on this job")
+  || /moved Omkar Hirekhan/.test(document.body.textContent));
 
 // Quick Actions.
 check("Quick actions button opens the sheet", clickText("Quick actions"));

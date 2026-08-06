@@ -6442,10 +6442,70 @@ function Dashboard({
     ] })
   ] });
 }
+var WIDGET_DEFS = [
+  { id: "revenue", title: "Signed revenue", w: 1 },
+  { id: "gross", title: "Gross profit", w: 1 },
+  { id: "closeRate", title: "Close rate", w: 1 },
+  { id: "avgJob", title: "Average job", w: 1 },
+  { id: "openPipeline", title: "Open pipeline", w: 1 },
+  { id: "receivable", title: "Receivable", w: 1 },
+  { id: "weightedPipeline", title: "Weighted pipeline", w: 1 },
+  { id: "avgAge", title: "Avg age in stage", w: 1 },
+  { id: "revenueTrend", title: "Revenue trend (6mo)", w: 2 },
+  { id: "wonTrend", title: "Jobs won trend (6mo)", w: 2 },
+  { id: "jobMix", title: "Job mix", w: 2 },
+  { id: "collections", title: "Collections", w: 2 },
+  { id: "repLeaderboard", title: "Rep leaderboard", w: 2, adminOnly: true },
+  { id: "leadSources", title: "Lead sources", w: 2 },
+  { id: "crewThroughput", title: "Crew throughput", w: 2, adminOnly: true },
+  { id: "stageDistribution", title: "Stage distribution", w: 2 }
+];
+var DEFAULT_DASHBOARD_LAYOUT = [
+  { id: "revenue", w: 1 },
+  { id: "gross", w: 1 },
+  { id: "closeRate", w: 1 },
+  { id: "avgJob", w: 1 },
+  { id: "openPipeline", w: 1 },
+  { id: "receivable", w: 1 },
+  { id: "revenueTrend", w: 2 },
+  { id: "jobMix", w: 2 },
+  { id: "collections", w: 2 }
+];
 function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [], setUsers }) {
   const [scope, setScope] = (0, import_react.useState)(isAdmin ? "company" : currentUser.name);
   const [range, setRange] = (0, import_react.useState)("all");
   const [tab, setTab] = (0, import_react.useState)("summary");
+  const [layout, setLayout] = (0, import_react.useState)(DEFAULT_DASHBOARD_LAYOUT);
+  const [editingBoard, setEditingBoard] = (0, import_react.useState)(false);
+  (0, import_react.useEffect)(() => {
+    let alive = true;
+    (async () => {
+      if (!currentUser || !currentUser.id) return;
+      const saved = await dashLoadLayout(currentUser.id);
+      if (alive && Array.isArray(saved) && saved.length) setLayout(saved);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [currentUser && currentUser.id]);
+  const saveLayout = (next) => {
+    setLayout(next);
+    if (currentUser && currentUser.id) dashSaveLayout(currentUser.id, next);
+  };
+  const moveWidget = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= layout.length) return;
+    const next = [...layout];
+    [next[i], next[j]] = [next[j], next[i]];
+    saveLayout(next);
+  };
+  const toggleWidgetWidth = (id) => saveLayout(layout.map((w) => w.id === id ? { ...w, w: w.w === 2 ? 1 : 2 } : w));
+  const removeWidget = (id) => saveLayout(layout.filter((w) => w.id !== id));
+  const addWidget = (id) => {
+    const def = WIDGET_DEFS.find((d) => d.id === id);
+    if (!def || layout.some((w) => w.id === id)) return;
+    saveLayout([...layout, { id, w: def.w }]);
+  };
   const scoped = (0, import_react.useMemo)(
     () => scope === "company" ? jobs : jobs.filter((j) => jobReps(j).some((r) => r.name === scope)),
     [jobs, scope]
@@ -6640,6 +6700,118 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
     downloadCsv(`commission-${scope === "company" ? "company" : scope.split(" ")[0].toLowerCase()}.csv`, rows);
     toast("Commission report exported");
   };
+  const renderWidget = (id) => {
+    switch (id) {
+      case "revenue":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Signed revenue", value: money(stat.revenue), sub: `${stat.won} jobs won` });
+      case "gross":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Gross profit", value: money(stat.gross), sub: `${pct1(stat.margin)} margin`, tone: "#177245" });
+      case "closeRate":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Close rate", value: pct1(stat.closeRate), sub: `${stat.won} won / ${stat.lost} lost` });
+      case "avgJob":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Average job", value: money(stat.avgJob), sub: "Signed jobs only" });
+      case "openPipeline":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Open pipeline", value: money(stat.openValue), sub: `${stat.open} active jobs` });
+      case "receivable":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Receivable", value: money(stat.ar), sub: `${money(stat.collected)} collected`, tone: stat.ar > 0 ? "#B42318" : void 0 });
+      case "weightedPipeline":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Weighted pipeline", value: money(stat.weightedPipeline), sub: "value \xD7 stage odds" });
+      case "avgAge":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Avg age in stage", value: `${Math.round(stat.avgAge)}d`, sub: "open jobs" });
+      case "revenueTrend":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Revenue trend \u2014 last 6 months" }),
+          trend.some((d) => d.won > 0) ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TrendChart, { data: trend, valueKey: "revenue", formatValue: moneyCompact }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub }, children: "Not enough signed jobs yet to chart a trend." })
+        ] });
+      case "wonTrend":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Jobs won \u2014 last 6 months" }),
+          trend.some((d) => d.won > 0) ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TrendChart, { data: trend, valueKey: "won", formatValue: (v) => String(v), tone: "#5B8DEF" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub }, children: "Not enough signed jobs yet to chart a trend." })
+        ] });
+      case "jobMix":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Job mix" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Insurance", v: `${stat.insurance} job${stat.insurance === 1 ? "" : "s"}` }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Retail", v: `${stat.retail} job${stat.retail === 1 ? "" : "s"}` }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Completed", v: String(stat.done) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Lost", v: String(stat.lost) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Unqualified", v: String(stat.unq) })
+        ] });
+      case "collections": {
+        const owing = scoped.map((j) => ({ j, p: paymentsSummary(j) })).filter(({ j, p }) => p.balance > 0.01 && p.contract > 0 && WON_STAGES.concat(["s10"]).includes(j.stageId)).sort((a, b) => b.p.balance - a.p.balance);
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: owing.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "red", children: money(owing.reduce((s2, x) => s2 + x.p.balance, 0)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Clear" }), children: "Collections" }),
+          owing.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub }, children: "Nothing outstanding." }) : owing.slice(0, 8).map(({ j, p }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: `1px solid ${S.line}`, fontSize: 13 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 700 }, children: j.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 700, color: "#B42318" }, children: money(p.balance) })
+          ] }, j.id))
+        ] });
+      }
+      case "repLeaderboard":
+        return !isAdmin ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Rep leaderboard" }),
+          reps.slice(0, 8).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontSize: 13 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 700 }, children: r.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub }, children: [
+              money(r.revenue),
+              " \xB7 ",
+              pct1(r.closeRate),
+              " close"
+            ] })
+          ] }, r.name))
+        ] });
+      case "leadSources":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Lead sources" }),
+          sourceRows.slice(0, 8).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontSize: 13 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 700 }, children: r.source }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub }, children: [
+              r.leads,
+              " leads \xB7 ",
+              money(r.revenue)
+            ] })
+          ] }, r.source))
+        ] });
+      case "crewThroughput":
+        return !isAdmin || crewRows.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Crew throughput" }),
+          crewRows.map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontSize: 13 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 700 }, children: r.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub }, children: [
+              r.done,
+              " done \xB7 ",
+              money(r.revenue)
+            ] })
+          ] }, r.name))
+        ] });
+      case "stageDistribution":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Stage distribution" }),
+          stages.map((st) => {
+            const inStage = scoped.filter((j) => j.stageId === st.id);
+            const max = Math.max(1, ...stages.map((x) => scoped.filter((j) => j.stageId === x.id).length));
+            return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 120, fontSize: 12, color: S.sub, flexShrink: 0 }, children: st.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, height: 16, background: S.soft, borderRadius: 6, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+                height: "100%",
+                width: `${inStage.length / max * 100}%`,
+                background: DEAD_STAGES.includes(st.id) ? "#B42318" : WON_STAGES.includes(st.id) ? "#177245" : T.primary,
+                borderRadius: 6,
+                minWidth: inStage.length ? 16 : 0
+              } }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 24, fontSize: 12, fontWeight: 700, textAlign: "right" }, children: inStage.length })
+            ] }, st.id);
+          })
+        ] });
+      default:
+        return null;
+    }
+  };
+  const visibleLayout = layout.filter((w) => {
+    const def = WIDGET_DEFS.find((d) => d.id === w.id);
+    return def && (!def.adminOnly || isAdmin);
+  });
+  const availableWidgets = WIDGET_DEFS.filter((d) => (!d.adminOnly || isAdmin) && !layout.some((w) => w.id === d.id));
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Financials & performance", onBack }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
@@ -6667,7 +6839,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
         }, children: u.name.split(" ")[0] }, u.id))
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginTop: 12, overflowX: "auto" }, children: [["summary", "Summary"], ["commission", "Commission"], isAdmin && ["reps", "By rep"], ["sources", "Lead sources"], ["pipeline", "Pipeline"]].filter(Boolean).map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setTab(id), style: {
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginTop: 12, overflowX: "auto" }, children: [["summary", "Summary"], ["dashboard", "My dashboard"], ["commission", "Commission"], isAdmin && ["reps", "By rep"], ["sources", "Lead sources"], ["pipeline", "Pipeline"]].filter(Boolean).map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setTab(id), style: {
       border: "none",
       background: tab === id ? T.primary : "#fff",
       color: tab === id ? "#fff" : S.ink,
@@ -6777,6 +6949,38 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Requests sent", v: String(stat.reviewsSent) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Reviews posted", v: String(stat.reviews) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Conversion", v: stat.reviewsSent ? pct1(stat.reviews / stat.reviewsSent * 100) : "\u2014" })
+      ] })
+    ] }),
+    tab === "dashboard" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: "Pick the widgets you want, size and order them how you like \u2014 saved to your own account, not shared with the team." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: editingBoard ? "primary" : "ghost", small: true, onClick: () => setEditingBoard(!editingBoard), style: { flexShrink: 0 }, children: editingBoard ? "Done" : "Customize" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: visibleLayout.map((w, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { gridColumn: w.w === 2 ? "1 / -1" : "auto" }, children: [
+        editingBoard && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => moveWidget(i, -1), disabled: i === 0, style: arrowBtn, "aria-label": "Move earlier", children: "\u2191" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => moveWidget(i, 1), disabled: i === visibleLayout.length - 1, style: arrowBtn, "aria-label": "Move later", children: "\u2193" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => toggleWidgetWidth(w.id), style: { ...arrowBtn, width: "auto", padding: "0 10px", fontSize: 12, fontWeight: 700 }, children: w.w === 2 ? "Full width" : "Half width" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeWidget(w.id), style: { ...arrowBtn, width: "auto", padding: "0 10px", fontSize: 12, fontWeight: 700, color: "#B42318" }, children: "Remove" })
+        ] }),
+        renderWidget(w.id)
+      ] }, w.id)) }),
+      visibleLayout.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, textAlign: "center", padding: "10px 0" }, children: "Nothing on your board yet \u2014 add a widget below." }) }),
+      editingBoard && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Add a widget" }),
+        availableWidgets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub }, children: "Every available widget is already on your board." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 }, children: availableWidgets.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => addWidget(d.id), style: {
+          border: `1px solid ${S.line}`,
+          background: S.card,
+          borderRadius: 999,
+          padding: "8px 13px",
+          fontSize: 12.5,
+          fontWeight: 700,
+          color: S.ink,
+          cursor: "pointer"
+        }, children: [
+          "+ ",
+          d.title
+        ] }, d.id)) })
       ] })
     ] }),
     tab === "commission" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12 }, children: [
@@ -26401,6 +26605,28 @@ function calFeedUrl(token, scheme = "https") {
   const host = m ? `${m[1]}.functions.supabase.co` : null;
   if (!host) return null;
   return `${scheme}://${host}/calendar-feed?token=${encodeURIComponent(token)}`;
+}
+async function dashLoadLayout(userId) {
+  const db = DB();
+  if (!db || !userId) return null;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    return data && data.data && data.data.dashLayout || null;
+  } catch (e) {
+    return null;
+  }
+}
+async function dashSaveLayout(userId, value) {
+  const db = DB();
+  if (!db || !userId) return false;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    const next = { ...data && data.data || {}, dashLayout: value };
+    const { error } = await db.from("crm_user_integrations").upsert({ user_id: userId, data: next, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+    return !error;
+  } catch (e) {
+    return false;
+  }
 }
 function CalendarSync({ currentUser, toast }) {
   const [token, setToken] = (0, import_react.useState)(null);

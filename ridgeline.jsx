@@ -5626,6 +5626,36 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
   );
 }
 
+/* Catalog for the "My dashboard" tab — every widget renders from data the
+   Summary/Commission/By rep/Pipeline tabs already compute, so this is a
+   picker over existing numbers, not a second reporting engine. w is the
+   default grid width (1 = half, 2 = full) a widget starts at; the user can
+   flip it once it's on their board. adminOnly widgets show company-wide
+   figures a rep shouldn't see about teammates. */
+const WIDGET_DEFS = [
+  { id: "revenue", title: "Signed revenue", w: 1 },
+  { id: "gross", title: "Gross profit", w: 1 },
+  { id: "closeRate", title: "Close rate", w: 1 },
+  { id: "avgJob", title: "Average job", w: 1 },
+  { id: "openPipeline", title: "Open pipeline", w: 1 },
+  { id: "receivable", title: "Receivable", w: 1 },
+  { id: "weightedPipeline", title: "Weighted pipeline", w: 1 },
+  { id: "avgAge", title: "Avg age in stage", w: 1 },
+  { id: "revenueTrend", title: "Revenue trend (6mo)", w: 2 },
+  { id: "wonTrend", title: "Jobs won trend (6mo)", w: 2 },
+  { id: "jobMix", title: "Job mix", w: 2 },
+  { id: "collections", title: "Collections", w: 2 },
+  { id: "repLeaderboard", title: "Rep leaderboard", w: 2, adminOnly: true },
+  { id: "leadSources", title: "Lead sources", w: 2 },
+  { id: "crewThroughput", title: "Crew throughput", w: 2, adminOnly: true },
+  { id: "stageDistribution", title: "Stage distribution", w: 2 },
+];
+const DEFAULT_DASHBOARD_LAYOUT = [
+  { id: "revenue", w: 1 }, { id: "gross", w: 1 }, { id: "closeRate", w: 1 },
+  { id: "avgJob", w: 1 }, { id: "openPipeline", w: 1 }, { id: "receivable", w: 1 },
+  { id: "revenueTrend", w: 2 }, { id: "jobMix", w: 2 }, { id: "collections", w: 2 },
+];
+
 /* ================================================================
    PERFORMANCE — rep scoreboard + funnel, computed from live jobs
    ================================================================ */
@@ -5633,6 +5663,42 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
   const [scope, setScope] = useState(isAdmin ? "company" : currentUser.name);
   const [range, setRange] = useState("all");
   const [tab, setTab] = useState("summary");
+
+  /* "My dashboard" — a per-seat widget board, not a second reporting engine.
+     Loads whatever this seat saved last time (real backend only; demo mode
+     just holds it in memory, same as everything else that "doesn't save"
+     there) and falls back to a default board that mirrors the fixed Summary
+     tab, so a rep who never customizes anything sees the same numbers they
+     always did. */
+  const [layout, setLayout] = useState(DEFAULT_DASHBOARD_LAYOUT);
+  const [editingBoard, setEditingBoard] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!currentUser || !currentUser.id) return;
+      const saved = await dashLoadLayout(currentUser.id);
+      if (alive && Array.isArray(saved) && saved.length) setLayout(saved);
+    })();
+    return () => { alive = false; };
+  }, [currentUser && currentUser.id]);
+  const saveLayout = (next) => {
+    setLayout(next);
+    if (currentUser && currentUser.id) dashSaveLayout(currentUser.id, next);
+  };
+  const moveWidget = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= layout.length) return;
+    const next = [...layout];
+    [next[i], next[j]] = [next[j], next[i]];
+    saveLayout(next);
+  };
+  const toggleWidgetWidth = (id) => saveLayout(layout.map((w) => (w.id === id ? { ...w, w: w.w === 2 ? 1 : 2 } : w)));
+  const removeWidget = (id) => saveLayout(layout.filter((w) => w.id !== id));
+  const addWidget = (id) => {
+    const def = WIDGET_DEFS.find((d) => d.id === id);
+    if (!def || layout.some((w) => w.id === id)) return;
+    saveLayout([...layout, { id, w: def.w }]);
+  };
 
   const scoped = useMemo(
     () => (scope === "company" ? jobs : jobs.filter((j) => jobReps(j).some((r) => r.name === scope))),
@@ -5826,6 +5892,121 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
     toast("Commission report exported");
   };
 
+  const renderWidget = (id) => {
+    switch (id) {
+      case "revenue": return <Stat label="Signed revenue" value={money(stat.revenue)} sub={`${stat.won} jobs won`} />;
+      case "gross": return <Stat label="Gross profit" value={money(stat.gross)} sub={`${pct1(stat.margin)} margin`} tone="#177245" />;
+      case "closeRate": return <Stat label="Close rate" value={pct1(stat.closeRate)} sub={`${stat.won} won / ${stat.lost} lost`} />;
+      case "avgJob": return <Stat label="Average job" value={money(stat.avgJob)} sub="Signed jobs only" />;
+      case "openPipeline": return <Stat label="Open pipeline" value={money(stat.openValue)} sub={`${stat.open} active jobs`} />;
+      case "receivable": return <Stat label="Receivable" value={money(stat.ar)} sub={`${money(stat.collected)} collected`} tone={stat.ar > 0 ? "#B42318" : undefined} />;
+      case "weightedPipeline": return <Stat label="Weighted pipeline" value={money(stat.weightedPipeline)} sub="value × stage odds" />;
+      case "avgAge": return <Stat label="Avg age in stage" value={`${Math.round(stat.avgAge)}d`} sub="open jobs" />;
+      case "revenueTrend": return (
+        <Card>
+          <CardTitle>Revenue trend — last 6 months</CardTitle>
+          {trend.some((d) => d.won > 0)
+            ? <TrendChart data={trend} valueKey="revenue" formatValue={moneyCompact} />
+            : <div style={{ fontSize: 12.5, color: S.sub }}>Not enough signed jobs yet to chart a trend.</div>}
+        </Card>
+      );
+      case "wonTrend": return (
+        <Card>
+          <CardTitle>Jobs won — last 6 months</CardTitle>
+          {trend.some((d) => d.won > 0)
+            ? <TrendChart data={trend} valueKey="won" formatValue={(v) => String(v)} tone="#5B8DEF" />
+            : <div style={{ fontSize: 12.5, color: S.sub }}>Not enough signed jobs yet to chart a trend.</div>}
+        </Card>
+      );
+      case "jobMix": return (
+        <Card>
+          <CardTitle>Job mix</CardTitle>
+          <KV k="Insurance" v={`${stat.insurance} job${stat.insurance === 1 ? "" : "s"}`} />
+          <KV k="Retail" v={`${stat.retail} job${stat.retail === 1 ? "" : "s"}`} />
+          <KV k="Completed" v={String(stat.done)} />
+          <KV k="Lost" v={String(stat.lost)} />
+          <KV k="Unqualified" v={String(stat.unq)} />
+        </Card>
+      );
+      case "collections": {
+        const owing = scoped
+          .map((j) => ({ j, p: paymentsSummary(j) }))
+          .filter(({ j, p }) => p.balance > 0.01 && p.contract > 0 && WON_STAGES.concat(["s10"]).includes(j.stageId))
+          .sort((a, b) => b.p.balance - a.p.balance);
+        return (
+          <Card>
+            <CardTitle right={owing.length ? <Chip tone="red">{money(owing.reduce((s2, x) => s2 + x.p.balance, 0))}</Chip> : <Chip tone="green">Clear</Chip>}>Collections</CardTitle>
+            {owing.length === 0
+              ? <div style={{ fontSize: 12.5, color: S.sub }}>Nothing outstanding.</div>
+              : owing.slice(0, 8).map(({ j, p }) => (
+                <div key={j.id} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: `1px solid ${S.line}`, fontSize: 13 }}>
+                  <span style={{ fontWeight: 700 }}>{j.name}</span><span style={{ fontWeight: 700, color: "#B42318" }}>{money(p.balance)}</span>
+                </div>
+              ))}
+          </Card>
+        );
+      }
+      case "repLeaderboard": return !isAdmin ? null : (
+        <Card>
+          <CardTitle>Rep leaderboard</CardTitle>
+          {reps.slice(0, 8).map((r, i) => (
+            <div key={r.name} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontSize: 13 }}>
+              <span style={{ fontWeight: 700 }}>{r.name}</span><span style={{ color: S.sub }}>{money(r.revenue)} · {pct1(r.closeRate)} close</span>
+            </div>
+          ))}
+        </Card>
+      );
+      case "leadSources": return (
+        <Card>
+          <CardTitle>Lead sources</CardTitle>
+          {sourceRows.slice(0, 8).map((r, i) => (
+            <div key={r.source} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontSize: 13 }}>
+              <span style={{ fontWeight: 700 }}>{r.source}</span><span style={{ color: S.sub }}>{r.leads} leads · {money(r.revenue)}</span>
+            </div>
+          ))}
+        </Card>
+      );
+      case "crewThroughput": return (!isAdmin || crewRows.length === 0) ? null : (
+        <Card>
+          <CardTitle>Crew throughput</CardTitle>
+          {crewRows.map((r, i) => (
+            <div key={r.name} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontSize: 13 }}>
+              <span style={{ fontWeight: 700 }}>{r.name}</span><span style={{ color: S.sub }}>{r.done} done · {money(r.revenue)}</span>
+            </div>
+          ))}
+        </Card>
+      );
+      case "stageDistribution": return (
+        <Card>
+          <CardTitle>Stage distribution</CardTitle>
+          {stages.map((st) => {
+            const inStage = scoped.filter((j) => j.stageId === st.id);
+            const max = Math.max(1, ...stages.map((x) => scoped.filter((j) => j.stageId === x.id).length));
+            return (
+              <div key={st.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
+                <div style={{ width: 120, fontSize: 12, color: S.sub, flexShrink: 0 }}>{st.name}</div>
+                <div style={{ flex: 1, height: 16, background: S.soft, borderRadius: 6, overflow: "hidden" }}>
+                  <div style={{
+                    height: "100%", width: `${(inStage.length / max) * 100}%`,
+                    background: DEAD_STAGES.includes(st.id) ? "#B42318" : WON_STAGES.includes(st.id) ? "#177245" : T.primary,
+                    borderRadius: 6, minWidth: inStage.length ? 16 : 0,
+                  }} />
+                </div>
+                <div style={{ width: 24, fontSize: 12, fontWeight: 700, textAlign: "right" }}>{inStage.length}</div>
+              </div>
+            );
+          })}
+        </Card>
+      );
+      default: return null;
+    }
+  };
+  const visibleLayout = layout.filter((w) => {
+    const def = WIDGET_DEFS.find((d) => d.id === w.id);
+    return def && (!def.adminOnly || isAdmin);
+  });
+  const availableWidgets = WIDGET_DEFS.filter((d) => (!d.adminOnly || isAdmin) && !layout.some((w) => w.id === d.id));
+
   return (
     <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
       <SubHeader title="Financials & performance" onBack={onBack} />
@@ -5853,7 +6034,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
       </Card>
 
       <div style={{ display: "flex", gap: 6, marginTop: 12, overflowX: "auto" }}>
-        {[["summary", "Summary"], ["commission", "Commission"], isAdmin && ["reps", "By rep"], ["sources", "Lead sources"], ["pipeline", "Pipeline"]]
+        {[["summary", "Summary"], ["dashboard", "My dashboard"], ["commission", "Commission"], isAdmin && ["reps", "By rep"], ["sources", "Lead sources"], ["pipeline", "Pipeline"]]
           .filter(Boolean).map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} style={{
               border: "none", background: tab === id ? T.primary : "#fff",
@@ -5974,6 +6155,65 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
             <KV k="Reviews posted" v={String(stat.reviews)} />
             <KV k="Conversion" v={stat.reviewsSent ? pct1((stat.reviews / stat.reviewsSent) * 100) : "—"} />
           </Card>
+        </div>
+      )}
+
+      {tab === "dashboard" && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+            <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
+              Pick the widgets you want, size and order them how you like — saved to your own account, not shared with the team.
+            </div>
+            <Btn kind={editingBoard ? "primary" : "ghost"} small onClick={() => setEditingBoard(!editingBoard)} style={{ flexShrink: 0 }}>
+              {editingBoard ? "Done" : "Customize"}
+            </Btn>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {visibleLayout.map((w, i) => (
+              <div key={w.id} style={{ gridColumn: w.w === 2 ? "1 / -1" : "auto" }}>
+                {editingBoard && (
+                  <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+                    <button onClick={() => moveWidget(i, -1)} disabled={i === 0} style={arrowBtn} aria-label="Move earlier">↑</button>
+                    <button onClick={() => moveWidget(i, 1)} disabled={i === visibleLayout.length - 1} style={arrowBtn} aria-label="Move later">↓</button>
+                    <button onClick={() => toggleWidgetWidth(w.id)} style={{ ...arrowBtn, width: "auto", padding: "0 10px", fontSize: 12, fontWeight: 700 }}>
+                      {w.w === 2 ? "Full width" : "Half width"}
+                    </button>
+                    <button onClick={() => removeWidget(w.id)} style={{ ...arrowBtn, width: "auto", padding: "0 10px", fontSize: 12, fontWeight: 700, color: "#B42318" }}>
+                      Remove
+                    </button>
+                  </div>
+                )}
+                {renderWidget(w.id)}
+              </div>
+            ))}
+          </div>
+
+          {visibleLayout.length === 0 && (
+            <Card style={{ marginTop: 4 }}>
+              <div style={{ fontSize: 13, color: S.sub, textAlign: "center", padding: "10px 0" }}>
+                Nothing on your board yet — add a widget below.
+              </div>
+            </Card>
+          )}
+
+          {editingBoard && (
+            <Card style={{ marginTop: 12 }}>
+              <CardTitle>Add a widget</CardTitle>
+              {availableWidgets.length === 0 ? (
+                <div style={{ fontSize: 12.5, color: S.sub }}>Every available widget is already on your board.</div>
+              ) : (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {availableWidgets.map((d) => (
+                    <button key={d.id} onClick={() => addWidget(d.id)} style={{
+                      border: `1px solid ${S.line}`, background: S.card, borderRadius: 999,
+                      padding: "8px 13px", fontSize: 12.5, fontWeight: 700, color: S.ink, cursor: "pointer",
+                    }}>+ {d.title}</button>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
         </div>
       )}
 
@@ -24771,6 +25011,30 @@ function calFeedUrl(token, scheme = "https") {
   const host = m ? `${m[1]}.functions.supabase.co` : null;
   if (!host) return null;
   return `${scheme}://${host}/calendar-feed?token=${encodeURIComponent(token)}`;
+}
+
+/* Per-seat dashboard layout, stored beside the CompanyCam token and calendar
+   token in the same crm_user_integrations row — a widget picker is a user
+   preference, not tenant data, and every other per-seat preference already
+   lives here, so this needed no new table or migration. */
+async function dashLoadLayout(userId) {
+  const db = DB();
+  if (!db || !userId) return null;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    return (data && data.data && data.data.dashLayout) || null;
+  } catch (e) { return null; }
+}
+async function dashSaveLayout(userId, value) {
+  const db = DB();
+  if (!db || !userId) return false;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    const next = { ...((data && data.data) || {}), dashLayout: value };
+    const { error } = await db.from("crm_user_integrations")
+      .upsert({ user_id: userId, data: next, updated_at: new Date().toISOString() });
+    return !error;
+  } catch (e) { return false; }
 }
 
 /* "Sync to your phone" — enables the per-seat calendar feed and shows the
