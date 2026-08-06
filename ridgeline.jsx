@@ -6341,6 +6341,16 @@ function isoToHuman(iso) {
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
+/* A payment row's `date` is nowStamp() — "Aug 6, 3:00 PM", no year — so
+   humanToIso can't be reused here: V8 parses a year-less date string as
+   the year 2001, not the current one. Prefer a row's own dateIso (set on
+   every payment logged after this field existed); for an older row that
+   only has the human stamp, fall back to today rather than trust a
+   parse that's silently wrong. */
+function payDateIso(p) {
+  if (p && p.dateIso) return p.dateIso;
+  return todayIso();
+}
 /* How long a job has sat in its current stage.
 
    This used to read job.daysInStage directly, which was dead data: the
@@ -10756,8 +10766,8 @@ const AGREEMENT_HEADER = [
   ] },
   { box: "INSURANCE & CLAIM", tint: true, rows: [
     [{ k: "carrier", label: "INSURANCE CARRIER" }],
-    [{ k: "claimNumber", label: "CLAIM NUMBER" }, { k: "dateOfLoss", label: "DATE OF LOSS" }],
-    [{ k: "outOfPocket", label: "OUT OF POCKET", t: "money" }, { k: "agreementDate", label: "DATE" }],
+    [{ k: "claimNumber", label: "CLAIM NUMBER" }, { k: "dateOfLoss", label: "DATE OF LOSS", t: "date" }],
+    [{ k: "outOfPocket", label: "OUT OF POCKET", t: "money" }, { k: "agreementDate", label: "DATE", t: "date" }],
     [{ k: "projectAddress", label: "PROJECT ADDRESS (IF DIFFERENT)" }],
   ] },
 ];
@@ -10934,7 +10944,7 @@ function agSecHtml(sec, a, brand) {
   return `<div class="agsec">${head}${note}${body}</div>`;
 }
 function agFieldHtml(f, a) {
-  const val = f.t === "money" ? agMoney(a[f.k]) : esc(a[f.k] || "");
+  const val = f.t === "money" ? agMoney(a[f.k]) : f.t === "date" ? esc(longDate(a[f.k])) : esc(a[f.k] || "");
   return `<div class="agfield" style="flex:${f.flex || 1}">
     <div class="agflb">${esc(f.label)}</div>
     <div class="agfval">${val}</div>
@@ -17588,8 +17598,9 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Estimate #"><input style={inputStyle} value={est.number} disabled={locked} onChange={(e) => setEst({ number: e.target.value })} /></Field>
           <Field label="Date">
-            <input style={inputStyle} value={est.date || new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-              disabled={locked} onChange={(e) => setEst({ date: e.target.value })} />
+            <input style={dateInputStyle} type="date" disabled={locked}
+              value={humanToIso(est.date) || todayIso()}
+              onChange={(e) => setEst({ date: isoToHuman(e.target.value) })} />
           </Field>
         </div>
         <Field label="Valid through">
@@ -17957,6 +17968,14 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
   const moneyTxt = (k) => (
     <MoneyInput style={inputStyle} value={a[k] || ""} disabled={locked} onChange={(v) => set(k, v)} />
   );
+  /* dateOfLoss and agreementDate are already stored as ISO — the same
+     type=date field job.claim's own Date of loss input uses — so no
+     human⇄ISO shim is needed here, unlike Valid through on the
+     Estimate tab. */
+  const dateTxt = (k) => (
+    <input style={dateInputStyle} type="date" value={a[k] || ""} disabled={locked}
+      onChange={(e) => set(k, e.target.value)} />
+  );
   /* These three acknowledgment lines used to be a plain text input a rep
      could type into on the customer's behalf — the same gap as the
      signature. They're read-only here now; a real value only ever
@@ -18006,7 +18025,9 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
           {box.rows.map((row, ri) => (
             <div key={ri} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
               {row.map((f) => (
-                <Field key={f.k} label={f.label.charAt(0) + f.label.slice(1).toLowerCase()}>{f.t === "money" ? moneyTxt(f.k) : txt(f.k)}</Field>
+                <Field key={f.k} label={f.label.charAt(0) + f.label.slice(1).toLowerCase()}>
+                  {f.t === "money" ? moneyTxt(f.k) : f.t === "date" ? dateTxt(f.k) : txt(f.k)}
+                </Field>
               ))}
             </div>
           ))}
@@ -19616,7 +19637,7 @@ function TabPayments({ job, mut, toast, onLog = () => {} }) {
         <Field label="Amount"><MoneyInput style={inputStyle} value={form.amt}
           onChange={(v) => setForm({ ...form, amt: v })} /></Field>
         <Btn style={{ width: "100%" }} disabled={!form.label.trim() || !num(form.amt)} onClick={() => {
-          mut((j) => ({ ...j, payments: [...j.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp() }] }));
+          mut((j) => ({ ...j, payments: [...j.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp(), dateIso: todayIso() }] }));
           setForm({ type: "Received", label: "", amt: "" });
           toast("Payment logged");
         }}><Plus size={15} /> Log payment</Btn>
@@ -19654,8 +19675,8 @@ function TabPayments({ job, mut, toast, onLog = () => {} }) {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Field label="Amount"><MoneyInput style={inputStyle} value={ef2.amt}
                 onChange={(v) => setEf2({ ...ef2, amt: v })} /></Field>
-              <Field label="Date"><input style={inputStyle} type="date" value={ef2.date || ""}
-                onChange={(e) => setEf2({ ...ef2, date: e.target.value })} /></Field>
+              <Field label="Date"><input style={dateInputStyle} type="date" value={payDateIso(ef2)}
+                onChange={(e) => setEf2({ ...ef2, dateIso: e.target.value, date: isoToHuman(e.target.value) })} /></Field>
             </div>
             <Field label="Method">
               <select style={selStyle} value={ef2.method || "Check"} onChange={(e) => setEf2({ ...ef2, method: e.target.value })}>

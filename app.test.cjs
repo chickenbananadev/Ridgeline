@@ -7045,6 +7045,10 @@ function isoToHuman(iso) {
   const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   return d.toLocaleDateString(void 0, { month: "short", day: "numeric", year: "numeric" });
 }
+function payDateIso(p) {
+  if (p && p.dateIso) return p.dateIso;
+  return todayIso();
+}
 function stageDays(job) {
   if (!job) return 0;
   if (job.stageAt) {
@@ -11855,8 +11859,8 @@ var AGREEMENT_HEADER = [
   ] },
   { box: "INSURANCE & CLAIM", tint: true, rows: [
     [{ k: "carrier", label: "INSURANCE CARRIER" }],
-    [{ k: "claimNumber", label: "CLAIM NUMBER" }, { k: "dateOfLoss", label: "DATE OF LOSS" }],
-    [{ k: "outOfPocket", label: "OUT OF POCKET", t: "money" }, { k: "agreementDate", label: "DATE" }],
+    [{ k: "claimNumber", label: "CLAIM NUMBER" }, { k: "dateOfLoss", label: "DATE OF LOSS", t: "date" }],
+    [{ k: "outOfPocket", label: "OUT OF POCKET", t: "money" }, { k: "agreementDate", label: "DATE", t: "date" }],
     [{ k: "projectAddress", label: "PROJECT ADDRESS (IF DIFFERENT)" }]
   ] }
 ];
@@ -11984,7 +11988,7 @@ function agSecHtml(sec, a, brand) {
   return `<div class="agsec">${head}${note}${body}</div>`;
 }
 function agFieldHtml(f, a) {
-  const val = f.t === "money" ? agMoney(a[f.k]) : esc(a[f.k] || "");
+  const val = f.t === "money" ? agMoney(a[f.k]) : f.t === "date" ? esc(longDate(a[f.k])) : esc(a[f.k] || "");
   return `<div class="agfield" style="flex:${f.flex || 1}">
     <div class="agflb">${esc(f.label)}</div>
     <div class="agfval">${val}</div>
@@ -18613,10 +18617,11 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "input",
           {
-            style: inputStyle,
-            value: est.date || (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { month: "short", day: "numeric", year: "numeric" }),
+            style: dateInputStyle,
+            type: "date",
             disabled: locked,
-            onChange: (e) => setEst({ date: e.target.value })
+            value: humanToIso(est.date) || todayIso(),
+            onChange: (e) => setEst({ date: isoToHuman(e.target.value) })
           }
         ) })
       ] }),
@@ -19060,6 +19065,16 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
     }
   );
   const moneyTxt = (k) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: a[k] || "", disabled: locked, onChange: (v) => set(k, v) });
+  const dateTxt = (k) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    "input",
+    {
+      style: dateInputStyle,
+      type: "date",
+      value: a[k] || "",
+      disabled: locked,
+      onChange: (e) => set(k, e.target.value)
+    }
+  );
   const InitialsStatus = ({ value }) => value ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { ...inputStyle, width: 120, display: "flex", alignItems: "center", fontWeight: 700 }, children: value }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, lineHeight: 1.4, maxWidth: 220 }, children: job.portalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     "Collected with the signature at ",
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `${window.location.origin}/?portal=${job.portalToken}`, target: "_blank", rel: "noreferrer", style: { color: T.accent, fontWeight: 700 }, children: "the client portal" })
@@ -19091,7 +19106,7 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
     ] }),
     AGREEMENT_HEADER.map((box) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: box.box.charAt(0) + box.box.slice(1).toLowerCase() }),
-      box.rows.map((row, ri) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }, children: row.map((f) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: f.label.charAt(0) + f.label.slice(1).toLowerCase(), children: f.t === "money" ? moneyTxt(f.k) : txt(f.k) }, f.k)) }, ri))
+      box.rows.map((row, ri) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }, children: row.map((f) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: f.label.charAt(0) + f.label.slice(1).toLowerCase(), children: f.t === "money" ? moneyTxt(f.k) : f.t === "date" ? dateTxt(f.k) : txt(f.k) }, f.k)) }, ri))
     ] }, box.box)),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Roofing specification" }),
@@ -20925,7 +20940,7 @@ function TabPayments({ job, mut, toast, onLog = () => {
         }
       ) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%" }, disabled: !form.label.trim() || !num(form.amt), onClick: () => {
-        mut((j) => ({ ...j, payments: [...j.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp() }] }));
+        mut((j) => ({ ...j, payments: [...j.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp(), dateIso: todayIso() }] }));
         setForm({ type: "Received", label: "", amt: "" });
         toast("Payment logged");
       }, children: [
@@ -20972,10 +20987,10 @@ function TabPayments({ job, mut, toast, onLog = () => {
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
               "input",
               {
-                style: inputStyle,
+                style: dateInputStyle,
                 type: "date",
-                value: ef2.date || "",
-                onChange: (e) => setEf2({ ...ef2, date: e.target.value })
+                value: payDateIso(ef2),
+                onChange: (e) => setEf2({ ...ef2, dateIso: e.target.value, date: isoToHuman(e.target.value) })
               }
             ) })
           ] }),

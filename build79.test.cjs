@@ -29,9 +29,12 @@ ok(/\{ k: "outOfPocket", label: "OUT OF POCKET", t: "money" \}/.test(src),
 ok(/outOfPocket: ins\.deductible \? String\(num\(ins\.deductible\)\) : "",/.test(src),
   "agreementPrefill seeds outOfPocket as a raw numeric string, matching the sibling deductible field");
 ok(/const moneyTxt = \(k\) => \(/.test(src), "AgreementForm gained a moneyTxt helper");
-ok(/\{f\.t === "money" \? moneyTxt\(f\.k\) : txt\(f\.k\)\}/.test(src),
+/* build 80 added a third (date) branch to both of these lines — assert
+   money still routes through moneyTxt/agMoney without pinning the exact
+   line text, since a later, legitimate build extends it further. */
+ok(/f\.t === "money" \? moneyTxt\(f\.k\)/.test(src),
   "the header field render branches on f.t to use moneyTxt for money fields");
-ok(/const val = f\.t === "money" \? agMoney\(a\[f\.k\]\) : esc\(a\[f\.k\] \|\| ""\);/.test(src),
+ok(/const val = f\.t === "money" \? agMoney\(a\[f\.k\]\) :/.test(src),
   "agFieldHtml routes money fields through agMoney() on the printed page");
 
 /* Regression guard: Balance due on completion stays free text, not MoneyInput. */
