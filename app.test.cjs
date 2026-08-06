@@ -1955,7 +1955,7 @@ var PORTAL_SECTIONS = [
   ["invoice", "Invoice & balance"],
   ["documents", "Documents"],
   ["photos", "Project photos"],
-  ["sign", "Documents to sign"],
+  ["sign", "Agreements & signatures"],
   ["requests", "Quotes & future projects"],
   ["messages", "Messages"],
   ["review", "Rate your experience"],
@@ -12626,7 +12626,6 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
       jobId: job.id,
       name: job.name,
       address: job.address,
-      projectType: projectNoun(job),
       stageLabel: job.stageLabel || "",
       order: portalOrderOf(portal).filter((sid) => sid === "documents" ? portalDocs.length > 0 : portalSectionOn(portal, sid)),
       /* Rep block: a per-job override wins over the assigned seat, so a
@@ -13092,7 +13091,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: pending.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "amber", children: [
       pending.length,
       " to sign"
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "All signed" }), children: "Documents to sign" }),
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "All signed" }), children: "Agreements & signatures" }),
     pending.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: "Nothing needs your signature right now." }),
     pending.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "center", padding: "11px 0", borderTop: `1px solid ${S.line}` }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.FileText, { size: 18, color: accent, style: { flexShrink: 0 } }),
@@ -13513,11 +13512,7 @@ function PublicPortal({ token }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minHeight: "100vh", background: S.bg, fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: prim, color: "#fff", padding: "22px 18px 26px" }, children: [
       d.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: d.logo, alt: "", style: { height: 44, objectFit: "contain", marginBottom: 10, display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, opacity: 0.8 }, children: d.company }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 21, fontWeight: 800, marginTop: 4 }, children: [
-        "Your ",
-        d.projectType || "roofing",
-        " project"
-      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 21, fontWeight: 800, marginTop: 4 }, children: "Your project" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, opacity: 0.85, marginTop: 3 }, children: d.address })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 60px" }, children: [
@@ -22438,11 +22433,7 @@ function TabPortal({ job, brand: brand2, mut, toast, currentUser, stageLabel = "
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: T.primary, padding: "16px 16px 14px", color: "#fff" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, opacity: 0.75 }, children: brand2.company }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 17, fontWeight: 800, marginTop: 3 }, children: [
-            "Your ",
-            projectNoun(job),
-            " project"
-          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, marginTop: 3 }, children: "Your project" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, opacity: 0.75, marginTop: 2 }, children: job.address })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: 14 }, children: [

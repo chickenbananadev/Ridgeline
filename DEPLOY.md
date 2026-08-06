@@ -44,6 +44,30 @@ authenticated insert/update/delete).
 
 ---
 
+## 0b. Customer signing — fixes "Could not sign... row-level security"
+
+**Symptom in the app:** a homeowner opens their portal link and tries
+to sign an estimate, contract, or change order, and gets "Could not
+sign — That did not save... Check the row-level security policies for
+signatures," no matter what device or doc type they try.
+
+**Cause:** migration `018` closed a real enumeration hole by removing
+direct anonymous read access to `crm_portal`, but `014`'s customer-
+signing policies still validated a token by querying `crm_portal`
+directly — a query that is itself subject to `crm_portal`'s RLS, and
+so always returned nothing for an anonymous visitor after `018`. Every
+customer signature was rejected as a result, already applied to this
+project's live database directly (see migration `025`), but run
+`supabase db push` too so a fresh environment picks it up the same way:
+
+```bash
+supabase db push
+```
+
+No secrets needed.
+
+---
+
 ## 1. CompanyCam — fixes "the connection isn't working"
 
 **Symptom in the app:** connecting CompanyCam shows *"Needs the CompanyCam

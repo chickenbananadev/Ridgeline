@@ -1553,7 +1553,7 @@ const PORTAL_SECTIONS = [
   ["invoice", "Invoice & balance"],
   ["documents", "Documents"],
   ["photos", "Project photos"],
-  ["sign", "Documents to sign"],
+  ["sign", "Agreements & signatures"],
   ["requests", "Quotes & future projects"],
   ["messages", "Messages"],
   ["review", "Rate your experience"],
@@ -11585,7 +11585,6 @@ function buildPortalSnapshot(job, brand, token, users = []) {
       company: brand.company, logo: brand.logo || null, primary: brand.primary,
       slogan: brand.slogan, phone: brand.phone, email: brand.email,
       jobId: job.id, name: job.name, address: job.address,
-      projectType: projectNoun(job),
       stageLabel: job.stageLabel || "",
       order: portalOrderOf(portal).filter((sid) => (sid === "documents" ? portalDocs.length > 0 : portalSectionOn(portal, sid))),
       /* Rep block: a per-job override wins over the assigned seat, so a
@@ -12061,7 +12060,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
   return (
     <Card>
       <CardTitle right={pending.length ? <Chip tone="amber">{pending.length} to sign</Chip> : <Chip tone="green">All signed</Chip>}>
-        Documents to sign
+        Agreements & signatures
       </CardTitle>
 
       {pending.length === 0 && (
@@ -12496,7 +12495,7 @@ function PublicPortal({ token }) {
         {d.logo
           ? <img src={d.logo} alt="" style={{ height: 44, objectFit: "contain", marginBottom: 10, display: "block" }} />
           : <div style={{ fontSize: 13, opacity: 0.8 }}>{d.company}</div>}
-        <div style={{ fontSize: 21, fontWeight: 800, marginTop: 4 }}>Your {d.projectType || "roofing"} project</div>
+        <div style={{ fontSize: 21, fontWeight: 800, marginTop: 4 }}>Your project</div>
         <div style={{ fontSize: 13.5, opacity: 0.85, marginTop: 3 }}>{d.address}</div>
       </div>
       <div style={{ padding: "16px 16px 60px" }}>
@@ -20954,7 +20953,7 @@ function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "", users
         <div style={{ border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" }}>
           <div style={{ background: T.primary, padding: "16px 16px 14px", color: "#fff" }}>
             <div style={{ fontSize: 12, opacity: 0.75 }}>{brand.company}</div>
-            <div style={{ fontSize: 17, fontWeight: 800, marginTop: 3 }}>Your {projectNoun(job)} project</div>
+            <div style={{ fontSize: 17, fontWeight: 800, marginTop: 3 }}>Your project</div>
             <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>{job.address}</div>
           </div>
           <div style={{ padding: 14 }}>
