@@ -37,8 +37,13 @@ ok(/const chatQuery = visibleConvIds\s*\n\s*\? db\.from\("crm_chat"\)\.select\("
 ok(/const \{ data: chatRows \} = await chatQuery;/.test(src), "the scoped/fallback query is actually the one awaited and used");
 
 /* ---------- static: realtime channel is tenant-filtered and covers UPDATE ---------- */
+/* Build 123 added conversation/membership/DELETE subscriptions to the
+   same channel, growing the effect well past the old fixed 2600-char
+   slice — bound the window by the next section's comment marker
+   instead so it always covers the whole effect. */
 const rtStart = src.indexOf('/* ---------- realtime: chat + activity from other devices');
-const rtSrc = src.slice(rtStart, rtStart + 2600);
+const rtEnd = src.indexOf('/* ---------- jobs: diff-watch', rtStart);
+const rtSrc = src.slice(rtStart, rtEnd > rtStart ? rtEnd : rtStart + 2600);
 ok(/if \(!db \|\| !ready \|\| !tenantId\) return;/.test(rtSrc), "the realtime effect now requires a known tenantId before subscribing at all");
 ok(/const upsertFromRow = \(r\) => \(\{/.test(rtSrc), "INSERT and UPDATE share one row-mapping helper instead of two copies of the same object shape");
 ok(/event: "INSERT", schema: "public", table: "crm_chat", filter: `tenant_id=eq\.\$\{tenantId\}`/.test(rtSrc),

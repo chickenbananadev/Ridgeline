@@ -39,7 +39,12 @@ ok(/const \[activity, setActivity\] = useState\(\(\) => \(liveDb\(\) \? \[\] : b
   "and never shows anything on a fresh demo, real or not");
 ok(/function buildSeedActivity\(\) \{/.test(src),
   "the seed history is built by a standalone function, not inlined into the useState call");
-ok(/function Dashboard\(\{ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND,\s*\n\s*appointments = \[\], apptTypes = \[\], crews = \[\], setAppointments, setApptTypes, toast, onQueueMessage, onLog, users = \[\], mutJob, onToggleTask,\s*\n\s*chatMsgs = \[\], onSendChat, stageRules = \{\}, currentUser = null, showMoney = true, isAdmin = true, activity = \[\] \}\) \{/.test(src),
+/* Build 123 removed the dead chatMsgs/onSendChat props (never read by
+   Dashboard's body; the handler built conversationless messages) —
+   assert the parts that carry this test's actual concern: the
+   signature still ends with the activity feed. */
+ok(/function Dashboard\(\{ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND,/.test(src) &&
+   /stageRules = \{\}, currentUser = null, showMoney = true, isAdmin = true, activity = \[\] \}\) \{/.test(src),
   "Dashboard actually accepts the activity feed rather than silently having nothing to compute from");
 ok(/<Dashboard jobs=\{jobs\} stages=\{stages\} onOpenJob=\{openJobScreen\} userName=\{userName\} go=\{setNav\}/.test(src) &&
    /stageRules=\{stageRules\} currentUser=\{liveUser\} showMoney=\{showMoney\} isAdmin=\{isAdmin\} activity=\{activity\}/.test(src),
