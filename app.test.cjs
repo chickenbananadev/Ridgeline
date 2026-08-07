@@ -29318,7 +29318,7 @@ function useDbSync(st) {
           return {
             ...base,
             id: r.id,
-            fin: fin.financials || base.fin || EMPTY_FIN(),
+            fin: { ...EMPTY_FIN(), ...fin.financials || base.fin || {} },
             payments: fin.payments || base.payments || []
           };
         });

@@ -36,8 +36,12 @@ ok(/data: \{ financials: j\.fin, payments: j\.payments \}/.test(src),
   "the crm_financials upsert now sources real cost data from job.fin");
 ok(!/data: \{ financials: j\.financials, payments: j\.payments \}/.test(src),
   "the old buggy crm_financials upsert (always-undefined j.financials) is gone");
-ok(/fin: fin\.financials \|\| base\.fin \|\| EMPTY_FIN\(\),/.test(src),
-  "the load path now restores job.fin from crm_financials (or a base.fin fallback), not the dead job.financials field");
+/* Build 109 changed this exact line's shape from a plain || chain to
+   a defaults-merge (still sourcing from fin.financials / base.fin —
+   see that build's own test for why), so match on the substring this
+   test actually cares about rather than the now-stale full line. */
+ok(/\(fin\.financials \|\| base\.fin \|\| \{\}\)/.test(src),
+  "the load path still restores job.fin from crm_financials (or a base.fin fallback), not the dead job.financials field");
 ok(/const EMPTY_FIN = \(\) => \(\{ materials: \[\], labor: \[\], other: \[\], commissionRate: 60, structure: "grossProfit", overheadPct: 10, reimbursements: \[\] \}\);/.test(src),
   "EMPTY_FIN() now matches the real fin shape used everywhere else (materials/labor/other/...), not the unrelated costLines shape");
 

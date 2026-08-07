@@ -27925,9 +27925,24 @@ function useDbSync(st) {
         const loadedJobs = (jobRows || []).map((r) => {
           const base = r.data || {};
           const fin = finMap[r.id] || {};
+          /* Merge onto EMPTY_FIN() rather than trusting whatever was
+             loaded outright — a real crm_financials row can predate the
+             current materials/labor/other bucket model (an older
+             version of this app stored a single flat "costLines" array
+             instead). That row is still truthy, so it used to win the
+             fallback chain below wholesale, missing the exact keys
+             computeFin() sums — crashing TabFinancials on open with no
+             error boundary anywhere in the app to catch it, unmounting
+             the whole screen to blank. Spreading the loaded object over
+             the defaults backfills only what's actually missing; a
+             legitimate current-shape fin (the overwhelmingly common
+             case) is untouched, since every one of its real keys
+             overwrites the default sitting under it. Self-heals in the
+             database too — the next save of any kind writes this
+             normalized shape back to crm_financials. */
           return {
             ...base, id: r.id,
-            fin: fin.financials || base.fin || EMPTY_FIN(),
+            fin: { ...EMPTY_FIN(), ...(fin.financials || base.fin || {}) },
             payments: fin.payments || base.payments || [],
           };
         });
