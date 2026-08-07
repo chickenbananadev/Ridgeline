@@ -35,22 +35,28 @@ function check(name, cond) {
   if (!cond) { realErr("FAILED: " + name); process.exit(1); }
 }
 
-/* ---- static: every tenant-scoped effect must have a legacy fallback ---- */
+/* ---- static: tenant-scoped effects must never hang, and must never
+   fall back to the shared legacy row ----
+
+   This block originally required a `.eq("id", 1)` / `upsert({id: 1})`
+   fallback in each tenant-scoped effect, to fix a production hang
+   where a tenant-less session blocked forever. Build 104 removed
+   those fallbacks: the legacy singleton row belongs to a real company
+   in a multi-tenant database, and a tenant-less account was found
+   live reading and attempting to write it. The anti-hang property is
+   kept — each effect now resolves rather than blocking — but without
+   touching another tenant's data. */
 check("brand read never hard-blocks on tenantId",
-  !/if \(!db \|\| !tenantId\) \{ if \(!db\) setLoaded\(true\); return; \}/.test(src));
-check("brand read falls back to id=1 when tenantId is unavailable",
-  /db\.from\("crm_brand"\)\.select\("data"\)\.eq\("id", 1\)\.maybeSingle\(\)/.test(src));
+  /if \(!tenantId\) \{ finish\(\); return \(\) => \{ alive = false; \}; \}/.test(src));
 check("org hydrate never hard-blocks on tenantId",
-  !/if \(!db \|\| !ready \|\| !tenantId\) return;/.test(src));
-check("org hydrate falls back to id=1 when tenantId is unavailable",
-  /db\.from\("crm_org"\)\.select\("data"\)\.eq\("id", 1\)\.maybeSingle\(\)/.test(src));
-check("org first-boot seed falls back to id=1 upsert",
-  /db\.from\("crm_org"\)\.upsert\(\{ id: 1, data: orgPack\(\), updated_at: new Date\(\)\.toISOString\(\) \}\);/.test(src));
-check("org debounced save falls back to id=1 upsert",
-  /db\.from\("crm_org"\)\.upsert\(\{ id: 1, data: orgPack\(\), updated_at: new Date\(\)\.toISOString\(\) \}\)\s*: db\.from\("crm_org"\)\.upsert\(\{ id: 1/.test(src)
-  || (src.match(/db\.from\("crm_org"\)\.upsert\(\{ id: 1/g) || []).length >= 2);
-check("brand save falls back to id=1 upsert",
-  /db\.from\("crm_brand"\)\.upsert\(\{ id: 1, data: payload, updated_at: new Date\(\)\.toISOString\(\) \}\);/.test(src));
+  !/if \(!db \|\| !ready \|\| !tenantId\) return;/.test(src)
+  && /: \{ data: null, error: null \};/.test(src));
+check("no crm_brand read or write targets the shared legacy id=1 row",
+  !/db\.from\("crm_brand"\)\.select\("data"\)\.eq\("id", 1\)\.maybeSingle\(\)/.test(src)
+  && !/db\.from\("crm_brand"\)\.upsert\(\{ id: 1,/.test(src));
+check("no crm_org read or write targets the shared legacy id=1 row",
+  !/db\.from\("crm_org"\)\.select\("data"\)\.eq\("id", 1\)\.maybeSingle\(\)/.test(src)
+  && !/db\.from\("crm_org"\)\.upsert\(\{ id: 1,/.test(src));
 check("hydrate effect's setHydrated(true) is unconditional, outside the try/catch",
   /\} catch \(e\) \{\s*\n\s*if \(alive\) setSyncErr\(/.test(src) && /if \(alive\) setHydrated\(true\);\s*\n\s*\}\)\(\);/.test(src));
 
