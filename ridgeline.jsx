@@ -24990,12 +24990,13 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   };
   const paidFor = (crewId) => {
     const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 86400000;
+    const crewName = (crews.find((c) => c.id === crewId) || {}).name || "";
     return jobs.filter((j) => j.crewId === crewId).reduce((sum, j) => {
-      const lines = (j.financials && j.financials.costLines) || [];
-      return sum + lines
-        .filter((l) => /labor|crew|install|sub/i.test(l.label || ""))
-        .filter((l) => !l.at || new Date(l.at).getTime() >= cutoff)
-        .reduce((t, l) => t + num(l.amt), 0);
+      const payouts = (j.payments || [])
+        .filter((p) => p.type !== "Received" && String(p.to || "").toLowerCase().includes(crewName.toLowerCase()));
+      return sum + payouts
+        .filter((p) => !p.at || new Date(p.at).getTime() >= cutoff)
+        .reduce((t, p) => t + num(p.amt), 0);
     }, 0);
   };
   /* A new crew gets its real id immediately, not at save — a document
@@ -25024,7 +25025,7 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             </select>
           </div>
           <div style={{ fontSize: 12, color: S.sub, marginTop: 7, lineHeight: 1.5 }}>
-            Totals come from labor and subcontractor lines on each crew's jobs in the Financials tab.
+            Totals come from payments logged against each crew's jobs — sub invoices marked paid, or any manual payout naming the crew.
           </div>
         </Card>
       )}
@@ -26892,7 +26893,7 @@ function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
             Confirmed sub invoices awaiting payment. Mark paid on the job's work order.
           </div>
           {payQueue.map((r) => (
-            <button key={r.job.id} onClick={() => onOpenJob && onOpenJob(r.job.id)} style={{
+            <button key={r.job.id} onClick={() => onOpenJob && onOpenJob(r.job.id, "workorder")} style={{
               display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
               border: "none", borderTop: `1px solid ${S.line}`, background: "none", cursor: "pointer", padding: "11px 2px", fontFamily: "inherit",
             }}>
