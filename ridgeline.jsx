@@ -3138,6 +3138,12 @@ function buildSubInvoiceDraft(job, crew) {
    ================================================================ */
 const AUTH = () => (typeof window !== "undefined" ? window.__AUTH__ : null);
 const liveAuth = () => !!AUTH();
+/* Set once the signed-in user's profile loads (see the boot-hydrate
+   effect). Storage object keys are prefixed with this so the
+   tenant-scoped write/update/delete Storage policies (migration 026)
+   have something to check — RLS on storage.objects has no tenant_id
+   column to key off, only the object path. */
+const currentTenantId = () => (typeof window !== "undefined" ? window.__TENANT_ID__ || null : null);
 /* Map a database profile row onto the shape the UI already uses. */
 const fromProfile = (row) => ({
   id: row.id, name: row.name, email: row.email, phone: row.phone || "",
@@ -20845,7 +20851,14 @@ function splitDataUrl(dataUrl) {
 async function uploadJobFile(jobId, file) {
   const db = DB();
   const safe = String(file.name || "file").replace(/[^\w.\-]+/g, "_");
-  const key = `${jobId}/${Date.now()}_${safe}`;
+  /* Tenant id leads the key so the tenant-scoped Storage write/update/
+     delete policies (migration 026) have a path segment to check —
+     storage.objects has no tenant_id column, only the object name.
+     Falls back to "_shared" rather than throwing when no tenant is
+     known yet (e.g. demo mode, which never touches real Storage
+     anyway since db.storage.upload below is the only caller). */
+  const tenantPrefix = currentTenantId() || "_shared";
+  const key = `${tenantPrefix}/${jobId}/${Date.now()}_${safe}`;
   if (db && db.storage) {
     try {
       const { error } = await db.storage.from("job-files").upload(key, file, { upsert: false });
@@ -28094,11 +28107,12 @@ export default function SupremeCRM() {
 
     const hydrate = async (session) => {
       if (!alive) return;
-      if (!session) { setCurrentUser(null); setBooting(false); return; }
+      if (!session) { setCurrentUser(null); setBooting(false); if (typeof window !== "undefined") window.__TENANT_ID__ = null; return; }
       try {
         const profile = await auth.loadProfile(session.user.id);
         if (!alive) return;
         setCurrentUser(fromProfile(profile));
+        if (typeof window !== "undefined") window.__TENANT_ID__ = profile.tenant_id || null;
         try {
           const all = await auth.listProfiles();
           if (alive && all) setUsers(all.map(fromProfile));

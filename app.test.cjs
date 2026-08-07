@@ -3790,6 +3790,7 @@ function buildSubInvoiceDraft(job, crew) {
 }
 var AUTH = () => typeof window !== "undefined" ? window.__AUTH__ : null;
 var liveAuth = () => !!AUTH();
+var currentTenantId = () => typeof window !== "undefined" ? window.__TENANT_ID__ || null : null;
 var fromProfile = (row) => ({
   id: row.id,
   name: row.name,
@@ -22186,7 +22187,8 @@ function splitDataUrl(dataUrl) {
 async function uploadJobFile(jobId, file) {
   const db = DB();
   const safe = String(file.name || "file").replace(/[^\w.\-]+/g, "_");
-  const key = `${jobId}/${Date.now()}_${safe}`;
+  const tenantPrefix = currentTenantId() || "_shared";
+  const key = `${tenantPrefix}/${jobId}/${Date.now()}_${safe}`;
   if (db && db.storage) {
     try {
       const { error } = await db.storage.from("job-files").upload(key, file, { upsert: false });
@@ -29561,12 +29563,14 @@ function SupremeCRM() {
       if (!session) {
         setCurrentUser(null);
         setBooting(false);
+        if (typeof window !== "undefined") window.__TENANT_ID__ = null;
         return;
       }
       try {
         const profile = await auth.loadProfile(session.user.id);
         if (!alive) return;
         setCurrentUser(fromProfile(profile));
+        if (typeof window !== "undefined") window.__TENANT_ID__ = profile.tenant_id || null;
         try {
           const all = await auth.listProfiles();
           if (alive && all) setUsers(all.map(fromProfile));
