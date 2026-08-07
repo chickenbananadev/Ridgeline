@@ -14211,40 +14211,125 @@ async function fetchStormHistory(lat, lng, start, end) {
     return days;
   } catch (e) { return null; }
 }
-/* Best-effort official corroboration: the Iowa Environmental Mesonet mirrors
-   NOAA Local Storm Reports as CORS-open GeoJSON. For a single day we pull the
-   national LSR set and keep the HAIL / wind reports within ~35 mi of the
-   point, returning the largest hail size (inches) and peak measured/estimated
-   wind (mph). Fails quiet — the code-based flags still stand on their own. */
+/* ------------------------------------------------------------------
+   NOAA Local Storm Reports — the official hail record.
+
+   The Iowa Environmental Mesonet mirrors NWS Local Storm Reports as
+   CORS-open GeoJSON, and this is what actually answers "did it hail on
+   this house". ERA5 cannot: reanalysis has no hail observation, only a
+   derived weather code, and codes 96/99 practically never appear in
+   it — so a lookup leaning on ERA5 for hail reports no hail, always.
+
+   Three things this gets right that the previous per-day version did
+   not:
+
+   1. It matches on `typetext` ("HAIL", "TSTM WND GST"). The feature
+      property named `type` is TYPECODE — a ONE-CHARACTER id ("H",
+      "G", "D", "T"). Testing `type.includes("HAIL")` can never be
+      true, so hail size and NOAA wind came back null on every report
+      that ever existed, and the "Hail — n″ (NOAA)" chip could not
+      render. That was the whole bug.
+   2. It passes a bounding box (west/east/south/north — the service
+      requires all four together) instead of downloading the national
+      report set and filtering client-side. That makes the WHOLE
+      window one small request rather than one national pull per day,
+      which is what made a multi-year hail history impractical before.
+   3. It reads `unit`, because gust magnitudes come through in knots
+      as well as mph and a raw number is wrong roughly half the time.
+
+   Reports are bucketed by LOCAL date, not the UTC date in `valid`. An
+   evening hailstorm lands after midnight UTC, so bucketing raw would
+   file it under the following day and set the date of loss one day
+   off — the kind of error a carrier notices.
+------------------------------------------------------------------- */
 const LSR_CACHE = new Map();
-async function enrichStormDay(lat, lng, iso) {
-  const key = `${weatherKey(lat, lng)}:${iso}`;
+const LSR_RADIUS_DEG = 0.45;    // ~30 mi; storm reports are sparse, a tight box finds nothing
+function lsrKind(p) {
+  /* typetext is the real classifier; the one-char type code is the
+     fallback so a missing typetext degrades instead of misreporting. */
+  const t = String(p.typetext || "").toUpperCase();
+  const code = String(p.type || "").toUpperCase();
+  if (t.includes("HAIL") || code === "H") return "hail";
+  if (t.includes("TORNADO") || code === "T") return "tornado";
+  if (/WND GST|WIND|DOWNBURST/.test(t) || code === "G") return "wind";
+  if (/DMG|DAMAGE/.test(t) || code === "D") return "damage";
+  return "other";
+}
+function lsrWindMph(mag, unit) {
+  if (!isFinite(mag)) return null;
+  return /KT|KNOT/i.test(String(unit || "")) ? mag * 1.15078 : mag;
+}
+/* Approximate local calendar date for a UTC instant at a longitude.
+   15° of longitude is an hour; for the continental US this picks the
+   right DAY even when it is an hour off on the clock, which is all the
+   bucketing needs. */
+function localDateAt(utcIso, lng) {
+  const t = Date.parse(utcIso);
+  if (!isFinite(t)) return null;
+  return new Date(t + Math.round(lng / 15) * 3600000).toISOString().slice(0, 10);
+}
+async function fetchStormReports(lat, lng, start, end) {
+  const key = `${weatherKey(lat, lng)}:${start}:${end}`;
   if (LSR_CACHE.has(key)) return LSR_CACHE.get(key);
   try {
-    const sts = `${iso}T00:00Z`;
-    const nextIso = new Date(new Date(iso + "T00:00Z").getTime() + 864e5).toISOString().slice(0, 10);
-    const ets = `${nextIso}T00:00Z`;
-    const url = `https://mesonet.agron.iastate.edu/geojson/lsr.geojson?sts=${sts}&ets=${ets}`;
+    /* +1 day on the end so a late-evening local storm on the last day,
+       which lands on the following UTC date, is still inside the window. */
+    const ets = new Date(Date.parse(end + "T00:00Z") + 2 * 864e5).toISOString().slice(0, 10);
+    const url = `https://mesonet.agron.iastate.edu/geojson/lsr.geojson` +
+      `?sts=${start}T00:00Z&ets=${ets}T00:00Z` +
+      `&west=${(lng - LSR_RADIUS_DEG).toFixed(3)}&east=${(lng + LSR_RADIUS_DEG).toFixed(3)}` +
+      `&south=${(lat - LSR_RADIUS_DEG).toFixed(3)}&north=${(lat + LSR_RADIUS_DEG).toFixed(3)}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error("lsr");
     const gj = await res.json();
-    let hailIn = null, windMph = null, count = 0;
+    const byDate = {};
     for (const f of gj.features || []) {
       const c = f.geometry && f.geometry.coordinates;
       if (!c) continue;
       const [flng, flat] = c;
-      if (Math.abs(flat - lat) > 0.5 || Math.abs(flng - lng) > 0.6) continue;
       const p = f.properties || {};
-      const type = String(p.type || "").toUpperCase();
+      const date = localDateAt(p.valid, lng);
+      if (!date || date < start || date > end) continue;
+      const kind = lsrKind(p);
+      if (kind === "other") continue;
       const mag = parseFloat(p.magnitude);
-      if (type.includes("HAIL") && !isNaN(mag)) { hailIn = Math.max(hailIn ?? 0, mag); count++; }
-      else if (type.includes("WND") && !isNaN(mag)) { windMph = Math.max(windMph ?? 0, mag); count++; }
-      else if (type.includes("TORNADO")) count++;
+      const row = byDate[date] || (byDate[date] = { hailIn: null, reportWind: null, count: 0, reports: [] });
+      row.count++;
+      if (kind === "hail" && isFinite(mag)) row.hailIn = Math.max(row.hailIn ?? 0, mag);
+      if (kind === "wind") {
+        const mph = lsrWindMph(mag, p.unit);
+        if (mph != null) row.reportWind = Math.max(row.reportWind ?? 0, mph);
+      }
+      row.reports.push({
+        kind, mag: isFinite(mag) ? mag : null, unit: p.unit || "",
+        at: p.valid || "", city: p.city || "", county: p.county || "", state: p.state || "",
+        qualifier: p.qualifier || "", source: p.source || "", remark: p.remark || "",
+        miles: haversineMiles(lat, lng, flat, flng),
+      });
     }
-    const out = { hailIn, reportWind: windMph, count };
-    LSR_CACHE.set(key, out);
-    return out;
+    /* Nearest report first — "3 mi away" and "26 mi away" are very
+       different conversations on a doorstep. */
+    Object.values(byDate).forEach((r) => r.reports.sort((a, b) => a.miles - b.miles));
+    LSR_CACHE.set(key, byDate);
+    return byDate;
   } catch (e) { return null; }
+}
+function haversineMiles(lat1, lng1, lat2, lng2) {
+  const R = 3958.8, rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+/* Hail size in the vocabulary adjusters and homeowners actually use.
+   1" is the NWS severe threshold and the size most carriers treat as
+   the start of a functional-damage conversation. */
+const HAIL_SIZES = [[4.5, "softball"], [4, "grapefruit"], [3, "teacup"], [2.75, "baseball"],
+  [2.5, "tennis ball"], [2, "hen egg"], [1.75, "golf ball"], [1.5, "ping pong ball"],
+  [1.25, "half dollar"], [1, "quarter"], [0.88, "nickel"], [0.75, "penny"], [0.5, "marble"]];
+function hailSizeLabel(inches) {
+  if (inches == null) return "";
+  const hit = HAIL_SIZES.find(([n]) => inches >= n);
+  return hit ? hit[1] : "pea";
 }
 /* NOAA SPC storm-report page for a given ISO date (official corroboration). */
 function spcReportLink(iso) {
@@ -14254,6 +14339,33 @@ function spcReportLink(iso) {
 function stormSeverity(r) {
   return (r.hailIn ? 4000 + r.hailIn * 500 : r.hail ? 3000 : 0)
     + (r.reportWind || r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
+}
+/* Merge the ERA5 day rows with the NOAA storm reports into one list.
+
+   The order matters. Reports LEAD and reanalysis decorates, not the
+   other way round: a confirmed 1.75" hail report is the finding, and
+   whatever gust ERA5 modelled that day is context. The old flow ranked
+   ERA5 days by a severity score that could not see hail, kept the top
+   handful, and only then asked NOAA about those — so a genuine hail day
+   that happened to be calm in the reanalysis was never asked about at
+   all and could not appear however hard you looked for it.
+
+   Every day carrying a storm report is therefore included
+   unconditionally; ERA5-only days still come along when they were
+   notable on their own (high wind, thunderstorm, heavy rain), because
+   a wind claim does not need a spotter to have called it in. */
+function mergeStormDays(days, reportsByDate) {
+  const byDate = new Map();
+  (days || []).forEach((d) => byDate.set(d.date, { ...d }));
+  Object.entries(reportsByDate || {}).forEach(([date, rep]) => {
+    const base = byDate.get(date) || { date, gust: null, precip: null, code: null,
+      hail: false, highWind: false, damagingWind: false, storm: false };
+    byDate.set(date, { ...base, hailIn: rep.hailIn, reportWind: rep.reportWind,
+      reports: rep.count, reportList: rep.reports });
+  });
+  return [...byDate.values()]
+    .filter((r) => r.reports || r.hail || r.highWind || r.storm || (r.precip != null && r.precip >= 0.75))
+    .sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1));
 }
 
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded = false }) {
@@ -15941,74 +16053,143 @@ function StormScout({ toast }) {
    the weather record, then corroborate against the official NOAA SPC report. */
 function StormLookup({ job, dol, onPick, toast }) {
   const iso = (d) => d.toISOString().slice(0, 10);
-  const [start, setStart] = useState(() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return iso(d); });
+  /* Two years, not one. Hail is not an annual event in most markets —
+     a one-year default routinely returns nothing and reads as "no hail
+     here" when the answer is "not in the last twelve months". */
+  const [start, setStart] = useState(() => { const d = new Date(); d.setFullYear(d.getFullYear() - 2); return iso(d); });
+  const [open, setOpen] = useState(null);
   const [end, setEnd] = useState(() => iso(new Date()));
   const [rows, setRows] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
+  const [reportsFailed, setReportsFailed] = useState(false);
   const run = async () => {
-    setLoading(true); setErr(""); setRows(null);
+    setLoading(true); setErr(""); setRows(null); setReportsFailed(false);
     let lat = job.lat ?? job.property?.lat, lng = job.lng ?? job.property?.lng;
     if (lat == null || lng == null) { const g = await geocodeZip(job.zip); if (g) { lat = g.lat; lng = g.lng; } }
     if (lat == null || lng == null) { setErr("No coordinates for this address yet — add a ZIP or pick the address from the map suggestions."); setLoading(false); return; }
-    const days = await fetchStormHistory(lat, lng, start, end);
-    if (!days) { setErr("Couldn't reach the weather archive. Check the connection and try again."); setLoading(false); return; }
-    const notable = days
-      .filter((r) => r.hail || r.highWind || r.storm || (r.precip != null && r.precip >= 0.75))
-      .sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1))
-      .slice(0, 24);
-    setRows(notable); setLoading(false);
-    if (!notable.length) { toast && toast("No notable storm days in that window"); return; }
-    /* Enrich the strongest candidates with official NOAA/IEM storm reports so
-       real hail size and measured wind show where they exist. Best-effort and
-       progressive — each day updates its row as its report comes back. */
-    notable.slice(0, 8).forEach(async (r) => {
-      const info = await enrichStormDay(lat, lng, r.date);
-      if (!info) return;
-      setRows((prev) => prev && prev.map((x) => x.date === r.date
-        ? { ...x, hailIn: info.hailIn, reportWind: info.reportWind, reports: info.count } : x));
-    });
+    /* Both sources at once. The storm reports are the hail record and
+       the reanalysis is the wind/rain context; neither one waits on the
+       other, and a failure in either still leaves a usable answer. */
+    const [days, reports] = await Promise.all([
+      fetchStormHistory(lat, lng, start, end),
+      fetchStormReports(lat, lng, start, end),
+    ]);
+    setLoading(false);
+    if (!days && !reports) { setErr("Couldn't reach the weather archive or the NOAA report service. Check the connection and try again."); return; }
+    /* Say so when the hail record specifically is the thing that didn't
+       load — "no hail found" and "couldn't check for hail" are very
+       different answers to give a rep standing at a door. */
+    setReportsFailed(!reports);
+    const merged = mergeStormDays(days || [], reports || {}).slice(0, 40);
+    setRows(merged);
+    if (!merged.length) toast && toast("No storm reports or notable weather in that window");
+  };
+  const setWindow = (years) => {
+    const d = new Date(); d.setFullYear(d.getFullYear() - years);
+    setStart(iso(d)); setEnd(iso(new Date()));
   };
 
   return (
     <Card style={{ marginTop: 12 }}>
       <CardTitle right={<Chip tone="blue">NOAA / Open-Meteo</Chip>}>Storm history — date of loss</CardTitle>
       <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
-        Pulls high-wind, hail and heavy-rain days for this address so you can set the date of loss from the record.
-        Gusts &amp; precip are ERA5 reanalysis; the strongest days are cross-checked against official NOAA storm reports,
-        so where a report exists you'll see the measured hail size and peak wind. Confirm the NOAA report before filing.
+        Hail and wind days on record for this address, so you can set the date of loss from the record rather than memory.
+        Hail sizes and measured wind come from official NOAA Local Storm Reports near the property; gusts and rain
+        without a “NOAA” tag are ERA5 reanalysis — real, but modelled rather than observed. Confirm the NOAA report before filing.
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }}>
         <Field label="From"><input style={dateInputStyle} type="date" value={start} max={end} onChange={(e) => setStart(e.target.value)} /></Field>
         <Field label="To"><input style={dateInputStyle} type="date" value={end} max={iso(new Date())} onChange={(e) => setEnd(e.target.value)} /></Field>
         <Btn small onClick={run} disabled={loading} style={{ marginBottom: 12 }}>{loading ? "Looking…" : "Look up"}</Btn>
       </div>
+      {/* Hail is episodic — the honest first question is "how far back?",
+          so make widening the window one tap instead of two date pickers. */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: -4, marginBottom: 4 }}>
+        <span style={{ fontSize: 12, color: S.sub, alignSelf: "center" }}>Look back:</span>
+        {[[1, "1 yr"], [2, "2 yrs"], [5, "5 yrs"], [10, "10 yrs"]].map(([y, label]) => (
+          <Btn key={y} kind="ghost" small onClick={() => setWindow(y)}>{label}</Btn>
+        ))}
+      </div>
       {err && <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 6 }}>{err}</div>}
+      {reportsFailed && rows && (
+        <Callout label="Hail record unavailable" tone="amber">
+          The NOAA storm-report service didn't respond, so what's below is modelled weather only — it is not
+          evidence that no hail fell here. Run the lookup again before telling a homeowner there's no hail on record.
+        </Callout>
+      )}
+      {rows && rows.length === 0 && !err && (
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 8 }}>
+          No storm reports or notable weather between {start} and {end}. Try a longer look-back — hail
+          often skips several years in a given neighborhood.
+        </div>
+      )}
       {rows && rows.length > 0 && (
         <div style={{ marginTop: 6 }}>
           {rows.map((r) => {
             const picked = r.date === dol;
+            const size = hailSizeLabel(r.hailIn);
+            const nearest = (r.reportList || [])[0];
             return (
-              <div key={r.date} style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0", borderTop: `1px solid ${S.line}` }}>
+              <div key={r.date} style={{ borderTop: `1px solid ${S.line}` }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{r.date}</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }}>
                     {r.hailIn != null
-                      ? <Chip tone="red">Hail — {r.hailIn.toFixed(2).replace(/\.?0+$/, "")}″ (NOAA)</Chip>
+                      ? <Chip tone="red">Hail — {r.hailIn.toFixed(2).replace(/\.?0+$/, "")}″{size ? ` (${size})` : ""} · NOAA</Chip>
                       : r.hail && <Chip tone="amber">Hail possible</Chip>}
                     {r.reportWind != null
-                      ? <Chip tone={r.reportWind >= 58 ? "red" : "amber"}>{r.reportWind >= 58 ? "Damaging wind" : "High wind"} — {Math.round(r.reportWind)} mph (NOAA)</Chip>
+                      ? <Chip tone={r.reportWind >= 58 ? "red" : "amber"}>{r.reportWind >= 58 ? "Damaging wind" : "High wind"} — {Math.round(r.reportWind)} mph · NOAA</Chip>
                       : r.gust != null && <Chip tone={r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray"}>
                           {r.gust >= 58 ? "Damaging wind" : r.gust >= 45 ? "High wind" : "Gusts"} — {r.gust} mph
                         </Chip>}
                     {r.precip != null && r.precip >= 0.5 && <Chip tone="blue">{r.precip.toFixed(2)}″ rain</Chip>}
+                    {r.reports > 0 && (
+                      <button onClick={() => setOpen(open === r.date ? null : r.date)}
+                        style={{ border: "none", background: "none", padding: 0, cursor: "pointer",
+                          fontSize: 11.5, fontWeight: 700, color: T.accent, fontFamily: "inherit" }}>
+                        {r.reports} report{r.reports === 1 ? "" : "s"}
+                        {nearest ? ` · nearest ${nearest.miles < 1 ? "<1" : Math.round(nearest.miles)} mi` : ""}
+                        {open === r.date ? " ▾" : " ▸"}
+                      </button>
+                    )}
                   </div>
                 </div>
                 <a href={spcReportLink(r.date)} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: T.accent, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }}>NOAA ↗</a>
                 <Btn kind={picked ? "green" : "soft"} small onClick={() => { onPick(r.date); toast && toast(`Date of loss set to ${r.date}`); }} style={{ flexShrink: 0 }}>
                   {picked ? "✓ Set" : "Use"}
                 </Btn>
+              </div>
+              {/* The individual reports behind the day. Distance and
+                  "measured vs estimated" are what make this usable as
+                  evidence rather than a headline — a 2" report 25 miles
+                  away is not this roof's storm. */}
+              {open === r.date && (r.reportList || []).length > 0 && (
+                <div style={{ padding: "2px 0 10px" }}>
+                  {r.reportList.slice(0, 12).map((rep, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "5px 0", fontSize: 12.5, color: S.sub }}>
+                      <span style={{ fontWeight: 700, color: S.ink, minWidth: 84 }}>
+                        {rep.kind === "hail" ? `${rep.mag}″ hail`
+                          : rep.kind === "wind" ? `${Math.round(lsrWindMph(rep.mag, rep.unit) || 0)} mph wind`
+                          : rep.kind === "tornado" ? "Tornado" : "Wind damage"}
+                      </span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        {rep.miles < 1 ? "<1" : Math.round(rep.miles)} mi — {rep.city}
+                        {rep.county ? `, ${rep.county} Co` : ""}{rep.state ? `, ${rep.state}` : ""}
+                        {rep.qualifier ? ` · ${rep.qualifier}` : ""}
+                        {rep.source ? ` · ${rep.source}` : ""}
+                      </span>
+                    </div>
+                  ))}
+                  {r.reportList.length > 12 && (
+                    <div style={{ fontSize: 12, color: S.sub, paddingTop: 4 }}>
+                      + {r.reportList.length - 12} more within {Math.round(LSR_RADIUS_DEG * 69)} mi
+                    </div>
+                  )}
+                </div>
+              )}
               </div>
             );
           })}
