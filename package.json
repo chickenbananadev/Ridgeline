@@ -128,7 +128,8 @@
     "test:build121": "node build121.test.cjs",
     "test:build122": "node build122.test.cjs",
     "test:build123": "node build123.test.cjs",
-    "test:build124": "node build124.test.cjs"
+    "test:build124": "node build124.test.cjs",
+    "test:build125": "node build125.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

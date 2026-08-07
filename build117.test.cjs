@@ -64,8 +64,12 @@ ok(/const createChannel = async \(name, topic, isPrivate\) => \{/.test(src) && /
 ok(/const \[conversations, setConversations\] = useState\(\[\]\);/.test(src), "root App tracks the visible conversation list");
 ok(/const \[activeConversationId, setActiveConversationId\] = useState\(null\);/.test(src), "root App tracks which conversation is open");
 ok(/const \[conversationMembers, setConversationMembers\] = useState\(\[\]\);/.test(src), "root App tracks membership rows for private conversations");
-ok(/if \(alive && \(!convRows \|\| !convRows\.length\)\) \{/.test(src) && /const generalId = `general-\$\{tenantId\}`;/.test(src),
-  "a brand-new tenant with zero conversations bootstraps #general client-side, using the same id convention as migration 031's backfill");
+/* Build 125 (owner decision) reversed the bootstrap: nothing is ever
+   pre-created — every company builds its own channel structure, so a
+   fresh tenant has zero conversations until someone makes one. Assert
+   the ABSENCE of the old auto-#general instead. */
+ok(!/const generalId = `general-\$\{tenantId\}`;/.test(src),
+  "no #general is ever bootstrapped client-side — a fresh tenant starts with zero conversations by design");
 
 /* ---------- static: outbound insert stamps conversation_id, hydrate reads it back ---------- */
 ok(/reactions: m\.reactions \|\| \{\}, conversation_id: m\.conversationId \|\| null,/.test(src),

@@ -24866,8 +24866,7 @@ function ConversationHeader({ conversation, conversationMembers, users, currentU
   const me = currentUser && currentUser.id;
   const isAdmin = !!(currentUser && currentUser.role === "admin");
   const isDm = conversation.kind === "dm";
-  const isGeneral = conversation.kind === "channel" && conversation.name === "general";
-  const canArchive = !isDm && !isGeneral && (conversation.createdBy === me || isAdmin);
+  const canArchive = !isDm && (conversation.createdBy === me || isAdmin);
   const canLeave = isDm || conversation.isPrivate;
   const memberNames = (conversationMembers || []).filter((m) => m.conversationId === conversation.id).map((m) => {
     const u = (users || []).find((x) => x.id === m.userId);
@@ -24918,7 +24917,7 @@ function ConversationHeader({ conversation, conversationMembers, users, currentU
           ]
         }
       ),
-      !canArchive && !canLeave && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub }, children: "This is the company's default channel and can't be removed." })
+      !canArchive && !canLeave && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub }, children: "Only the person who created this channel, or an admin, can archive it." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       Sheet,
@@ -29766,7 +29765,10 @@ function Inbox({
           unreadCounts
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      !activeConversationId ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Set up your team chat" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.6 }, children: "Every company structures chat its own way. Create your first channel above \u2014 many teams start with one for everyone, then add channels per crew, per office, or per project \u2014 or start a direct message with a teammate. Channels are open to the whole team unless you make them private." })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         ChatThread,
         {
           msgs: (chatMsgs || []).filter((m) => m.conversationId === activeConversationId),
@@ -30023,23 +30025,7 @@ function useDbSync(st) {
         }
         let visibleConvIds = null;
         if (tenantId) {
-          let { data: convRows } = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
-          if (alive && (!convRows || !convRows.length)) {
-            const generalId = `general-${tenantId}`;
-            const { error: genErr } = await db.from("crm_chat_conversations").insert({
-              id: generalId,
-              tenant_id: tenantId,
-              kind: "channel",
-              name: "general",
-              topic: "Everyone at the company",
-              is_private: false,
-              created_by: null
-            });
-            if (!genErr) {
-              const again = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
-              convRows = again.data;
-            }
-          }
+          const { data: convRows } = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
           if (alive && convRows) {
             setConversations(convRows.map((r) => ({
               id: r.id,
@@ -30705,9 +30691,7 @@ function SupremeCRM() {
   };
   (0, import_react.useEffect)(() => {
     if (activeConversationId || !conversations.length) return;
-    const tenantId = currentUser && currentUser.tenantId;
-    const general = tenantId && conversations.find((c) => c.id === `general-${tenantId}`);
-    selectConversation((general || conversations[0]).id);
+    selectConversation(conversations[0].id);
   }, [conversations, activeConversationId]);
   (0, import_react.useEffect)(() => {
     const db = DB();
@@ -30834,9 +30818,7 @@ function SupremeCRM() {
   };
   const landSomewhereAfterLeaving = (removedId, remaining) => {
     if (activeConversationId !== removedId) return;
-    const tenantId = currentUser && currentUser.tenantId;
-    const generalId = tenantId ? `general-${tenantId}` : null;
-    const fallback = remaining.find((c) => c.id === generalId) || remaining[0];
+    const fallback = remaining[0];
     if (fallback) selectConversation(fallback.id);
     else setActiveConversationId(null);
   };
