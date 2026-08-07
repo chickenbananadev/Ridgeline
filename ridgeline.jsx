@@ -56,6 +56,7 @@ const DEFAULT_BRAND = {
   accent: "#0A9E98",
   accentSoft: "#E3F5F4",
   googleReviewLink: "",
+  billingContactUserId: "",
 };
 
 /* ================================================================
@@ -24008,7 +24009,7 @@ function AgreementBranding({ brand, setBrand, toast }) {
   );
 }
 
-function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", currentUser = null }) {
+function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", currentUser = null, users = [] }) {
   const set = (k) => (e) => setBrand({ ...brand, [k]: e.target.value });
   const logoRef = useRef(null);
   const onLogo = (e) => {
@@ -24114,6 +24115,14 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", current
         <Field label="Email"><input style={inputStyle} value={brand.email} onChange={set("email")} /></Field>
         <Field label="Accounting email" hint="Where sub-invoice payment notices are sent when a sub invoice is submitted.">
           <input style={inputStyle} type="email" value={brand.accountingEmail || ""} onChange={set("accountingEmail")} placeholder="accounting@yourcompany.com" />
+        </Field>
+        <Field label="Billing contact" hint="Notified automatically — email and text — the moment a sub payout is confirmed or a job's cap-out is fully paid. Defaults to any admin if left unset.">
+          <select style={inputStyle} value={brand.billingContactUserId || ""} onChange={set("billingContactUserId")}>
+            <option value="">No one selected — falls back to an admin</option>
+            {users.filter((u) => u.active !== false).map((u) => (
+              <option key={u.id} value={u.id}>{u.name}{u.role ? ` — ${ROLES.find((r) => r.id === u.role)?.label || u.role}` : ""}</option>
+            ))}
+          </select>
         </Field>
         <Field label="Head office address">
           <AddressAutocomplete value={brand.address} placeholder="Start typing the address…"
@@ -29278,7 +29287,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "help" ? (
         <HelpDesk onBack={() => setNav("more")} brand={brand} />
       ) : nav === "branding" ? (
-        <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} brandErr={brandErr} currentUser={liveUser} />
+        <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} brandErr={brandErr} currentUser={liveUser} users={users} />
       ) : null}
       </div>
 

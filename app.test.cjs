@@ -59,7 +59,8 @@ var DEFAULT_BRAND = {
   primary: "#20242A",
   accent: "#0A9E98",
   accentSoft: "#E3F5F4",
-  googleReviewLink: ""
+  googleReviewLink: "",
+  billingContactUserId: ""
 };
 var SOURCES = {
   RCO: { name: "Residential Code of Ohio (OAC 4101:8)", url: "https://codes.ohio.gov/ohio-administrative-code/4101:8", publisher: "Ohio Legislative Service Commission \u2014 official text" },
@@ -25230,7 +25231,7 @@ function AgreementBranding({ brand, setBrand, toast }) {
     ] })
   ] });
 }
-function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", currentUser = null }) {
+function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", currentUser = null, users = [] }) {
   const set = (k) => (e) => setBrand({ ...brand, [k]: e.target.value });
   const logoRef = (0, import_react.useRef)(null);
   const onLogo = (e) => {
@@ -25321,6 +25322,13 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", current
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Main phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.phone, onChange: set("phone") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.email, onChange: set("email") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Accounting email", hint: "Where sub-invoice payment notices are sent when a sub invoice is submitted.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: brand.accountingEmail || "", onChange: set("accountingEmail"), placeholder: "accounting@yourcompany.com" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Billing contact", hint: "Notified automatically \u2014 email and text \u2014 the moment a sub payout is confirmed or a job's cap-out is fully paid. Defaults to any admin if left unset.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: inputStyle, value: brand.billingContactUserId || "", onChange: set("billingContactUserId"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "No one selected \u2014 falls back to an admin" }),
+        users.filter((u) => u.active !== false).map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: u.id, children: [
+          u.name,
+          u.role ? ` \u2014 ${ROLES.find((r) => r.id === u.role)?.label || u.role}` : ""
+        ] }, u.id))
+      ] }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Head office address", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         AddressAutocomplete,
         {
@@ -30859,7 +30867,7 @@ function SupremeCRM() {
         toast,
         brand
       }
-    ) : nav === "billing" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BillingSettings, { currentUser: liveUser, onBack: () => setNav("more"), toast }) : nav === "help" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelpDesk, { onBack: () => setNav("more"), brand }) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand, setBrand, onBack: () => setNav("more"), toast, brandErr, currentUser: liveUser }) : null }),
+    ) : nav === "billing" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BillingSettings, { currentUser: liveUser, onBack: () => setNav("more"), toast }) : nav === "help" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelpDesk, { onBack: () => setNav("more"), brand }) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand, setBrand, onBack: () => setNav("more"), toast, brandErr, currentUser: liveUser, users }) : null }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
       flexShrink: 0,
       zIndex: 50,
