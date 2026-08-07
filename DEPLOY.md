@@ -136,6 +136,69 @@ as a follow-up, wire the checkout quantity — see §10).
 
 ---
 
+## 3b. Transactional email — custom SMTP
+
+**Do this before relying on §3.** Every invite in §3 is an email, and by
+default Supabase sends it through its own built-in sender. That sender is
+rate-limited to a handful of messages per hour and sends from a generic
+Supabase address, so invites either throttle or land in spam. Since seats are
+invite-only — a rep can never self-signup into a company — a seat that never
+receives its invite is a rep who cannot get in at all.
+
+This is a **dashboard setting, not code**. Nothing in this repo changes.
+
+**1. Get an app password from your mail provider.** For Zoho: Zoho Mail →
+Settings → Security → App Passwords → generate one for "Supabase." Use that,
+never the account's login password. Note that some providers gate outbound
+SMTP behind a paid plan — confirm your plan allows it before wiring this up,
+or the settings will save and every send will silently fail.
+
+**2. Publish SPF and DKIM for the domain first.** Sending as
+`@roofstride.com` without them is filtered as aggressively as the default
+sender was, so skipping this step buys nothing. Your mail provider issues both
+records; add them at whoever hosts the domain's DNS (Vercel → Domains →
+roofstride.com → DNS Records for this project). SPF is a single TXT at the
+apex — if another service already sends as this domain, merge into the
+existing record rather than adding a second one; two SPF records on the same
+name breaks SPF outright.
+
+**3. Supabase → Project Settings → Authentication → SMTP Settings → Enable
+Custom SMTP:**
+
+| Field | Value |
+|---|---|
+| Host | `smtp.zoho.com` |
+| Port | `465` (SSL) or `587` (TLS) |
+| Username | `support@roofstride.com` |
+| Password | the app password from step 1 |
+| Sender email | `support@roofstride.com` |
+| Sender name | `RoofStride` |
+
+Confirm the host against your provider's own docs — regional accounts differ
+(`smtp.zoho.eu`, `smtp.zoho.in`).
+
+**4. Verify it actually sends.** Invite a real seat from Team & seats, then
+check **Supabase → Logs → Auth**. A working send logs the invite with no
+error; a rejected one logs the SMTP failure verbatim (bad credentials, plan
+doesn't permit SMTP, unverified sender). Confirm the invite landed:
+
+```sql
+select email, invited_at, confirmation_sent_at, email_confirmed_at
+from auth.users order by created_at desc limit 5;
+```
+
+`invited_at` set means the invite was issued; `email_confirmed_at` set means
+the person actually received it and followed the link. If `invited_at` is null
+across every row, no invite has ever been issued and the problem is upstream
+of SMTP — check that `invite-user` is deployed (§3).
+
+Note this is separate from §5. Custom SMTP covers **platform** mail — invites,
+password resets, email confirmations — sent by RoofStride to its own users.
+Rep-to-homeowner mail deliberately goes out through each rep's own Gmail so a
+homeowner replies to the person who knocked on their door.
+
+---
+
 ## 4. Calendar sync — appointments on iPhone / Google Calendar
 
 Reps subscribe their phone calendar to a personal RoofStride feed under
