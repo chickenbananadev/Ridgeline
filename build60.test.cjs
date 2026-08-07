@@ -70,7 +70,12 @@ global.FileReader = class {
   ok(up.storage === "inline", `with no DB client configured, it takes the inline fallback (got ${up.storage})`);
   ok(up.url.startsWith("data:application/pdf"), "and the fallback actually carries the file's bytes");
   ok(up.size === 1024, "the real size is reported, not a placeholder dash");
-  ok(up.key.startsWith("_company/"), "company documents get their own key prefix, distinct from any job's");
+  /* Build 98 added a tenant-id path segment ahead of the job/company
+     scope (${tenantPrefix}/${jobId}/...) so the tenant-scoped Storage
+     policies have something to check; with no window.__TENANT_ID__ in
+     this plain-Node test environment it falls back to "_shared". The
+     job/company scope itself is still the segment right after that. */
+  ok(up.key.split("/")[1] === "_company", "company documents still get their own key prefix, distinct from any job's");
   ok(!/^\d+_company_/.test(up.key), "and the prefix reads as a scope, not a job id that happens to be a fake string");
 
   fs.unlinkSync(bundle);

@@ -40,7 +40,7 @@ check("marketing headline present", /One Stride Ahead/.test(src));
 check("brand slogan present", /PRODUCT\.tagline/.test(src) && !/Roofing, start to paid\./.test(src));
 check("all six STRIDE values present", ["Simplicity", "Transparency", "Responsibility", "Innovation", "Dependability", "Empowerment"]
   .every((w) => src.includes(w)));
-check("pricing shows the real base and unlimited prices", /\$\{PRODUCT\.basePrice\.toFixed\(2\)\}/.test(src) && /\$\{PRODUCT\.unlimitedPrice\.toFixed\(2\)\}/.test(src));
+check("pricing shows the real base and add-on prices (build 99)", /\$\{PRODUCT\.basePrice\.toFixed\(2\)\}/.test(src) && /\$\{PRODUCT\.addonPrice\.toFixed\(2\)\}/.test(src));
 check("trial terms state card is required", /7-day free trial, card required/.test(src));
 check("uses real screenshots, not placeholder images", [
   "/marketing/shot-dashboard.png", "/marketing/shot-pipeline.png", "/marketing/shot-job-detail.png",
@@ -79,7 +79,7 @@ act(() => { root.render(React.createElement(App)); });
 
 check("marketing page is the first thing shown", /One Stride Ahead/.test(document.body.textContent));
 check("marketing page never shows a tenant name", !/Supreme Building Group/.test(document.body.textContent));
-check("pricing shown on the marketing page", /49\.99/.test(document.body.textContent));
+check("pricing shown on the marketing page (build 99)", /119\.99/.test(document.body.textContent));
 check("STRIDE section rendered", /The STRIDE standard/.test(document.body.textContent));
 
 check("Start free trial routes into signup mode", clickText("Start your free trial"));

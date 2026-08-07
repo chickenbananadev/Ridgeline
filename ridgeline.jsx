@@ -24,17 +24,14 @@ import {
 const PRODUCT = {
   name: "RoofStride",
   tagline: "Built for Roofing. Made to Move.",
-  /* Two-tier pricing: a base plan covering the first few seats, extra
-     seats billed individually beyond that — or a flat unlimited-up-to-
-     a-cap plan for teams that would rather not think about seat count.
-     seatPrice is kept as a back-compat alias (= basePrice) for any
-     other code that hasn't been migrated to the new fields yet. */
-  basePrice: 49.99,
-  baseSeats: 3,
-  extraSeatPrice: 14.99,
-  unlimitedPrice: 169.99,
-  unlimitedSeatCap: 20,
-  get seatPrice() { return this.basePrice; },
+  /* One plan: a base price covering 10 seats, plus one optional add-on
+     block of 10 more seats (20 total, hard cap — not repeatable). No
+     unlimited tier. */
+  basePrice: 119.99,
+  baseSeats: 10,
+  addonSeats: 10,
+  addonPrice: 59.99,
+  get maxSeats() { return this.baseSeats + this.addonSeats; },
   trialDays: 7,
   supportEmail: "support@roofstride.com",
 };
@@ -1233,9 +1230,19 @@ const TEAM = ["Jacob Henderson", "Drew Klass", "Stephen Klein", "Steven Tatgenho
    admin can change how commission is calculated. */
 const ROLES = [
   { id: "admin", label: "Admin", blurb: "Full access: commission structures, company splits, seats, branding." },
+  { id: "secretary", label: "Secretary", blurb: "Scheduling, customers, and documents. No financials, no structure or seat changes." },
   { id: "manager", label: "Production manager", blurb: "All jobs and financials, but cannot change commission structures or seats." },
+  { id: "sales_manager", label: "Sales manager", blurb: "Every rep's jobs, commissions, and the leaderboard, plus their own. Cannot change commission structures or seats." },
   { id: "rep", label: "Sales rep", blurb: "Own jobs and payout figures. Cannot see company splits or structure controls." },
   { id: "crew", label: "Crew / field", blurb: "Work orders, photos, and tasks only. No pricing, no financials." },
+];
+/* The 3 capabilities an admin can delegate to a specific non-admin
+   person (see hasCapability() below) — one admin-only checkbox group
+   per seat in TeamManager, independent of role. */
+const CAPABILITIES = [
+  ["editStructure", "Edit commission structure"],
+  ["manageSeats", "Manage seats"],
+  ["manageFeatures", "Manage feature toggles"],
 ];
 const SEED_USERS = [
   { id: "u1", name: "Jacob Henderson", email: "jacob@supremebuildinggroup.com", phone: "(847) 757-9890", role: "admin", title: "Owner / Admin", active: true, commissionRate: 60, addedAt: "2026-01-04" },
@@ -1293,9 +1300,33 @@ function repContactFor(users, job) {
     overridden: ["name", "title", "phone", "email"].some((k) => String(o[k] || "").trim() && o[k] !== base[k]),
   };
 }
-const canSeeMoney = (u) => u && u.role !== "crew";
-const canEditStructure = (u) => u && u.role === "admin";
-const canManageSeats = (u) => u && u.role === "admin";
+const canSeeMoney = (u) => u && !["crew", "secretary"].includes(u.role);
+/* Delegated authority: an admin can grant one of these named
+   capabilities to a specific non-admin person (profiles.
+   permission_overrides, a flat { capabilityKey: true } map) — the
+   admin still has everything by definition, a grant only matters for
+   someone who isn't one. */
+const hasCapability = (u, cap) => !!u && (u.role === "admin" || !!(u.permissionOverrides && u.permissionOverrides[cap]));
+const canEditStructure = (u) => hasCapability(u, "editStructure");
+const canManageSeats = (u) => hasCapability(u, "manageSeats");
+const canManageFeatures = (u) => hasCapability(u, "manageFeatures");
+/* Back-office/company-config screens (branding, docs, templates, price
+   list, vendors, announcements, workflow, crew manager) — every role
+   above individual-contributor level, not just admin+production
+   manager as before Secretary/Sales manager existed. One simplifying
+   rule replacing ~10 previously copy-pasted "admin or manager" inline
+   checks; narrow any specific screen further if it turns out to need
+   its own tighter rule. */
+const canManageCompanyConfig = (u) => u && ["admin", "secretary", "manager", "sales_manager"].includes(u.role);
+/* Company-wide visibility into Performance (every rep's jobs,
+   commissions, the leaderboard) — the ROLES blurbs for Production
+   manager and Sales manager both promise this, but Performance's own
+   "isAdmin" prop was wired to canEditStructure (admin-only) before
+   Sales manager existed, so Production manager never actually got it
+   either. Scoped to just the Performance call site, not the general
+   isAdmin prop other components use for stricter things (seats,
+   commission structure, change-order signing). */
+const canSeeCompanyPerformance = (u) => u && ["admin", "manager", "sales_manager"].includes(u.role);
 const LEAD_SOURCES = ["Door knocking", "Customer referral", "Google", "Website", "Yard sign", "Facebook", "Call in", "Repeat customer", "Real-estate referral", "Billboard / print"];
 
 const DEFAULT_STAGES = [
@@ -3138,16 +3169,24 @@ function buildSubInvoiceDraft(job, crew) {
    ================================================================ */
 const AUTH = () => (typeof window !== "undefined" ? window.__AUTH__ : null);
 const liveAuth = () => !!AUTH();
+/* Set once the signed-in user's profile loads (see the boot-hydrate
+   effect). Storage object keys are prefixed with this so the
+   tenant-scoped write/update/delete Storage policies (migration 026)
+   have something to check — RLS on storage.objects has no tenant_id
+   column to key off, only the object path. */
+const currentTenantId = () => (typeof window !== "undefined" ? window.__TENANT_ID__ || null : null);
 /* Map a database profile row onto the shape the UI already uses. */
 const fromProfile = (row) => ({
   id: row.id, name: row.name, email: row.email, phone: row.phone || "",
   role: row.role, title: row.title || "", active: row.active,
   commissionRate: row.commission_rate != null ? Number(row.commission_rate) : 60,
   addedAt: row.added_at || "", tenantId: row.tenant_id || null,
+  permissionOverrides: row.permission_overrides || {},
 });
 const toProfile = (u) => ({
   name: u.name, email: u.email, phone: u.phone || null, role: u.role,
   title: u.title || null, commission_rate: u.commissionRate ?? 60, active: u.active,
+  permission_overrides: u.permissionOverrides || {},
 });
 
 /* ================================================================
@@ -3919,7 +3958,7 @@ function Marketing({ onSignIn, onStartTrial }) {
     ["Do you handle insurance restoration?", "Deeply. Track ACV, supplements, deductible and recoverable depreciation per job; a supplement checker cites the code behind every missed line for all 50 states; pull storm history for a date of loss; and chase depreciation to release."],
     ["Am I locked into a contract?", "No. Every plan is month-to-month — the 7-day trial doesn't charge if you cancel before it ends, and you can cancel anytime after. No tiers to unlock; every account gets every feature."],
     ["Is my data mine?", "Always. Export jobs and financials to CSV and QuickBooks whenever you want. Your customer list and history are yours to take with you."],
-    ["Can my whole crew have logins?", "Yes. Add seats as you grow, or go unlimited and stop counting logins. Roles keep money and settings visible only to who should see them."],
+    ["Can my whole crew have logins?", "Yes, up to 20 seats. Roles keep money and settings visible only to who should see them."],
   ];
   const STRIDE = [
     ["S", "Simplicity", "We turn complicated roofing workflows into clear, straightforward steps.", "stride-simplicity.jpg"],
@@ -4156,42 +4195,21 @@ function Marketing({ onSignIn, onStartTrial }) {
             Every feature, either way you pay.
           </div>
           <div style={{ fontSize: 15, color: MKT.sub, marginBottom: 34, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
-            No feature gates, no tiers to unlock — the only choice is how you'd rather pay for seats.
+            No feature gates, no tiers to unlock — one plan, one optional add-on.
           </div>
-          <div className="mkt-pricing-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, textAlign: "left", marginBottom: 28 }}>
-            <div style={{
-              background: S.card, borderRadius: 20, padding: "30px 26px", border: `1px solid ${MKT.line}`,
-              boxShadow: "0 20px 50px rgba(32,36,42,.06)",
-            }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: MKT.sub, marginBottom: 6 }}>Pay per seat</div>
-              <div style={{ fontSize: 36, fontWeight: 800, color: MKT.ink, marginBottom: 2 }}>
-                ${PRODUCT.basePrice.toFixed(2)}<span style={{ fontSize: 14, fontWeight: 600, color: MKT.sub }}>/mo</span>
-              </div>
-              <div style={{ fontSize: 13, color: MKT.sub, marginBottom: 18 }}>
-                Includes {PRODUCT.baseSeats} seats · ${PRODUCT.extraSeatPrice.toFixed(2)}/mo per seat after that
-              </div>
-              <button onClick={() => onStartTrial("per_seat")} style={{
-                width: "100%", border: `1.5px solid ${MKT.teal}`, background: "transparent", color: MKT.teal, fontWeight: 700,
-                fontSize: 15, cursor: "pointer", fontFamily: "inherit", padding: "13px", borderRadius: 10,
-              }}>Start your free trial</button>
-            </div>
+          <div className="mkt-pricing-grid" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 20, textAlign: "left", marginBottom: 28, maxWidth: 380, marginLeft: "auto", marginRight: "auto" }}>
             <div style={{
               background: MKT.ink, borderRadius: 20, padding: "30px 26px", position: "relative",
               boxShadow: "0 20px 50px rgba(32,36,42,.18)",
             }}>
-              <div style={{
-                position: "absolute", top: -12, left: 26, background: MKT.teal, color: "#fff",
-                fontSize: 11, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase",
-                padding: "4px 10px", borderRadius: 999,
-              }}>Best for growing crews</div>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: "rgba(255,255,255,.6)", marginBottom: 6 }}>Unlimited seats</div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: "rgba(255,255,255,.6)", marginBottom: 6 }}>Every feature, one price</div>
               <div style={{ fontSize: 36, fontWeight: 800, color: "#fff", marginBottom: 2 }}>
-                ${PRODUCT.unlimitedPrice.toFixed(2)}<span style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,.6)" }}>/mo</span>
+                ${PRODUCT.basePrice.toFixed(2)}<span style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,.6)" }}>/mo</span>
               </div>
               <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", marginBottom: 18 }}>
-                Flat rate, up to {PRODUCT.unlimitedSeatCap} seats — never count logins again
+                Includes {PRODUCT.baseSeats} seats · add {PRODUCT.addonSeats} more anytime for ${PRODUCT.addonPrice.toFixed(2)}/mo (up to {PRODUCT.maxSeats} total)
               </div>
-              <button onClick={() => onStartTrial("unlimited")} style={{
+              <button onClick={onStartTrial} style={{
                 width: "100%", border: "none", background: MKT.teal, color: "#fff", fontWeight: 700,
                 fontSize: 15, cursor: "pointer", fontFamily: "inherit", padding: "13px", borderRadius: 10,
               }}>Start your free trial</button>
@@ -4497,8 +4515,8 @@ function Login({ brand, users, onLogin, initialMode = "login", selectedPlan = "p
               </div>
               <div style={{ fontSize: 13.5, color: S.sub, marginBottom: 18, lineHeight: 1.5 }}>
                 Card required to start — you won't be charged for {PRODUCT.trialDays} days. After that it's
-                ${PRODUCT.basePrice.toFixed(2)}/mo for the first {PRODUCT.baseSeats} seats (${PRODUCT.extraSeatPrice.toFixed(2)}/seat after that),
-                or ${PRODUCT.unlimitedPrice.toFixed(2)}/mo flat for up to {PRODUCT.unlimitedSeatCap}. Cancel anytime before the trial ends and you won't be charged.
+                ${PRODUCT.basePrice.toFixed(2)}/mo for {PRODUCT.baseSeats} seats, with an optional add-on of
+                {PRODUCT.addonSeats} more seats for ${PRODUCT.addonPrice.toFixed(2)}/mo (up to {PRODUCT.maxSeats} total). Cancel anytime before the trial ends and you won't be charged.
               </div>
               <Field label="Your name">
                 <input style={inputStyle} value={suName} autoComplete="name"
@@ -7870,7 +7888,7 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
      pipeline every job and every rep depends on, app-wide, the moment
      Save is clicked. This took no role prop and performed no check at
      all — any signed-in rep who opened it could do this. */
-  const canEdit = !currentUser || currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = !currentUser || canManageCompanyConfig(currentUser);
   const [local, setLocal] = useState(stages);
   const [rules, setRules] = useState(stageRules);
   const [openRule, setOpenRule] = useState(null);
@@ -7932,7 +7950,7 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
             <Lock size={18} color={S.sub} style={{ flexShrink: 0, marginTop: 2 }} />
             <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
-              Pipeline stages are admin/manager-only — every job and every rep depends on this
+              Pipeline stages are management-only — every job and every rep depends on this
               structure. Ask the office to make a change.
             </div>
           </div>
@@ -9403,7 +9421,7 @@ function AnnouncementBar({ announcements = [] }) {
 }
 
 function AnnouncementManager({ announcements, setAnnouncements, currentUser, onBack, toast }) {
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
   const [draft, setDraft] = useState("");
   const add = () => {
     const t = draft.trim();
@@ -12905,10 +12923,12 @@ function PasswordSetScreen({ brand, mode, onDone, toast }) {
       fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif" }}>
       <div style={{ width: "100%", maxWidth: 380 }}>
         <div style={{ textAlign: "center", marginBottom: 22 }}>
-          {brand.logo
-            ? <img src={brand.logo} alt="" style={{ height: 60, maxWidth: 200, objectFit: "contain", margin: "0 auto 12px", display: "block" }} />
-            : <div style={{ width: 58, height: 58, margin: "0 auto 12px", borderRadius: 15, background: brand.primary,
-                color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }}>{brand.short}</div>}
+          {/* Always RoofStride's own mark, never a tenant's logo — this
+              screen is reached before/outside the signed-in app
+              (invite-acceptance, password recovery, password change). */}
+          <img src="/icon-512.png" alt="RoofStride" style={{
+            width: 58, height: 58, borderRadius: 15, objectFit: "contain", margin: "0 auto 12px", display: "block",
+          }} />
           <div style={{ fontSize: 20, fontWeight: 800, color: S.ink }}>
             {mode === "invite" ? "Welcome — set your password"
               : mode === "recovery" ? "Choose a new password" : "Change your password"}
@@ -20845,7 +20865,14 @@ function splitDataUrl(dataUrl) {
 async function uploadJobFile(jobId, file) {
   const db = DB();
   const safe = String(file.name || "file").replace(/[^\w.\-]+/g, "_");
-  const key = `${jobId}/${Date.now()}_${safe}`;
+  /* Tenant id leads the key so the tenant-scoped Storage write/update/
+     delete policies (migration 026) have a path segment to check —
+     storage.objects has no tenant_id column, only the object name.
+     Falls back to "_shared" rather than throwing when no tenant is
+     known yet (e.g. demo mode, which never touches real Storage
+     anyway since db.storage.upload below is the only caller). */
+  const tenantPrefix = currentTenantId() || "_shared";
+  const key = `${tenantPrefix}/${jobId}/${Date.now()}_${safe}`;
   if (db && db.storage) {
     try {
       const { error } = await db.storage.from("job-files").upload(key, file, { upsert: false });
@@ -23289,7 +23316,7 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
    BRANDING EDITOR + MORE MENU + INBOX
    ================================================================ */
 function ActivityFeed({ activity, currentUser, onOpenJob, onBack }) {
-  const isMgr = currentUser.role === "admin" || currentUser.role === "manager";
+  const isMgr = canManageCompanyConfig(currentUser);
   const [kind, setKind] = useState("All");
   const mine = isMgr ? activity : activity.filter((a) => a.by === currentUser.name);
   const KINDS = ["All", "lead", "stage", "task", "note", "message", "appointment"];
@@ -23765,7 +23792,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
 }
 
 function VendorManager({ vendors, setVendors, currentUser, onBack, toast }) {
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
   const blank = { name: "", contact: "", phone: "", email: "", account: "", notes: "", active: true };
   const [editing, setEditing] = useState(null);
   const [f, setF] = useState(blank);
@@ -24012,7 +24039,7 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", current
      managers already restrict their own writes to admin/manager; this
      screen took no role prop at all and performed no check, so any
      signed-in rep who found the nav entry could repaint the company. */
-  const canEdit = !currentUser || currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = !currentUser || canManageCompanyConfig(currentUser);
   if (!canEdit) {
     return (
       <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
@@ -24021,7 +24048,7 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", current
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
             <Lock size={18} color={S.sub} style={{ flexShrink: 0, marginTop: 2 }} />
             <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
-              Branding is admin/manager-only — it controls the logo, colors, and company name on every
+              Branding is management-only — it controls the logo, colors, and company name on every
               document and the login screen. Ask the office to make a change.
             </div>
           </div>
@@ -24152,7 +24179,7 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   const [err, setErr] = useState("");
   const fileRef = useRef(null);
   const pendingFile = useRef(null);
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
 
   const today = todayIso();
   const soon = isoLocal(new Date(Date.now() + 60 * 864e5));
@@ -24340,7 +24367,7 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
   const [q, setQ] = useState("");
   const [importing, setImporting] = useState(null);
   const fileRef = useRef(null);
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
 
   const parseCsv = (text) => {
     const lines = text.split(/\r?\n/).filter((l) => l.trim());
@@ -24563,7 +24590,7 @@ function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, 
   const [f, setF] = useState({ kind: "email", audience: "Customer", name: "", subject: "", body: "" });
   const fileRef = useRef(null);
   const bodyRef = useRef(null);
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
 
   const list = templates.filter((t) => t.kind === kind && (aud === "All" || t.audience === aud));
   const open = (t) => { setEditing(t || "new"); setF(t ? { ...t } : { kind, audience: aud === "All" ? "Customer" : aud, name: "", subject: "", body: "" }); };
@@ -24710,7 +24737,7 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const [editing, setEditing] = useState(null);
   const blank = { name: "", contact: "", phone: "", email: "", trades: [], active: true };
   const [f, setF] = useState(blank);
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
   const TRADES = ["Roofing", "Siding", "Gutters", "Metal", "Flashing", "Windows", "Carpentry"];
   const [customTrade, setCustomTrade] = useState("");
   const [range, setRange] = useState("all");
@@ -25937,7 +25964,7 @@ function JobImport({ jobs, setJobs, stages, users, onBack, toast, currentUser })
 function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand }) {
   const [editing, setEditing] = useState(null); // user object or "new"
   const isAdmin = canManageSeats(currentUser);
-  const blank = { name: "", email: "", phone: "", role: "rep", title: "Sales Rep", commissionRate: 60, active: true };
+  const blank = { name: "", email: "", phone: "", role: "rep", title: "Sales Rep", commissionRate: 60, active: true, permissionOverrides: {} };
   const [f, setF] = useState(blank);
   const open = (u) => { setEditing(u || "new"); setF(u ? { ...u } : blank); };
   const set = (k) => (e) => {
@@ -25961,11 +25988,10 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
     return () => { alive = false; };
   }, []);
   const activeCount = users.filter((u) => u.active).length;
-  const plan = tenant && tenant.plan;
-  /* Per-seat: base seats plus any extra paid seats. Unlimited: flat cap. */
-  const seatsIncluded = tenant
-    ? (plan === "unlimited" ? PRODUCT.unlimitedSeatCap : PRODUCT.baseSeats + (tenant.seats_paid || 0))
-    : null;
+  /* One plan, one optional add-on block — not a per-seat increment.
+     seats_paid is either 0 or PRODUCT.addonSeats, never in between. */
+  const hasAddon = !!tenant && (tenant.seats_paid || 0) >= PRODUCT.addonSeats;
+  const seatsIncluded = tenant ? PRODUCT.baseSeats + (hasAddon ? PRODUCT.addonSeats : 0) : null;
   const atLimit = seatsIncluded != null && activeCount >= seatsIncluded;
 
   const manageBilling = async () => {
@@ -25984,9 +26010,9 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
       if (editing === "new") {
         /* Enforce the plan's seat allowance before creating a billable seat. */
         if (atLimit) {
-          setSeatErr(plan === "unlimited"
-            ? `Your Unlimited plan covers up to ${seatsIncluded} seats and all ${activeCount} are in use. Deactivate a seat or contact support to raise the cap.`
-            : `Your plan includes ${seatsIncluded} seat${seatsIncluded === 1 ? "" : "s"} and all are in use. Add a seat to your subscription in Manage billing, then invite this person.`);
+          setSeatErr(hasAddon
+            ? `You're at the 20-seat maximum and all are in use. Deactivate a seat before inviting this person.`
+            : `Your plan includes ${seatsIncluded} seats and all are in use. Add the 10-seat add-on in Manage billing, then invite this person.`);
           setSaving(false);
           return;
         }
@@ -26116,13 +26142,13 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
           <CardTitle right={<Chip tone={tenant.status === "active" ? "green" : tenant.status === "past_due" || tenant.status === "canceled" ? "red" : "amber"}>
             {tenant.status === "trialing" ? `Trial${tenant.days_left != null ? ` — ${tenant.days_left}d left` : ""}` : (tenant.status || "—")}
           </Chip>}>Subscription</CardTitle>
-          <KV k="Plan" v={plan === "unlimited" ? `Unlimited — up to ${PRODUCT.unlimitedSeatCap} seats` : `Team — ${PRODUCT.baseSeats} seats + ${tenant.seats_paid || 0} added`} />
+          <KV k="Plan" v={hasAddon ? `${PRODUCT.baseSeats} + ${PRODUCT.addonSeats} seats (${PRODUCT.maxSeats} total)` : `${PRODUCT.baseSeats} seats`} />
           <KV k="Seats" v={`${activeCount} used of ${seatsIncluded} included`} />
           {atLimit && (
             <Callout label="Seat limit reached" tone="amber">
-              {plan === "unlimited"
-                ? "Every seat on your plan is in use. Deactivate one to free it up, or contact support to raise the cap."
-                : "Add a seat to your subscription in Manage billing, then invite the new person."}
+              {hasAddon
+                ? "You're at the 20-seat maximum. Deactivate a seat to free it up."
+                : "Add the 10-seat add-on in Manage billing, then invite the new person."}
             </Callout>
           )}
           <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
@@ -26211,6 +26237,17 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
         <div style={{ background: T.accentSoft, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.primary, marginBottom: 14, lineHeight: 1.5 }}>
           {(ROLES.find((r) => r.id === f.role) || {}).blurb}
         </div>
+        {isAdmin && f.role !== "admin" && editing !== "new" && (
+          <Field label="Delegated authority" hint="Give this person one or more admin-only capabilities without making them a full admin.">
+            {CAPABILITIES.map(([key, label]) => (
+              <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: S.ink, padding: "5px 0" }}>
+                <input type="checkbox" checked={!!(f.permissionOverrides && f.permissionOverrides[key])}
+                  onChange={(e) => setF((p) => ({ ...p, permissionOverrides: { ...(p.permissionOverrides || {}), [key]: e.target.checked } }))} />
+                {label}
+              </label>
+            ))}
+          </Field>
+        )}
         <Field label="Job title (shown in the app)"><input style={inputStyle} value={f.title} onChange={set("title")} /></Field>
         {(brand.locations || []).length > 0 && (
           <Field label="Location" hint="Documents and messages for this rep's jobs show this office's phone and address.">
@@ -26673,7 +26710,7 @@ function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
 }
 
 function AdminControls({ features, setFeatures, activity, users, currentUser, onBack, toast, security, setSecurity }) {
-  const admin = !!(currentUser && currentUser.role === "admin");
+  const admin = canManageFeatures(currentUser);
   const [tab, setTab] = useState("features");
   const [q, setQ] = useState("");
   if (!admin) {
@@ -26681,7 +26718,7 @@ function AdminControls({ features, setFeatures, activity, users, currentUser, on
       <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
         <SubHeader title="Admin controls" onBack={onBack} />
         <Card style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 14, color: S.sub }}>This screen is restricted to admins.</div>
+          <div style={{ fontSize: 14, color: S.sub }}>This screen is restricted to admins, or someone given that authority.</div>
         </Card>
       </div>
     );
@@ -27367,7 +27404,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["warranties", Shield, "Warranties", "Every roof's labor and manufacturer terms"],
     ]],
     ["Sales & marketing", [
-      ["activity", ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
+      ["activity", ClipboardList, "Activity feed", currentUser && canManageCompanyConfig(currentUser) ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", Phone, "Calls & attribution", "Log calls, see which sources make money"],
       ["contacts", Users, "Contacts", "Every client, with consent status"],
       ["leadsources", Filter, "Lead sources", "Add, remove and reorder the options"],
@@ -27396,7 +27433,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["workflow", ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
       ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam, Google reviews"],
       ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
-      admin && ["admin", Shield, "Admin controls", "Feature switches, security and the audit log"],
+      canManageFeatures(currentUser) && ["admin", Shield, "Admin controls", "Feature switches, security and the audit log"],
       admin && ["setupkeys", Lock, "Setup & keys", "API keys and services still to connect"],
       ["syscheck", AlertTriangle, "System check", "Test the database connection and setup"],
       ["help", BookOpen, "Help & guides", "How every part of the app works"],
@@ -27626,7 +27663,7 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
 const DB = () => (typeof window !== "undefined" ? window.__SUPABASE__ || null : null);
 const liveDb = () => !!DB();
 
-const EMPTY_FIN = () => ({ costLines: [], reimbursements: [] });
+const EMPTY_FIN = () => ({ materials: [], labor: [], other: [], commissionRate: 60, structure: "grossProfit", overheadPct: 10, reimbursements: [] });
 
 function useBrandSync(brand, setBrand, hasSession, tenantId) {
   const lastSaved = useRef(null);
@@ -27714,7 +27751,7 @@ function useBrandSync(brand, setBrand, hasSession, tenantId) {
 
 function useDbSync(st) {
   const {
-    ready, isCrew, userName, tenantId,
+    ready, isMoneyBlocked, userName, tenantId,
     jobs, setJobs, appointments, setAppointments,
     activity, setActivity, chatMsgs, setChatMsgs,
     orgPack, unpackOrg,
@@ -27764,7 +27801,7 @@ function useDbSync(st) {
         const { data: jobRows, error: jErr } = await db.from("crm_jobs").select("id, data");
         if (jErr) throw jErr;
         let finMap = {};
-        if (!isCrew) {
+        if (!isMoneyBlocked) {
           const { data: finRows } = await db.from("crm_financials").select("job_id, data");
           (finRows || []).forEach((r) => { finMap[r.job_id] = r.data || {}; });
         }
@@ -27773,7 +27810,7 @@ function useDbSync(st) {
           const fin = finMap[r.id] || {};
           return {
             ...base, id: r.id,
-            financials: fin.financials || base.financials || EMPTY_FIN(),
+            fin: fin.financials || base.fin || EMPTY_FIN(),
             payments: fin.payments || base.payments || [],
           };
         });
@@ -27850,7 +27887,7 @@ function useDbSync(st) {
         const removed = [...jobRefs.current.keys()].filter((id) => !current.has(id));
         if (changed.length) {
           const rows = changed.map((j) => {
-            const { financials, payments, ...rest } = j;
+            const { fin, payments, ...rest } = j;
             return { id: j.id, name: j.name, stage_id: j.stageId, assignee: j.assignee, data: rest, updated_at: new Date().toISOString() };
           });
           const { error } = await db.from("crm_jobs").upsert(rows);
@@ -27866,8 +27903,8 @@ function useDbSync(st) {
             }));
             await db.from("crm_portal").upsert(snaps);
           }
-          if (!isCrew) {
-            const finRows = changed.map((j) => ({ job_id: j.id, data: { financials: j.financials, payments: j.payments }, updated_at: new Date().toISOString() }));
+          if (!isMoneyBlocked) {
+            const finRows = changed.map((j) => ({ job_id: j.id, data: { financials: j.fin, payments: j.payments }, updated_at: new Date().toISOString() }));
             await db.from("crm_financials").upsert(finRows);
           }
           changed.forEach((j) => jobRefs.current.set(j.id, j));
@@ -28094,11 +28131,12 @@ export default function SupremeCRM() {
 
     const hydrate = async (session) => {
       if (!alive) return;
-      if (!session) { setCurrentUser(null); setBooting(false); return; }
+      if (!session) { setCurrentUser(null); setBooting(false); if (typeof window !== "undefined") window.__TENANT_ID__ = null; return; }
       try {
         const profile = await auth.loadProfile(session.user.id);
         if (!alive) return;
         setCurrentUser(fromProfile(profile));
+        if (typeof window !== "undefined") window.__TENANT_ID__ = profile.tenant_id || null;
         try {
           const all = await auth.listProfiles();
           if (alive && all) setUsers(all.map(fromProfile));
@@ -28321,7 +28359,7 @@ export default function SupremeCRM() {
   const brandErr = useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true, currentUser && currentUser.tenantId);
   const { hydrated, syncErr } = useDbSync({
     ready: liveAuth() ? !!currentUser : true,
-    isCrew: !!(currentUser && currentUser.role === "crew"),
+    isMoneyBlocked: !!(currentUser && !canSeeMoney(currentUser)),
     userName: syncUserName, tenantId: currentUser && currentUser.tenantId,
     jobs, setJobs, appointments, setAppointments,
     activity, setActivity, chatMsgs, setChatMsgs,
@@ -28725,14 +28763,13 @@ export default function SupremeCRM() {
     return (
       <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: S.card }}>
         <div style={{ textAlign: "center" }}>
-          {brand.logo ? (
-            <img src={brand.logo} alt={brand.company} style={{ height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" }} />
-          ) : (
-            <div style={{
-              width: 56, height: 56, borderRadius: 14, background: brand.primary, color: "#fff",
-              display: "grid", placeItems: "center", fontWeight: 800, margin: "0 auto 14px",
-            }}>{brand.short}</div>
-          )}
+          {/* Always RoofStride's own mark here, never a tenant's logo —
+              this is a pre-hydration loading gate, not the signed-in
+              app itself; a tenant's own branding shows normally once
+              the app actually renders. */}
+          <img src="/icon-512.png" alt="RoofStride" style={{
+            width: 73, height: 73, borderRadius: 16, objectFit: "contain", margin: "0 auto 14px", display: "block",
+          }} />
           <div style={{ fontSize: 14, color: S.sub }}>Loading…</div>
         </div>
       </div>
@@ -28918,7 +28955,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           seed={codeSeed} onConsumeSeed={() => setCodeSeed(null)} />
       ) : nav === "performance" ? (
         <Performance jobs={jobs} stages={stages} users={users} onBack={() => setNav("more")}
-          isAdmin={isAdmin} currentUser={liveUser} toast={toast} crews={crews} setUsers={setUsers}
+          isAdmin={canSeeCompanyPerformance(liveUser)} currentUser={liveUser} toast={toast} crews={crews} setUsers={setUsers}
           dashLayout={dashLayout} setDashLayout={setDashLayout} />
       ) : nav === "calendar" ? (
         <CalendarView jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}

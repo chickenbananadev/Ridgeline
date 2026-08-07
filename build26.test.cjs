@@ -25,7 +25,7 @@ function check(name, cond) {
 
 /* ---- static source assertions ---- */
 check("PRODUCT constant exists", /const PRODUCT = \{/.test(src));
-check("PRODUCT carries the two-tier pricing model", /basePrice: 49\.99/.test(src) && /extraSeatPrice: 14\.99/.test(src) && /unlimitedPrice: 169\.99/.test(src));
+check("PRODUCT carries the current base+add-on pricing model (build 99)", /basePrice: 119\.99/.test(src) && /addonPrice: 59\.99/.test(src));
 check("PRODUCT carries trial length", /trialDays: 7/.test(src));
 
 check("signup mode panel exists", /mode === "signup"/.test(src));
