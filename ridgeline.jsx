@@ -28211,6 +28211,13 @@ function useDbSync(st) {
            way the migration itself does — same id convention
            (general-<tenantId>) — so both paths converge on one
            channel instead of a tenant ever ending up with none. */
+        /* Which conversation ids this seat can actually see — carried
+           out of the tenant block below so the chat fetch can scope to
+           it. Left null (meaning "no scoping available yet") for a
+           tenant-less session rather than an empty array, so that rare
+           path still falls back to the old unscoped fetch below instead
+           of silently loading zero messages. */
+        let visibleConvIds = null;
         if (tenantId) {
           let { data: convRows } = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
           if (alive && (!convRows || !convRows.length)) {
@@ -28229,6 +28236,7 @@ function useDbSync(st) {
               id: r.id, kind: r.kind, name: r.name, topic: r.topic,
               isPrivate: !!r.is_private, createdBy: r.created_by, createdAt: r.created_at,
             })));
+            visibleConvIds = convRows.map((r) => r.id);
             const privateIds = convRows.filter((r) => r.is_private).map((r) => r.id);
             if (privateIds.length) {
               const { data: memRows } = await db.from("crm_chat_members").select("*").in("conversation_id", privateIds);
@@ -28239,7 +28247,16 @@ function useDbSync(st) {
           }
         }
 
-        const { data: chatRows } = await db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
+        /* Scoped to the conversations this seat can actually see,
+           instead of the last 300 rows company-wide regardless of
+           channel — a busy #general no longer risks crowding a
+           quieter DM's history out of the cap. Falls back to the old
+           unscoped fetch only for the rare tenant-less session, where
+           there's no conversation list to scope by yet. */
+        const chatQuery = visibleConvIds
+          ? db.from("crm_chat").select("*").in("conversation_id", visibleConvIds).order("at", { ascending: true }).limit(1000)
+          : db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
+        const { data: chatRows } = await chatQuery;
         if (alive && chatRows) {
           const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, conversationId: r.conversation_id || null }));
           msgs.forEach((m) => persistedChat.current.add(m.id));
@@ -28255,17 +28272,35 @@ function useDbSync(st) {
     return () => { alive = false; };
   }, [ready, tenantId]);
 
-  /* ---------- realtime: chat + activity from other devices ---------- */
+  /* ---------- realtime: chat + activity from other devices ----------
+     The crm_chat leg is scoped to this tenant (filter below) instead
+     of subscribing to every tenant's INSERTs unfiltered — the actual
+     privacy boundary is still chat_read's RLS (Supabase filters
+     postgres_changes payloads by the subscriber's own SELECT policy,
+     the same mechanism that already made the old unfiltered channel
+     safe), so this is bandwidth hygiene, not a new security fix. It
+     now also subscribes UPDATE, which the old channel never did — a
+     teammate's reaction, edit, or delete on a message already loaded
+     used to never appear live; only a full reload picked it up. */
   useEffect(() => {
     const db = DB();
-    if (!db || !ready) return;
+    if (!db || !ready || !tenantId) return;
+    const upsertFromRow = (r) => ({
+      id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body,
+      mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {},
+      editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null,
+      conversationId: r.conversation_id || null,
+    });
     const ch = db.channel("crm-stream")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_chat" }, (payload) => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_chat", filter: `tenant_id=eq.${tenantId}` }, (payload) => {
         const r = payload.new;
         if (persistedChat.current.has(r.id)) return;
         persistedChat.current.add(r.id);
-        setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev :
-          [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, conversationId: r.conversation_id || null }]);
+        setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev : [...prev, upsertFromRow(r)]);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "crm_chat", filter: `tenant_id=eq.${tenantId}` }, (payload) => {
+        const r = payload.new;
+        setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev.map((m) => (m.id === r.id ? upsertFromRow(r) : m)) : prev);
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_activity" }, (payload) => {
         const r = payload.new;
@@ -28276,7 +28311,7 @@ function useDbSync(st) {
       })
       .subscribe();
     return () => { db.removeChannel(ch); };
-  }, [ready]);
+  }, [ready, tenantId]);
 
   /* ---------- jobs: diff-watch, debounced batch upsert ---------- */
   useEffect(() => {

@@ -29604,6 +29604,7 @@ function useDbSync(st) {
           acts.forEach((a) => persistedActivity.current.add(a.id));
           setActivity(acts);
         }
+        let visibleConvIds = null;
         if (tenantId) {
           let { data: convRows } = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
           if (alive && (!convRows || !convRows.length)) {
@@ -29632,6 +29633,7 @@ function useDbSync(st) {
               createdBy: r.created_by,
               createdAt: r.created_at
             })));
+            visibleConvIds = convRows.map((r) => r.id);
             const privateIds = convRows.filter((r) => r.is_private).map((r) => r.id);
             if (privateIds.length) {
               const { data: memRows } = await db.from("crm_chat_members").select("*").in("conversation_id", privateIds);
@@ -29641,7 +29643,8 @@ function useDbSync(st) {
             }
           }
         }
-        const { data: chatRows } = await db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
+        const chatQuery = visibleConvIds ? db.from("crm_chat").select("*").in("conversation_id", visibleConvIds).order("at", { ascending: true }).limit(1e3) : db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
+        const { data: chatRows } = await chatQuery;
         if (alive && chatRows) {
           const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, conversationId: r.conversation_id || null }));
           msgs.forEach((m) => persistedChat.current.add(m.id));
@@ -29659,12 +29662,26 @@ function useDbSync(st) {
   }, [ready, tenantId]);
   (0, import_react.useEffect)(() => {
     const db = DB();
-    if (!db || !ready) return;
-    const ch = db.channel("crm-stream").on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_chat" }, (payload) => {
+    if (!db || !ready || !tenantId) return;
+    const upsertFromRow = (r) => ({
+      id: r.id,
+      at: String(r.at).slice(0, 16).replace("T", " "),
+      by: r.by_name,
+      text: r.body,
+      mentions: r.mentions || [],
+      jobId: r.job_id,
+      reactions: r.reactions || {},
+      editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null,
+      conversationId: r.conversation_id || null
+    });
+    const ch = db.channel("crm-stream").on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_chat", filter: `tenant_id=eq.${tenantId}` }, (payload) => {
       const r = payload.new;
       if (persistedChat.current.has(r.id)) return;
       persistedChat.current.add(r.id);
-      setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev : [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, conversationId: r.conversation_id || null }]);
+      setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev : [...prev, upsertFromRow(r)]);
+    }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "crm_chat", filter: `tenant_id=eq.${tenantId}` }, (payload) => {
+      const r = payload.new;
+      setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev.map((m) => m.id === r.id ? upsertFromRow(r) : m) : prev);
     }).on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_activity" }, (payload) => {
       const r = payload.new;
       if (persistedActivity.current.has(r.id)) return;
@@ -29674,7 +29691,7 @@ function useDbSync(st) {
     return () => {
       db.removeChannel(ch);
     };
-  }, [ready]);
+  }, [ready, tenantId]);
   (0, import_react.useEffect)(() => {
     const db = DB();
     if (!db || !ready || !hydrated) return;
