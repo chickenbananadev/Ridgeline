@@ -26228,9 +26228,10 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   };
   const paidFor = (crewId) => {
     const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 864e5;
+    const crewName = (crews.find((c) => c.id === crewId) || {}).name || "";
     return jobs.filter((j) => j.crewId === crewId).reduce((sum, j) => {
-      const lines = j.financials && j.financials.costLines || [];
-      return sum + lines.filter((l) => /labor|crew|install|sub/i.test(l.label || "")).filter((l) => !l.at || new Date(l.at).getTime() >= cutoff).reduce((t, l) => t + num(l.amt), 0);
+      const payouts = (j.payments || []).filter((p) => p.type !== "Received" && String(p.to || "").toLowerCase().includes(crewName.toLowerCase()));
+      return sum + payouts.filter((p) => !p.at || new Date(p.at).getTime() >= cutoff).reduce((t, p) => t + num(p.amt), 0);
     }, 0);
   };
   const open = (c) => {
@@ -26266,7 +26267,7 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "365", children: "Last 12 months" })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 7, lineHeight: 1.5 }, children: "Totals come from labor and subcontractor lines on each crew's jobs in the Financials tab." })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 7, lineHeight: 1.5 }, children: "Totals come from payments logged against each crew's jobs \u2014 sub invoices marked paid, or any manual payout naming the crew." })
     ] }),
     crews.map((c) => {
       const assigned = jobs.filter((j) => j.crewId === c.id).length;
@@ -28198,7 +28199,7 @@ function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
     payQueue.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: payQueue.some((r) => r.overdue) ? "red" : "amber", children: money(payTotal) }), children: "Subs to pay" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginBottom: 6, lineHeight: 1.5 }, children: "Confirmed sub invoices awaiting payment. Mark paid on the job's work order." }),
-      payQueue.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob && onOpenJob(r.job.id), style: {
+      payQueue.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob && onOpenJob(r.job.id, "workorder"), style: {
         display: "flex",
         alignItems: "center",
         gap: 10,
