@@ -10025,7 +10025,8 @@ function JobDetail({
                   crews,
                   templates,
                   currentUser,
-                  users
+                  users,
+                  integrations
                 }
               );
             case "tasks":
@@ -19852,6 +19853,25 @@ async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, in
   const to = kind === "sms" ? job.phone : job.email;
   return deliverMessage({ to, kind, subject, body, jobId: job.id }, integrations, currentUser);
 }
+function billingContactFor(brand, users) {
+  const list = users || [];
+  const id = brand && brand.billingContactUserId;
+  const chosen = id && list.find((u) => u.id === id && u.active !== false);
+  if (chosen) return chosen;
+  return list.find((u) => u.active !== false && u.role === "admin") || null;
+}
+async function deliverToBillingContact(job, { subject, body }, integrations, users, brand, currentUser) {
+  const contact = billingContactFor(brand, users);
+  if (!contact) return { contact: null, sent: [] };
+  const sent = [];
+  if (contact.email) {
+    sent.push(await deliverMessage({ to: contact.email, kind: "email", subject, body, jobId: job.id }, integrations, currentUser));
+  }
+  if (contact.phone) {
+    sent.push(await deliverMessage({ to: contact.phone, kind: "sms", subject, body, jobId: job.id }, integrations, currentUser));
+  }
+  return { contact, sent };
+}
 function TabMessages({ job, mut, toast, brand, templates, crews, integrations, currentUser, users }) {
   const [compose, setCompose] = (0, import_react.useState)(null);
   const [to, setTo] = (0, import_react.useState)("Customer");
@@ -21332,7 +21352,7 @@ function TabInvoice({ job, brand, mut, toast, currentUser = null, integrations =
     ] })
   ] });
 }
-function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
+function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand, integrations, users }) {
   const [menuOpen, setMenuOpen] = (0, import_react.useState)(false);
   const [menuQ, setMenuQ] = (0, import_react.useState)("");
   const inv = job.subInvoice || null;
@@ -21357,9 +21377,17 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
     mut((j) => ({ ...j, fin: { ...j.fin || {}, labor: [...(j.fin || {}).labor || [], { id: uid("l"), label: `Sub labor \u2014 ${crew.name} (invoice)`, amt: Math.round(subInvoiceTotal(j.subInvoice) * 100) / 100, by: crew.name }] } }));
     toast("Posted to job costs");
   };
-  const confirmInv = () => {
-    setInv({ status: "confirmed", confirmedBy: (currentUser || {}).name || "", confirmedAt: todayIso(), dueDate: dueFromTerms(inv.terms) });
+  const confirmInv = async () => {
+    const dueDate = dueFromTerms(inv.terms);
+    setInv({ status: "confirmed", confirmedBy: (currentUser || {}).name || "", confirmedAt: todayIso(), dueDate });
     toast(docAlerts.length ? `Confirmed \u2014 heads up: ${crew.name} has ${docAlerts.length} expired/expiring doc(s)` : "Sub invoice confirmed");
+    if (!inv.notifiedAt) {
+      const amt = subInvoiceTotal(inv);
+      const subject = `Sub payout ready \u2014 ${crew.name} \u2014 ${job.name}`;
+      const body = `${crew.name}'s sub invoice for ${job.name} (${job.address}) is confirmed and ready to pay \u2014 ${money(amt)}. Terms ${inv.terms || "\u2014"}, due ${dueDate || "\u2014"}.`;
+      const out = await deliverToBillingContact(job, { subject, body }, integrations, users, brand, currentUser);
+      if (out.contact) setInv({ notifiedAt: (/* @__PURE__ */ new Date()).toISOString() });
+    }
   };
   const submitInv = () => {
     const acct = brand && brand.accountingEmail || "";
@@ -21546,7 +21574,7 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
     ] })
   ] });
 }
-function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, users }) {
+function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, users, integrations }) {
   const [picking, setPicking] = (0, import_react.useState)(false);
   const [sending, setSending] = (0, import_react.useState)(false);
   const [notes, setNotes] = (0, import_react.useState)(job.workOrder ? job.workOrder.notes : "");
@@ -21639,7 +21667,7 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
         ] })
       ] })
     ] }),
-    crew && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubInvoiceCard, { job, crew, mut, toast, currentUser, brand }),
+    crew && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubInvoiceCard, { job, crew, mut, toast, currentUser, brand, integrations, users }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "No pricing" }), children: [
         "Work order \u2014 ",

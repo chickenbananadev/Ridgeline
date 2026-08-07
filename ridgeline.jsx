@@ -8845,7 +8845,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "photos": return <TabPhotos job={job} mut={mut} toast={toast} ccToken={ccToken} />;
               case "financials": return <TabFinancialsCombined job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} integrations={integrations} onLog={onLog} />;
               case "workorder": return <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
-                crews={crews} templates={templates} currentUser={currentUser} users={users} />;
+                crews={crews} templates={templates} currentUser={currentUser} users={users} integrations={integrations} />;
               case "tasks": return <TabTasks job={job} mut={mut} toast={toast} />;
               case "punchlist": return <TabPunchList job={job} mut={mut} toast={toast} currentUser={currentUser} />;
               case "files": return <TabFiles job={job} mut={mut} toast={toast} />;
@@ -20201,7 +20201,7 @@ function TabInvoice({ job, brand, mut, toast, currentUser = null, integrations =
 /* Editable subcontractor invoice for a job. Seeds computable lines, lets the
    office add the rest from the sub's priced menu, capture reimbursables at
    actual cost, and post the total to job costs. Office-only. */
-function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
+function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand, integrations, users }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuQ, setMenuQ] = useState("");
   const inv = job.subInvoice || null;
@@ -20219,9 +20219,21 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
     mut((j) => ({ ...j, fin: { ...(j.fin || {}), labor: [...(((j.fin || {}).labor) || []), { id: uid("l"), label: `Sub labor — ${crew.name} (invoice)`, amt: Math.round(subInvoiceTotal(j.subInvoice) * 100) / 100, by: crew.name }] } }));
     toast("Posted to job costs");
   };
-  const confirmInv = () => {
-    setInv({ status: "confirmed", confirmedBy: (currentUser || {}).name || "", confirmedAt: todayIso(), dueDate: dueFromTerms(inv.terms) });
+  const confirmInv = async () => {
+    const dueDate = dueFromTerms(inv.terms);
+    setInv({ status: "confirmed", confirmedBy: (currentUser || {}).name || "", confirmedAt: todayIso(), dueDate });
     toast(docAlerts.length ? `Confirmed — heads up: ${crew.name} has ${docAlerts.length} expired/expiring doc(s)` : "Sub invoice confirmed");
+    /* Auto-notify the billing contact the moment a sub payout is ready
+       — no queue, immediate send, per an explicit product decision (the
+       whole point is nobody has to remember to check). notifiedAt
+       guards against firing twice for the same invoice. */
+    if (!inv.notifiedAt) {
+      const amt = subInvoiceTotal(inv);
+      const subject = `Sub payout ready — ${crew.name} — ${job.name}`;
+      const body = `${crew.name}'s sub invoice for ${job.name} (${job.address}) is confirmed and ready to pay — ${money(amt)}. Terms ${inv.terms || "—"}, due ${dueDate || "—"}.`;
+      const out = await deliverToBillingContact(job, { subject, body }, integrations, users, brand, currentUser);
+      if (out.contact) setInv({ notifiedAt: new Date().toISOString() });
+    }
   };
   const submitInv = () => {
     const acct = (brand && brand.accountingEmail) || "";
@@ -20362,7 +20374,7 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
   );
 }
 
-function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, users }) {
+function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, users, integrations }) {
   const [picking, setPicking] = useState(false);
   const [sending, setSending] = useState(false);
   const [notes, setNotes] = useState(job.workOrder ? job.workOrder.notes : "");
@@ -20450,7 +20462,7 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
           card and this job's installed squares + conditions. Never shown on
           the crew-facing document below. */}
       {crew && canSeeMoney(currentUser) && (
-        <SubInvoiceCard job={job} crew={crew} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />
+        <SubInvoiceCard job={job} crew={crew} mut={mut} toast={toast} currentUser={currentUser} brand={brand} integrations={integrations} users={users} />
       )}
 
       <Card style={{ marginTop: 12 }}>
