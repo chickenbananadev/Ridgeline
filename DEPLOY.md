@@ -88,10 +88,10 @@ deployed, re-open Integrations → CompanyCam and paste the token again.
 
 ---
 
-## 2. Billing portal — "Manage billing" / cancel on the backend
+## 2. Billing portal — "Manage subscription" / cancel on the backend
 
-**Symptom in the app:** Team & seats → **Manage billing** says the portal
-isn't available.
+**Symptom in the app:** Team & seats, or More → **Billing** → **Manage
+subscription**, says the portal isn't available.
 
 **Fix:** deploy the portal function and set the Stripe secret.
 
@@ -101,17 +101,30 @@ supabase secrets set APP_URL=https://roofstride.com
 supabase functions deploy create-portal-session
 ```
 
-Then, once in the Stripe dashboard, enable the **Customer Portal**
-(Settings → Billing → Customer portal) and turn on the actions you want owners
-to have — update card, change plan, cancel subscription. That's the only place
-a subscription can be cancelled, by design. **"Cancel subscription" is off by
-default on a new Stripe account** — this needs to be switched on explicitly,
-or "Manage billing" opens but has no cancel option at all. Under that same
-toggle, Stripe asks when a cancellation takes effect: **"At the end of the
-billing period"** is the right choice here — someone who cancels mid-trial
-keeps trial access through the trial's end instead of losing it immediately,
-and someone who cancels mid-subscription keeps what they already paid for
-instead of being cut off with unused days left on the current charge.
+Then, in the Stripe dashboard: **Settings → Billing → Customer portal**.
+Everything below is one dashboard page — this is the entire configuration
+that makes "Manage subscription" do what More → Billing's own screen already
+tells the owner it does. Every one of these is **off by default** on a new
+Stripe account:
+
+| Toggle | Turn on | Why |
+|---|---|---|
+| **Customer information** → Update payment methods | On | "Change your card" |
+| **Invoice history** | On | "View and download invoices" |
+| **Customer information** → Update billing address / tax ID | On | "Update billing information" |
+| **Cancellations** | On, timing = **"At the end of the billing period"** | "Cancel your subscription" — end-of-period keeps someone who cancels mid-trial in through the trial's end, and someone who cancels mid-subscription in through what they already paid for, instead of cutting them off immediately either way |
+| **Subscriptions → Customers can switch plans** | On, with **both** real Prices (§8) added to the swappable group | "Switch between Base and Unlimited" — without both Prices listed here specifically, the portal only shows whichever one the customer is already on, with no upgrade/downgrade option at all |
+
+Also on this page: set a **support email and business name** (shown on the
+portal itself and on Stripe-generated invoices — this is the "RoofStride"
+your customers actually see billing from), and a **default return URL**
+matching `APP_URL` above, so "Return to RoofStride" inside the portal lands
+back on the real app instead of a blank Stripe page.
+
+**Save**, then click **"Preview"** on that same settings page — no test
+card or live subscription needed for this check, it just renders the portal
+UI so you can confirm all 5 rows actually appear before a real customer
+depends on them.
 
 ---
 
@@ -135,11 +148,12 @@ Either way, add your app origin under **Authentication → URL Configuration →
 Redirect URLs** (e.g. `https://roofstride.com`, plus any preview domains) so
 the invite/reset links land back on the app.
 
-**Seat allowance:** the "N of M seats" shown in Team & seats comes from
-`my_tenant()` (migration `021`). Adding a seat past the plan's allowance is
-blocked with a prompt to add seats in Manage billing. To actually bill for the
-extra seat, raise the subscription quantity in the Stripe customer portal (or,
-as a follow-up, wire the checkout quantity — see §10).
+**Seat allowance:** the "N of M seats" shown in Team & seats and More →
+Billing comes from `my_tenant()` (migration `021`), enforced both client-side
+and server-side (`invite-user`) against `tenants.plan`. The base plan is
+capped at 10 seats; adding an 11th is blocked with a prompt to upgrade to
+Unlimited (§8) — there is no per-seat quantity to raise instead, unlike an
+older per-seat-priced model this app no longer uses.
 
 ---
 
@@ -371,7 +385,27 @@ bypass this by editing the request from the browser.
 
 These three functions run the marketing site's "Start your free trial"
 flow end to end: Checkout → verify → create the tenant, then keep
-subscription status and seat count in sync afterward.
+subscription status and seat count in sync afterward. **This section is
+the complete answer to "how do we connect the real Stripe products so
+checkout and the trial actually work" — follow it in order.**
+
+### Step 1 — find the two real Price IDs (not Product IDs)
+
+You already created both products in Stripe (shown as **Pro** and
+**Unlimited** on the marketing graphics — the app's own internal name
+for the first one is "Base plan," same product, just a different label
+in two different places, don't go looking for one named "Base"). What
+this app needs from each isn't the *Product* — it's the **Price**
+attached to it, since a Product can carry more than one Price (e.g. a
+monthly and an annual one) and Stripe needs to know exactly which.
+
+In the Stripe dashboard: **Products** → open **Pro** → under
+**Pricing**, click the `$119.99 / month` row → copy the ID at the top,
+which starts with `price_...` (NOT the Product ID, which starts with
+`prod_...` and won't work here). Repeat for **Unlimited** →
+`$199.99 / month` → its own `price_...` ID.
+
+### Step 2 — set both as secrets, plus everything else Checkout needs
 
 ```bash
 supabase functions deploy create-checkout-session   # signup → Stripe Checkout
@@ -379,28 +413,6 @@ supabase functions deploy complete-signup           # verifies checkout, creates
 supabase functions deploy stripe-webhook            # keeps status/seats in sync
 supabase db push                                    # apply any pending migrations
 ```
-
-Two plans — create both as real Stripe Prices before setting the
-secrets below:
-- **Base plan**: recurring, $119.99/mo, no metering, capped at 10 seats
-  by the app (`STRIPE_PRICE_PER_SEAT`, the name is a holdover from an
-  earlier per-seat model). This is what a signup uses when they click
-  the base-plan card on the pricing section.
-- **Unlimited plan**: recurring, $199.99/mo, no metering, no seat cap
-  (`STRIPE_PRICE_UNLIMITED`). Used when a signup clicks the
-  Unlimited card instead.
-
-Both are offered at signup — `create-checkout-session` reads
-`{ plan: "per_seat" | "unlimited" }` from the client and picks the
-matching Price ID. To let an existing customer switch plans later
-without contacting support, add both Prices to the Stripe dashboard's
-**Billing Portal configuration** (Settings → Billing → Customer portal
-→ Products) as a swappable group — `stripe-webhook` watches
-`customer.subscription.updated` for whichever price is actually on the
-subscription and syncs `tenants.plan` accordingly. Without both secrets
-below set, the webhook leaves `plan` untouched rather than guessing, so
-a self-service upgrade would charge the card but never actually lift
-the app's own 10-seat cap.
 
 ```bash
 supabase secrets set STRIPE_SECRET_KEY=sk_live_...          # Stripe → Developers → API keys
@@ -410,7 +422,9 @@ supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...          # set after creati
 supabase secrets set APP_URL=https://roofstride.com          # your domain, no trailing slash
 ```
 
-Then, in the Stripe dashboard: **Developers → Webhooks → Add endpoint**,
+### Step 3 — the webhook, which is what makes conversion and cancellation actually show up in the app
+
+In the Stripe dashboard: **Developers → Webhooks → Add endpoint**,
 pointing at `https://<project-ref>.functions.supabase.co/stripe-webhook`,
 subscribed to exactly the 4 events the function's own `switch` handles —
 `customer.subscription.updated`, `customer.subscription.deleted`,
@@ -421,8 +435,6 @@ redirects back; the webhook doesn't listen for it and would silently
 ignore it if subscribed.) Stripe shows the signing secret once the
 endpoint is created — that's the `STRIPE_WEBHOOK_SECRET` value above.
 
-**This is exactly what makes trial-to-paid conversion and cancellation
-show up correctly in the app**, not just in Stripe:
 - Stripe itself auto-charges the card on file the moment the 7-day
   trial ends — nothing in this codebase drives that, Checkout's
   `trial_period_days: 7` plus `payment_method_collection: "always"`
@@ -433,14 +445,50 @@ show up correctly in the app**, not just in Stripe:
   `past_due`, and `customer.subscription.updated` is the fallback that
   independently reflects whatever status Stripe settles on regardless
   of which invoice event landed first.
-- Canceling (via "Manage billing" → the Stripe Billing Portal, see §2)
-  fires `customer.subscription.deleted` once the subscription actually
-  ends, which is what sets `tenants.status = 'canceled'`.
+- Canceling (via More → Billing → "Manage subscription" → the Stripe
+  Billing Portal, see §2) fires `customer.subscription.deleted` once
+  the subscription actually ends, which is what sets
+  `tenants.status = 'canceled'` — and, since migration 030, is the
+  exact moment the app itself locks the company out.
 - Without this webhook correctly configured, Stripe still bills (or
   stops billing) the customer's card exactly the same either way — but
   `tenants.status` inside this app silently stops updating, so a
   canceled or payment-failed company keeps showing as if nothing
   happened.
+
+### Step 4 — let customers switch Pro ↔ Unlimited themselves
+
+Both plans are already offered at signup — `create-checkout-session`
+reads `{ plan: "per_seat" | "unlimited" }` from the client and picks the
+matching Price ID from Step 1/2 automatically, no further setup needed
+there. Switching *after* signup is a separate, dashboard-only step: add
+both real Prices to the Customer Portal's "Customers can switch plans"
+group (§2's table above) — without that, More → Billing's own "Switch
+between Base and Unlimited" bullet is a promise the Stripe side isn't
+actually configured to keep yet.
+
+### Step 5 — verify it end to end
+
+No code changes needed to check this — a real signup, in Stripe test
+mode with a test card (`4242 4242 4242 4242`, any future expiry/CVC),
+proves every piece above at once:
+1. **Start free trial** on either pricing card → land on Stripe
+   Checkout showing the right plan's real price → complete with the
+   test card.
+2. Redirected back to the app, signed in, with a working company (this
+   is `complete-signup` + `create_tenant` succeeding).
+3. In the Stripe dashboard, find the new subscription and use **"Advance
+   to next billing cycle"** (Stripe's built-in trial fast-forward,
+   under the subscription's own menu — no waiting 7 real days) → the
+   test card gets charged → `stripe-webhook` fires →
+   `tenants.status` flips to `active` (confirm via More → Billing,
+   which now reads live off `my_tenant()`).
+4. From More → Billing → **Manage subscription**, cancel → Stripe sets
+   `cancel_at_period_end` → status stays `active` until the period
+   Step 3 just advanced actually ends → **advance the cycle once more**
+   → `customer.subscription.deleted` fires → the app locks the company
+   out behind the "Subscription canceled" screen (build 107) with a
+   working "Reactivate billing" button for whoever ran this test.
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are
 injected into every function automatically — don't set them by hand.
@@ -467,10 +515,13 @@ missing key never white-screens the site.
 
 ---
 
-## 10. Optional follow-up: sync Stripe seat quantity
+## 10. (Retired) Syncing a per-seat Stripe quantity
 
-`create-checkout-session` currently starts every subscription at
-`quantity: 1`. To bill per active seat automatically, update the subscription
-item quantity from `stripe-webhook` (or a small scheduled job) to match the
-count of active seats for the tenant. Until then, seat quantity is managed in
-the Stripe customer portal.
+This section used to describe billing per active seat via the Checkout
+line item's `quantity`, from an earlier per-seat-priced model. Pricing
+is now two flat plans — $119.99/mo for up to 10 seats, $199.99/mo
+Unlimited (§8) — with no variable seat quantity in Stripe to sync at
+all; `create-checkout-session`'s `quantity: 1` is fixed on purpose, not
+a placeholder waiting on this follow-up. Left here only so a future
+per-seat-priced tier, if one is ever added, isn't designed from
+scratch.

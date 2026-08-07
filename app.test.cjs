@@ -27431,7 +27431,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
     try {
       if (editing === "new") {
         if (atLimit) {
-          setSeatErr(`Your plan includes ${seatsIncluded} seats and all are in use. Upgrade to Unlimited in Manage billing, then invite this person.`);
+          setSeatErr(`Your plan includes ${seatsIncluded} seats and all are in use. Upgrade to Unlimited in Manage subscription, then invite this person.`);
           setSaving(false);
           return;
         }
@@ -27564,9 +27564,9 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: tenant.status === "active" ? "green" : tenant.status === "past_due" || tenant.status === "canceled" ? "red" : "amber", children: tenant.status === "trialing" ? `Trial${tenant.days_left != null ? ` \u2014 ${tenant.days_left}d left` : ""}` : tenant.status || "\u2014" }), children: "Subscription" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Plan", v: isUnlimited ? "Unlimited" : `Base \u2014 ${PRODUCT.baseSeats} seats` }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Seats", v: isUnlimited ? `${activeCount} used, no limit` : `${activeCount} used of ${seatsIncluded} included` }),
-      atLimit && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Seat limit reached", tone: "amber", children: "Upgrade to Unlimited in Manage billing to add more seats." }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "soft", small: true, onClick: manageBilling, disabled: billingBusy, children: billingBusy ? "Opening\u2026" : "Manage billing" }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: "Manage billing opens the secure Stripe portal to change your plan, add or remove seats, update your card, or cancel. It's the only place a subscription can be changed." })
+      atLimit && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Seat limit reached", tone: "amber", children: "Upgrade to Unlimited in Manage subscription to add more seats." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "soft", small: true, onClick: manageBilling, disabled: billingBusy, children: billingBusy ? "Opening\u2026" : "Manage subscription" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: "Manage subscription opens the secure Stripe portal to change cards, view invoices, switch plans, or cancel. It's the only place a subscription can be changed \u2014 for the full picture and a bigger button, see More \u2192 Billing." })
     ] }),
     users.map((u) => {
       const assigned = jobs.filter((j) => j.assignee === u.name).length;
@@ -27746,6 +27746,71 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
         children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "This signs you out immediately", tone: "red", children: "You'll be logged out right away and won't be able to sign back in until another admin reactivates you." })
       }
     )
+  ] });
+}
+function BillingSettings({ currentUser, onBack, toast }) {
+  const [tenant, setTenant] = (0, import_react.useState)(null);
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  (0, import_react.useEffect)(() => {
+    const auth = AUTH();
+    if (!auth || !auth.myTenant) return;
+    let alive = true;
+    auth.myTenant().then((t) => {
+      if (alive) setTenant(t);
+    }).catch(() => {
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const canManage = canManageSeats(currentUser);
+  const isUnlimited = !!tenant && tenant.plan === "unlimited";
+  const manageBilling = async () => {
+    const auth = AUTH();
+    if (!auth || !auth.manageBilling) {
+      toast("Billing portal isn't available yet \u2014 contact " + PRODUCT.supportEmail);
+      return;
+    }
+    setBusy(true);
+    try {
+      await auth.manageBilling();
+    } catch (e) {
+      toast(e && e.message ? e.message : "Couldn't open the billing portal");
+    }
+    setBusy(false);
+  };
+  if (!canManage) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Billing", onBack }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Lock, { size: 18, color: S.sub, style: { flexShrink: 0, marginTop: 2 } }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: "Billing is managed by an admin. Ask them to change cards, view invoices, switch plans, or cancel." })
+      ] }) })
+    ] });
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Billing", onBack }),
+    tenant && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: tenant.status === "active" ? "green" : tenant.status === "past_due" || tenant.status === "canceled" ? "red" : "amber", children: tenant.status === "trialing" ? `Trial${tenant.days_left != null ? ` \u2014 ${tenant.days_left}d left` : ""}` : tenant.status || "\u2014" }), children: "Subscription" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Plan", v: isUnlimited ? "Unlimited" : `Base \u2014 ${PRODUCT.baseSeats} seats` }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Price", v: isUnlimited ? `$${PRODUCT.unlimitedPrice.toFixed(2)}/mo` : `$${PRODUCT.basePrice.toFixed(2)}/mo` })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, color: S.ink, marginBottom: 6 }, children: "Manage subscription" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 14 }, children: "Opens Stripe's secure billing portal, where you can:" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gap: 6, marginBottom: 16 }, children: [
+        "Change your card",
+        "View and download invoices",
+        "Switch between Base and Unlimited",
+        "Update billing information",
+        "Cancel your subscription"
+      ].map((f) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 15, color: T.accent, style: { flexShrink: 0, marginTop: 2 } }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink }, children: f })
+      ] }, f)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, onClick: manageBilling, disabled: busy, children: busy ? "Opening\u2026" : "Manage subscription" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "This is the only place a subscription can be changed \u2014 RoofStride itself never stores your card." })
+    ] })
   ] });
 }
 var SETUP_ITEMS = [
@@ -28888,6 +28953,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
     ]],
     ["Setup", [
       ["team", import_lucide_react.HardHat, "Team & seats", canManageSeats(currentUser) ? "Add users, roles, logins" : "Who's on the team"],
+      ["billing", import_lucide_react.CreditCard, "Billing", canManageSeats(currentUser) ? "Manage subscription, cards & invoices" : "Ask an admin about billing"],
       ["vendors", import_lucide_react.Building2, "Vendors & suppliers", "Material suppliers and account details"],
       ["branding", import_lucide_react.Settings, "Company branding", "Name, logo, colors, what prints on documents"],
       ["workflow", import_lucide_react.ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
@@ -30793,7 +30859,7 @@ function SupremeCRM() {
         toast,
         brand
       }
-    ) : nav === "help" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelpDesk, { onBack: () => setNav("more"), brand }) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand, setBrand, onBack: () => setNav("more"), toast, brandErr, currentUser: liveUser }) : null }),
+    ) : nav === "billing" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BillingSettings, { currentUser: liveUser, onBack: () => setNav("more"), toast }) : nav === "help" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelpDesk, { onBack: () => setNav("more"), brand }) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand, setBrand, onBack: () => setNav("more"), toast, brandErr, currentUser: liveUser }) : null }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
       flexShrink: 0,
       zIndex: 50,

@@ -52,7 +52,11 @@ ok(/const isUnlimited = !!tenant && tenant\.plan === "unlimited";/.test(src),
   "TeamManager derives isUnlimited from tenant.plan, the column my_tenant() already returns");
 ok(/const seatsIncluded = tenant \? \(isUnlimited \? Infinity : PRODUCT\.baseSeats\) : null;/.test(src),
   "seatsIncluded is Infinity on Unlimited (so every >= comparison downstream just works) or the base cap otherwise");
-ok(/Upgrade to Unlimited in Manage billing/.test(src),
+/* Build 108 renamed the user-visible label from "Manage billing" to
+   "Manage subscription" for consistency with the new dedicated Billing
+   screen — the underlying point this assertion checks (the copy points
+   at upgrading plans, not buying a retired add-on) is unchanged. */
+ok(/Upgrade to Unlimited in Manage subscription/.test(src),
   "the seat-limit error/callout copy points at upgrading plans, not buying a retired add-on");
 
 /* ---------- static: the SyntheticEvent bug is fixed on every generic CTA ---------- */

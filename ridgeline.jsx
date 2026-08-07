@@ -8,7 +8,7 @@ import {
   BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat, CloudRain,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
   Scale, Lightbulb, ExternalLink, Lock, Layers, Smile
-, Filter , Megaphone, Clock, Zap, Sun, Moon, Navigation, Award, ClipboardCheck, Sparkles } from "lucide-react";
+, Filter , Megaphone, Clock, Zap, Sun, Moon, Navigation, Award, ClipboardCheck, Sparkles, CreditCard } from "lucide-react";
 
 /* ================================================================
    BRANDING — single source of company identity. Everything company-
@@ -26033,7 +26033,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
       if (editing === "new") {
         /* Enforce the plan's seat allowance before creating a billable seat. */
         if (atLimit) {
-          setSeatErr(`Your plan includes ${seatsIncluded} seats and all are in use. Upgrade to Unlimited in Manage billing, then invite this person.`);
+          setSeatErr(`Your plan includes ${seatsIncluded} seats and all are in use. Upgrade to Unlimited in Manage subscription, then invite this person.`);
           setSaving(false);
           return;
         }
@@ -26167,17 +26167,18 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
           <KV k="Seats" v={isUnlimited ? `${activeCount} used, no limit` : `${activeCount} used of ${seatsIncluded} included`} />
           {atLimit && (
             <Callout label="Seat limit reached" tone="amber">
-              Upgrade to Unlimited in Manage billing to add more seats.
+              Upgrade to Unlimited in Manage subscription to add more seats.
             </Callout>
           )}
           <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
             <Btn kind="soft" small onClick={manageBilling} disabled={billingBusy}>
-              {billingBusy ? "Opening…" : "Manage billing"}
+              {billingBusy ? "Opening…" : "Manage subscription"}
             </Btn>
           </div>
           <div style={{ fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }}>
-            Manage billing opens the secure Stripe portal to change your plan, add or remove seats,
-            update your card, or cancel. It's the only place a subscription can be changed.
+            Manage subscription opens the secure Stripe portal to change cards, view invoices,
+            switch plans, or cancel. It's the only place a subscription can be changed — for the
+            full picture and a bigger button, see More → Billing.
           </div>
         </Card>
       )}
@@ -26341,6 +26342,91 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
           You'll be logged out right away and won't be able to sign back in until another admin reactivates you.
         </Callout>
       </Sheet>
+    </div>
+  );
+}
+
+/* Dedicated Billing screen — More → Billing → Manage subscription.
+   TeamManager already carries a compact Subscription card next to seat
+   management (useful there for at-a-glance context while inviting
+   people), so this doesn't replace that — it's the discoverable,
+   bigger-button destination for someone who came looking for billing
+   specifically, not someone already in the middle of adding a seat.
+   Same data (my_tenant()), same manageBilling() action, same
+   admin-or-delegated gate create-portal-session enforces server-side. */
+function BillingSettings({ currentUser, onBack, toast }) {
+  const [tenant, setTenant] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const auth = AUTH();
+    if (!auth || !auth.myTenant) return;
+    let alive = true;
+    auth.myTenant().then((t) => { if (alive) setTenant(t); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const canManage = canManageSeats(currentUser);
+  const isUnlimited = !!tenant && tenant.plan === "unlimited";
+
+  const manageBilling = async () => {
+    const auth = AUTH();
+    if (!auth || !auth.manageBilling) { toast("Billing portal isn't available yet — contact " + PRODUCT.supportEmail); return; }
+    setBusy(true);
+    try { await auth.manageBilling(); }
+    catch (e) { toast(e && e.message ? e.message : "Couldn't open the billing portal"); }
+    setBusy(false);
+  };
+
+  if (!canManage) {
+    return (
+      <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
+        <SubHeader title="Billing" onBack={onBack} />
+        <Card style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <Lock size={18} color={S.sub} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
+              Billing is managed by an admin. Ask them to change cards, view invoices, switch
+              plans, or cancel.
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
+      <SubHeader title="Billing" onBack={onBack} />
+      {tenant && (
+        <Card style={{ marginTop: 14 }}>
+          <CardTitle right={<Chip tone={tenant.status === "active" ? "green" : tenant.status === "past_due" || tenant.status === "canceled" ? "red" : "amber"}>
+            {tenant.status === "trialing" ? `Trial${tenant.days_left != null ? ` — ${tenant.days_left}d left` : ""}` : (tenant.status || "—")}
+          </Chip>}>Subscription</CardTitle>
+          <KV k="Plan" v={isUnlimited ? "Unlimited" : `Base — ${PRODUCT.baseSeats} seats`} />
+          <KV k="Price" v={isUnlimited ? `$${PRODUCT.unlimitedPrice.toFixed(2)}/mo` : `$${PRODUCT.basePrice.toFixed(2)}/mo`} />
+        </Card>
+      )}
+      <Card style={{ marginTop: 12 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: S.ink, marginBottom: 6 }}>Manage subscription</div>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55, marginBottom: 14 }}>
+          Opens Stripe's secure billing portal, where you can:
+        </div>
+        <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>
+          {["Change your card", "View and download invoices", "Switch between Base and Unlimited",
+            "Update billing information", "Cancel your subscription"].map((f) => (
+            <div key={f} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <CheckCircle2 size={15} color={T.accent} style={{ flexShrink: 0, marginTop: 2 }} />
+              <div style={{ fontSize: 13.5, color: S.ink }}>{f}</div>
+            </div>
+          ))}
+        </div>
+        <Btn style={{ width: "100%" }} onClick={manageBilling} disabled={busy}>
+          {busy ? "Opening…" : "Manage subscription"}
+        </Btn>
+        <div style={{ fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
+          This is the only place a subscription can be changed — RoofStride itself never
+          stores your card.
+        </div>
+      </Card>
     </div>
   );
 }
@@ -27447,6 +27533,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
     ]],
     ["Setup", [
       ["team", HardHat, "Team & seats", canManageSeats(currentUser) ? "Add users, roles, logins" : "Who's on the team"],
+      ["billing", CreditCard, "Billing", canManageSeats(currentUser) ? "Manage subscription, cards & invoices" : "Ask an admin about billing"],
       ["vendors", Building2, "Vendors & suppliers", "Material suppliers and account details"],
       ["branding", Settings, "Company branding", "Name, logo, colors, what prints on documents"],
       ["workflow", ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
@@ -28925,7 +29012,7 @@ export default function SupremeCRM() {
      so this gate is the real grace period, not an extra one built here.
      Only an admin (or someone delegated seat/billing management) sees
      a working "Reactivate billing" button, matching who can already
-     reach Manage billing from Team & seats; anyone else is told to ask
+     reach Manage subscription from Team & seats or More → Billing; anyone else is told to ask
      their admin, since create-portal-session enforces the same check
      server-side regardless of what this screen shows. */
   if (liveAuth() && liveUser.tenantId && tenantLock && tenantLock.locked) {
@@ -29171,6 +29258,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "team" ? (
         <TeamManager users={users} setUsers={setUsers} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} brand={brand} />
+      ) : nav === "billing" ? (
+        <BillingSettings currentUser={liveUser} onBack={() => setNav("more")} toast={toast} />
       ) : nav === "help" ? (
         <HelpDesk onBack={() => setNav("more")} brand={brand} />
       ) : nav === "branding" ? (
