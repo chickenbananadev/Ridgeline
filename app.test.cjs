@@ -10013,7 +10013,7 @@ function JobDetail({
             case "photos":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPhotos, { job, mut, toast, ccToken });
             case "financials":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancialsCombined, { job, mut, toast, isAdmin, currentUser, brand, integrations, onLog });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancialsCombined, { job, mut, toast, isAdmin, currentUser, brand, integrations, onLog, users });
             case "workorder":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                 TabWorkOrder,
@@ -20622,7 +20622,7 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
   ] });
 }
 function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, integrations = {}, onLog = () => {
-} }) {
+}, users }) {
   const [sub, setSub] = (0, import_react.useState)("costs");
   const SUBS = [["costs", "Costs & profit"], ["payments", "Payments"], ["invoice", "Invoice"]];
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -20639,7 +20639,7 @@ function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, i
       fontFamily: "inherit"
     }, children: label }, id)) }),
     sub === "costs" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancials, { job, mut, toast, isAdmin, currentUser, brand }),
-    sub === "payments" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPayments, { job, mut, toast, onLog }),
+    sub === "payments" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPayments, { job, mut, toast, onLog, currentUser, brand, integrations, users }),
     sub === "invoice" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabInvoice, { job, brand, mut, toast, currentUser, integrations })
   ] });
 }
@@ -20968,7 +20968,7 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
   ] });
 }
 function TabPayments({ job, mut, toast, onLog = () => {
-} }) {
+}, currentUser, brand, integrations, users }) {
   const [editPay, setEditPay] = (0, import_react.useState)(null);
   const [ef2, setEf2] = (0, import_react.useState)(null);
   const checkRef = (0, import_react.useRef)(null);
@@ -20976,9 +20976,22 @@ function TabPayments({ job, mut, toast, onLog = () => {
     setEditPay(p2.id);
     setEf2({ ...p2 });
   };
-  const savePayEdit = () => {
+  const notifyCapOutIfReady = async (nextPayments) => {
+    const ready = paymentsSummary({ ...job, payments: nextPayments }).balance <= 0.01;
+    if (ready && !job.capOutNotifiedAt) {
+      const cap = computeCapOut(job);
+      const subject = `Cap-out ready \u2014 ${job.name}`;
+      const body = `${job.name} (${job.address}) is fully paid and ready to cap out. Commission ${money(cap.commission)}, payout ${money(cap.payout)}.`;
+      const out = await deliverToBillingContact(job, { subject, body }, integrations, users, brand, currentUser);
+      if (out.contact) mut((j) => ({ ...j, capOutNotifiedAt: (/* @__PURE__ */ new Date()).toISOString() }));
+    } else if (!ready && job.capOutNotifiedAt) {
+      mut((j) => ({ ...j, capOutNotifiedAt: null }));
+    }
+  };
+  const savePayEdit = async () => {
     const before = (job.payments || []).find((x) => x.id === editPay);
-    mut((j) => ({ ...j, payments: j.payments.map((x) => x.id === editPay ? { ...x, ...ef2, amt: num(ef2.amt) } : x) }));
+    const nextPayments = job.payments.map((x) => x.id === editPay ? { ...x, ...ef2, amt: num(ef2.amt) } : x);
+    mut((j) => ({ ...j, payments: nextPayments }));
     if (before) {
       const changes = [];
       if (num(before.amt) !== num(ef2.amt)) changes.push(`amount ${money(num(before.amt))} \u2192 ${money(num(ef2.amt))}`);
@@ -20994,10 +21007,12 @@ function TabPayments({ job, mut, toast, onLog = () => {
     }
     setEditPay(null);
     toast("Payment updated");
+    await notifyCapOutIfReady(nextPayments);
   };
-  const deletePay = () => {
+  const deletePay = async () => {
     const before = (job.payments || []).find((x) => x.id === editPay);
-    mut((j) => ({ ...j, payments: j.payments.filter((x) => x.id !== editPay) }));
+    const nextPayments = job.payments.filter((x) => x.id !== editPay);
+    mut((j) => ({ ...j, payments: nextPayments }));
     if (before) {
       onLog({
         kind: "payment",
@@ -21008,6 +21023,7 @@ function TabPayments({ job, mut, toast, onLog = () => {
     }
     setEditPay(null);
     toast("Payment removed");
+    await notifyCapOutIfReady(nextPayments);
   };
   const attachCheck = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -21057,10 +21073,12 @@ function TabPayments({ job, mut, toast, onLog = () => {
           onChange: (v) => setForm({ ...form, amt: v })
         }
       ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%" }, disabled: !form.label.trim() || !num(form.amt), onClick: () => {
-        mut((j) => ({ ...j, payments: [...j.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp(), dateIso: todayIso() }] }));
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%" }, disabled: !form.label.trim() || !num(form.amt), onClick: async () => {
+        const nextPayments = [...job.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp(), dateIso: todayIso() }];
+        mut((j) => ({ ...j, payments: nextPayments }));
         setForm({ type: "Received", label: "", amt: "" });
         toast("Payment logged");
+        await notifyCapOutIfReady(nextPayments);
       }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 15 }),
         " Log payment"

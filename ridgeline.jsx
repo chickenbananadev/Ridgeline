@@ -8843,7 +8843,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "messages": return <TabMessages job={job} mut={mut} toast={toast} brand={brand}
                 templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />;
               case "photos": return <TabPhotos job={job} mut={mut} toast={toast} ccToken={ccToken} />;
-              case "financials": return <TabFinancialsCombined job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} integrations={integrations} onLog={onLog} />;
+              case "financials": return <TabFinancialsCombined job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} integrations={integrations} onLog={onLog} users={users} />;
               case "workorder": return <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
                 crews={crews} templates={templates} currentUser={currentUser} users={users} integrations={integrations} />;
               case "tasks": return <TabTasks job={job} mut={mut} toast={toast} />;
@@ -19520,7 +19520,7 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
    each sub-tab is still the exact same component as before (nothing
    about TabFinancials/TabPayments/TabInvoice changed), just reached
    through one door instead of three. */
-function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, integrations = {}, onLog = () => {} }) {
+function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, integrations = {}, onLog = () => {}, users }) {
   const [sub, setSub] = useState("costs");
   const SUBS = [["costs", "Costs & profit"], ["payments", "Payments"], ["invoice", "Invoice"]];
   return (
@@ -19536,7 +19536,7 @@ function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, i
         ))}
       </div>
       {sub === "costs" && <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />}
-      {sub === "payments" && <TabPayments job={job} mut={mut} toast={toast} onLog={onLog} />}
+      {sub === "payments" && <TabPayments job={job} mut={mut} toast={toast} onLog={onLog} currentUser={currentUser} brand={brand} integrations={integrations} users={users} />}
       {sub === "invoice" && <TabInvoice job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser} integrations={integrations} />}
     </>
   );
@@ -19833,18 +19833,37 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
 }
 
 /* ---------- Payments ---------- */
-function TabPayments({ job, mut, toast, onLog = () => {} }) {
+function TabPayments({ job, mut, toast, onLog = () => {}, currentUser, brand, integrations, users }) {
   const [editPay, setEditPay] = useState(null);
   const [ef2, setEf2] = useState(null);
   const checkRef = useRef(null);
   const openPayEdit = (p2) => { setEditPay(p2.id); setEf2({ ...p2 }); };
+  /* Auto-notifies the billing contact the instant a job's balance
+     crosses fully paid — no queue, immediate send, mirroring the
+     sub-payout trigger in SubInvoiceCard.confirmInv(). capOutNotifiedAt
+     guards against re-firing on every payment edit once already
+     notified; if a later edit/refund pushes the balance back above
+     zero, it's cleared so a genuine re-completion notifies again. */
+  const notifyCapOutIfReady = async (nextPayments) => {
+    const ready = paymentsSummary({ ...job, payments: nextPayments }).balance <= 0.01;
+    if (ready && !job.capOutNotifiedAt) {
+      const cap = computeCapOut(job);
+      const subject = `Cap-out ready — ${job.name}`;
+      const body = `${job.name} (${job.address}) is fully paid and ready to cap out. Commission ${money(cap.commission)}, payout ${money(cap.payout)}.`;
+      const out = await deliverToBillingContact(job, { subject, body }, integrations, users, brand, currentUser);
+      if (out.contact) mut((j) => ({ ...j, capOutNotifiedAt: new Date().toISOString() }));
+    } else if (!ready && job.capOutNotifiedAt) {
+      mut((j) => ({ ...j, capOutNotifiedAt: null }));
+    }
+  };
   /* The edit sheet tells the user "every edit is written to the activity
      feed with the old values, so the record stays honest". It wasn't — both
      of these only mutated and toasted, so a logged deposit could be silently
      zeroed. Now the claim is true. */
-  const savePayEdit = () => {
+  const savePayEdit = async () => {
     const before = (job.payments || []).find((x) => x.id === editPay);
-    mut((j) => ({ ...j, payments: j.payments.map((x) => (x.id === editPay ? { ...x, ...ef2, amt: num(ef2.amt) } : x)) }));
+    const nextPayments = job.payments.map((x) => (x.id === editPay ? { ...x, ...ef2, amt: num(ef2.amt) } : x));
+    mut((j) => ({ ...j, payments: nextPayments }));
     if (before) {
       const changes = [];
       if (num(before.amt) !== num(ef2.amt)) changes.push(`amount ${money(num(before.amt))} → ${money(num(ef2.amt))}`);
@@ -19855,15 +19874,18 @@ function TabPayments({ job, mut, toast, onLog = () => {} }) {
         text: changes.length ? `edited a payment — ${changes.join("; ")}` : "edited a payment (no values changed)" });
     }
     setEditPay(null); toast("Payment updated");
+    await notifyCapOutIfReady(nextPayments);
   };
-  const deletePay = () => {
+  const deletePay = async () => {
     const before = (job.payments || []).find((x) => x.id === editPay);
-    mut((j) => ({ ...j, payments: j.payments.filter((x) => x.id !== editPay) }));
+    const nextPayments = job.payments.filter((x) => x.id !== editPay);
+    mut((j) => ({ ...j, payments: nextPayments }));
     if (before) {
       onLog({ kind: "payment", jobId: job.id, jobName: job.name,
         text: `removed a ${money(num(before.amt))} payment${before.date ? ` dated ${before.date}` : ""}${before.method ? ` (${before.method})` : ""}` });
     }
     setEditPay(null); toast("Payment removed");
+    await notifyCapOutIfReady(nextPayments);
   };
   const attachCheck = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -19900,10 +19922,12 @@ function TabPayments({ job, mut, toast, onLog = () => {} }) {
           onChange={(e) => setForm({ ...form, label: e.target.value })} /></Field>
         <Field label="Amount"><MoneyInput style={inputStyle} value={form.amt}
           onChange={(v) => setForm({ ...form, amt: v })} /></Field>
-        <Btn style={{ width: "100%" }} disabled={!form.label.trim() || !num(form.amt)} onClick={() => {
-          mut((j) => ({ ...j, payments: [...j.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp(), dateIso: todayIso() }] }));
+        <Btn style={{ width: "100%" }} disabled={!form.label.trim() || !num(form.amt)} onClick={async () => {
+          const nextPayments = [...job.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp(), dateIso: todayIso() }];
+          mut((j) => ({ ...j, payments: nextPayments }));
           setForm({ type: "Received", label: "", amt: "" });
           toast("Payment logged");
+          await notifyCapOutIfReady(nextPayments);
         }}><Plus size={15} /> Log payment</Btn>
       </Card>
       <Card style={{ marginTop: 12 }}>
