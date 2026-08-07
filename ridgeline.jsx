@@ -3491,9 +3491,13 @@ const dateInputStyle = {
   minHeight: 44, boxSizing: "border-box", width: "100%", minWidth: 0,
 };
 
-function Card({ children, style, pad = 18, onClick }) {
+/* testId is forwarded because Card otherwise silently swallows every
+   prop it doesn't name — a data-testid written on a Card looked right
+   in the source and never reached the DOM, which is exactly the kind
+   of thing that makes a passing test meaningless. */
+function Card({ children, style, pad = 18, onClick, testId }) {
   return (
-    <div onClick={onClick} style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }}>
+    <div onClick={onClick} data-testid={testId} style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }}>
       {children}
     </div>
   );
@@ -28754,6 +28758,195 @@ function useCanvassPins({ tenantId, ready }) {
   return { pins, list: Object.values(pins), loadBounds, savePin, removePin, err, setErr, loading };
 }
 
+/* Company-editable dispositions. Same shape as the lead-source and
+   pipeline-stage editors, and gated the same way.
+
+   The id is what pins store, so it is fixed once created — renaming
+   changes the label everywhere without orphaning a single pin, which
+   is the whole reason name and id are separate. Deleting is allowed
+   but never silently: pins already carrying that status keep
+   rendering with their real name and flags via canvassStatus's
+   fallback, and the editor says how many would be affected. */
+function CanvassStatusEditor({ statuses, setStatuses, onBack, toast, currentUser }) {
+  const list = canvassStatusList(statuses);
+  const canEdit = canManageCompanyConfig(currentUser);
+  const [draft, setDraft] = useState("");
+  const write = (next) => setStatuses(next);
+  const patch = (id, p) => write(list.map((s) => (s.id === id ? { ...s, ...p } : s)));
+  const add = () => {
+    const name = draft.trim();
+    if (!name) return;
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || `s_${list.length}`;
+    if (list.some((s) => s.id === id)) { toast("There's already one with that name"); return; }
+    write([...list, { id, name, color: "#6B7280", contact: false, open: true, terminal: false }]);
+    setDraft(""); toast("Disposition added");
+  };
+  const move = (i, d) => {
+    const a = [...list]; const j = i + d;
+    if (j < 0 || j >= a.length) return;
+    [a[i], a[j]] = [a[j], a[i]];
+    write(a);
+  };
+  const COLORS = ["#9CA3AF", "#6B7280", "#B45309", "#B42318", "#1D4ED8", "#7C3AED", "#047857", "#111827"];
+  return (
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
+      <SubHeader title="Canvassing dispositions" onBack={onBack} />
+      <Card style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 13, color: S.sub, marginBottom: 12, lineHeight: 1.5 }}>
+          What reps mark at a door, and the colors they show as on the map. Renaming one changes it everywhere —
+          doors already marked keep their history. Two settings do real work rather than decorate:
+          <b> Counts as contact</b> is the denominator your appointment rate is measured against, and
+          <b> Do not knock</b> marks a promise to a homeowner.
+        </div>
+        {canEdit && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <input style={{ ...inputStyle, flex: 1 }} value={draft} placeholder="Add a disposition — Renter, Dog…"
+              onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
+            <Btn onClick={add} disabled={!draft.trim()} data-testid="add-disposition"><Plus size={14} /></Btn>
+          </div>
+        )}
+      </Card>
+      {list.map((s, i) => (
+        <Card key={s.id} pad={13} style={{ marginTop: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0, flex: 1 }}>
+              <span style={{ width: 13, height: 13, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
+              {canEdit ? (
+                <input style={{ ...inputStyle, flex: 1 }} value={s.name}
+                  onChange={(e) => patch(s.id, { name: e.target.value })} />
+              ) : <span style={{ fontSize: 14.5, fontWeight: 700 }}>{s.name}</span>}
+            </div>
+            {canEdit && (
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <Btn kind="ghost" small disabled={i === 0} onClick={() => move(i, -1)}>↑</Btn>
+                <Btn kind="ghost" small disabled={i === list.length - 1} onClick={() => move(i, 1)}>↓</Btn>
+                <button aria-label={`Delete ${s.name}`}
+                  onClick={() => { write(list.filter((x) => x.id !== s.id)); toast("Disposition removed — doors already marked with it keep their label"); }}
+                  style={{ border: "none", background: "none", cursor: "pointer" }}>
+                  <Trash2 size={16} color="#B42318" />
+                </button>
+              </div>
+            )}
+          </div>
+          {canEdit && (
+            <>
+              <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                {COLORS.map((c) => (
+                  <button key={c} type="button" aria-label={`Color ${c}`} onClick={() => patch(s.id, { color: c })}
+                    style={{
+                      width: 24, height: 24, borderRadius: "50%", background: c, cursor: "pointer",
+                      border: s.color === c ? "3px solid #111827" : `1px solid ${S.line}`,
+                    }} />
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 14, marginTop: 10, flexWrap: "wrap", fontSize: 13 }}>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!s.contact} onChange={(e) => patch(s.id, { contact: e.target.checked })} />
+                  Counts as contact
+                </label>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!s.open} onChange={(e) => patch(s.id, { open: e.target.checked })} />
+                  Still worth revisiting
+                </label>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!s.terminal} onChange={(e) => patch(s.id, { terminal: e.target.checked })} />
+                  Do not knock
+                </label>
+              </div>
+            </>
+          )}
+        </Card>
+      ))}
+      {!canEdit && (
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 12 }}>
+          Only an admin or someone with company-settings access can change these.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------
+   Working the territory — filtering, and counting honestly.
+
+   The one number a canvassing scoreboard gets wrong is the
+   denominator. Doors KNOCKED and doors ANSWERED are different, and
+   quoting a close rate against doors knocked makes every rep look bad
+   on a street where nobody was home. So contacts are counted from the
+   status flags (contact: true), and the conversion rate is measured
+   against contacts, with doors reported alongside rather than divided
+   into.
+
+   Both of these are pure functions so the numbers can be checked
+   without a rendered screen — a scoreboard nobody can verify is a
+   scoreboard people stop trusting.
+------------------------------------------------------------------- */
+function filterCanvassPins(pins, f, meId) {
+  const from = f.from ? f.from : null, to = f.to ? f.to : null;
+  return (pins || []).filter((p) => {
+    if (f.statuses && f.statuses.length && !f.statuses.includes(p.status)) return false;
+    if (f.mineOnly && p.assigned_to !== meId && p.created_by !== meId) return false;
+    if (f.rep && p.assigned_to !== f.rep) return false;
+    if (from || to) {
+      /* An un-knocked pin has no date to compare, so a date filter
+         excludes it rather than silently treating it as today. */
+      if (!p.knocked_at) return false;
+      const d = String(p.knocked_at).slice(0, 10);
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+    }
+    if (f.q) {
+      const hay = [p.address, (p.prospect || {}).name, (p.prospect || {}).phone, p.notes]
+        .filter(Boolean).join(" ").toLowerCase();
+      if (!hay.includes(f.q.toLowerCase())) return false;
+    }
+    return true;
+  });
+}
+function canvassStats(pins, statuses) {
+  const st = (id) => canvassStatus(statuses, id);
+  const knocked = (pins || []).filter((p) => p.knocked_at);
+  const contacts = knocked.filter((p) => st(p.status).contact);
+  const appointments = knocked.filter((p) => p.status === "appointment");
+  const sold = knocked.filter((p) => p.status === "sold");
+  const converted = (pins || []).filter((p) => p.job_id);
+  const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
+  return {
+    doors: knocked.length,
+    contacts: contacts.length,
+    appointments: appointments.length,
+    sold: sold.length,
+    converted: converted.length,
+    /* Answered per door knocked — a measure of the street and the time
+       of day, not of the rep. */
+    contactRate: pct(contacts.length, knocked.length),
+    /* Appointments per CONTACT. This is the number that actually says
+       something about how someone talks to people. */
+    apptRate: pct(appointments.length, contacts.length),
+  };
+}
+function canvassLeaderboard(pins, statuses, users) {
+  /* Credit goes to whoever made each knock — read from the history
+     entries, not from assigned_to. A pin reassigned later must not
+     silently move yesterday's doors onto someone else's total. */
+  const byRep = new Map();
+  (pins || []).forEach((p) => {
+    (p.history || []).forEach((h) => {
+      const key = h.byId || h.by || "—";
+      const row = byRep.get(key) || { id: h.byId, name: h.by || "", doors: 0, contacts: 0, appointments: 0 };
+      row.doors++;
+      if (canvassStatus(statuses, h.status).contact) row.contacts++;
+      if (h.status === "appointment") row.appointments++;
+      if (!row.name && h.byId) {
+        const u = (users || []).find((x) => x.id === h.byId);
+        if (u) row.name = u.name;
+      }
+      byRep.set(key, row);
+    });
+  });
+  return [...byRep.values()].sort((a, b) => b.doors - a.doors);
+}
+
 /* The pin's own record. Split out of CanvassScreen because it is a
    different job: the map is about the street, this is about one door.
 
@@ -28810,6 +29003,19 @@ function CanvassPinSheet({ pin, statuses, users, onClose, onSave, onConvert, onO
       <Field label="Notes" hint="What was actually said. This is what the next person at this door reads.">
         <textarea style={{ ...inputStyle, minHeight: 84, resize: "vertical" }} value={notes}
           onChange={(e) => setNotes(e.target.value)} />
+      </Field>
+
+      {/* Whose door this is now. Reassigning does NOT move the knocks
+          already in the history onto the new rep — the scoreboard reads
+          who actually knocked, not who owns the pin today. */}
+      <Field label="Owned by" hint="Who works this door from here. Past knocks stay credited to whoever made them.">
+        <select style={selStyle} value={pin.assigned_to || ""} data-testid="assign-pin"
+          onChange={(e) => onSave({ assigned_to: e.target.value || null })}>
+          <option value="">Nobody in particular</option>
+          {(users || []).filter((u) => u.active !== false).map((u) => (
+            <option key={u.id} value={u.id}>{u.name}</option>
+          ))}
+        </select>
       </Field>
 
       {/* Storm history for THIS address — the whole reason a rep is on
@@ -28890,7 +29096,16 @@ function CanvassScreen({ onBack, currentUser, jobs, users, canvassStatuses, toas
   const tenantId = currentUser && currentUser.tenantId;
   const { list, loadBounds, savePin, removePin, err, setErr, loading } =
     useCanvassPins({ tenantId, ready: !!currentUser });
+  const [view, setView] = useState("map");
+  const [filters, setFilters] = useState({ statuses: [], rep: "", mineOnly: false, from: "", to: "", q: "" });
+  const [filterOpen, setFilterOpen] = useState(false);
   const statuses = canvassStatusList(canvassStatuses);
+  const meId = currentUser && currentUser.id;
+  const shown = filterCanvassPins(list, filters, meId);
+  const stats = canvassStats(shown, canvassStatuses);
+  const board = canvassLeaderboard(shown, canvassStatuses, users);
+  const filterCount = (filters.statuses || []).length + (filters.rep ? 1 : 0)
+    + (filters.mineOnly ? 1 : 0) + (filters.from ? 1 : 0) + (filters.to ? 1 : 0) + (filters.q ? 1 : 0);
   const selected = list.find((p) => p.id === selectedId) || null;
   const detailPin = list.find((p) => p.id === detail) || null;
 
@@ -28973,8 +29188,16 @@ function CanvassScreen({ onBack, currentUser, jobs, users, canvassStatuses, toas
               setCenter(c); setZoom(18); onMove({ center: c, zoom: 18 });
             }} />
         </Field>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Btn kind="ghost" small style={{ flex: 1 }} onClick={findMe}><MapPin size={13} /> Where I am</Btn>
+          <Btn kind={view === "list" ? "soft" : "ghost"} small data-testid="canvass-view-toggle"
+            onClick={() => setView(view === "map" ? "list" : "map")}>
+            {view === "map" ? "List" : "Map"}
+          </Btn>
+          <Btn kind={filterCount ? "soft" : "ghost"} small data-testid="canvass-filters"
+            onClick={() => setFilterOpen(true)}>
+            <Filter size={13} /> {filterCount ? `Filters · ${filterCount}` : "Filters"}
+          </Btn>
           {loading && <Chip tone="gray">Loading…</Chip>}
         </div>
       </Card>
@@ -28986,21 +29209,151 @@ function CanvassScreen({ onBack, currentUser, jobs, users, canvassStatuses, toas
         </Callout>
       )}
 
-      <Card style={{ marginTop: 12, padding: 0, overflow: "hidden" }}>
-        <div ref={mapWrapRef} style={{ height: 420, position: "relative" }}>
-          <CanvassMap
-            center={center} zoom={zoom} onMove={onMove}
-            pins={list} statuses={canvassStatuses} selectedId={selectedId}
-            onTapPin={(p) => setSelectedId(p.id)}
-            onTapMap={(lat, lng) => { setSelectedId(null); dropPin(lat, lng); }}
-            me={me} />
+      {view === "map" ? (
+        <>
+          <Card style={{ marginTop: 12, padding: 0, overflow: "hidden" }}>
+            <div ref={mapWrapRef} style={{ height: 420, position: "relative" }}>
+              <CanvassMap
+                center={center} zoom={zoom} onMove={onMove}
+                pins={shown} statuses={canvassStatuses} selectedId={selectedId}
+                onTapPin={(p) => setSelectedId(p.id)}
+                onTapMap={(lat, lng) => { setSelectedId(null); dropPin(lat, lng); }}
+                me={me} />
+            </div>
+          </Card>
+          <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 10 }}>
+            Tap anywhere to drop a pin at that house — tapping within {PIN_SNAP_METRES} m of an existing pin
+            opens that one instead, so two reps on the same street don't double up. Pins are shared with the whole team.
+            {filterCount > 0 && " Filters are hiding some pins right now."}
+          </div>
+        </>
+      ) : (
+        /* The list is not a lesser map. It is what a rep uses in a
+           moving truck, on a bad signal, or when working a callback
+           list at 6pm — sorted by the thing that matters then, which
+           is who was last spoken to. */
+        <Card style={{ marginTop: 12 }} testId="canvass-list">
+          <CardTitle right={<Chip tone="gray">{shown.length}</Chip>}>Doors</CardTitle>
+          {shown.length === 0 ? (
+            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+              {list.length === 0
+                ? "No pins in this area yet. Switch to the map and tap a house to start."
+                : "No pins match these filters."}
+            </div>
+          ) : [...shown].sort((a, b) => String(b.knocked_at || "").localeCompare(String(a.knocked_at || ""))).map((p, i) => {
+            const st = canvassStatus(canvassStatuses, p.status);
+            return (
+              <button key={p.id} data-testid={`row-${p.id}`}
+                onClick={() => { setSelectedId(p.id); setCenter({ lat: p.lat, lng: p.lng }); setDetail(p.id); }}
+                style={{
+                  display: "flex", gap: 10, alignItems: "center", width: "100%", textAlign: "left",
+                  border: "none", background: "none", cursor: "pointer", fontFamily: "inherit",
+                  padding: "10px 0", borderTop: i ? `1px solid ${S.line}` : "none",
+                }}>
+                <span style={{ width: 11, height: 11, borderRadius: "50%", background: st.color, flexShrink: 0 }} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: S.ink }}>
+                    {p.address || "Dropped pin"}
+                  </span>
+                  <span style={{ display: "block", fontSize: 12, color: S.sub, marginTop: 2 }}>
+                    {st.name}
+                    {(p.prospect || {}).name ? ` · ${p.prospect.name}` : ""}
+                    {p.knocked_at ? ` · ${String(p.knocked_at).slice(0, 10)}` : " · never knocked"}
+                  </span>
+                </span>
+                {p.job_id && <Chip tone="green">Job</Chip>}
+              </button>
+            );
+          })}
+        </Card>
+      )}
+
+      {/* Counted where a rep can see it, against the right denominator. */}
+      <Card style={{ marginTop: 12 }} testId="canvass-scoreboard">
+        <CardTitle right={filterCount ? <Chip tone="blue">filtered</Chip> : null}>Scoreboard</CardTitle>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 10 }}>
+          {[["Doors", stats.doors], ["Answered", stats.contacts], ["Appointments", stats.appointments],
+            ["Sold", stats.sold], ["Became jobs", stats.converted]].map(([label, n]) => (
+            <div key={label} style={{ background: S.soft, borderRadius: 10, padding: "10px 12px" }}>
+              <div style={{ fontSize: 19, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{n}</div>
+              <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2 }}>{label}</div>
+            </div>
+          ))}
         </div>
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
+          <b>{stats.contactRate}%</b> of doors were answered, and <b>{stats.apptRate}%</b> of the
+          people who answered set an appointment. The second number is the one that says something about
+          selling — the first mostly says who was home.
+        </div>
+        {board.length > 1 && (
+          <div style={{ marginTop: 12 }}>
+            {board.map((r, i) => (
+              <div key={r.id || r.name || i} style={{ display: "flex", gap: 10, alignItems: "baseline", padding: "7px 0", borderTop: `1px solid ${S.line}` }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600 }}>{r.name || "Unattributed"}</span>
+                <span style={{ fontSize: 12.5, color: S.sub, fontVariantNumeric: "tabular-nums" }}>
+                  {r.doors} doors · {r.contacts} answered · {r.appointments} appts
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
-      <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 10 }}>
-        Tap anywhere to drop a pin at that house — tapping within {PIN_SNAP_METRES} m of an existing pin
-        opens that one instead, so two reps on the same street don't double up. Pins are shared with the whole team.
-      </div>
+      <Sheet open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter doors"
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} data-testid="clear-filters"
+              onClick={() => setFilters({ statuses: [], rep: "", mineOnly: false, from: "", to: "", q: "" })}>
+              Clear
+            </Btn>
+            <Btn style={{ flex: 1 }} onClick={() => setFilterOpen(false)}>Show {shown.length}</Btn>
+          </div>
+        }>
+        <Field label="Search" hint="Address, name, phone or anything in the notes.">
+          <input style={inputStyle} value={filters.q} placeholder="Oak St, or Dana"
+            onChange={(e) => setFilters({ ...filters, q: e.target.value })} />
+        </Field>
+        <Field label="Status">
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+            {statuses.map((s) => {
+              const on = (filters.statuses || []).includes(s.id);
+              return (
+                <button key={s.id} type="button"
+                  onClick={() => setFilters({
+                    ...filters,
+                    statuses: on ? filters.statuses.filter((x) => x !== s.id) : [...(filters.statuses || []), s.id],
+                  })}
+                  style={{
+                    border: `1.5px solid ${on ? s.color : S.line}`, background: on ? s.color : S.card,
+                    color: on ? "#fff" : S.ink, borderRadius: 999, padding: "7px 13px",
+                    fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                  }}>{s.name}</button>
+              );
+            })}
+          </div>
+        </Field>
+        <Field label="Rep">
+          <select style={selStyle} value={filters.rep} onChange={(e) => setFilters({ ...filters, rep: e.target.value })}>
+            <option value="">Anyone</option>
+            {(users || []).filter((u) => u.active !== false).map((u) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 9, fontSize: 13.5, cursor: "pointer" }}>
+            <input type="checkbox" checked={filters.mineOnly}
+              onChange={(e) => setFilters({ ...filters, mineOnly: e.target.checked })} />
+            Only doors I dropped or own
+          </label>
+        </Field>
+        <Field label="Knocked between" hint="A door nobody has knocked has no date, so a date range hides it.">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <input type="date" style={dateInputStyle} value={filters.from}
+              onChange={(e) => setFilters({ ...filters, from: e.target.value })} />
+            <input type="date" style={dateInputStyle} value={filters.to}
+              onChange={(e) => setFilters({ ...filters, to: e.target.value })} />
+          </div>
+        </Field>
+      </Sheet>
 
       {busy && <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8 }}>Looking up that address…</div>}
 
@@ -29114,6 +29467,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["vendors", Building2, "Vendors & suppliers", "Material suppliers and account details"],
       ["branding", Settings, "Company branding", "Name, logo, colors, what prints on documents"],
       ["workflow", ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
+      ["canvassstatuses", MapPin, "Canvassing dispositions", "What reps mark at a door, and the map colors"],
       ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam, Google reviews"],
       ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
       canManageFeatures(currentUser) && ["admin", Shield, "Admin controls", "Feature switches, security and the audit log"],
@@ -31344,6 +31698,9 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <CanvassScreen onBack={() => setNav("more")} currentUser={liveUser} jobs={jobs} users={users}
           canvassStatuses={canvassStatuses} toast={toast}
           onCreateLeadFromPin={createLeadFromCanvassPin} onOpenJob={openJobScreen} />
+      ) : nav === "canvassstatuses" ? (
+        <CanvassStatusEditor statuses={canvassStatuses} setStatuses={setCanvassStatuses}
+          onBack={() => setNav("more")} toast={toast} currentUser={liveUser} />
       ) : nav === "claims" ? (
         <ClaimsDashboard jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
       ) : nav === "crewpay" ? (
