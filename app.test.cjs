@@ -24564,7 +24564,7 @@ function PersonPicker({ open, onClose, title = "Choose people", users, excludeNa
     footer
   ] });
 }
-function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg }) {
+function ChatThread({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg, conversationId = null }) {
   const [txt, setTxt] = (0, import_react.useState)("");
   const [mentionOpen, setMentionOpen] = (0, import_react.useState)(false);
   const [tagOpen, setTagOpen] = (0, import_react.useState)(false);
@@ -24594,7 +24594,8 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
       text: t,
       mentions,
       jobId: tagged || null,
-      reactions: {}
+      reactions: {},
+      conversationId
     }]);
     setTxt("");
     setTagged(null);
@@ -29157,7 +29158,147 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%", marginTop: 8 }, onClick: onLogout, children: "Sign out" })
   ] });
 }
-function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat, onDeleteMsg, onSendQueued, integrations = {} }) {
+function ConversationList({ conversations, conversationMembers, activeConversationId, onSelect, users, currentUser, onCreateChannel, onStartDm }) {
+  const [creating, setCreating] = (0, import_react.useState)(null);
+  const [name, setName] = (0, import_react.useState)("");
+  const [topic, setTopic] = (0, import_react.useState)("");
+  const [makePrivate, setMakePrivate] = (0, import_react.useState)(false);
+  const [dmPicked, setDmPicked] = (0, import_react.useState)([]);
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const me = currentUser && currentUser.id;
+  const channels = (conversations || []).filter((c) => c.kind === "channel").sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const dms = (conversations || []).filter((c) => c.kind === "dm");
+  const dmLabel = (c) => {
+    const otherIds = (conversationMembers || []).filter((m) => m.conversationId === c.id && m.userId !== me).map((m) => m.userId);
+    const names = otherIds.map((id) => {
+      const u = (users || []).find((x) => x.id === id);
+      return u ? u.name : "Someone";
+    });
+    return names.length ? names.join(", ") : "Direct message";
+  };
+  const closeCreate = () => {
+    setCreating(null);
+    setName("");
+    setTopic("");
+    setMakePrivate(false);
+    setDmPicked([]);
+  };
+  const submitChannel = async () => {
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    try {
+      await onCreateChannel(name.trim(), topic.trim(), makePrivate);
+      closeCreate();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const submitDm = async () => {
+    if (!dmPicked.length || busy) return;
+    setBusy(true);
+    try {
+      await onStartDm(dmPicked.map((u) => u.id));
+      closeCreate();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const pillStyle = (active) => ({
+    flexShrink: 0,
+    border: `1.5px solid ${active ? T.accent : S.line}`,
+    background: active ? T.accentSoft : "#fff",
+    color: active ? T.accent : S.ink,
+    borderRadius: 999,
+    padding: "8px 13px",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer",
+    whiteSpace: "nowrap"
+  });
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 12 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginBottom: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => setCreating("channel"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+        " Channel"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => setCreating("dm"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+        " Direct message"
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }, children: [
+      channels.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onSelect(c.id), style: pillStyle(c.id === activeConversationId), children: [
+        "# ",
+        c.name,
+        c.isPrivate ? " \u{1F512}" : ""
+      ] }, c.id)),
+      dms.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onSelect(c.id), style: pillStyle(c.id === activeConversationId), children: dmLabel(c) }, c.id))
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+      Sheet,
+      {
+        open: creating === "channel",
+        onClose: closeCreate,
+        title: "Create a channel",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, disabled: !name.trim() || busy, onClick: submitChannel, children: busy ? "Creating\u2026" : "Create channel" }),
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Name", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: name, onChange: (e) => setName(e.target.value), placeholder: "dispatch" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Topic (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: topic, onChange: (e) => setTopic(e.target.value), placeholder: "What's this channel for?" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14 }, children: "Make private \u2014 only people you add can see it" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setMakePrivate(!makePrivate), style: {
+              width: 46,
+              height: 27,
+              borderRadius: 99,
+              border: "none",
+              cursor: "pointer",
+              background: makePrivate ? T.accent : "#D6D9DE",
+              position: "relative",
+              flexShrink: 0
+            }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: makePrivate ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" } }) })
+          ] })
+        ]
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      PersonPicker,
+      {
+        open: creating === "dm",
+        onClose: closeCreate,
+        title: "Start a direct message",
+        users,
+        excludeName: currentUser && currentUser.name,
+        multi: true,
+        selectedIds: dmPicked.map((u) => u.id),
+        onPick: (u) => setDmPicked((prev) => prev.some((x) => x.id === u.id) ? prev.filter((x) => x.id !== u.id) : [...prev, u]),
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%", marginTop: 8 }, disabled: !dmPicked.length || busy, onClick: submitDm, children: busy ? "Starting\u2026" : `Start (${dmPicked.length})` })
+      }
+    )
+  ] });
+}
+function Inbox({
+  jobs,
+  onOpenJob,
+  onCompose,
+  chatMsgs,
+  setChatMsgs,
+  users,
+  currentUser,
+  unreadChat = 0,
+  onSeenChat,
+  onDeleteMsg,
+  onSendQueued,
+  integrations = {},
+  conversations = [],
+  conversationMembers = [],
+  activeConversationId = null,
+  onSelectConversation = () => {
+  },
+  onCreateChannel = () => {
+  },
+  onStartDm = () => {
+  }
+}) {
   const [pane, setPane] = (0, import_react.useState)("team");
   const [filter, setFilter] = (0, import_react.useState)("All");
   const [sendingId, setSendingId] = (0, import_react.useState)(null);
@@ -29198,19 +29339,40 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
       label,
       id === "team" && unreadChat > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { background: "#B3261E", color: "#fff", borderRadius: 99, fontSize: 10.5, fontWeight: 800, padding: "1px 6px" }, children: unreadChat })
     ] }, id)) }),
-    pane === "team" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-      TeamChat,
-      {
-        msgs: chatMsgs,
-        setMsgs: setChatMsgs,
-        users,
-        jobs,
-        currentUser,
-        onOpenJob,
-        embedded: true,
-        onDeleteMsg
-      }
-    ) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    pane === "team" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        ConversationList,
+        {
+          conversations,
+          conversationMembers,
+          activeConversationId,
+          onSelect: onSelectConversation,
+          users,
+          currentUser,
+          onCreateChannel,
+          onStartDm
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        ChatThread,
+        {
+          msgs: (chatMsgs || []).filter((m) => m.conversationId === activeConversationId),
+          setMsgs: (updater) => setChatMsgs((all2) => {
+            const mine = (all2 || []).filter((m) => m.conversationId === activeConversationId);
+            const others = (all2 || []).filter((m) => m.conversationId !== activeConversationId);
+            const next = typeof updater === "function" ? updater(mine) : updater;
+            return [...others, ...next].sort((a, b) => (a.at || "").localeCompare(b.at || ""));
+          }),
+          users,
+          jobs,
+          currentUser,
+          onOpenJob,
+          embedded: true,
+          onDeleteMsg,
+          conversationId: activeConversationId
+        }
+      )
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginBottom: 12 }, children: ["All", "Sent", "Queued", "Viewed"].map((fl) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setFilter(fl), style: {
         border: `1.5px solid ${filter === fl ? T.accent : S.line}`,
         background: filter === fl ? T.accentSoft : "#fff",
@@ -29369,6 +29531,9 @@ function useDbSync(st) {
     setActivity,
     chatMsgs,
     setChatMsgs,
+    conversations,
+    setConversations,
+    setConversationMembers,
     orgPack,
     unpackOrg
   } = st;
@@ -29439,9 +29604,46 @@ function useDbSync(st) {
           acts.forEach((a) => persistedActivity.current.add(a.id));
           setActivity(acts);
         }
+        if (tenantId) {
+          let { data: convRows } = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
+          if (alive && (!convRows || !convRows.length)) {
+            const generalId = `general-${tenantId}`;
+            const { error: genErr } = await db.from("crm_chat_conversations").insert({
+              id: generalId,
+              tenant_id: tenantId,
+              kind: "channel",
+              name: "general",
+              topic: "Everyone at the company",
+              is_private: false,
+              created_by: null
+            });
+            if (!genErr) {
+              const again = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
+              convRows = again.data;
+            }
+          }
+          if (alive && convRows) {
+            setConversations(convRows.map((r) => ({
+              id: r.id,
+              kind: r.kind,
+              name: r.name,
+              topic: r.topic,
+              isPrivate: !!r.is_private,
+              createdBy: r.created_by,
+              createdAt: r.created_at
+            })));
+            const privateIds = convRows.filter((r) => r.is_private).map((r) => r.id);
+            if (privateIds.length) {
+              const { data: memRows } = await db.from("crm_chat_members").select("*").in("conversation_id", privateIds);
+              if (alive && memRows) {
+                setConversationMembers(memRows.map((r) => ({ conversationId: r.conversation_id, userId: r.user_id })));
+              }
+            }
+          }
+        }
         const { data: chatRows } = await db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
         if (alive && chatRows) {
-          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null }));
+          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, conversationId: r.conversation_id || null }));
           msgs.forEach((m) => persistedChat.current.add(m.id));
           setChatMsgs(msgs);
         }
@@ -29462,7 +29664,7 @@ function useDbSync(st) {
       const r = payload.new;
       if (persistedChat.current.has(r.id)) return;
       persistedChat.current.add(r.id);
-      setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev : [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null }]);
+      setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev : [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, conversationId: r.conversation_id || null }]);
     }).on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_activity" }, (payload) => {
       const r = payload.new;
       if (persistedActivity.current.has(r.id)) return;
@@ -29579,7 +29781,8 @@ function useDbSync(st) {
       body: m.text,
       mentions: m.mentions || [],
       job_id: m.jobId || null,
-      reactions: m.reactions || {}
+      reactions: m.reactions || {},
+      conversation_id: m.conversationId || null
     }))).then(({ error }) => {
       if (error) fresh.forEach((m) => persistedChat.current.delete(m.id));
     });
@@ -29762,6 +29965,9 @@ function SupremeCRM() {
   const [docTemplates, setDocTemplates] = (0, import_react.useState)({ notes: [], terms: [], scope: [] });
   const [activity, setActivity] = (0, import_react.useState)(() => liveDb() ? [] : buildSeedActivity());
   const [chatMsgs, setChatMsgs] = (0, import_react.useState)([]);
+  const [conversations, setConversations] = (0, import_react.useState)([]);
+  const [activeConversationId, setActiveConversationId] = (0, import_react.useState)(null);
+  const [conversationMembers, setConversationMembers] = (0, import_react.useState)([]);
   const [announcements, setAnnouncements] = (0, import_react.useState)([]);
   const [calls, setCalls] = (0, import_react.useState)([]);
   const [chatSeenCount, setChatSeenCountRaw] = (0, import_react.useState)(0);
@@ -29990,6 +30196,9 @@ function SupremeCRM() {
     setActivity,
     chatMsgs,
     setChatMsgs,
+    conversations,
+    setConversations,
+    setConversationMembers,
     orgPack,
     unpackOrg,
     orgDeps,
@@ -29997,6 +30206,12 @@ function SupremeCRM() {
     stagesRef: stages,
     usersRef: users
   });
+  (0, import_react.useEffect)(() => {
+    if (activeConversationId || !conversations.length) return;
+    const tenantId = currentUser && currentUser.tenantId;
+    const general = tenantId && conversations.find((c) => c.id === `general-${tenantId}`);
+    setActiveConversationId((general || conversations[0]).id);
+  }, [conversations, activeConversationId]);
   T.primary = brand.primary || "#28373E";
   T.accent = brand.accent || "#0A9E98";
   T.accentSoft = brand.accentSoft && brand.accentSoftCustom ? brand.accentSoft : softOf(T.accent);
@@ -30053,6 +30268,54 @@ function SupremeCRM() {
   const toast = (msg) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 2200);
+  };
+  const startConversation = async (kind, name, topic, isPrivate, memberIds) => {
+    const db = DB();
+    if (!db || !currentUser) return null;
+    if (!isPrivate) {
+      const id2 = uid("conv");
+      const { error: error2 } = await db.from("crm_chat_conversations").insert({
+        id: id2,
+        tenant_id: currentUser.tenantId,
+        kind,
+        name: name || null,
+        topic: topic || null,
+        is_private: false,
+        created_by: currentUser.id
+      });
+      if (error2) {
+        toast("Couldn't create channel \u2014 " + error2.message);
+        return null;
+      }
+      setConversations((prev) => [...prev, { id: id2, kind, name: name || null, topic: topic || null, isPrivate: false, createdBy: currentUser.id, createdAt: (/* @__PURE__ */ new Date()).toISOString() }]);
+      return id2;
+    }
+    const { data: id, error } = await db.rpc("start_conversation", {
+      p_kind: kind,
+      p_name: name || null,
+      p_topic: topic || null,
+      p_is_private: true,
+      p_member_ids: memberIds || []
+    });
+    if (error) {
+      toast("Couldn't start \u2014 " + error.message);
+      return null;
+    }
+    setConversations((prev) => prev.some((c) => c.id === id) ? prev : [...prev, { id, kind, name: name || null, topic: topic || null, isPrivate: true, createdBy: currentUser.id, createdAt: (/* @__PURE__ */ new Date()).toISOString() }]);
+    setConversationMembers((prev) => {
+      const mine = [currentUser.id, ...memberIds || []];
+      const additions = mine.filter((uid2) => !prev.some((m) => m.conversationId === id && m.userId === uid2)).map((uid2) => ({ conversationId: id, userId: uid2 }));
+      return [...prev, ...additions];
+    });
+    return id;
+  };
+  const createChannel = async (name, topic, isPrivate) => {
+    const id = await startConversation("channel", name, topic, isPrivate, []);
+    if (id) setActiveConversationId(id);
+  };
+  const startDm = async (memberIds) => {
+    const id = await startConversation("dm", null, null, true, memberIds);
+    if (id) setActiveConversationId(id);
   };
   const gmailCbDone = (0, import_react.useRef)(false);
   (0, import_react.useEffect)(() => {
@@ -30679,7 +30942,13 @@ function SupremeCRM() {
           });
         },
         integrations,
-        onSendQueued: sendQueuedMessage
+        onSendQueued: sendQueuedMessage,
+        conversations,
+        conversationMembers,
+        activeConversationId,
+        onSelectConversation: setActiveConversationId,
+        onCreateChannel: createChannel,
+        onStartDm: startDm
       }
     ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand, onNav: (id) => {
       if (id === "password") return setChangePwOpen(true);

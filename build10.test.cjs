@@ -45,7 +45,10 @@ ok(src.includes('[["team", "Team chat"], ["customers", "Customers"]]'), "inbox h
 ok(src.includes("unreadChat"), "inbox tracks unread team messages");
 ok(src.includes('label="Inbox" badge={Math.max(0, chatMsgs.length - chatSeenCount)}'), "nav badge counts unread chat");
 ok(src.includes('"Schedule", "Appointments'), "More menu leads with a Schedule entry (calendar lives here)");
-ok(src.includes("embedded = false, onDeleteMsg }"), "TeamChat is embeddable and can delete");
+/* Build 117 renamed TeamChat to ChatThread and added a conversationId
+   prop after onDeleteMsg, so match on the still-true substring rather
+   than the now-stale exact-signature-tail string. */
+ok(src.includes("embedded = false, onDeleteMsg, conversationId = null }"), "ChatThread (formerly TeamChat) is embeddable and can delete");
 ok(!src.includes('onBack={() => { setChatSeenCount(chatMsgs.length); setNav("more"); }} />'),
   "standalone chat route no longer renders a separate screen");
 

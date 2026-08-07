@@ -23590,7 +23590,7 @@ function PersonPicker({ open, onClose, title = "Choose people", users, excludeNa
   );
 }
 
-function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg }) {
+function ChatThread({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg, conversationId = null }) {
   const [txt, setTxt] = useState("");
   const [mentionOpen, setMentionOpen] = useState(false);
   const [tagOpen, setTagOpen] = useState(false);
@@ -23618,7 +23618,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
     const mentions = (users || []).filter((u) => u && u.name && t.includes(`@${u.name}`)).map((u) => u.name);
     setMsgs([...(msgs || []), {
       id: uid("cm"), by: me, at: new Date().toISOString().slice(0, 16).replace("T", " "),
-      text: t, mentions, jobId: tagged || null, reactions: {},
+      text: t, mentions, jobId: tagged || null, reactions: {}, conversationId,
     }]);
     setTxt(""); setTagged(null); setMentionOpen(false); setEmojiOpen(false);
   };
@@ -27776,7 +27776,95 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
   );
 }
 
-function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat, onDeleteMsg, onSendQueued, integrations = {} }) {
+/* The channel/DM switcher above ChatThread — a horizontal strip of
+   pills (channels first, then DMs by the other participant's name),
+   plus "+ Channel" and "+ Direct message" actions. DMs resolve their
+   display name from conversationMembers + users rather than storing
+   one, since a DM's "name" is just whoever else is in it. */
+function ConversationList({ conversations, conversationMembers, activeConversationId, onSelect, users, currentUser, onCreateChannel, onStartDm }) {
+  const [creating, setCreating] = useState(null); // null | "channel" | "dm"
+  const [name, setName] = useState("");
+  const [topic, setTopic] = useState("");
+  const [makePrivate, setMakePrivate] = useState(false);
+  const [dmPicked, setDmPicked] = useState([]);
+  const [busy, setBusy] = useState(false);
+
+  const me = currentUser && currentUser.id;
+  const channels = (conversations || []).filter((c) => c.kind === "channel").sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const dms = (conversations || []).filter((c) => c.kind === "dm");
+
+  const dmLabel = (c) => {
+    const otherIds = (conversationMembers || []).filter((m) => m.conversationId === c.id && m.userId !== me).map((m) => m.userId);
+    const names = otherIds.map((id) => { const u = (users || []).find((x) => x.id === id); return u ? u.name : "Someone"; });
+    return names.length ? names.join(", ") : "Direct message";
+  };
+
+  const closeCreate = () => { setCreating(null); setName(""); setTopic(""); setMakePrivate(false); setDmPicked([]); };
+
+  const submitChannel = async () => {
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    try { await onCreateChannel(name.trim(), topic.trim(), makePrivate); closeCreate(); }
+    finally { setBusy(false); }
+  };
+  const submitDm = async () => {
+    if (!dmPicked.length || busy) return;
+    setBusy(true);
+    try { await onStartDm(dmPicked.map((u) => u.id)); closeCreate(); }
+    finally { setBusy(false); }
+  };
+
+  const pillStyle = (active) => ({
+    flexShrink: 0, border: `1.5px solid ${active ? T.accent : S.line}`,
+    background: active ? T.accentSoft : "#fff", color: active ? T.accent : S.ink,
+    borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap",
+  });
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <Btn kind="ghost" small onClick={() => setCreating("channel")}><Plus size={13} /> Channel</Btn>
+        <Btn kind="ghost" small onClick={() => setCreating("dm")}><Plus size={13} /> Direct message</Btn>
+      </div>
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+        {channels.map((c) => (
+          <button key={c.id} onClick={() => onSelect(c.id)} style={pillStyle(c.id === activeConversationId)}>
+            # {c.name}{c.isPrivate ? " 🔒" : ""}
+          </button>
+        ))}
+        {dms.map((c) => (
+          <button key={c.id} onClick={() => onSelect(c.id)} style={pillStyle(c.id === activeConversationId)}>
+            {dmLabel(c)}
+          </button>
+        ))}
+      </div>
+
+      <Sheet open={creating === "channel"} onClose={closeCreate} title="Create a channel"
+        footer={<Btn style={{ width: "100%" }} disabled={!name.trim() || busy} onClick={submitChannel}>{busy ? "Creating…" : "Create channel"}</Btn>}>
+        <Field label="Name"><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder="dispatch" /></Field>
+        <Field label="Topic (optional)"><input style={inputStyle} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="What's this channel for?" /></Field>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0" }}>
+          <span style={{ fontSize: 14 }}>Make private — only people you add can see it</span>
+          <button onClick={() => setMakePrivate(!makePrivate)} style={{
+            width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer",
+            background: makePrivate ? T.accent : "#D6D9DE", position: "relative", flexShrink: 0,
+          }}>
+            <span style={{ position: "absolute", top: 3, left: makePrivate ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" }} />
+          </button>
+        </div>
+      </Sheet>
+
+      <PersonPicker open={creating === "dm"} onClose={closeCreate} title="Start a direct message"
+        users={users} excludeName={currentUser && currentUser.name} multi
+        selectedIds={dmPicked.map((u) => u.id)}
+        onPick={(u) => setDmPicked((prev) => (prev.some((x) => x.id === u.id) ? prev.filter((x) => x.id !== u.id) : [...prev, u]))}
+        footer={<Btn style={{ width: "100%", marginTop: 8 }} disabled={!dmPicked.length || busy} onClick={submitDm}>{busy ? "Starting…" : `Start (${dmPicked.length})`}</Btn>} />
+    </div>
+  );
+}
+
+function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat, onDeleteMsg, onSendQueued, integrations = {},
+  conversations = [], conversationMembers = [], activeConversationId = null, onSelectConversation = () => {}, onCreateChannel = () => {}, onStartDm = () => {} }) {
   /* Team chat and customer messages are both messages, so they live
      under one Inbox rather than two destinations. Team opens first —
      it is the one with unread counts attached to the nav badge. */
@@ -27816,8 +27904,22 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
       </div>
 
       {pane === "team" ? (
-        <TeamChat msgs={chatMsgs} setMsgs={setChatMsgs} users={users} jobs={jobs}
-          currentUser={currentUser} onOpenJob={onOpenJob} embedded onDeleteMsg={onDeleteMsg} />
+        <>
+          <ConversationList conversations={conversations} conversationMembers={conversationMembers}
+            activeConversationId={activeConversationId} onSelect={onSelectConversation}
+            users={users} currentUser={currentUser}
+            onCreateChannel={onCreateChannel} onStartDm={onStartDm} />
+          <ChatThread
+            msgs={(chatMsgs || []).filter((m) => m.conversationId === activeConversationId)}
+            setMsgs={(updater) => setChatMsgs((all) => {
+              const mine = (all || []).filter((m) => m.conversationId === activeConversationId);
+              const others = (all || []).filter((m) => m.conversationId !== activeConversationId);
+              const next = typeof updater === "function" ? updater(mine) : updater;
+              return [...others, ...next].sort((a, b) => (a.at || "").localeCompare(b.at || ""));
+            })}
+            users={users} jobs={jobs} currentUser={currentUser} onOpenJob={onOpenJob}
+            embedded onDeleteMsg={onDeleteMsg} conversationId={activeConversationId} />
+        </>
       ) : (
       <>
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
@@ -28001,6 +28103,7 @@ function useDbSync(st) {
     ready, isMoneyBlocked, userName, tenantId,
     jobs, setJobs, appointments, setAppointments,
     activity, setActivity, chatMsgs, setChatMsgs,
+    conversations, setConversations, setConversationMembers,
     orgPack, unpackOrg,
   } = st;
   const [hydrated, setHydrated] = useState(!liveDb());
@@ -28099,9 +28202,46 @@ function useDbSync(st) {
           setActivity(acts);
         }
 
+        /* Conversations (channels + DMs) this seat can see — RLS on
+           crm_chat_conversations already limits this to open channels
+           plus any private channel/DM the seat is a member of. A
+           brand-new tenant with no migrated history has zero rows
+           here (migration 031's backfill only ran for tenants that
+           already had crm_chat rows), so bootstrap #general the same
+           way the migration itself does — same id convention
+           (general-<tenantId>) — so both paths converge on one
+           channel instead of a tenant ever ending up with none. */
+        if (tenantId) {
+          let { data: convRows } = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
+          if (alive && (!convRows || !convRows.length)) {
+            const generalId = `general-${tenantId}`;
+            const { error: genErr } = await db.from("crm_chat_conversations").insert({
+              id: generalId, tenant_id: tenantId, kind: "channel", name: "general",
+              topic: "Everyone at the company", is_private: false, created_by: null,
+            });
+            if (!genErr) {
+              const again = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
+              convRows = again.data;
+            }
+          }
+          if (alive && convRows) {
+            setConversations(convRows.map((r) => ({
+              id: r.id, kind: r.kind, name: r.name, topic: r.topic,
+              isPrivate: !!r.is_private, createdBy: r.created_by, createdAt: r.created_at,
+            })));
+            const privateIds = convRows.filter((r) => r.is_private).map((r) => r.id);
+            if (privateIds.length) {
+              const { data: memRows } = await db.from("crm_chat_members").select("*").in("conversation_id", privateIds);
+              if (alive && memRows) {
+                setConversationMembers(memRows.map((r) => ({ conversationId: r.conversation_id, userId: r.user_id })));
+              }
+            }
+          }
+        }
+
         const { data: chatRows } = await db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
         if (alive && chatRows) {
-          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null }));
+          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, conversationId: r.conversation_id || null }));
           msgs.forEach((m) => persistedChat.current.add(m.id));
           setChatMsgs(msgs);
         }
@@ -28125,7 +28265,7 @@ function useDbSync(st) {
         if (persistedChat.current.has(r.id)) return;
         persistedChat.current.add(r.id);
         setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev :
-          [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null }]);
+          [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, conversationId: r.conversation_id || null }]);
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_activity" }, (payload) => {
         const r = payload.new;
@@ -28238,7 +28378,7 @@ function useDbSync(st) {
     fresh.forEach((m) => persistedChat.current.add(m.id));
     db.from("crm_chat").insert(fresh.map((m) => ({
       id: m.id, by_name: m.by, body: m.text, mentions: m.mentions || [], job_id: m.jobId || null,
-      reactions: m.reactions || {},
+      reactions: m.reactions || {}, conversation_id: m.conversationId || null,
     }))).then(({ error }) => { if (error) fresh.forEach((m) => persistedChat.current.delete(m.id)); });
   }, [chatMsgs, ready, hydrated]);
 
@@ -28454,6 +28594,19 @@ export default function SupremeCRM() {
   const [docTemplates, setDocTemplates] = useState({ notes: [], terms: [], scope: [] });
   const [activity, setActivity] = useState(() => (liveDb() ? [] : buildSeedActivity()));
   const [chatMsgs, setChatMsgs] = useState([]);
+  /* Every channel/DM the signed-in seat can see — open channels
+     company-wide, plus any private channel/DM they're a member of
+     (crm_chat_conversations RLS already does that filtering). Starts
+     empty and is populated by useDbSync's hydrate; activeConversationId
+     defaults to the tenant's #general once conversations load. */
+  const [conversations, setConversations] = useState([]);
+  const [activeConversationId, setActiveConversationId] = useState(null);
+  /* Membership rows for this seat's PRIVATE conversations only (DMs and
+     any locked-down channel) — just enough to resolve "who's on this
+     DM" into real names for ConversationList. Open channels need no
+     membership row to read/post, so there's nothing useful to fetch
+     for them here. */
+  const [conversationMembers, setConversationMembers] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [calls, setCalls] = useState([]);
   /* How many of `chatMsgs` this seat has already seen — drives both the
@@ -28659,9 +28812,20 @@ export default function SupremeCRM() {
     userName: syncUserName, tenantId: currentUser && currentUser.tenantId,
     jobs, setJobs, appointments, setAppointments,
     activity, setActivity, chatMsgs, setChatMsgs,
+    conversations, setConversations, setConversationMembers,
     orgPack, unpackOrg, orgDeps,
     brandRef: brand, stagesRef: stages, usersRef: users,
   });
+
+  /* Land on #general (or whatever conversation loaded first) the
+     moment the conversation list is known, so Team chat never opens
+     to an empty picker with nothing selected. */
+  useEffect(() => {
+    if (activeConversationId || !conversations.length) return;
+    const tenantId = currentUser && currentUser.tenantId;
+    const general = tenantId && conversations.find((c) => c.id === `general-${tenantId}`);
+    setActiveConversationId((general || conversations[0]).id);
+  }, [conversations, activeConversationId]); // eslint-disable-line
 
   /* Copy brand colors into the live theme before anything renders. */
   T.primary = brand.primary || "#28373E";
@@ -28737,6 +28901,48 @@ export default function SupremeCRM() {
   }, [chatMsgs]);
 
   const toast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(""), 2200); };
+
+  /* Creates a channel or DM and returns its new id, or null on failure.
+     Open channels (the default) are a plain insert — conv_insert's RLS
+     already restricts that path to non-private rows. Private channels
+     and every DM must go through start_conversation() instead, since
+     writing OTHER people's membership rows can't be done through a
+     per-row insert policy (see migration 031). */
+  const startConversation = async (kind, name, topic, isPrivate, memberIds) => {
+    const db = DB();
+    if (!db || !currentUser) return null;
+    if (!isPrivate) {
+      const id = uid("conv");
+      const { error } = await db.from("crm_chat_conversations").insert({
+        id, tenant_id: currentUser.tenantId, kind, name: name || null, topic: topic || null,
+        is_private: false, created_by: currentUser.id,
+      });
+      if (error) { toast("Couldn't create channel — " + error.message); return null; }
+      setConversations((prev) => [...prev, { id, kind, name: name || null, topic: topic || null, isPrivate: false, createdBy: currentUser.id, createdAt: new Date().toISOString() }]);
+      return id;
+    }
+    const { data: id, error } = await db.rpc("start_conversation", {
+      p_kind: kind, p_name: name || null, p_topic: topic || null, p_is_private: true, p_member_ids: memberIds || [],
+    });
+    if (error) { toast("Couldn't start — " + error.message); return null; }
+    setConversations((prev) => (prev.some((c) => c.id === id) ? prev : [...prev, { id, kind, name: name || null, topic: topic || null, isPrivate: true, createdBy: currentUser.id, createdAt: new Date().toISOString() }]));
+    setConversationMembers((prev) => {
+      const mine = [currentUser.id, ...(memberIds || [])];
+      const additions = mine
+        .filter((uid2) => !prev.some((m) => m.conversationId === id && m.userId === uid2))
+        .map((uid2) => ({ conversationId: id, userId: uid2 }));
+      return [...prev, ...additions];
+    });
+    return id;
+  };
+  const createChannel = async (name, topic, isPrivate) => {
+    const id = await startConversation("channel", name, topic, isPrivate, []);
+    if (id) setActiveConversationId(id);
+  };
+  const startDm = async (memberIds) => {
+    const id = await startConversation("dm", null, null, true, memberIds);
+    if (id) setActiveConversationId(id);
+  };
 
   /* Finish the Gmail OAuth handshake when Google redirects back with
      ?state=gmail&code=... — exchange the code, mark the seat connected, and
@@ -29309,7 +29515,10 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             if (db) db.from("crm_chat").delete().eq("id", id).then(() => {}, () => {});
           }}
           integrations={integrations}
-          onSendQueued={sendQueuedMessage} />
+          onSendQueued={sendQueuedMessage}
+          conversations={conversations} conversationMembers={conversationMembers}
+          activeConversationId={activeConversationId} onSelectConversation={setActiveConversationId}
+          onCreateChannel={createChannel} onStartDm={startDm} />
       ) : nav === "more" ? (
         <MoreMenu brand={brand} onNav={(id) => {
           if (id === "password") return setChangePwOpen(true);
