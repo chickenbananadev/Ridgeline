@@ -61,12 +61,26 @@ ok(/create policy sig_team_select on crm_signatures for select to authenticated/
    /create policy sig_team_update on crm_signatures for update to authenticated/.test(mig),
   "crm_signatures keeps working tenant-scoped select/insert/update, split out from the old ALL policy");
 
-ok(/\(storage\.foldername\(name\)\)\[1\] = current_tenant_id\(\)::text/.test(mig),
-  "the job-files Storage write/update/delete policies now check a tenant-id path prefix");
-const storageWriteCount = (mig.match(/\(storage\.foldername\(name\)\)\[1\] = current_tenant_id\(\)::text/g) || []).length;
-ok(storageWriteCount >= 4, "the tenant-prefix check appears on all of insert/update(using+check)/delete (>=4 occurrences)");
-ok(!/(drop|create) policy .*job_files_public_read/.test(mig),
-  "the public read policy (migration 024) is deliberately left untouched by this migration");
+/* The storage section of this migration was written against migration
+   024's assumed job_files_authenticated_* policies. Checking the live
+   database before applying showed 024 was never run: the buckets are
+   private and hand-made, and the actual policies are the broad,
+   tenant-blind schema.sql-era job_photos_* ones. Adding tenant-scoped
+   policies alongside those would have been a no-op, since Postgres
+   ORs permissive policies together. The section was removed and the
+   real constraint documented in the migration itself, rather than
+   shipping SQL that looks like a fix but isn't. */
+ok(!/create policy job_files_authenticated_(write|update|delete) on storage\.objects/.test(mig),
+  "migration 026 no longer creates storage policies that would be silently OR'd away by the existing broad ones");
+ok(/Postgres ORs permissive policies together/.test(mig),
+  "the migration documents WHY the storage section is absent, so the next person doesn't re-add an ineffective fix");
+ok(/tenant-prefixed key format uploadJobFile now produces/.test(mig),
+  "the migration records the prerequisite for actually closing the storage gap later");
+/* The app-side half of the eventual fix is still in place and still
+   worth keeping: new uploads carry the tenant-id prefix the future
+   storage policy will check. */
+ok(/const tenantPrefix = currentTenantId\(\) \|\| "_shared";/.test(src),
+  "uploadJobFile still computes a tenant prefix, the prerequisite for the future storage-policy fix");
 
 ok(/where t\.id = p_tenant_id and t\.id = current_tenant_id\(\)/.test(mig),
   "is_tenant_locked() now refuses to answer for any tenant other than the caller's own");

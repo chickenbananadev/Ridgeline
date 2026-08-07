@@ -88,6 +88,12 @@
         --rl-slate-bg:#E9EDEF;
       }
     </style>
+    <!-- With scripting off, React will never mount, so the pre-mount frame in
+         #root would sit there as a permanent full-viewport "Loading…" the
+         visitor has to scroll past to reach the <noscript> content below it.
+         Hide #root entirely in that case: no-JS agents get the marketing
+         markup and nothing else. -->
+    <noscript><style>#root { display: none; }</style></noscript>
     <!-- Structured data so search engines understand what RoofStride is and
          how it's priced. Kept in sync with the PRODUCT constants in the app. -->
     <script type="application/ld+json">
@@ -126,10 +132,29 @@
     </script>
   </head>
   <body style="margin:0">
+    <!-- Pre-mount frame. This is what a real visitor sees between the HTML
+         parsing and React mounting — on a phone over cellular that is a
+         visible beat, not an imperceptible one. It deliberately mirrors the
+         app's own boot screen (ridgeline.jsx, the `booting` gate: RoofStride
+         mark at 73px on the card background, "Loading…" beneath) so the
+         handoff to React is a continuation rather than a change of screen.
+         React replaces this entire subtree on mount.
+
+         The marketing copy that used to live here moved into <noscript>
+         below: it was flashing full-page for a second on every cold load
+         before the app appeared. It stays in the raw HTML for crawlers and
+         link unfurlers — which read the served markup, not the painted
+         page — and it still renders for a genuinely JS-less visitor, but a
+         real user never sees it. -->
     <div id="root">
-      <!-- Crawlable marketing content: real HTML so search engines and link
-           unfurlers index the copy even before the SPA mounts. React replaces
-           this entire subtree on load, so it never double-renders for users. -->
+      <div style="min-height:100vh;min-height:100dvh;display:grid;place-items:center;background:var(--rl-card);font-family:system-ui,-apple-system,'Segoe UI',sans-serif">
+        <div style="text-align:center">
+          <img src="/icon-512.png" alt="RoofStride" width="73" height="73" style="width:73px;height:73px;border-radius:16px;object-fit:contain;margin:0 auto 14px;display:block" />
+          <div style="font-size:14px;color:var(--rl-sub)">Loading…</div>
+        </div>
+      </div>
+    </div>
+    <noscript>
       <main style="max-width:860px;margin:0 auto;padding:48px 24px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#20242A">
         <img src="/icon-512.png" alt="RoofStride" width="56" height="56" style="width:56px;height:56px;border-radius:12px;display:block;margin:0 0 16px" />
         <h1 style="font-size:34px;line-height:1.15;margin:0 0 12px">RoofStride — the roofing CRM built for the field</h1>
@@ -147,7 +172,7 @@
         <p style="font-size:16px;line-height:1.7;color:#374151;margin:0">$119.99/mo including 10 seats. Add 10 more seats anytime for $59.99/mo (20 seats max). Start with a 7-day free trial.</p>
         <p style="font-size:16px;margin:28px 0 0"><a href="mailto:support@roofstride.com" style="color:#0A9E98;font-weight:600">Contact us</a> — support@roofstride.com</p>
       </main>
-    </div>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
