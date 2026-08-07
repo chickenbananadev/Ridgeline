@@ -23887,16 +23887,17 @@ function PersonPicker({ open, onClose, title = "Choose people", users, excludeNa
    offered for DMs/private channels: an open channel's membership row
    is just read-tracking, not visibility — everyone always sees an
    open channel regardless of membership, so "leaving" one wouldn't
-   actually remove it from anyone's list. #general can never be
-   archived — it's the one channel every session lands on by default. */
+   actually remove it from anyone's list. No channel is special
+   (owner decision, build 125): nothing is pre-created and any
+   channel — whatever its name — is archivable by its creator or an
+   admin. */
 function ConversationHeader({ conversation, conversationMembers, users, currentUser, onArchive, onLeave }) {
   const [open, setOpen] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
   const me = currentUser && currentUser.id;
   const isAdmin = !!(currentUser && currentUser.role === "admin");
   const isDm = conversation.kind === "dm";
-  const isGeneral = conversation.kind === "channel" && conversation.name === "general";
-  const canArchive = !isDm && !isGeneral && (conversation.createdBy === me || isAdmin);
+  const canArchive = !isDm && (conversation.createdBy === me || isAdmin);
   const canLeave = isDm || conversation.isPrivate;
   const memberNames = (conversationMembers || [])
     .filter((m) => m.conversationId === conversation.id)
@@ -23943,7 +23944,7 @@ function ConversationHeader({ conversation, conversationMembers, users, currentU
           </Btn>
         )}
         {!canArchive && !canLeave && (
-          <div style={{ fontSize: 12.5, color: S.sub }}>This is the company's default channel and can't be removed.</div>
+          <div style={{ fontSize: 12.5, color: S.sub }}>Only the person who created this channel, or an admin, can archive it.</div>
         )}
       </Sheet>
 
@@ -28303,6 +28304,21 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
             activeConversationId={activeConversationId} onSelect={onSelectConversation}
             users={users} currentUser={currentUser}
             onCreateChannel={onCreateChannel} onStartDm={onStartDm} unreadCounts={unreadCounts} />
+          {/* Nothing is pre-created — a company that hasn't built any
+              channels yet gets a real starting point, not an empty
+              composer aimed at no conversation. */}
+          {!activeConversationId ? (
+            <Card>
+              <CardTitle>Set up your team chat</CardTitle>
+              <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.6 }}>
+                Every company structures chat its own way. Create your first
+                channel above — many teams start with one for everyone, then
+                add channels per crew, per office, or per project — or start
+                a direct message with a teammate. Channels are open to the
+                whole team unless you make them private.
+              </div>
+            </Card>
+          ) : (
           <ChatThread
             msgs={(chatMsgs || []).filter((m) => m.conversationId === activeConversationId)}
             setMsgs={(updater) => setChatMsgs((all) => {
@@ -28316,6 +28332,7 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
             conversation={(conversations || []).find((c) => c.id === activeConversationId) || null}
             conversationMembers={conversationMembers}
             onArchiveConversation={onArchiveConversation} onLeaveConversation={onLeaveConversation} />
+          )}
         </>
       ) : (
       <>
@@ -28601,13 +28618,12 @@ function useDbSync(st) {
 
         /* Conversations (channels + DMs) this seat can see — RLS on
            crm_chat_conversations already limits this to open channels
-           plus any private channel/DM the seat is a member of. A
-           brand-new tenant with no migrated history has zero rows
-           here (migration 031's backfill only ran for tenants that
-           already had crm_chat rows), so bootstrap #general the same
-           way the migration itself does — same id convention
-           (general-<tenantId>) — so both paths converge on one
-           channel instead of a tenant ever ending up with none. */
+           plus any private channel/DM the seat is a member of. Nothing
+           is ever pre-created (owner decision, build 125): every
+           company builds its own channel structure from zero — a
+           brand-new tenant simply has no conversations until someone
+           makes one. The old auto-#general bootstrap is gone, and
+           migration 036 archived the ones earlier code had created. */
         /* Which conversation ids this seat can actually see — carried
            out of the tenant block below so the chat fetch can scope to
            it. Left null (meaning "no scoping available yet") for a
@@ -28616,18 +28632,7 @@ function useDbSync(st) {
            of silently loading zero messages. */
         let visibleConvIds = null;
         if (tenantId) {
-          let { data: convRows } = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
-          if (alive && (!convRows || !convRows.length)) {
-            const generalId = `general-${tenantId}`;
-            const { error: genErr } = await db.from("crm_chat_conversations").insert({
-              id: generalId, tenant_id: tenantId, kind: "channel", name: "general",
-              topic: "Everyone at the company", is_private: false, created_by: null,
-            });
-            if (!genErr) {
-              const again = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
-              convRows = again.data;
-            }
-          }
+          const { data: convRows } = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
           if (alive && convRows) {
             setConversations(convRows.map((r) => ({
               id: r.id, kind: r.kind, name: r.name, topic: r.topic,
@@ -29328,14 +29333,13 @@ export default function SupremeCRM() {
   };
   const selectConversation = (id) => { setActiveConversationId(id); markConversationRead(id); };
 
-  /* Land on #general (or whatever conversation loaded first) the
-     moment the conversation list is known, so Team chat never opens
-     to an empty picker with nothing selected. */
+  /* Land on the first conversation once the list is known. A company
+     with none yet (nothing is ever pre-created — every company builds
+     its own structure) stays unselected and Inbox shows the
+     create-your-first-channel state instead of an empty thread. */
   useEffect(() => {
     if (activeConversationId || !conversations.length) return;
-    const tenantId = currentUser && currentUser.tenantId;
-    const general = tenantId && conversations.find((c) => c.id === `general-${tenantId}`);
-    selectConversation((general || conversations[0]).id);
+    selectConversation(conversations[0].id);
   }, [conversations, activeConversationId]); // eslint-disable-line
 
   /* Real unread/mention counts, per conversation, from the server —
@@ -29477,14 +29481,13 @@ export default function SupremeCRM() {
   };
 
   /* Moves off whatever conversation just became inaccessible (archived
-     or left) onto #general, the same conversation a fresh session
-     lands on — reuses selectConversation so the fallback is marked
-     read too, instead of landing on it with a stale unread badge. */
+     or left) onto whichever is first in the remaining list — reuses
+     selectConversation so the fallback is marked read too, instead of
+     landing on it with a stale unread badge. Archiving the last one
+     lands on the create-your-first-channel state. */
   const landSomewhereAfterLeaving = (removedId, remaining) => {
     if (activeConversationId !== removedId) return;
-    const tenantId = currentUser && currentUser.tenantId;
-    const generalId = tenantId ? `general-${tenantId}` : null;
-    const fallback = remaining.find((c) => c.id === generalId) || remaining[0];
+    const fallback = remaining[0];
     if (fallback) selectConversation(fallback.id); else setActiveConversationId(null);
   };
   /* Archives a channel for EVERYONE — creator or admin only, matches

@@ -34,12 +34,15 @@ ok(/create policy members_leave on crm_chat_members for delete to authenticated\
 /* ---------- static: ConversationHeader exists with archive + leave ---------- */
 ok(/function ConversationHeader\(\{ conversation, conversationMembers, users, currentUser, onArchive, onLeave \}\)/.test(src),
   "ConversationHeader exists with the expected props");
-ok(/const canArchive = !isDm && !isGeneral && \(conversation\.createdBy === me \|\| isAdmin\);/.test(src),
+/* Build 125 (owner decision) removed #general's archive protection
+   along with the pre-created channel itself — no channel is special;
+   any channel is archivable by its creator or an admin. */
+ok(/const canArchive = !isDm && \(conversation\.createdBy === me \|\| isAdmin\);/.test(src),
   "archiving is gated to the channel's creator or an admin, matching conv_archive's RLS exactly");
 ok(/const canLeave = isDm \|\| conversation\.isPrivate;/.test(src),
   "leaving is only offered for DMs and private channels, not open channels where membership never gates visibility");
-ok(/const isGeneral = conversation\.kind === "channel" && conversation\.name === "general";/.test(src),
-  "the default #general channel is identified so it can never be archived");
+ok(!/const isGeneral = /.test(src),
+  "no channel is special-cased against archiving anymore — nothing is pre-created, so there is no 'default' channel to protect");
 ok(/This removes <b># \{conversation\.name\}<\/b> for everyone in the company, not just you\./.test(src),
   "the archive confirmation is explicit that this affects everyone, not just the person clicking it");
 
@@ -71,23 +74,24 @@ ok(/db\.from\("crm_chat_members"\)\.delete\(\)\.eq\("conversation_id", id\)\.eq\
 ok(/onArchiveConversation=\{archiveConversation\} onLeaveConversation=\{leaveConversation\}/.test(src),
   "the root wires the real archive/leave functions into Inbox, not stubs");
 
-/* ---------- behavioral: mirror the archive/leave permission gates ---------- */
+/* ---------- behavioral: mirror the archive/leave permission gates ----------
+   (Build 125 removed the #general special case — no channel is
+   protected from archiving anymore, because none is pre-created.) */
 function canArchive(conversation, me, isAdmin) {
   const isDm = conversation.kind === "dm";
-  const isGeneral = conversation.kind === "channel" && conversation.name === "general";
-  return !isDm && !isGeneral && (conversation.createdBy === me || isAdmin);
+  return !isDm && (conversation.createdBy === me || isAdmin);
 }
 function canLeave(conversation) {
   return conversation.kind === "dm" || conversation.isPrivate;
 }
 ok(canArchive({ kind: "channel", name: "dispatch", createdBy: "u1" }, "u1", false) === true,
-  "the creator of a non-general channel can archive it");
+  "the creator of a channel can archive it");
 ok(canArchive({ kind: "channel", name: "dispatch", createdBy: "u2" }, "u1", true) === true,
   "an admin can archive any channel they didn't create");
 ok(canArchive({ kind: "channel", name: "dispatch", createdBy: "u2" }, "u1", false) === false,
   "a regular member who isn't the creator or an admin cannot archive a channel");
-ok(canArchive({ kind: "channel", name: "general", createdBy: null }, "u1", true) === false,
-  "even an admin cannot archive #general — it's the one channel every session lands on");
+ok(canArchive({ kind: "channel", name: "general", createdBy: null }, "u1", true) === true,
+  "even a channel named 'general' is archivable by an admin — no name is special (build 125)");
 ok(canArchive({ kind: "dm", createdBy: "u1" }, "u1", true) === false,
   "a DM is never archivable (only leavable) — archive is a channel-only, affects-everyone action");
 ok(canLeave({ kind: "dm" }) === true, "any DM can be left");
@@ -95,19 +99,20 @@ ok(canLeave({ kind: "channel", isPrivate: true }) === true, "a private channel c
 ok(canLeave({ kind: "channel", isPrivate: false }) === false,
   "an open channel cannot be 'left' — membership never gates visibility for one, so leaving would silently do nothing useful");
 
-/* ---------- behavioral: mirror landSomewhereAfterLeaving's fallback logic ---------- */
-function landSomewhereAfterLeaving(activeId, removedId, remaining, tenantId) {
+/* ---------- behavioral: mirror landSomewhereAfterLeaving's fallback logic ----------
+   (Build 125: no #general preference — the fallback is simply the
+   first remaining conversation, or nothing at all.) */
+function landSomewhereAfterLeaving(activeId, removedId, remaining) {
   if (activeId !== removedId) return activeId; // untouched if a different conversation was removed
-  const generalId = tenantId ? `general-${tenantId}` : null;
-  const fallback = remaining.find((c) => c.id === generalId) || remaining[0];
+  const fallback = remaining[0];
   return fallback ? fallback.id : null;
 }
-const REMAINING = [{ id: "general-t1" }, { id: "dm-1" }];
-ok(landSomewhereAfterLeaving("dm-2", "dm-2", REMAINING, "t1") === "general-t1",
-  "leaving/archiving the active conversation lands back on #general when it's still around");
-ok(landSomewhereAfterLeaving("dm-1", "dm-2", REMAINING, "t1") === "dm-1",
+const REMAINING = [{ id: "chan-a" }, { id: "dm-1" }];
+ok(landSomewhereAfterLeaving("dm-2", "dm-2", REMAINING) === "chan-a",
+  "leaving/archiving the active conversation lands on the first remaining one");
+ok(landSomewhereAfterLeaving("dm-1", "dm-2", REMAINING) === "dm-1",
   "leaving/archiving a DIFFERENT conversation never moves you off the one you're actually looking at");
-ok(landSomewhereAfterLeaving("only-one", "only-one", [], "t1") === null,
+ok(landSomewhereAfterLeaving("only-one", "only-one", []) === null,
   "leaving/archiving your only conversation with nothing left to fall back to doesn't crash — lands on null, not a dangling id");
 
 if (fails) { console.log("\nbuild 121: " + fails + " FAILED"); process.exit(1); }
