@@ -13928,18 +13928,25 @@ function SystemCheck({ currentUser, onBack }) {
         }
       }
       try {
-        const write = currentUser && currentUser.tenantId ? db.from("crm_brand").upsert({ tenant_id: currentUser.tenantId, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "tenant_id" }) : db.from("crm_brand").upsert({ id: 1, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "id" });
-        const { error } = await write;
-        out.push({
-          label: "Can save settings",
-          ok: !error,
-          detail: error ? `Write blocked: ${error.message}` : "Write succeeded"
-        });
+        if (!(currentUser && currentUser.tenantId)) {
+          out.push({
+            label: "Can save settings",
+            ok: false,
+            detail: "This account isn't attached to a company yet \u2014 finish signup first."
+          });
+        } else {
+          const { error } = await db.from("crm_brand").upsert({ tenant_id: currentUser.tenantId, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "tenant_id" });
+          out.push({
+            label: "Can save settings",
+            ok: !error,
+            detail: error ? `Write blocked: ${error.message}` : "Write succeeded"
+          });
+        }
       } catch (e) {
         out.push({ label: "Can save settings", ok: false, detail: String(e && e.message || e) });
       }
       try {
-        const { data: bRow } = currentUser && currentUser.tenantId ? await db.from("crm_brand").select("data").eq("tenant_id", currentUser.tenantId).maybeSingle() : await db.from("crm_brand").select("data").eq("id", 1).maybeSingle();
+        const { data: bRow } = currentUser && currentUser.tenantId ? await db.from("crm_brand").select("data").eq("tenant_id", currentUser.tenantId).maybeSingle() : { data: null };
         const d = bRow && bRow.data || null;
         const size = d ? JSON.stringify(d).length : 0;
         const logoKb = d && d.logo ? Math.round(String(d.logo).length / 1024) : 0;
@@ -29130,7 +29137,13 @@ function useBrandSync(brand, setBrand, hasSession, tenantId) {
     const finish = () => {
       if (alive) setLoaded(true);
     };
-    const query = tenantId ? db.from("crm_brand").select("data").eq("tenant_id", tenantId).maybeSingle() : db.from("crm_brand").select("data").eq("id", 1).maybeSingle();
+    if (!tenantId) {
+      finish();
+      return () => {
+        alive = false;
+      };
+    }
+    const query = db.from("crm_brand").select("data").eq("tenant_id", tenantId).maybeSingle();
     query.then(({ data, error }) => {
       if (!alive) return;
       const d = data && data.data;
@@ -29149,12 +29162,12 @@ function useBrandSync(brand, setBrand, hasSession, tenantId) {
   }, [tenantId, hasSession]);
   (0, import_react.useEffect)(() => {
     const db = DB();
-    if (!db || !hasSession || !loaded) return;
+    if (!db || !hasSession || !loaded || !tenantId) return;
     if (JSON.stringify(brand) === JSON.stringify(lastSaved.current)) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       const payload = brand;
-      const write = tenantId ? db.from("crm_brand").upsert({ tenant_id: tenantId, data: payload, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "tenant_id" }) : db.from("crm_brand").upsert({ id: 1, data: payload, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+      const write = db.from("crm_brand").upsert({ tenant_id: tenantId, data: payload, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "tenant_id" });
       write.then(({ error }) => {
         if (error) {
           const missing = /relation .*crm_brand.* does not exist|schema cache/i.test(error.message || "");
@@ -29206,18 +29219,13 @@ function useDbSync(st) {
     let alive = true;
     (async () => {
       try {
-        const orgQuery = tenantId ? db.from("crm_org").select("data").eq("tenant_id", tenantId).maybeSingle() : db.from("crm_org").select("data").eq("id", 1).maybeSingle();
-        const { data: orgRow, error: orgErr } = await orgQuery;
+        const { data: orgRow, error: orgErr } = tenantId ? await db.from("crm_org").select("data").eq("tenant_id", tenantId).maybeSingle() : { data: null, error: null };
         if (orgErr) throw orgErr;
         if (!alive) return;
         if (orgRow && orgRow.data && Object.keys(orgRow.data).length) {
           unpackOrg(orgRow.data);
-        } else {
-          if (tenantId) {
-            await db.from("crm_org").upsert({ tenant_id: tenantId, data: orgPack(), updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "tenant_id" });
-          } else {
-            await db.from("crm_org").upsert({ id: 1, data: orgPack(), updated_at: (/* @__PURE__ */ new Date()).toISOString() });
-          }
+        } else if (tenantId) {
+          await db.from("crm_org").upsert({ tenant_id: tenantId, data: orgPack(), updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "tenant_id" });
         }
         const { data: jobRows, error: jErr } = await db.from("crm_jobs").select("id, data");
         if (jErr) throw jErr;
@@ -29446,10 +29454,13 @@ function useDbSync(st) {
   const packStr = JSON.stringify(st.orgDeps);
   (0, import_react.useEffect)(() => {
     const db = DB();
-    if (!db || !ready || !hydrated) return;
+    if (!db || !ready || !hydrated || !tenantId) return;
     if (orgTimer.current) clearTimeout(orgTimer.current);
     orgTimer.current = setTimeout(() => {
-      const write = tenantId ? db.from("crm_org").upsert({ tenant_id: tenantId, data: orgPack(), updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "tenant_id" }) : db.from("crm_org").upsert({ id: 1, data: orgPack(), updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+      const write = db.from("crm_org").upsert(
+        { tenant_id: tenantId, data: orgPack(), updated_at: (/* @__PURE__ */ new Date()).toISOString() },
+        { onConflict: "tenant_id" }
+      );
       write.then(({ error }) => {
         if (error) setSyncErr2("Settings save failed. " + error.message);
       });
@@ -29527,6 +29538,7 @@ function SupremeCRM() {
   const [authMode, setAuthMode] = (0, import_react.useState)("login");
   const [selectedPlan, setSelectedPlan] = (0, import_react.useState)("per_seat");
   const [checkoutDone, setCheckoutDone] = (0, import_react.useState)(false);
+  const [setupBusy, setSetupBusy] = (0, import_react.useState)(false);
   const [users, setUsers] = (0, import_react.useState)(SEED_USERS);
   const [booting, setBooting] = (0, import_react.useState)(liveAuth());
   const [authError, setAuthError] = (0, import_react.useState)("");
@@ -30240,6 +30252,41 @@ function SupremeCRM() {
         }
         setCurrentUser(null);
       }, children: "Back to sign in" })
+    ] }) });
+  }
+  if (liveAuth() && !liveUser.tenantId) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, background: S.bg }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { maxWidth: 400, textAlign: "center" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: "/icon-512.png", alt: "RoofStride", style: { width: 58, height: 58, borderRadius: 15, objectFit: "contain", margin: "0 auto 12px", display: "block" } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, color: S.ink }, children: "Finish setting up your company" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, marginTop: 8, lineHeight: 1.55 }, children: "Your account exists, but it isn't attached to a company yet \u2014 that happens when checkout completes. Until then there's nothing to show, and you won't see any other company's data." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%", marginTop: 16 }, disabled: setupBusy, onClick: async () => {
+        const a = AUTH();
+        if (!a || !a.startCheckout) {
+          toast("Checkout isn't available on this build \u2014 contact " + PRODUCT.supportEmail);
+          return;
+        }
+        setSetupBusy(true);
+        try {
+          await a.startCheckout({ company: liveUser.name || "" });
+        } catch (e) {
+          toast(e && e.message || "Couldn't reopen checkout");
+          setSetupBusy(false);
+        }
+      }, children: setupBusy ? "Opening\u2026" : "Finish setup" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%", marginTop: 8 }, onClick: async () => {
+        const a = AUTH();
+        if (a) {
+          try {
+            await a.signOut();
+          } catch (e) {
+          }
+        }
+        setCurrentUser(null);
+      }, children: "Sign out" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 12 }, children: [
+        "Stuck? Email ",
+        PRODUCT.supportEmail
+      ] })
     ] }) });
   }
   const userName = liveUser.name;

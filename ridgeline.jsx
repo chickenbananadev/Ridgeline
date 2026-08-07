@@ -13023,28 +13023,35 @@ function SystemCheck({ currentUser, onBack }) {
          branding then collided on crm_brand_tenant_id_key, producing a false
          "write blocked" even though their settings save fine. */
       try {
-        const write = (currentUser && currentUser.tenantId)
-          ? db.from("crm_brand").upsert({ tenant_id: currentUser.tenantId, updated_at: new Date().toISOString() }, { onConflict: "tenant_id" })
-          : db.from("crm_brand").upsert({ id: 1, updated_at: new Date().toISOString() }, { onConflict: "id" });
-        const { error } = await write;
-        out.push({
-          label: "Can save settings",
-          ok: !error,
-          detail: error ? `Write blocked: ${error.message}` : "Write succeeded",
-        });
+        if (!(currentUser && currentUser.tenantId)) {
+          /* No tenant: there is no row this account may write. Probing
+             the legacy id=1 row would test another company's row and
+             report a misleading "write blocked". */
+          out.push({
+            label: "Can save settings",
+            ok: false,
+            detail: "This account isn't attached to a company yet — finish signup first.",
+          });
+        } else {
+          const { error } = await db.from("crm_brand").upsert({ tenant_id: currentUser.tenantId, updated_at: new Date().toISOString() }, { onConflict: "tenant_id" });
+          out.push({
+            label: "Can save settings",
+            ok: !error,
+            detail: error ? `Write blocked: ${error.message}` : "Write succeeded",
+          });
+        }
       } catch (e) {
         out.push({ label: "Can save settings", ok: false, detail: String((e && e.message) || e) });
       }
       /* Report what is actually stored, and how big it is — an oversized
          logo is the usual reason a save appears to succeed then vanish.
-         Scoped to this user's own tenant when known; falls back to the
-         legacy id=1 row otherwise so this check stays accurate before
-         migration 015/016 have run, rather than always reporting
-         "nothing saved yet" against data that is actually there. */
+         Strictly scoped to this user's own tenant: the old fallback to
+         the legacy id=1 row reported another company's branding as
+         though it were this account's. */
       try {
         const { data: bRow } = currentUser && currentUser.tenantId
           ? await db.from("crm_brand").select("data").eq("tenant_id", currentUser.tenantId).maybeSingle()
-          : await db.from("crm_brand").select("data").eq("id", 1).maybeSingle();
+          : { data: null };
         const d = (bRow && bRow.data) || null;
         const size = d ? JSON.stringify(d).length : 0;
         const logoKb = d && d.logo ? Math.round(String(d.logo).length / 1024) : 0;
@@ -27696,9 +27703,15 @@ function useBrandSync(brand, setBrand, hasSession, tenantId) {
     if (!db || !hasSession) { if (!db) setLoaded(true); return; }
     let alive = true;
     const finish = () => { if (alive) setLoaded(true); };
-    const query = tenantId
-      ? db.from("crm_brand").select("data").eq("tenant_id", tenantId).maybeSingle()
-      : db.from("crm_brand").select("data").eq("id", 1).maybeSingle();
+    /* No tenant means no branding to load. The old `.eq("id", 1)`
+       fallback here read the legacy pre-multi-tenancy singleton row,
+       which in a live multi-tenant database belongs to whichever
+       company was migrated first — so a tenant-less session rendered
+       that company's name, phone, address and review link as its own.
+       There is no correct row to read without a tenant; read nothing
+       and keep RoofStride's defaults. */
+    if (!tenantId) { finish(); return () => { alive = false; }; }
+    const query = db.from("crm_brand").select("data").eq("tenant_id", tenantId).maybeSingle();
     query
       .then(({ data, error }) => {
         if (!alive) return;
@@ -27717,14 +27730,18 @@ function useBrandSync(brand, setBrand, hasSession, tenantId) {
 
   useEffect(() => {
     const db = DB();
-    if (!db || !hasSession || !loaded) return;
+    if (!db || !hasSession || !loaded || !tenantId) return;
     if (JSON.stringify(brand) === JSON.stringify(lastSaved.current)) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       const payload = brand;
-      const write = tenantId
-        ? db.from("crm_brand").upsert({ tenant_id: tenantId, data: payload, updated_at: new Date().toISOString() }, { onConflict: "tenant_id" })
-        : db.from("crm_brand").upsert({ id: 1, data: payload, updated_at: new Date().toISOString() });
+      /* Same reasoning as the read above: with no tenant there is no
+         row this session may legitimately write. The old fallback
+         upserted the singleton id=1 row, i.e. another company's
+         branding — which RLS rejected, surfacing a raw
+         "violates row-level security policy" error to a user who had
+         done nothing wrong. Don't attempt the write at all. */
+      const write = db.from("crm_brand").upsert({ tenant_id: tenantId, data: payload, updated_at: new Date().toISOString() }, { onConflict: "tenant_id" });
       write
         .then(({ error }) => {
           if (error) {
@@ -27781,21 +27798,22 @@ function useDbSync(st) {
            Tenant-scoped avoids every company's stages/price-list/crews
            living in the same row; the legacy path is what keeps the
            app functional in the meantime. */
-        const orgQuery = tenantId
-          ? db.from("crm_org").select("data").eq("tenant_id", tenantId).maybeSingle()
-          : db.from("crm_org").select("data").eq("id", 1).maybeSingle();
-        const { data: orgRow, error: orgErr } = await orgQuery;
+        /* Tenant-scoped only. The legacy `.eq("id", 1)` fallback that
+           used to sit here read the pre-multi-tenancy singleton row —
+           in a live multi-tenant database that is the first-migrated
+           company's stages, price list, crews and vendors. RLS already
+           blocks it, but a tenant-less session has no org row to read
+           by definition, so don't ask for one. */
+        const { data: orgRow, error: orgErr } = tenantId
+          ? await db.from("crm_org").select("data").eq("tenant_id", tenantId).maybeSingle()
+          : { data: null, error: null };
         if (orgErr) throw orgErr;
         if (!alive) return;
         if (orgRow && orgRow.data && Object.keys(orgRow.data).length) {
           unpackOrg(orgRow.data);
-        } else {
+        } else if (tenantId) {
           /* First boot: persist the built-in defaults as THIS tenant's baseline. */
-          if (tenantId) {
-            await db.from("crm_org").upsert({ tenant_id: tenantId, data: orgPack(), updated_at: new Date().toISOString() }, { onConflict: "tenant_id" });
-          } else {
-            await db.from("crm_org").upsert({ id: 1, data: orgPack(), updated_at: new Date().toISOString() });
-          }
+          await db.from("crm_org").upsert({ tenant_id: tenantId, data: orgPack(), updated_at: new Date().toISOString() }, { onConflict: "tenant_id" });
         }
 
         const { data: jobRows, error: jErr } = await db.from("crm_jobs").select("id, data");
@@ -28018,12 +28036,16 @@ function useDbSync(st) {
   const packStr = JSON.stringify(st.orgDeps);
   useEffect(() => {
     const db = DB();
-    if (!db || !ready || !hydrated) return;
+    /* No tenant means no org row this session may write — the legacy
+       id=1 fallback here targeted another company's settings row and
+       could only ever be rejected by RLS, surfacing a raw policy
+       error to someone who simply hadn't finished signup. */
+    if (!db || !ready || !hydrated || !tenantId) return;
     if (orgTimer.current) clearTimeout(orgTimer.current);
     orgTimer.current = setTimeout(() => {
-      const write = tenantId
-        ? db.from("crm_org").upsert({ tenant_id: tenantId, data: orgPack(), updated_at: new Date().toISOString() }, { onConflict: "tenant_id" })
-        : db.from("crm_org").upsert({ id: 1, data: orgPack(), updated_at: new Date().toISOString() });
+      const write = db.from("crm_org").upsert(
+        { tenant_id: tenantId, data: orgPack(), updated_at: new Date().toISOString() },
+        { onConflict: "tenant_id" });
       write.then(({ error }) => { if (error) setSyncErr("Settings save failed. " + error.message); });
     }, 1400);
     return () => { if (orgTimer.current) clearTimeout(orgTimer.current); };
@@ -28117,6 +28139,8 @@ export default function SupremeCRM() {
   const [authMode, setAuthMode] = useState("login");
   const [selectedPlan, setSelectedPlan] = useState("per_seat");
   const [checkoutDone, setCheckoutDone] = useState(false);
+  /* Guards the "Finish setup" button on the no-tenant screen below. */
+  const [setupBusy, setSetupBusy] = useState(false);
   const [users, setUsers] = useState(SEED_USERS);
   const [booting, setBooting] = useState(liveAuth());
   const [authError, setAuthError] = useState("");
@@ -28814,6 +28838,43 @@ export default function SupremeCRM() {
           <div style={{ fontSize: 16, fontWeight: 700, marginTop: 10 }}>This seat has been deactivated</div>
           <div style={{ fontSize: 14, color: S.sub, marginTop: 6 }}>Contact the office to restore access.</div>
           <Btn kind="ghost" style={{ width: "100%", marginTop: 16 }} onClick={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* ignore */ } } setCurrentUser(null); }}>Back to sign in</Btn>
+        </Card>
+      </div>
+    );
+  }
+  /* A signed-in account with no tenant is in signup limbo: auth
+     succeeded but create_tenant never ran (checkout abandoned, or
+     complete-signup failed). Such a session must not reach the app at
+     all. Before this gate it did, and every tenant-scoped query fell
+     back to legacy pre-multi-tenancy paths keyed on the singleton
+     id=1 row — which is another company's data. RLS is the real
+     boundary and now blocks that read, but a half-working app that
+     silently shows nothing (or, on a pre-026 database, someone
+     else's company) is not an acceptable second line of defense. */
+  if (liveAuth() && !liveUser.tenantId) {
+    return (
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, background: S.bg }}>
+        <Card style={{ maxWidth: 400, textAlign: "center" }}>
+          <img src="/icon-512.png" alt="RoofStride" style={{ width: 58, height: 58, borderRadius: 15, objectFit: "contain", margin: "0 auto 12px", display: "block" }} />
+          <div style={{ fontSize: 17, fontWeight: 800, color: S.ink }}>Finish setting up your company</div>
+          <div style={{ fontSize: 14, color: S.sub, marginTop: 8, lineHeight: 1.55 }}>
+            Your account exists, but it isn't attached to a company yet — that happens when checkout
+            completes. Until then there's nothing to show, and you won't see any other company's data.
+          </div>
+          <Btn style={{ width: "100%", marginTop: 16 }} disabled={setupBusy} onClick={async () => {
+            const a = AUTH();
+            if (!a || !a.startCheckout) { toast("Checkout isn't available on this build — contact " + PRODUCT.supportEmail); return; }
+            setSetupBusy(true);
+            try { await a.startCheckout({ company: liveUser.name || "" }); }
+            catch (e) { toast((e && e.message) || "Couldn't reopen checkout"); setSetupBusy(false); }
+          }}>{setupBusy ? "Opening…" : "Finish setup"}</Btn>
+          <Btn kind="ghost" style={{ width: "100%", marginTop: 8 }} onClick={async () => {
+            const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } }
+            setCurrentUser(null);
+          }}>Sign out</Btn>
+          <div style={{ fontSize: 12, color: S.sub, marginTop: 12 }}>
+            Stuck? Email {PRODUCT.supportEmail}
+          </div>
         </Card>
       </div>
     );

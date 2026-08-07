@@ -15,14 +15,28 @@ check("migration 017 is idempotent", /if not exists[\s\S]*pg_constraint/.test(mi
 check("useDbSync destructures tenantId", /ready, isMoneyBlocked, userName, tenantId,/.test(src));
 check("org hydrate read is scoped by tenant_id, not a hardcoded id",
   /db\.from\("crm_org"\)\.select\("data"\)\.eq\("tenant_id", tenantId\)/.test(src));
-check("org hydrate falls back to legacy id=1 when tenantId is unavailable, rather than hard-blocking forever (fixed after a production hang)",
-  /db\.from\("crm_org"\)\.select\("data"\)\.eq\("id", 1\)\.maybeSingle\(\)/.test(src));
+/* See build29/build104: the `.eq("id", 1)` fallback these assertions
+   used to require solved a real hang by reading the legacy singleton
+   row — i.e. another company's stages, price list, crews and vendors.
+   Build 104 removed it. Hydration still completes for a tenant-less
+   session (it resolves to a null row and falls through to
+   setHydrated(true) rather than returning early), so the anti-hang
+   property is preserved without the cross-tenant read. */
+check("org hydrate resolves to a null row when tenantId is unavailable, without returning early or hanging",
+  /const \{ data: orgRow, error: orgErr \} = tenantId\s*\n\s*\? await db\.from\("crm_org"\)\.select\("data"\)\.eq\("tenant_id", tenantId\)\.maybeSingle\(\)\s*\n\s*: \{ data: null, error: null \};/.test(src));
+check("org hydrate no longer reads the shared legacy row",
+  !/db\.from\("crm_org"\)\.select\("data"\)\.eq\("id", 1\)\.maybeSingle\(\)/.test(src));
 check("org first-boot seed upserts by tenant_id with onConflict, not id:1",
   /upsert\(\{ tenant_id: tenantId, data: orgPack\(\), updated_at: new Date\(\)\.toISOString\(\) \}, \{ onConflict: "tenant_id" \}\)/.test(src));
-check("org debounced save falls back to legacy id=1 when tenantId is unavailable, rather than silently never saving (fixed after a production hang)",
-  /db\.from\("crm_org"\)\.upsert\(\{ id: 1, data: orgPack\(\), updated_at: new Date\(\)\.toISOString\(\) \}\)/.test(src));
-check("the legacy id=1 fallback exists deliberately in exactly the right places (org read, org first-boot seed, org debounced save)",
-  (src.match(/"crm_org"\)\.(?:select\("data"\)\.eq\("id", 1\)\.maybeSingle\(\)|upsert\(\{ id: 1)/g) || []).length >= 3);
+/* The "rather than silently never saving" concern behind the old
+   assertion no longer applies: a tenant-less session cannot reach the
+   app at all (build 104's gate), so there are no settings changes to
+   lose. Writing them into another company's row was never an
+   acceptable way to avoid losing them. */
+check("org debounced save does not fire without a tenant",
+  /if \(!db \|\| !ready \|\| !hydrated \|\| !tenantId\) return;/.test(src));
+check("no legacy id=1 crm_org read or write remains anywhere",
+  (src.match(/"crm_org"\)\.(?:select\("data"\)\.eq\("id", 1\)\.maybeSingle\(\)|upsert\(\{ id: 1)/g) || []).length === 0);
 check("useDbSync call site passes tenantId through", /tenantId: currentUser && currentUser\.tenantId,/.test(src));
 
 /* ---- static: new logo colors wired everywhere ---- */

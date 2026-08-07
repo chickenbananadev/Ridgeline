@@ -69,8 +69,22 @@ check("fromProfile carries tenantId through", /tenantId: row\.tenant_id \|\| nul
 check("useBrandSync takes a tenantId parameter", /function useBrandSync\(brand, setBrand, hasSession, tenantId\)/.test(src));
 check("brand read is scoped by tenant_id, not a hardcoded id",
   /db\.from\("crm_brand"\)\.select\("data"\)\.eq\("tenant_id", tenantId\)/.test(src));
-check("brand read falls back to legacy id=1 when tenantId is unavailable, rather than hard-blocking forever (fixed after a production hang)",
-  /db\.from\("crm_brand"\)\.select\("data"\)\.eq\("id", 1\)\.maybeSingle\(\)/.test(src));
+/* This assertion used to require a `.eq("id", 1)` fallback for the
+   no-tenant case. That fallback was added to fix a real production
+   hang (a tenant-less session blocking on a load that never
+   resolved), but it fixed it by reading the legacy singleton row —
+   which in a live multi-tenant database is the first-migrated
+   company's branding. Build 104 removed it after exactly that leak
+   was reported: a new account saw another company's name, phone,
+   address and review link.
+
+   The property this test exists to protect — never hang — still
+   holds, and is asserted directly below instead of via the specific
+   (leaky) mechanism that used to provide it. */
+check("brand read resolves the loading state when tenantId is unavailable, rather than hard-blocking forever",
+  /if \(!tenantId\) \{ finish\(\); return \(\) => \{ alive = false; \}; \}/.test(src));
+check("brand read no longer reads the shared legacy row for a tenant-less session",
+  !/db\.from\("crm_brand"\)\.select\("data"\)\.eq\("id", 1\)\.maybeSingle\(\)/.test(src));
 check("brand save upserts by tenant_id with onConflict, not a shared id",
   /upsert\(\{ tenant_id: tenantId, data: payload,[\s\S]*?\{ onConflict: "tenant_id" \}\)/.test(src));
 check("no remaining hardcoded crm_brand id:1 read/write in the live sync path",
