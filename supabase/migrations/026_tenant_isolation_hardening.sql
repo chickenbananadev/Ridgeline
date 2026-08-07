@@ -101,23 +101,36 @@ drop policy if exists sig_no_delete on crm_signatures;
 create policy sig_no_delete on crm_signatures for delete to authenticated
   using (false);
 
--- ---------- 5. job-files Storage bucket: tenant-scope writes ----------
--- Read stays untouched (job_files_public_read, migration 024).
-drop policy if exists job_files_authenticated_write on storage.objects;
-create policy job_files_authenticated_write on storage.objects
-  for insert to authenticated
-  with check (bucket_id = 'job-files' and (storage.foldername(name))[1] = current_tenant_id()::text);
-
-drop policy if exists job_files_authenticated_update on storage.objects;
-create policy job_files_authenticated_update on storage.objects
-  for update to authenticated
-  using (bucket_id = 'job-files' and (storage.foldername(name))[1] = current_tenant_id()::text)
-  with check (bucket_id = 'job-files' and (storage.foldername(name))[1] = current_tenant_id()::text);
-
-drop policy if exists job_files_authenticated_delete on storage.objects;
-create policy job_files_authenticated_delete on storage.objects
-  for delete to authenticated
-  using (bucket_id = 'job-files' and (storage.foldername(name))[1] = current_tenant_id()::text);
+-- ---------- 5. job-files Storage bucket: NOT done here ----------
+-- This section originally created tenant-prefixed write/update/delete
+-- policies named job_files_authenticated_*, on the assumption that
+-- migration 024 had created that bucket and those policies. Checking
+-- the live database before applying showed that assumption is wrong:
+--
+--   * 024 was never applied. The job-photos and job-files buckets were
+--     created by hand and are private (public = false), not the public
+--     bucket 024 describes.
+--   * The live storage.objects policies are the schema.sql-era
+--     job_photos_read / job_photos_write / job_photos_delete, gated on
+--     is_active_user() / can_see_money() across BOTH buckets, with no
+--     tenant scoping.
+--
+-- Adding tenant-scoped policies alongside those would have achieved
+-- nothing: Postgres ORs permissive policies together, so the existing
+-- broad job_photos_write would still allow any active user to write
+-- anywhere. Actually closing this requires dropping the broad policies,
+-- which cannot be done safely until every client is on the
+-- tenant-prefixed key format uploadJobFile now produces — a cached
+-- older bundle would start failing uploads immediately.
+--
+-- Current exposure, stated plainly rather than papered over: both
+-- buckets are private, so an object needs an authenticated, active
+-- user AND knowledge of the exact object key (jobId/timestamp_name,
+-- or tenantId/jobId/timestamp_name for new uploads). There is no
+-- listing or enumeration path exposed by the app. But a user of one
+-- tenant who obtains another tenant's key can read, overwrite or
+-- delete that object. That is a real remaining gap, tracked separately
+-- from this migration.
 
 -- ---------- is_tenant_locked: stop cross-tenant billing-status probing ----------
 create or replace function is_tenant_locked(p_tenant_id uuid)
