@@ -19,6 +19,55 @@ supabase link --project-ref <your-project-ref>   # from the project's URL
 
 ---
 
+## 0. Photo & file storage — fixes "Bucket not found"
+
+**Symptom in the app:** uploading a photo anywhere — job photos, punch
+list, company documents, contract attachments all share one upload path
+— fails with a raw provider error like `{"statusCode":"404","error":
+"Bucket not found"}`.
+
+**Fix:** apply the migration that creates the bucket (idempotent, safe
+to re-run):
+
+```bash
+supabase db push
+```
+
+No secrets needed. Until this is applied, uploads fall back to saving
+the image inline in the database (capped at 3 MB) rather than failing
+outright — real Storage removes that cap and is what production should
+run on. If you'd rather set it up by hand instead: Storage → New bucket
+→ name it exactly `job-files`, mark it **public** (the app calls
+`getPublicUrl()` and stores that link directly — there's no signed-URL
+path), then add the four policies in migration `024` (public read,
+authenticated insert/update/delete).
+
+---
+
+## 0b. Customer signing — fixes "Could not sign... row-level security"
+
+**Symptom in the app:** a homeowner opens their portal link and tries
+to sign an estimate, contract, or change order, and gets "Could not
+sign — That did not save... Check the row-level security policies for
+signatures," no matter what device or doc type they try.
+
+**Cause:** migration `018` closed a real enumeration hole by removing
+direct anonymous read access to `crm_portal`, but `014`'s customer-
+signing policies still validated a token by querying `crm_portal`
+directly — a query that is itself subject to `crm_portal`'s RLS, and
+so always returned nothing for an anonymous visitor after `018`. Every
+customer signature was rejected as a result, already applied to this
+project's live database directly (see migration `025`), but run
+`supabase db push` too so a fresh environment picks it up the same way:
+
+```bash
+supabase db push
+```
+
+No secrets needed.
+
+---
+
 ## 1. CompanyCam — fixes "the connection isn't working"
 
 **Symptom in the app:** connecting CompanyCam shows *"Needs the CompanyCam
@@ -83,7 +132,7 @@ the invite/reset links land back on the app.
 `my_tenant()` (migration `021`). Adding a seat past the plan's allowance is
 blocked with a prompt to add seats in Manage billing. To actually bill for the
 extra seat, raise the subscription quantity in the Stripe customer portal (or,
-as a follow-up, wire the checkout quantity — see §9).
+as a follow-up, wire the checkout quantity — see §10).
 
 ---
 
@@ -102,14 +151,18 @@ the feed is public and gated by a long per-seat token in the URL (stored in
 `crm_user_integrations`). No secrets needed. `supabase/config.toml` already
 records the `verify_jwt = false` setting for CLI/CI deploys.
 
-## 5. Email sending — per-rep Gmail
+## 5. Email sending — per-rep Gmail (and outbound Google Calendar sync)
 
 Each rep sends from their **own** Gmail; there's no shared company sender.
-One Google Cloud OAuth client serves everyone.
+One Google Cloud OAuth client serves everyone. The same connection now also
+covers a one-way outbound sync — a newly booked appointment gets pushed to
+the rep's own Google Calendar — since both use the same Google account
+connection and refresh token.
 
 **One-time (office):**
-1. console.cloud.google.com → new project → enable the **Gmail API**.
-2. **OAuth consent screen** → Internal (if you use Google Workspace) or External; add the `gmail.send` scope.
+1. console.cloud.google.com → new project → enable the **Gmail API** and the
+   **Google Calendar API**.
+2. **OAuth consent screen** → Internal (if you use Google Workspace) or External; add the `gmail.send` and `calendar.events` scopes.
 3. **Credentials → OAuth client ID → Web application.** Add your app origin **with a trailing slash** as an Authorized redirect URI (e.g. `https://roofstride.com/`, plus preview origins).
 4. Set the Client ID and Secret:
    ```bash
@@ -118,16 +171,27 @@ One Google Cloud OAuth client serves everyone.
    supabase secrets set GOOGLE_CLIENT_ID=<client id> GOOGLE_CLIENT_SECRET=<client secret>
    supabase functions deploy gmail-oauth
    supabase functions deploy gmail-send
+   supabase functions deploy calendar-push
    ```
 
 **Then each rep:** Integrations → **Connect my Gmail** → pick their account →
 approve. Messages composed on a job then send from their address; replies land
-in their inbox. Until this is deployed, email is saved to the job thread rather
-than sent (SMS via Twilio is unaffected).
+in their inbox; new appointments booked from a job or the calendar screen get
+pushed to that rep's own Google Calendar. Until this is deployed, email is
+saved to the job thread rather than sent, and the calendar push silently does
+nothing (SMS via EZ Texting is unaffected either way).
+
+> A rep who connected **before** `calendar.events` was added to the scope has
+> a Gmail-only token — the calendar push for them fails with a message
+> telling them to reconnect from Integrations, rather than failing silently
+> or against the wrong permission. Reconnecting re-runs the same consent
+> screen with both scopes and replaces their stored token.
 
 > Note: *immediate* emails send now. Scheduled day-before reminders are still
 > queued in the thread — delivering those on a timer needs a small scheduled
-> function (a follow-up), since a schedule has to run server-side.
+> function (a follow-up), since a schedule has to run server-side. Calendar
+> sync is one-way (app → Google) only; edits made in Google Calendar don't
+> come back.
 
 ## 6. Roofing assistant — optional, and optional on purpose
 
@@ -160,42 +224,115 @@ function returns a soft failure and the app falls back to the cited entries it
 always showed. Nothing in the UI reports an error, because there is nothing
 the rep could do about it.
 
-## 7. Everything else already in the repo
+## 6b. AI damage detection on photos — shares the assistant's key
 
-These functions exist and just need deploying if you haven't already:
+Every photo with real image data (uploaded through the app, not a legacy
+record) gets a **Scan for damage** button in the album. It sends that one
+photo to the model and gets back what's visibly documented — hail impact,
+wind/lifted shingles, granule loss, cracking, flashing damage — each with a
+confidence and a one-line description. A finding a rep trusts becomes the
+same photo evidence tag the manual "Tag a photo" flow already writes, so it
+feeds straight into the supplement checker.
+
+```bash
+supabase functions deploy photo-damage-detect
+```
+
+Uses the same `ANTHROPIC_API_KEY` secret as the roofing assistant above — no
+separate key to provision. With no key deployed, the **Scan for damage**
+button still appears (any photo can be scanned) but tapping it tells the rep
+plainly that detection isn't available yet, rather than failing silently.
+
+Same sandbox as the assistant: the model sees exactly one photo's bytes and
+nothing else about the job or tenant. The prompt is explicit that this
+assists a rep who verifies in person — it never estimates damage that isn't
+visibly in the frame, and it never states a dollar value or a claim
+determination.
+
+## 7. Texting — EZ Texting
+
+**Symptom in the app:** texting a customer (a job's Messages tab, an
+appointment-confirmation text, the "share ETA" en-route text, or any
+automated stage-change text) either does nothing or shows *"Texting
+isn't set up on this project yet — saved to the thread."*
+
+**Fix:** generate an API key and deploy the function.
+
+```bash
+supabase secrets set EZTEXTING_API_KEY=...   # app.eztexting.com → Settings → Integrations / Developer API
+supabase functions deploy send-sms
+```
+
+Then send one real test text — a job's Messages tab, to a recipient
+who has SMS consent on file — before relying on this for real
+customers. The exact request EZ Texting's REST API expects (endpoint,
+auth header, body field names) is built into
+`supabase/functions/send-sms/index.ts` from cross-checked third-party
+integration guides, **not** a direct read of EZ Texting's own
+reference docs — this environment's network policy blocked outbound
+access to `developers.eztexting.com` while writing it (see the comment
+at the top of that file). If EZ Texting has a different shape, the
+test send fails with EZ Texting's own error message surfaced back into
+the app's toast, and
+`https://www.eztexting.com/developers/sms-api-documentation/rest` —
+reachable from your own machine, not from this build environment — is
+where to reconcile it.
+
+Every automated text and every rep-composed text funnels through this
+one function, so nothing above it needs to change if the provider
+changes again later.
+
+**Why EZ Texting instead of a standard 10-digit business number:** a
+standard long code needs the carriers' A2P 10DLC campaign
+registration — a self-service process that can take days and doesn't
+always clear on the first attempt (this project's original Twilio
+number never cleared review). EZ Texting sends over a shared short
+code by default, a different carrier category that skips 10DLC review
+entirely, which is the main reason it was faster to stand up.
+
+**Consent is enforced server-side, not just in the UI:** the function
+checks `crm_jobs.data.consent.sms.granted` before sending anything
+tied to a job and refuses with `403` if it isn't set — a rep can't
+bypass this by editing the request from the browser.
+
+---
+
+## 8. Signup & checkout — Stripe
+
+These three functions run the marketing site's "Start your free trial"
+flow end to end: Checkout → verify → create the tenant, then keep
+subscription status and seat count in sync afterward.
 
 ```bash
 supabase functions deploy create-checkout-session   # signup → Stripe Checkout
 supabase functions deploy complete-signup           # verifies checkout, creates tenant
 supabase functions deploy stripe-webhook            # keeps status/seats in sync
-supabase functions deploy send-sms                  # Twilio text sending
 supabase db push                                    # apply any pending migrations
 ```
 
-Secrets used across these (set the ones you use):
+```bash
+supabase secrets set STRIPE_SECRET_KEY=sk_live_...          # Stripe → Developers → API keys
+supabase secrets set STRIPE_PRICE_PER_SEAT=price_...         # Stripe → Products → Team price ID
+supabase secrets set STRIPE_PRICE_UNLIMITED=price_...        # Stripe → Products → Unlimited price ID
+supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...          # set after creating the webhook endpoint below
+supabase secrets set APP_URL=https://roofstride.com          # your domain, no trailing slash
+```
 
-| Secret | Used by | Where to get it |
-| --- | --- | --- |
-| `STRIPE_SECRET_KEY` | checkout, portal, webhook | Stripe → Developers → API keys |
-| `STRIPE_PRICE_PER_SEAT` | checkout | Stripe → Products (Team price ID) |
-| `STRIPE_PRICE_UNLIMITED` | checkout | Stripe → Products (Unlimited price ID) |
-| `STRIPE_WEBHOOK_SECRET` | webhook | Stripe → Developers → Webhooks → signing secret |
-| `APP_URL` | checkout, portal | your domain, no trailing slash |
-| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` | send-sms | Twilio console |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | gmail-oauth, gmail-send | Google Cloud → Credentials |
-| `ANTHROPIC_API_KEY` | ai-assistant | console.anthropic.com → API keys (never `VITE_`) |
+Then, in the Stripe dashboard: **Developers → Webhooks → Add endpoint**,
+pointing at `https://<project-ref>.functions.supabase.co/stripe-webhook`,
+subscribed to `customer.subscription.updated`,
+`customer.subscription.deleted`, and `checkout.session.completed`. Stripe
+shows the signing secret once the endpoint is created — that's the
+`STRIPE_WEBHOOK_SECRET` value above.
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are
 injected into every function automatically — don't set them by hand.
-
-For the Stripe **webhook**, add an endpoint in the Stripe dashboard pointing at
-`https://<project-ref>.functions.supabase.co/stripe-webhook` and subscribe to
-`customer.subscription.updated`, `customer.subscription.deleted`, and
-`checkout.session.completed`.
+`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` (§5) and `ANTHROPIC_API_KEY`
+(§6) are documented in their own sections above, not repeated here.
 
 ---
 
-## 8. Front-end environment variables (Vercel)
+## 9. Front-end environment variables (Vercel)
 
 Set these in the Vercel project (Project → Settings → Environment Variables),
 then redeploy:
@@ -213,7 +350,7 @@ missing key never white-screens the site.
 
 ---
 
-## 9. Optional follow-up: sync Stripe seat quantity
+## 10. Optional follow-up: sync Stripe seat quantity
 
 `create-checkout-session` currently starts every subscription at
 `quantity: 1`. To bill per active seat automatically, update the subscription

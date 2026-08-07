@@ -1460,165 +1460,6 @@ ${f.note || ""}`.trim() : "[your state's department of insurance \u2014 address 
   const blocking = used.filter((u) => !printable(u.fact));
   return { body, used, blocking, ready: blocking.length === 0 };
 }
-var NAAG_DIRECTORY = "https://www.naag.org/find-my-ag/";
-var NASCLA_DIRECTORY = "https://www.nascla.org/page/licensing_boards";
-var LEGAL_AUTHORITIES = {
-  ag: { name: "State attorney general \u2014 consumer protection division", url: NAAG_DIRECTORY },
-  doi: { name: "State department of insurance", url: NAIC_DIRECTORY },
-  lic: { name: "State contractor licensing board", url: NASCLA_DIRECTORY }
-};
-var LEGAL_FIELDS = [
-  {
-    key: "choiceOfLaw",
-    label: "Governing law",
-    authority: "ag",
-    binding: true,
-    help: "Which state's law the agreement is written under. Reciting the wrong one is the defect that started this."
-  },
-  {
-    key: "rescission",
-    label: "Right to cancel",
-    authority: "ag",
-    binding: true,
-    help: "How long the owner has to cancel, and whether the clock runs in business or calendar days."
-  },
-  {
-    key: "noticeOfCancellation",
-    label: "Notice of Cancellation",
-    authority: "ag",
-    binding: true,
-    help: "Whether a separate cancellation notice must be handed over, in how many copies, and at what type size."
-  },
-  {
-    key: "insuranceRescission",
-    label: "Insurance-restoration cancellation",
-    authority: "doi",
-    binding: true,
-    help: "Several states give a separate right to cancel once the carrier denies the claim. Where one exists it must be in the contract."
-  },
-  {
-    key: "deductibleNotice",
-    label: "Deductible-rebate notice",
-    authority: "doi",
-    binding: true,
-    help: "The statutory notice that the insured is responsible for the deductible and it cannot be waived or absorbed."
-  },
-  {
-    key: "financeCharge",
-    label: "Finance-charge ceiling",
-    authority: "ag",
-    binding: true,
-    help: "The maximum late charge on an unpaid balance. The supplied terms assert 1.5% per month, which exceeds the cap in some states."
-  },
-  {
-    key: "downPayment",
-    label: "Down-payment cap",
-    authority: "ag",
-    binding: true,
-    help: "The most that may be collected before work starts. The supplied terms say half down."
-  },
-  {
-    key: "cancellationFee",
-    label: "Cancellation-fee limit",
-    authority: "ag",
-    binding: true,
-    help: "Whether a liquidated-damages fee on late cancellation is enforceable, and at what ceiling. The supplied terms assert 15% of the insurance proceeds."
-  },
-  {
-    key: "warrantyFloor",
-    label: "Workmanship warranty floor",
-    authority: "ag",
-    binding: true,
-    help: "Any statutory minimum the written warranty has to meet."
-  },
-  {
-    key: "licenceOnContract",
-    label: "Licence number on the contract",
-    authority: "lic",
-    binding: true,
-    help: "Where a licence number must be printed on the agreement, omitting it can void the contract or bar a lien."
-  },
-  {
-    key: "licensing",
-    label: "Licence or registration required",
-    authority: "lic",
-    binding: false,
-    help: "Whether roofing work needs a state licence, a registration, or neither \u2014 and who issues it."
-  },
-  {
-    key: "consumerIndemnity",
-    label: "Consumer indemnity permissible",
-    authority: "ag",
-    binding: false,
-    help: "The supplied terms have the homeowner indemnify the company. Several states will not enforce that against a consumer."
-  },
-  {
-    key: "aob",
-    label: "Assignment of benefits",
-    authority: "doi",
-    binding: false,
-    help: "Whether an AOB is permitted, restricted, or prohibited for residential property claims."
-  }
-];
-var LEGAL_FIELD_KEYS = LEGAL_FIELDS.map((f) => f.key);
-var BINDING_LEGAL_FIELDS = LEGAL_FIELDS.filter((f) => f.binding).map((f) => f.key);
-var LEGAL_PACK_SEED = {
-  OH: {
-    choiceOfLaw: { value: "Ohio", note: "The property is in Ohio, so Ohio law governs the agreement.", srcId: "ORC1345" },
-    rescission: {
-      value: "Three (3) business days from the date of the transaction",
-      note: "Ohio's Home Solicitation Sales Act. Confirm the current text and whether this sale is within its scope before relying on it.",
-      srcId: "ORC1345"
-    }
-  }
-};
-function legalPackFor(state, overrides = {}) {
-  const st = String(state || "").toUpperCase();
-  const seed = LEGAL_PACK_SEED[st] || {};
-  const conf = overrides && overrides[st] || {};
-  const pack = {};
-  LEGAL_FIELDS.forEach((f) => {
-    const auth = LEGAL_AUTHORITIES[f.authority];
-    const c = conf[f.key];
-    if (c && c.value) {
-      pack[f.key] = fact(c.value, {
-        note: c.note || "",
-        sourceUrl: c.sourceUrl || auth.url,
-        sourceName: c.sourceName || auth.name,
-        asOf: c.at || null,
-        verifiedBy: c.by || null,
-        confidence: "verified"
-      });
-      return;
-    }
-    const s = seed[f.key];
-    if (s) {
-      const src = s.srcId ? SOURCES[s.srcId] : null;
-      pack[f.key] = fact(s.value, {
-        note: s.note || "",
-        srcId: s.srcId || "",
-        sourceUrl: src && src.url || auth.url,
-        sourceName: src && src.name || auth.name,
-        confidence: "derived"
-      });
-      return;
-    }
-    pack[f.key] = fact("", {
-      note: st ? `Not established for ${st}. ${auth.name} is the body that settles this \u2014 check it and confirm here.` : "Pick the property's state.",
-      sourceUrl: auth.url,
-      sourceName: auth.name,
-      confidence: "unknown"
-    });
-  });
-  return pack;
-}
-function legalPackGaps(state, overrides = {}) {
-  const pack = legalPackFor(state, overrides);
-  return LEGAL_FIELDS.filter((f) => f.binding && !printable(pack[f.key]));
-}
-function legalPackReady(state, overrides = {}) {
-  return !!String(state || "").trim() && legalPackGaps(state, overrides).length === 0;
-}
 function regulatorFor(state) {
   const r = STATE_REGULATORS[state];
   if (r) {
@@ -1820,6 +1661,7 @@ var DEFAULT_STAGES = [
   { id: "s11", name: "Lost", cat: "Lost" },
   { id: "s12", name: "Unqualified", cat: "Unqualified" }
 ];
+var JOB_TYPES = ["Retail", "Insurance", "Commercial", "Unknown"];
 var JOB_PATHS = {
   Retail: [
     "Schedule inspection",
@@ -1913,28 +1755,28 @@ function mergeTemplate(text, ctx) {
   if (!text) return "";
   return text.replace(/\{\{(\w+)\}\}/g, (m, k) => ctx[k] != null && ctx[k] !== "" ? String(ctx[k]) : m);
 }
-function templateContext(job, brand2, crew, users) {
+function templateContext(job, brand, crew, users) {
   const pay = paymentsSummary(job);
   const first = (job.name || "").split(" ")[0];
   const rep = (users || []).find((u) => u.name === job.assignee);
-  const loc = rep && rep.locationId && (brand2.locations || []).find((l) => l.id === rep.locationId);
+  const loc = rep && rep.locationId && (brand.locations || []).find((l) => l.id === rep.locationId);
   return {
     customer_name: job.name,
     customer_first: first,
     job_address: job.address,
     rep_name: job.assignee,
-    rep_phone: rep && rep.repPhone || loc && loc.phone || brand2.phone,
-    rep_email: rep && (rep.workEmail || rep.email) || loc && loc.email || brand2.email,
-    office_address: loc && loc.address || brand2.address,
-    office_phone: loc && loc.phone || brand2.phone,
-    office_email: loc && loc.email || brand2.email,
-    company: brand2.company,
+    rep_phone: rep && rep.repPhone || loc && loc.phone || brand.phone,
+    rep_email: rep && (rep.workEmail || rep.email) || loc && loc.email || brand.email,
+    office_address: loc && loc.address || brand.address,
+    office_phone: loc && loc.phone || brand.phone,
+    office_email: loc && loc.email || brand.email,
+    company: brand.company,
     crew_name: crew ? crew.name : "",
     scheduled_date: job.schedDate || "",
     contract_total: pay.contract ? money(pay.contract) : "",
     balance_due: pay.balance ? money(pay.balance) : "",
     claim_number: job.insurance ? job.insurance.claim : "",
-    review_link: brand2.googleReviewLink
+    review_link: brand.googleReviewLink
   };
 }
 var SEED_TEMPLATES = [
@@ -2114,7 +1956,7 @@ var PORTAL_SECTIONS = [
   ["invoice", "Invoice & balance"],
   ["documents", "Documents"],
   ["photos", "Project photos"],
-  ["sign", "Documents to sign"],
+  ["sign", "Agreements & signatures"],
   ["requests", "Quotes & future projects"],
   ["messages", "Messages"],
   ["review", "Rate your experience"],
@@ -2617,6 +2459,60 @@ var seedJobs = [
     }]
   }
 ];
+function buildSeedActivity() {
+  const now = Date.now();
+  const chain = (jobId, jobName, steps) => {
+    const totalPastDays = steps.reduce((sum, [, days]) => sum + days, 0);
+    let t = now - totalPastDays * 864e5;
+    return steps.map(([stageName, days]) => {
+      const entry = {
+        id: uid("act"),
+        kind: "stage",
+        jobId,
+        jobName,
+        by: "Jacob Henderson",
+        at: new Date(t).toISOString().slice(0, 16).replace("T", " "),
+        text: `moved ${jobName} to "${stageName}"`
+      };
+      t += days * 864e5;
+      return entry;
+    });
+  };
+  return [
+    ...chain("j1", "Rob Kennard", [["New lead", 3], ["Appointment scheduled", 0]]),
+    ...chain("j2", "Omkar Hirekhan", [["New lead", 2], ["Appointment scheduled", 5], ["Estimate sent / Follow up", 0]]),
+    ...chain("j3", "Roger Perry", [
+      ["New lead", 2],
+      ["Appointment scheduled", 4],
+      ["Estimate sent / Follow up", 5],
+      ["Claim filed", 3],
+      ["Job approved", 4],
+      ["Supplementing", 3],
+      ["Deposit paid \u2014 job scheduled", 4],
+      ["Production", 5],
+      ["Payments / Invoicing / Cap out", 0]
+    ]),
+    ...chain("j4", "Jill Neitzel", [
+      ["New lead", 2],
+      ["Appointment scheduled", 3],
+      ["Estimate sent / Follow up", 4],
+      ["Claim filed", 3],
+      ["Job approved", 0]
+    ]),
+    ...chain("j6", "Dale Whitfield", [
+      ["New lead", 2],
+      ["Appointment scheduled", 4],
+      ["Estimate sent / Follow up", 5],
+      ["Claim filed", 3],
+      ["Job approved", 4],
+      ["Supplementing", 3],
+      ["Deposit paid \u2014 job scheduled", 4],
+      ["Production", 5],
+      ["Payments / Invoicing / Cap out", 3],
+      ["Job completed", 0]
+    ])
+  ].sort((a, b) => (b.at || "").localeCompare(a.at || ""));
+}
 var ZIP_PREFIX_STATE = [
   { lo: 10, hi: 27, state: "MA" },
   { lo: 28, hi: 29, state: "RI" },
@@ -3188,19 +3084,6 @@ var JURIS_OVERRIDES = {};
 function setJurisOverrides(map) {
   JURIS_OVERRIDES = map || {};
 }
-var LEGAL_OVERRIDES = {};
-function setLegalOverrides(map) {
-  LEGAL_OVERRIDES = map || {};
-}
-function legalPack(state) {
-  return legalPackFor(state, LEGAL_OVERRIDES);
-}
-function legalGaps(state) {
-  return legalPackGaps(state, LEGAL_OVERRIDES);
-}
-function legalReady(state) {
-  return legalPackReady(state, LEGAL_OVERRIDES);
-}
 var LEARNED_JURISDICTIONS = {};
 function setLearnedJurisdictions(map) {
   LEARNED_JURISDICTIONS = map || {};
@@ -3484,6 +3367,13 @@ var fmtStamp = (iso) => {
 };
 var money = (n) => (n < 0 ? "-$" : "$") + Math.abs(n).toLocaleString(void 0, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 var money0 = (n) => (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
+var moneyCompact = (n) => {
+  const sign = n < 0 ? "-$" : "$";
+  const v = Math.abs(n);
+  if (v >= 1e6) return `${sign}${(v / 1e6).toFixed(v >= 1e7 ? 0 : 1)}M`;
+  if (v >= 1e3) return `${sign}${(v / 1e3).toFixed(v >= 1e4 ? 0 : 1)}k`;
+  return `${sign}${Math.round(v)}`;
+};
 var pct1 = (n) => `${n.toFixed(2)}%`;
 var FACT_TIERS = ["unknown", "seeded", "derived", "verified"];
 function fact(value, opts = {}) {
@@ -3626,7 +3516,8 @@ function repSplitValid(job) {
 function computeCapOut(job) {
   const { materials, labor, other, cogs } = computeFin(job.fin);
   const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : []).filter((c) => c.status === "Approved").reduce((a2, c) => a2 + coTotal(c), 0);
-  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved;
+  const supApproved = (Array.isArray((job.claim || {}).supplements) ? job.claim.supplements : []).filter((s) => s.status === "Approved" || s.status === "Paid").reduce((a2, s) => a2 + num(s.amount), 0);
+  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved + supApproved;
   const gross = contract - cogs;
   const structure = job.fin.structure || "grossProfit";
   const rate = job.fin.commissionRate;
@@ -3711,7 +3602,8 @@ function paymentsSummary(job) {
   const received = job.payments.filter((p) => p.type === "Received").reduce((s, p) => s + p.amt, 0);
   const paidOut = job.payments.filter((p) => p.type !== "Received").reduce((s, p) => s + p.amt, 0);
   const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : []).filter((c) => c.status === "Approved").reduce((a2, c) => a2 + coTotal(c), 0);
-  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved;
+  const supApproved = (Array.isArray((job.claim || {}).supplements) ? job.claim.supplements : []).filter((s) => s.status === "Approved" || s.status === "Paid").reduce((a2, s) => a2 + num(s.amount), 0);
+  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved + supApproved;
   return { received, paidOut, contract, balance: contract - received };
 }
 var EXPORT_ALLOWED = false;
@@ -4313,6 +4205,14 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
   ] });
 }
 function Sheet({ open, onClose, title, children, footer, wide, tall, center = true }) {
+  (0, import_react.useEffect)(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   if (!open) return null;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
     position: "fixed",
@@ -4328,8 +4228,14 @@ function Sheet({ open, onClose, title, children, footer, wide, tall, center = tr
     background: S.card,
     width: "100%",
     maxWidth: wide ? 760 : 560,
-    maxHeight: center ? "82vh" : "90vh",
-    minHeight: tall ? "55vh" : void 0,
+    /* `vh` is the layout viewport, which on iOS Safari can be taller
+       than what's actually on screen while the address bar is
+       showing — the footer (the button that submits the sheet) would
+       render below the real visible area with no way to reach it,
+       since this outer overlay has no scroll of its own. `dvh` tracks
+       the real, currently-visible viewport instead. */
+    maxHeight: center ? "82dvh" : "90dvh",
+    minHeight: tall ? "55dvh" : void 0,
     borderRadius: center ? 18 : "18px 18px 0 0",
     display: "flex",
     flexDirection: "column",
@@ -4337,7 +4243,7 @@ function Sheet({ open, onClose, title, children, footer, wide, tall, center = tr
   }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 12px" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 700, color: S.ink }, children: title }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onClose, style: {
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onClose, "aria-label": "Close", style: {
         border: "none",
         background: S.soft,
         borderRadius: 999,
@@ -4349,7 +4255,13 @@ function Sheet({ open, onClose, title, children, footer, wide, tall, center = tr
         color: S.ink
       }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.X, { size: 17 }) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { overflowY: "auto", padding: "4px 20px 20px", flex: 1 }, children }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      overflowY: "auto",
+      padding: "4px 20px 20px",
+      flex: 1,
+      WebkitOverflowScrolling: "touch",
+      overscrollBehavior: "contain"
+    }, children }),
     footer && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "12px 20px 20px", borderTop: `1px solid ${S.line}` }, children: footer })
   ] }) });
 }
@@ -4367,7 +4279,12 @@ function Toast({ msg }) {
     fontSize: 14,
     fontWeight: 600,
     zIndex: 90,
-    whiteSpace: "nowrap"
+    whiteSpace: "nowrap",
+    /* Purely informational, never itself tappable — without this its
+       screen rect can sit on top of a Sheet's footer button (e.g. an
+       Add-appointment save) and silently swallow a real tap meant for
+       what's underneath. */
+    pointerEvents: "none"
   }, children: msg });
 }
 function SignaturePad({ open, onClose, title, onApply }) {
@@ -5077,7 +4994,7 @@ function Marketing({ onSignIn, onStartTrial }) {
     ] }) })
   ] });
 }
-function Login({ brand: brand2, users, onLogin, initialMode = "login", selectedPlan = "per_seat", onBackToMarketing }) {
+function Login({ brand, users, onLogin, initialMode = "login", selectedPlan = "per_seat", onBackToMarketing }) {
   const [mode, setMode] = (0, import_react.useState)(initialMode);
   const [suName, setSuName] = (0, import_react.useState)("");
   const [suCompany, setSuCompany] = (0, import_react.useState)("");
@@ -5129,11 +5046,11 @@ function Login({ brand: brand2, users, onLogin, initialMode = "login", selectedP
     setBusy(false);
   };
   if (!live && mode === "account") {
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", background: brand2.primary, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "100%", maxWidth: 420 }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", background: brand.primary, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "100%", maxWidth: 420 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center", marginBottom: 22 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: S.card, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Shield, { size: 28, color: brand2.primary }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800, color: "#fff" }, children: brand2.company }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 4 }, children: brand2.slogan })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: S.card, display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Shield, { size: 28, color: brand.primary }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 22, fontWeight: 800, color: "#fff" }, children: brand.company }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 4 }, children: brand.slogan })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { padding: 14 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.sub, padding: "4px 6px 10px" }, children: "Continue as" }),
@@ -5154,7 +5071,7 @@ function Login({ brand: brand2, users, onLogin, initialMode = "login", selectedP
             height: 38,
             borderRadius: 999,
             flexShrink: 0,
-            background: u.role === "admin" ? brand2.primary : T.accentSoft,
+            background: u.role === "admin" ? brand.primary : T.accentSoft,
             color: u.role === "admin" ? "#fff" : T.accent,
             display: "grid",
             placeItems: "center",
@@ -5609,6 +5526,43 @@ function exceptionFeed(jobs, ctx) {
   const all = (jobs || []).flatMap((j) => jobExceptions(j, ctx));
   return all.sort((a, b) => a.tone === b.tone ? 0 : a.tone === "red" ? -1 : 1);
 }
+var STAGE_MOVE_RE = / to "([^"]*)"$/;
+function stageDurationSamples(activity, stages) {
+  const byName = new Map((stages || []).map((s) => [s.name, s.id]));
+  const moves = (activity || []).filter((a) => a.kind === "stage" && a.jobId && STAGE_MOVE_RE.test(a.text || "")).map((a) => ({ jobId: a.jobId, at: a.at, stageId: byName.get(STAGE_MOVE_RE.exec(a.text)[1]) })).filter((m) => m.stageId).sort((a, b) => (a.at || "").localeCompare(b.at || ""));
+  const byJob = /* @__PURE__ */ new Map();
+  moves.forEach((m) => {
+    if (!byJob.has(m.jobId)) byJob.set(m.jobId, []);
+    byJob.get(m.jobId).push(m);
+  });
+  const samples = {};
+  byJob.forEach((seq) => {
+    for (let i = 0; i < seq.length - 1; i++) {
+      const days = (Date.parse(seq[i + 1].at) - Date.parse(seq[i].at)) / 864e5;
+      if (!(days >= 0)) continue;
+      (samples[seq[i].stageId] || (samples[seq[i].stageId] = [])).push(days);
+    }
+  });
+  return samples;
+}
+var STALL_MIN_SAMPLE = 3;
+function predictedStallRisk(jobs, activity, stages) {
+  const samples = stageDurationSamples(activity, stages);
+  const median = (arr) => {
+    const s = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  };
+  const done = ["s10", "s11", "s12"];
+  return (jobs || []).filter((j) => !done.includes(j.stageId)).map((j) => {
+    const pool = samples[j.stageId];
+    if (!pool || pool.length < STALL_MIN_SAMPLE) return null;
+    const typicalDays = median(pool);
+    const daysIn = stageDays(j);
+    if (daysIn <= typicalDays) return null;
+    return { job: j, stageId: j.stageId, daysIn, typicalDays: Math.round(typicalDays * 10) / 10, sampleSize: pool.length };
+  }).filter(Boolean).sort((a, b) => b.daysIn - b.typicalDays - (a.daysIn - a.typicalDays));
+}
 function FocusList({ jobs, onOpenJob, stages = [] }) {
   const ranked = jobs.map((j) => ({ j, f: focusScore(j) })).filter((x) => x.f).sort((a, b) => b.f.score - a.f.score).slice(0, 5);
   if (ranked.length === 0) return null;
@@ -5667,7 +5621,7 @@ function Dashboard({
   onNewLead,
   onQuickTask,
   onOpenStage,
-  brand: brand2 = DEFAULT_BRAND,
+  brand = DEFAULT_BRAND,
   appointments = [],
   apptTypes = [],
   crews = [],
@@ -5684,7 +5638,8 @@ function Dashboard({
   stageRules = {},
   currentUser = null,
   showMoney = true,
-  isAdmin = true
+  isAdmin = true,
+  activity = []
 }) {
   const isRep = !!currentUser && currentUser.role === "rep";
   const [scope, setScope] = (0, import_react.useState)(isRep ? "mine" : "all");
@@ -5692,6 +5647,7 @@ function Dashboard({
     if (scope !== "mine" || !currentUser) return allJobs;
     return allJobs.filter((j) => j.assignee === currentUser.name);
   }, [allJobs, scope, currentUser]);
+  const stallRisk = (0, import_react.useMemo)(() => predictedStallRisk(jobs, activity, stages), [jobs, activity, stages]);
   const [homeBoard, setHomeBoard] = (0, import_react.useState)("calendar");
   const [showAllBlockers, setShowAllBlockers] = (0, import_react.useState)(false);
   const [quick, setQuick] = (0, import_react.useState)(null);
@@ -5747,7 +5703,7 @@ function Dashboard({
   const wonCount = approvedPlus.length;
   const avgSale = wonCount ? signedValue / wonCount : 0;
   const collected = jobs.reduce((s, j) => s + paymentsSummary(j).received, 0);
-  const closeRate = jobs.length ? wonCount / jobs.length : 0;
+  const closeRate = jobs.length ? wonCount / jobs.length * 100 : 0;
   const reviewJobs = jobs.filter((j) => WON_STAGES.includes(j.stageId) || j.stageId === "s10");
   const rev = { posted: 0, recover: 0, rated: 0, asked: 0, notasked: 0 };
   reviewJobs.forEach((j) => {
@@ -5770,8 +5726,8 @@ function Dashboard({
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, marginTop: 4 }, children: (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { weekday: "long", month: "long", day: "numeric" }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "right", flexShrink: 0, maxWidth: 130 }, children: [
-        brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: brand2.company, style: { height: 40, maxWidth: 130, objectFit: "contain", display: "block", marginLeft: "auto" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 800, color: T.primary }, children: brand2.short }),
-        brand2.address && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10, color: S.sub, marginTop: 3, lineHeight: 1.35 }, children: String(brand2.address).split(",")[1] ? String(brand2.address).split(",").slice(-2).join(",").trim() : brand2.address })
+        brand.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand.logo, alt: brand.company, style: { height: 40, maxWidth: 130, objectFit: "contain", display: "block", marginLeft: "auto" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 800, color: T.primary }, children: brand.short }),
+        brand.address && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10, color: S.sub, marginTop: 3, lineHeight: 1.35 }, children: String(brand.address).split(",")[1] ? String(brand.address).split(",").slice(-2).join(",").trim() : brand.address })
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, marginTop: 16 }, children: [
@@ -5945,6 +5901,53 @@ function Dashboard({
       ] });
     })(),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(FocusList, { jobs, onOpenJob, stages }),
+    stallRisk.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 16 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: stallRisk.length }), children: "Likely to stall" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }, children: "Sitting longer than half of past jobs took to move past this stage." }),
+      stallRisk.slice(0, 5).map(({ job: j, stageId, daysIn, typicalDays, sampleSize }, i) => {
+        const stage = stages.find((s) => s.id === stageId);
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob(j.id), style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          width: "100%",
+          border: "none",
+          background: "none",
+          cursor: "pointer",
+          textAlign: "left",
+          fontFamily: "inherit",
+          padding: "9px 0",
+          borderTop: i ? `1px solid ${S.line}` : "none"
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, fontWeight: 700, color: S.ink }, children: j.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 1 }, children: [
+              stage ? stage.name : "this stage",
+              " \xB7 based on ",
+              sampleSize,
+              " past ",
+              sampleSize === 1 ? "job" : "jobs"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "right", flexShrink: 0, marginLeft: 10 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13.5, fontWeight: 800, color: "#9A6B00" }, children: [
+              daysIn,
+              "d"
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11, color: S.sub }, children: [
+              "typically ",
+              typicalDays,
+              "d"
+            ] })
+          ] })
+        ] }, j.id);
+      }),
+      stallRisk.length > 5 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, paddingTop: 8 }, children: [
+        "+ ",
+        stallRisk.length - 5,
+        " more"
+      ] })
+    ] }),
     (() => {
       const days = [];
       for (let i = 0; i < 7; i++) {
@@ -6295,10 +6298,71 @@ function Dashboard({
     ] })
   ] });
 }
-function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [] }) {
+var WIDGET_DEFS = [
+  { id: "revenue", title: "Signed revenue", w: 1 },
+  { id: "gross", title: "Gross profit", w: 1 },
+  { id: "closeRate", title: "Close rate", w: 1 },
+  { id: "avgJob", title: "Average job", w: 1 },
+  { id: "openPipeline", title: "Open pipeline", w: 1 },
+  { id: "receivable", title: "Receivable", w: 1 },
+  { id: "weightedPipeline", title: "Weighted pipeline", w: 1 },
+  { id: "avgAge", title: "Avg age in stage", w: 1 },
+  { id: "revenueTrend", title: "Revenue trend (6mo)", w: 2 },
+  { id: "wonTrend", title: "Jobs won trend (6mo)", w: 2 },
+  { id: "jobMix", title: "Job mix", w: 2 },
+  { id: "collections", title: "Collections", w: 2 },
+  { id: "repLeaderboard", title: "Rep leaderboard", w: 2, adminOnly: true },
+  { id: "leadSources", title: "Lead sources", w: 2 },
+  { id: "crewThroughput", title: "Crew throughput", w: 2, adminOnly: true },
+  { id: "stageDistribution", title: "Stage distribution", w: 2 }
+];
+var DEFAULT_DASHBOARD_LAYOUT = [
+  { id: "revenue", w: 1 },
+  { id: "gross", w: 1 },
+  { id: "closeRate", w: 1 },
+  { id: "avgJob", w: 1 },
+  { id: "openPipeline", w: 1 },
+  { id: "receivable", w: 1 },
+  { id: "revenueTrend", w: 2 },
+  { id: "jobMix", w: 2 },
+  { id: "collections", w: 2 }
+];
+function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [], setUsers, dashLayout, setDashLayout }) {
   const [scope, setScope] = (0, import_react.useState)(isAdmin ? "company" : currentUser.name);
   const [range, setRange] = (0, import_react.useState)("all");
   const [tab, setTab] = (0, import_react.useState)("summary");
+  const layout = dashLayout;
+  const setLayout = setDashLayout;
+  const [editingBoard, setEditingBoard] = (0, import_react.useState)(false);
+  (0, import_react.useEffect)(() => {
+    let alive = true;
+    (async () => {
+      if (!currentUser || !currentUser.id) return;
+      const saved = await dashLoadLayout(currentUser.id);
+      if (alive && Array.isArray(saved) && saved.length) setLayout(saved);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [currentUser && currentUser.id]);
+  const saveLayout = (next) => {
+    setLayout(next);
+    if (currentUser && currentUser.id) dashSaveLayout(currentUser.id, next);
+  };
+  const moveWidget = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= layout.length) return;
+    const next = [...layout];
+    [next[i], next[j]] = [next[j], next[i]];
+    saveLayout(next);
+  };
+  const toggleWidgetWidth = (id) => saveLayout(layout.map((w) => w.id === id ? { ...w, w: w.w === 2 ? 1 : 2 } : w));
+  const removeWidget = (id) => saveLayout(layout.filter((w) => w.id !== id));
+  const addWidget = (id) => {
+    const def = WIDGET_DEFS.find((d) => d.id === id);
+    if (!def || layout.some((w) => w.id === id)) return;
+    saveLayout([...layout, { id, w: def.w }]);
+  };
   const scoped = (0, import_react.useMemo)(
     () => scope === "company" ? jobs : jobs.filter((j) => jobReps(j).some((r) => r.name === scope)),
     [jobs, scope]
@@ -6410,11 +6474,50 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
     return Object.values(map).sort((a2, b2) => b2.revenue - a2.revenue || b2.leads - a2.leads);
   }, [scoped]);
   const commissionRows = (0, import_react.useMemo)(() => scoped.filter((j) => WON_STAGES.includes(j.stageId)).map((j) => ({ job: j, cap: computeCapOut(j) })).sort((a2, b2) => b2.cap.payout - a2.cap.payout), [scoped]);
+  const trend = (0, import_react.useMemo)(() => {
+    const MONTHS_BACK = 6;
+    const now = /* @__PURE__ */ new Date();
+    const buckets = [];
+    for (let i = MONTHS_BACK - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      buckets.push({
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+        label: d.toLocaleString(void 0, { month: "short" }),
+        revenue: 0,
+        won: 0
+      });
+    }
+    const byKey = Object.fromEntries(buckets.map((b) => [b.key, b]));
+    scoped.filter((j) => WON_STAGES.includes(j.stageId)).forEach((j) => {
+      const raw = j.contract && j.contract.signedAt || j.stageAt;
+      const d = parseAnyStamp(raw);
+      if (!d) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const b = byKey[key];
+      if (!b) return;
+      b.revenue += computeCapOut(j).contract;
+      b.won += 1;
+    });
+    return buckets;
+  }, [scoped]);
   const Stat = ({ label, value, sub, tone }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 14, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 19, fontWeight: 800, color: tone || S.ink }, children: value }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 700, color: S.ink, marginTop: 3 }, children: label }),
     sub && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 2 }, children: sub })
   ] });
+  const setGoal = (name, val) => setUsers && setUsers((prev) => prev.map((u) => u.name === name ? { ...u, goal: val } : u));
+  const TrendChart = ({ data, valueKey, formatValue, tone }) => {
+    const max = Math.max(1, ...data.map((d) => d[valueKey]));
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", alignItems: "flex-end", gap: 8, marginTop: 4 }, children: data.map((d) => {
+      const v = d[valueKey];
+      const h = v > 0 ? Math.max(6, Math.round(v / max * 72)) : 0;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10, color: S.sub, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }, children: v > 0 ? formatValue(v) : "" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: "100%", height: 72, display: "flex", alignItems: "flex-end" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: "100%", height: h, background: tone || T.accent, borderRadius: "4px 4px 0 0" } }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, fontWeight: 700 }, children: d.label })
+      ] }, d.key);
+    }) });
+  };
   const exportCommission = () => {
     const rows = [
       [`Commission report \u2014 ${scope === "company" ? "Company-wide" : scope}`],
@@ -6454,6 +6557,118 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
     downloadCsv(`commission-${scope === "company" ? "company" : scope.split(" ")[0].toLowerCase()}.csv`, rows);
     toast("Commission report exported");
   };
+  const renderWidget = (id) => {
+    switch (id) {
+      case "revenue":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Signed revenue", value: money(stat.revenue), sub: `${stat.won} jobs won` });
+      case "gross":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Gross profit", value: money(stat.gross), sub: `${pct1(stat.margin)} margin`, tone: "#177245" });
+      case "closeRate":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Close rate", value: pct1(stat.closeRate), sub: `${stat.won} won / ${stat.lost} lost` });
+      case "avgJob":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Average job", value: money(stat.avgJob), sub: "Signed jobs only" });
+      case "openPipeline":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Open pipeline", value: money(stat.openValue), sub: `${stat.open} active jobs` });
+      case "receivable":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Receivable", value: money(stat.ar), sub: `${money(stat.collected)} collected`, tone: stat.ar > 0 ? "#B42318" : void 0 });
+      case "weightedPipeline":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Weighted pipeline", value: money(stat.weightedPipeline), sub: "value \xD7 stage odds" });
+      case "avgAge":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Avg age in stage", value: `${Math.round(stat.avgAge)}d`, sub: "open jobs" });
+      case "revenueTrend":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Revenue trend \u2014 last 6 months" }),
+          trend.some((d) => d.won > 0) ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TrendChart, { data: trend, valueKey: "revenue", formatValue: moneyCompact }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub }, children: "Not enough signed jobs yet to chart a trend." })
+        ] });
+      case "wonTrend":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Jobs won \u2014 last 6 months" }),
+          trend.some((d) => d.won > 0) ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TrendChart, { data: trend, valueKey: "won", formatValue: (v) => String(v), tone: "#5B8DEF" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub }, children: "Not enough signed jobs yet to chart a trend." })
+        ] });
+      case "jobMix":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Job mix" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Insurance", v: `${stat.insurance} job${stat.insurance === 1 ? "" : "s"}` }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Retail", v: `${stat.retail} job${stat.retail === 1 ? "" : "s"}` }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Completed", v: String(stat.done) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Lost", v: String(stat.lost) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Unqualified", v: String(stat.unq) })
+        ] });
+      case "collections": {
+        const owing = scoped.map((j) => ({ j, p: paymentsSummary(j) })).filter(({ j, p }) => p.balance > 0.01 && p.contract > 0 && WON_STAGES.concat(["s10"]).includes(j.stageId)).sort((a, b) => b.p.balance - a.p.balance);
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: owing.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "red", children: money(owing.reduce((s2, x) => s2 + x.p.balance, 0)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Clear" }), children: "Collections" }),
+          owing.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub }, children: "Nothing outstanding." }) : owing.slice(0, 8).map(({ j, p }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: `1px solid ${S.line}`, fontSize: 13 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 700 }, children: j.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 700, color: "#B42318" }, children: money(p.balance) })
+          ] }, j.id))
+        ] });
+      }
+      case "repLeaderboard":
+        return !isAdmin ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Rep leaderboard" }),
+          reps.slice(0, 8).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontSize: 13 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 700 }, children: r.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub }, children: [
+              money(r.revenue),
+              " \xB7 ",
+              pct1(r.closeRate),
+              " close"
+            ] })
+          ] }, r.name))
+        ] });
+      case "leadSources":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Lead sources" }),
+          sourceRows.slice(0, 8).map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontSize: 13 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 700 }, children: r.source }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub }, children: [
+              r.leads,
+              " leads \xB7 ",
+              money(r.revenue)
+            ] })
+          ] }, r.source))
+        ] });
+      case "crewThroughput":
+        return !isAdmin || crewRows.length === 0 ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Crew throughput" }),
+          crewRows.map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontSize: 13 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 700 }, children: r.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub }, children: [
+              r.done,
+              " done \xB7 ",
+              money(r.revenue)
+            ] })
+          ] }, r.name))
+        ] });
+      case "stageDistribution":
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Stage distribution" }),
+          stages.map((st) => {
+            const inStage = scoped.filter((j) => j.stageId === st.id);
+            const max = Math.max(1, ...stages.map((x) => scoped.filter((j) => j.stageId === x.id).length));
+            return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 120, fontSize: 12, color: S.sub, flexShrink: 0 }, children: st.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, height: 16, background: S.soft, borderRadius: 6, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+                height: "100%",
+                width: `${inStage.length / max * 100}%`,
+                background: DEAD_STAGES.includes(st.id) ? "#B42318" : WON_STAGES.includes(st.id) ? "#177245" : T.primary,
+                borderRadius: 6,
+                minWidth: inStage.length ? 16 : 0
+              } }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 24, fontSize: 12, fontWeight: 700, textAlign: "right" }, children: inStage.length })
+            ] }, st.id);
+          })
+        ] });
+      default:
+        return null;
+    }
+  };
+  const visibleLayout = layout.filter((w) => {
+    const def = WIDGET_DEFS.find((d) => d.id === w.id);
+    return def && (!def.adminOnly || isAdmin);
+  });
+  const availableWidgets = WIDGET_DEFS.filter((d) => (!d.adminOnly || isAdmin) && !layout.some((w) => w.id === d.id));
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Financials & performance", onBack }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
@@ -6481,7 +6696,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
         }, children: u.name.split(" ")[0] }, u.id))
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginTop: 12, overflowX: "auto" }, children: [["summary", "Summary"], ["commission", "Commission"], isAdmin && ["reps", "By rep"], ["sources", "Lead sources"], ["pipeline", "Pipeline"]].filter(Boolean).map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setTab(id), style: {
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginTop: 12, overflowX: "auto" }, children: [["summary", "Summary"], ["dashboard", "My dashboard"], ["commission", "Commission"], isAdmin && ["reps", "By rep"], ["sources", "Lead sources"], ["pipeline", "Pipeline"]].filter(Boolean).map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setTab(id), style: {
       border: "none",
       background: tab === id ? T.primary : "#fff",
       color: tab === id ? "#fff" : S.ink,
@@ -6501,6 +6716,13 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Average job", value: money(stat.avgJob), sub: "Signed jobs only" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Open pipeline", value: money(stat.openValue), sub: `${stat.open} active jobs` }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, { label: "Receivable", value: money(stat.ar), sub: `${money(stat.collected)} collected`, tone: stat.ar > 0 ? "#B42318" : void 0 })
+      ] }),
+      trend.some((d) => d.won > 0) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Trend \u2014 last 6 months" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 700, color: S.sub, marginBottom: 2 }, children: "SIGNED REVENUE" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TrendChart, { data: trend, valueKey: "revenue", formatValue: moneyCompact }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 700, color: S.sub, marginTop: 16, marginBottom: 2 }, children: "JOBS WON" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TrendChart, { data: trend, valueKey: "won", formatValue: (v) => String(v), tone: "#5B8DEF" })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Job mix" }),
@@ -6586,6 +6808,38 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Conversion", v: stat.reviewsSent ? pct1(stat.reviews / stat.reviewsSent * 100) : "\u2014" })
       ] })
     ] }),
+    tab === "dashboard" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: "Pick the widgets you want, size and order them how you like \u2014 saved to your own account, not shared with the team." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: editingBoard ? "primary" : "ghost", small: true, onClick: () => setEditingBoard(!editingBoard), style: { flexShrink: 0 }, children: editingBoard ? "Done" : "Customize" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: visibleLayout.map((w, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { gridColumn: w.w === 2 ? "1 / -1" : "auto" }, children: [
+        editingBoard && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => moveWidget(i, -1), disabled: i === 0, style: arrowBtn, "aria-label": "Move earlier", children: "\u2191" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => moveWidget(i, 1), disabled: i === visibleLayout.length - 1, style: arrowBtn, "aria-label": "Move later", children: "\u2193" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => toggleWidgetWidth(w.id), style: { ...arrowBtn, width: "auto", padding: "0 10px", fontSize: 12, fontWeight: 700 }, children: w.w === 2 ? "Full width" : "Half width" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => removeWidget(w.id), style: { ...arrowBtn, width: "auto", padding: "0 10px", fontSize: 12, fontWeight: 700, color: "#B42318" }, children: "Remove" })
+        ] }),
+        renderWidget(w.id)
+      ] }, w.id)) }),
+      visibleLayout.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 4 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, textAlign: "center", padding: "10px 0" }, children: "Nothing on your board yet \u2014 add a widget below." }) }),
+      editingBoard && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Add a widget" }),
+        availableWidgets.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub }, children: "Every available widget is already on your board." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 }, children: availableWidgets.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => addWidget(d.id), style: {
+          border: `1px solid ${S.line}`,
+          background: S.card,
+          borderRadius: 999,
+          padding: "8px 13px",
+          fontSize: 12.5,
+          fontWeight: 700,
+          color: S.ink,
+          cursor: "pointer"
+        }, children: [
+          "+ ",
+          d.title
+        ] }, d.id)) })
+      ] })
+    ] }),
     tab === "commission" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: isAdmin ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: exportCommission, children: [
@@ -6666,7 +6920,33 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
           money(r.reimb)
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 800, color: T.accent }, children: money(r.payout) })
-      ] })
+      ] }),
+      (() => {
+        const u = users.find((x) => x.name === r.name);
+        const goal = u ? num(u.goal) : 0;
+        const progress = goal > 0 ? Math.min(100, r.revenue / goal * 100) : 0;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}` }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11, fontWeight: 800, letterSpacing: ".05em", color: S.sub }, children: "GOAL" }),
+            goal > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 12.5, fontWeight: 700, color: progress >= 100 ? "#177245" : S.ink }, children: [
+              pct1(progress),
+              " of ",
+              money(goal),
+              progress >= 100 ? " \u2014 hit" : ""
+            ] })
+          ] }),
+          goal > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 6, background: S.line, borderRadius: 99, overflow: "hidden", marginBottom: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: `${progress}%`, height: "100%", background: progress >= 100 ? "#177245" : T.accent } }) }),
+          setUsers && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            MoneyInput,
+            {
+              style: { ...inputStyle, width: "100%" },
+              placeholder: "Set a revenue goal",
+              value: u ? u.goal || "" : "",
+              onChange: (v) => setGoal(r.name, v)
+            }
+          )
+        ] });
+      })()
     ] }, r.name)) }),
     tab === "sources" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Lead source performance" }),
@@ -6734,7 +7014,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
 function SubHeader({ title, onBack, right }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 12 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onBack, style: {
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onBack, "aria-label": "Back", style: {
         border: `1px solid ${S.line}`,
         background: S.card,
         borderRadius: 999,
@@ -6762,6 +7042,21 @@ function isoLocal(d) {
 }
 function todayIso() {
   return isoLocal(/* @__PURE__ */ new Date());
+}
+function humanToIso(s) {
+  if (!s) return "";
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? "" : isoLocal(d);
+}
+function isoToHuman(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+  if (!m) return "";
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.toLocaleDateString(void 0, { month: "short", day: "numeric", year: "numeric" });
+}
+function payDateIso(p) {
+  if (p && p.dateIso) return p.dateIso;
+  return todayIso();
 }
 function stageDays(job) {
   if (!job) return 0;
@@ -6871,8 +7166,16 @@ function timeMinutes(value) {
   const [hours, minutes] = value.split(":").map(Number);
   return hours * 60 + minutes;
 }
+function apptWindowISO(date, time, durationMin) {
+  if (!date || !time) return null;
+  const start = /* @__PURE__ */ new Date(`${date}T${time}:00`);
+  if (isNaN(start.getTime())) return null;
+  const end = new Date(start.getTime() + (Number(durationMin) || 60) * 6e4);
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:00`;
+  return { start: fmt(start), end: fmt(end) };
+}
 function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage, onLog = () => {
-}, users = [], embedded = false }) {
+}, users = [], crews = [], embedded = false }) {
   const today = /* @__PURE__ */ new Date();
   const [month, setMonth] = (0, import_react.useState)(new Date(today.getFullYear(), today.getMonth(), 1));
   const [view, setView] = (0, import_react.useState)("all");
@@ -6947,7 +7250,13 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
     const travelRisk = !overlap && gap < 90 && selectedJob?.zip && apJob?.zip && selectedJob.zip !== apJob.zip;
     return overlap || travelRisk ? { ap, job: apJob, overlap, gap } : null;
   }).filter(Boolean);
-  const hardConflicts = scheduleChecks.filter((check) => check.overlap);
+  const productionConflicts = f.date ? jobs.filter((j) => {
+    if (j.id === f.jobId || !j.schedDate || j.schedDate !== f.date) return false;
+    if (!resolvedAssignedTo) return false;
+    const crewName = j.crewId ? (crews.find((c) => c.id === j.crewId) || {}).name : null;
+    return j.assignee === resolvedAssignedTo || crewName && crewName === resolvedAssignedTo;
+  }).map((j) => ({ job: j, overlap: true, gap: 0, production: true })) : [];
+  const hardConflicts = [...scheduleChecks.filter((check) => check.overlap), ...productionConflicts];
   const save = () => {
     const jb = jobs.find((x) => x.id === f.jobId);
     if (hardConflicts.length) {
@@ -6969,9 +7278,27 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `updated ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
       toast("Appointment updated");
     } else {
-      setAppointments([...appointments, { ...payload, id: uid("ap") }]);
+      const newId = uid("ap");
+      setAppointments([...appointments, { ...payload, id: newId }]);
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `scheduled ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
       toast(notified ? `Appointment added \u2014 ${notified === "sms" ? "text" : "email"} ready to send from the Inbox` : "Appointment added");
+      const auth = AUTH();
+      const win = apptWindowISO(f.date, f.time, payload.durationMin);
+      if (auth && auth.pushToCalendar && win) {
+        auth.pushToCalendar({
+          summary: `${f.type}${jb ? ` \u2014 ${jb.name}` : ""}`,
+          description: jb ? `RoofStride \u2014 ${f.type} for ${jb.name}` : `RoofStride \u2014 ${f.type}`,
+          location: jb ? jb.address : "",
+          start: win.start,
+          end: win.end,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        }).then((res) => {
+          if (res && res.eventId) {
+            setAppointments((prev) => prev.map((ap) => ap.id === newId ? { ...ap, googleEventId: res.eventId } : ap));
+          }
+        }).catch(() => {
+        });
+      }
     }
     setAdding(false);
     setEditingId(null);
@@ -7519,7 +7846,7 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
             ] }) })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "date", value: f.date, onChange: (e) => setF({ ...f, date: e.target.value }) }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: f.date, onChange: (e) => setF({ ...f, date: e.target.value }) }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Time", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "time", value: f.time, onChange: (e) => setF({ ...f, time: e.target.value }) }) })
           ] }),
           scheduleChecks.map((check) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: check.overlap ? "Scheduling conflict" : "Travel-time warning", tone: check.overlap ? "red" : "amber", children: [
@@ -7532,6 +7859,14 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
             ".",
             check.overlap ? " These appointments overlap and cannot be double-booked." : ` There is only about ${check.gap} minutes between different service areas.`
           ] }, check.ap.id)),
+          productionConflicts.map((check) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Scheduling conflict", tone: "red", children: [
+            resolvedAssignedTo,
+            " is already booked for a full production day on ",
+            check.job.name,
+            "'s job on ",
+            f.date,
+            ". That cannot be double-booked with a timed appointment."
+          ] }, check.job.id)),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Notes", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", { style: { ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" }, value: f.notes, onChange: (e) => setF({ ...f, notes: e.target.value }) }) })
         ]
       }
@@ -7847,7 +8182,7 @@ function Contacts({ jobs, onBack, onOpenJob, onAddProject, currentUser, onDelete
     )
   ] });
 }
-function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LEAD_SOURCES, users = [], jobs = [], seed = null }) {
+function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURCES, users = [], jobs = [], seed = null }) {
   const contacts = (0, import_react.useMemo)(() => buildContactDirectory(jobs), [jobs]);
   const roster = (0, import_react.useMemo)(() => {
     const names = (users || []).filter((u) => u.active !== false).map((u) => u.name).filter(Boolean);
@@ -7905,6 +8240,11 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
     const consentJobs = selected?.jobs || [];
     setF({
       ...blank,
+      /* This reset runs in the same effect flush as the roster-default
+         effect above and always wins (it replaces the whole object, not
+         a functional update) — defaulting the assignee here directly
+         keeps a new lead from silently landing with assignee: "". */
+      assignee: roster.length ? roster[0] : "",
       contactMode: selected ? "existing" : "new",
       existingContactId: selected?.id || "",
       first: selected?.first || seedName[0] || "",
@@ -7915,7 +8255,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
       smsConsent: consentJobs.some((j) => j.consent?.sms?.granted),
       emailConsent: consentJobs.some((j) => j.consent?.email?.granted)
     });
-  }, [open, seed]);
+  }, [open, seed, roster]);
   (0, import_react.useEffect)(() => {
     if (!open || GEO_BIAS) return;
     const withCoords = jobs.find((j) => (j.lat ?? j.property?.lat) != null && (j.lng ?? j.property?.lng) != null);
@@ -8161,7 +8501,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
           ] }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Assign to", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: f.assignee, onChange: set("assignee"), children: roster.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: t }, t)) }) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Claim type *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: ["Insurance", "Retail", "Commercial", "Unknown"].map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setF({ ...f, claimType: c }), style: {
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Claim type *", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: JOB_TYPES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setF({ ...f, claimType: c }), style: {
           border: `1.5px solid ${f.claimType === c ? T.accent : S.line}`,
           background: f.claimType === c ? T.accentSoft : "#fff",
           color: f.claimType === c ? T.accent : S.ink,
@@ -8177,7 +8517,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Carrier", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.carrier, onChange: set("carrier"), placeholder: "State Farm, Allstate\u2026" }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Policy number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.policy, onChange: set("policy") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Claim number", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.claim, onChange: set("claim") }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deductible ($)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.deductible, onChange: set("deductible") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deductible ($)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: f.deductible, onChange: set("deductible") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Adjuster name", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.adjusterName, onChange: set("adjusterName") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Adjuster phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.adjusterPhone, onChange: set("adjusterPhone") }) })
           ] }),
@@ -8219,7 +8559,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand: brand2, leadSources = LE
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Text messages." }),
               " I agree to receive texts about my project from ",
-              brand2.company,
+              brand.company,
               ". Msg & data rates may apply. Reply STOP to opt out."
             ] })
           ] }),
@@ -8353,7 +8693,8 @@ function FiltersSheet({ open, onClose, stages, filters, setFilters, assignees = 
 }
 var linkBtn = { border: "none", background: "none", color: T.accent, fontWeight: 700, fontSize: 13, cursor: "pointer", padding: 0 };
 function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, setStageRules = () => {
-} }) {
+}, currentUser = null }) {
+  const canEdit = !currentUser || currentUser.role === "admin" || currentUser.role === "manager";
   const [local, setLocal] = (0, import_react.useState)(stages);
   const [rules, setRules] = (0, import_react.useState)(stageRules);
   const [openRule, setOpenRule] = (0, import_react.useState)(null);
@@ -8396,14 +8737,14 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
     if (p.tasks && !p.tasks.every((t) => r.tasks.some((x) => String(x.label).toLowerCase() === String(t.label).toLowerCase()))) return false;
     return true;
   }).length;
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
     Sheet,
     {
       open,
       onClose,
       title: "Customize workflow",
       tall: true,
-      footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+      footer: canEdit ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: onClose, children: "Cancel" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           Btn,
@@ -8418,8 +8759,11 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
             children: "Save workflow"
           }
         )
-      ] }),
-      children: [
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%" }, onClick: onClose, children: "Close" }),
+      children: !canEdit ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Lock, { size: 18, color: S.sub, style: { flexShrink: 0, marginTop: 2 } }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: "Pipeline stages are admin/manager-only \u2014 every job and every rep depends on this structure. Ask the office to make a change." })
+      ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14, color: S.sub, marginBottom: 14, lineHeight: 1.5 }, children: [
           "Rename, reorder, add, or remove pipeline stages. Open ",
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", { style: { color: S.ink }, children: "Automate" }),
@@ -8614,7 +8958,7 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
             ]
           }
         )
-      ]
+      ] })
     }
   );
 }
@@ -8695,8 +9039,10 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
   const addAppointment = () => {
     if (!appt.date) return;
     const category = categoryForAppointment(appt.type);
+    const newId = uid("ap");
+    const durationMin = Number(appt.durationMin) || 60;
     setAppointments([...appointments, {
-      id: uid("ap"),
+      id: newId,
       jobId: job.id,
       type: appt.type,
       date: appt.date,
@@ -8704,11 +9050,28 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
       notes: "",
       category,
       assignedTo: job.assignee,
-      durationMin: Number(appt.durationMin) || 60,
+      durationMin,
       status: "Scheduled"
     }]);
     onLog({ kind: "appointment", jobId: job.id, jobName: job.name, text: `scheduled ${appt.type.toLowerCase()} for ${job.name} on ${appt.date}` });
     finish("Appointment added");
+    const auth = AUTH();
+    const win = apptWindowISO(appt.date, appt.time, durationMin);
+    if (auth && auth.pushToCalendar && win) {
+      auth.pushToCalendar({
+        summary: `${appt.type} \u2014 ${job.name}`,
+        description: `RoofStride \u2014 ${appt.type} for ${job.name}`,
+        location: job.address,
+        start: win.start,
+        end: win.end,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      }).then((res) => {
+        if (res && res.eventId) {
+          setAppointments((prev) => prev.map((ap) => ap.id === newId ? { ...ap, googleEventId: res.eventId } : ap));
+        }
+      }).catch(() => {
+      });
+    }
   };
   const actions = [
     ["note", "Note"],
@@ -8751,7 +9114,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
     mode === "task" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Task", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { autoFocus: true, style: inputStyle, value: task.label, onChange: (e) => setTask({ ...task, label: e.target.value }) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Due date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "date", value: task.due, onChange: (e) => setTask({ ...task, due: e.target.value }) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Due date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: task.due, onChange: (e) => setTask({ ...task, due: e.target.value }) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Time", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "time", value: task.time, onChange: (e) => setTask({ ...task, time: e.target.value }) }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, disabled: !task.label.trim(), onClick: addTask, children: "Add task" })
@@ -8759,7 +9122,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
     mode === "appointment" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Type", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: appt.type, onChange: (e) => setAppt({ ...appt, type: e.target.value }), children: apptTypes.map((type) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: type }, type)) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "date", value: appt.date, onChange: (e) => setAppt({ ...appt, date: e.target.value }) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: appt.date, onChange: (e) => setAppt({ ...appt, date: e.target.value }) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Time", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "time", value: appt.time, onChange: (e) => setAppt({ ...appt, time: e.target.value }) }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Duration", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: appt.durationMin, onChange: (e) => setAppt({ ...appt, durationMin: Number(e.target.value) }), children: [
@@ -8781,7 +9144,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
 }
 function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {
 }, stageRules = {}, onBulkMoveStage = () => {
-} }) {
+}, appointments = [], users = [] }) {
   const dragJob = (0, import_react.useRef)(null);
   const focusRef = (0, import_react.useRef)(null);
   (0, import_react.useEffect)(() => {
@@ -8805,7 +9168,10 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
     setSelected(/* @__PURE__ */ new Set());
     setBulkMenu(null);
   };
-  const assigneeOptions = (0, import_react.useMemo)(() => [...new Set(jobs.map((j) => j.assignee).filter(Boolean))], [jobs]);
+  const assigneeOptions = (0, import_react.useMemo)(() => [...new Set([
+    ...users.filter((u) => u.active !== false).map((u) => u.name),
+    ...jobs.map((j) => j.assignee)
+  ].filter(Boolean))].sort(), [jobs, users]);
   const filtered = (0, import_react.useMemo)(() => {
     let out = jobs.filter((j) => {
       if (q) {
@@ -8828,7 +9194,8 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       return true;
     });
     const s = filters.sort;
-    if (s === "value-hi") out = [...out].sort((a, b) => b.value - a.value);
+    if (s === "updated") out = [...out].sort((a, b) => (b.touchedAt || 0) - (a.touchedAt || 0));
+    else if (s === "value-hi") out = [...out].sort((a, b) => b.value - a.value);
     else if (s === "value-lo") out = [...out].sort((a, b) => a.value - b.value);
     else if (s === "stage-time") out = [...out].sort((a, b) => stageDays(b) - stageDays(a));
     else if (s === "name") out = [...out].sort((a, b) => a.name.localeCompare(b.name));
@@ -8836,6 +9203,12 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
     return out;
   }, [jobs, filters, q]);
   const activeFilterCount = filters.assignees.length + filters.stages.length + filters.sources.length;
+  const exceptionsByJob = (0, import_react.useMemo)(() => {
+    const ctx = { stages, stageRules, appointments };
+    const map = /* @__PURE__ */ new Map();
+    filtered.forEach((j) => map.set(j.id, jobExceptions(j, ctx)));
+    return map;
+  }, [filtered, stages, stageRules, appointments]);
   const JobCard = ({ job }) => {
     const age = stageAge(job, stageRules);
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
@@ -9117,6 +9490,9 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
     }, children: stages.map((stage) => {
       const inStage = filtered.filter((j) => j.stageId === stage.id);
       const total = inStage.reduce((s, j) => s + j.value, 0);
+      const stageExc = inStage.flatMap((j) => exceptionsByJob.get(j.id) || []);
+      const redCount = stageExc.filter((e) => e.tone === "red").length;
+      const amberCount = stageExc.filter((e) => e.tone === "amber").length;
       return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
         "div",
         {
@@ -9142,24 +9518,36 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
             outlineOffset: 4
           },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "baseline",
-              padding: "0 2px 10px",
-              borderBottom: `2px solid ${S.line}`,
-              marginBottom: 12
-            }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: [
-                stage.name,
-                " ",
-                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub, fontWeight: 600 }, children: [
-                  "(",
-                  inStage.length,
-                  ")"
-                ] })
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "0 2px 10px", borderBottom: `2px solid ${S.line}`, marginBottom: 12 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 15, fontWeight: 800, color: S.ink }, children: [
+                  stage.name,
+                  " ",
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub, fontWeight: 600 }, children: [
+                    "(",
+                    inStage.length,
+                    ")"
+                  ] })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.sub }, children: money(total) })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.sub }, children: money(total) })
+              (redCount > 0 || amberCount > 0) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                "div",
+                {
+                  style: { display: "flex", gap: 5, marginTop: 6 },
+                  title: `${redCount ? `${redCount} needs attention now` : ""}${redCount && amberCount ? " \xB7 " : ""}${amberCount ? `${amberCount} worth a look` : ""}`,
+                  children: [
+                    redCount > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "red", children: [
+                      redCount,
+                      " at risk"
+                    ] }),
+                    amberCount > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "amber", children: [
+                      amberCount,
+                      " to watch"
+                    ] })
+                  ]
+                }
+              )
             ] }),
             inStage.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(JobCard, { job: j }, j.id)),
             inStage.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
@@ -9274,7 +9662,7 @@ var JOB_SECTIONS = [
 function JobDetail({
   job,
   stages,
-  brand: brand2,
+  brand,
   onBack,
   onMoveStage,
   mut,
@@ -9320,10 +9708,13 @@ function JobDetail({
     }, 80);
   };
   (0, import_react.useEffect)(() => {
-    if (openTab) {
-      setTab(openTab);
-      setOpen((o) => ({ ...o, [openTab]: true }));
-    }
+    if (!openTab) return;
+    setTab(openTab);
+    setOpen((o) => ({ ...o, [openTab]: true }));
+    setTimeout(() => {
+      const el = document.getElementById(`jobsec-${openTab}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
   }, [openTab, job.id]);
   const [delOpen, setDelOpen] = (0, import_react.useState)(false);
   const [delTyped, setDelTyped] = (0, import_react.useState)("");
@@ -9551,7 +9942,7 @@ function JobDetail({
                   mut,
                   toast,
                   reviewSettings,
-                  brand: brand2,
+                  brand,
                   currentUser,
                   onLog,
                   leadSources,
@@ -9563,7 +9954,7 @@ function JobDetail({
                 }
               );
             case "claim":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabClaim, { job, mut, toast, brand: brand2 });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabClaim, { job, mut, toast, brand });
             case "handoff":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                 TabHandoff,
@@ -9579,7 +9970,7 @@ function JobDetail({
                 }
               );
             case "changeorders":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChangeOrders, { job, mut, toast, currentUser, brand: brand2, showMoney });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChangeOrders, { job, mut, toast, currentUser, brand, showMoney });
             case "checklist":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabChecklist, { job, mut, toast });
             case "ventilation":
@@ -9587,13 +9978,13 @@ function JobDetail({
             case "measure":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabMeasure, { job, mut, toast });
             case "materials":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabMaterials, { job, mut, toast });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabMaterials, { job, mut, toast, brand });
             case "estimate":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                 TabEstimate,
                 {
                   job,
-                  brand: brand2,
+                  brand,
                   mut,
                   toast,
                   estimateTemplates,
@@ -9610,7 +10001,7 @@ function JobDetail({
                   TabContract,
                   {
                     job,
-                    brand: brand2,
+                    brand,
                     setBrand,
                     mut,
                     toast,
@@ -9620,10 +10011,10 @@ function JobDetail({
                     integrations
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabSignatures, { job, mut, toast, currentUser, brand: brand2 })
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabSignatures, { job, mut, toast, currentUser, brand })
               ] });
             case "report":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabReport, { job, brand: brand2, juris, mut, toast, currentUser, integrations });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabReport, { job, brand, juris, mut, toast, currentUser, integrations });
             case "messages":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                 TabMessages,
@@ -9631,7 +10022,7 @@ function JobDetail({
                   job,
                   mut,
                   toast,
-                  brand: brand2,
+                  brand,
                   templates,
                   crews,
                   integrations,
@@ -9642,7 +10033,7 @@ function JobDetail({
             case "photos":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPhotos, { job, mut, toast, ccToken });
             case "financials":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancialsCombined, { job, mut, toast, isAdmin, currentUser, brand: brand2, integrations, onLog });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancialsCombined, { job, mut, toast, isAdmin, currentUser, brand, integrations, onLog });
             case "workorder":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                 TabWorkOrder,
@@ -9650,7 +10041,7 @@ function JobDetail({
                   job,
                   mut,
                   toast,
-                  brand: brand2,
+                  brand,
                   crews,
                   templates,
                   currentUser,
@@ -9668,7 +10059,7 @@ function JobDetail({
                 TabCertificate,
                 {
                   job,
-                  brand: brand2,
+                  brand,
                   mut,
                   toast,
                   currentUser,
@@ -9682,7 +10073,7 @@ function JobDetail({
                 TabPortal,
                 {
                   job,
-                  brand: brand2,
+                  brand,
                   mut,
                   toast,
                   currentUser,
@@ -9812,7 +10203,7 @@ function JobDetail({
     ] })
   ] });
 }
-function TabOverview({ job, juris, mut, toast, reviewSettings, brand: brand2, currentUser = { name: "Team" }, onLog = () => {
+function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUser = { name: "Team" }, onLog = () => {
 }, leadSources = LEAD_SOURCES, activity = [], users = [], isAdmin = false, onOpenCodeLookup = () => {
 }, integrations = {} }) {
   const notes = job.notes || [];
@@ -9968,7 +10359,7 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand: brand2, cu
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Job type", hint: "Sets which task pathway this job follows.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         PillGroup,
         {
-          options: ["Retail", "Insurance", "Commercial", "Unknown"],
+          options: JOB_TYPES,
           value: job.claimType,
           onPick: (v) => {
             mut((j) => ({ ...j, claimType: v }));
@@ -10217,7 +10608,7 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand: brand2, cu
             ]
           }
         ),
-        rv.rating >= 4 && !rv.posted && brand2.googleReviewLink && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => mut((j) => ({ ...j, review: { ...j.review || {}, posted: true } })), children: "Mark posted" })
+        rv.rating >= 4 && !rv.posted && brand.googleReviewLink && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => mut((j) => ({ ...j, review: { ...j.review || {}, posted: true } })), children: "Mark posted" })
       ] })
     ] })
   ] });
@@ -10330,9 +10721,9 @@ function AnnouncementManager({ announcements, setAnnouncements, currentUser, onB
     ] }, a.id))
   ] });
 }
-function docShell(title, brand2, bodyHtml, opts = {}) {
+function docShell(title, brand, bodyHtml, opts = {}) {
   const esc2 = (x) => String(x == null ? "" : x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const logo = brand2.logo ? `<img src="${brand2.logo}" style="height:52px;object-fit:contain" alt="">` : `<div style="font:800 22px Georgia,serif;color:${brand2.primary}">${esc2(brand2.company)}</div>`;
+  const logo = brand.logo ? `<img src="${brand.logo}" style="height:52px;object-fit:contain" alt="">` : `<div style="font:800 22px Georgia,serif;color:${brand.primary}">${esc2(brand.company)}</div>`;
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc2(title)}</title>
@@ -10346,9 +10737,9 @@ function docShell(title, brand2, bodyHtml, opts = {}) {
      of the table grid entirely and render as loose boxes. Scoping by tag
      keeps a class-name collision from silently destroying a table. */
   div.head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px;
-          border-bottom: 3px solid ${brand2.primary}; padding-bottom: 14px; margin-bottom: 20px; }
+          border-bottom: 3px solid ${brand.primary}; padding-bottom: 14px; margin-bottom: 20px; }
   .co { font-size: 11.5px; color: #6B7280; line-height: 1.5; margin-top: 6px; white-space: pre-line; }
-  .title { font-size: 21px; font-weight: 800; text-align: right; color: ${brand2.primary}; }
+  .title { font-size: 21px; font-weight: 800; text-align: right; color: ${brand.primary}; }
   .meta { font-size: 11.5px; color: #6B7280; text-align: right; margin-top: 5px; line-height: 1.6; }
   h2 { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: #6B7280;
        margin: 22px 0 8px; font-weight: 800; }
@@ -10358,7 +10749,7 @@ function docShell(title, brand2, bodyHtml, opts = {}) {
   td { padding: 8px 6px; border-bottom: 1px solid #F3F4F6; vertical-align: top; font-size: 12.5px; }
   td.r, th.r { text-align: right; white-space: nowrap; }
   div.tot { display: flex; justify-content: space-between; padding: 7px 6px; font-size: 13px; }
-  div.tot.grand { font-weight: 800; font-size: 15px; border-top: 2px solid ${brand2.primary}; margin-top: 6px; padding-top: 10px; }
+  div.tot.grand { font-weight: 800; font-size: 15px; border-top: 2px solid ${brand.primary}; margin-top: 6px; padding-top: 10px; }
   .box { border: 1px solid #E5E7EB; border-radius: 9px; padding: 12px 14px; margin-top: 8px; }
   .muted { color: #6B7280; font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; }
   .sig { display: flex; gap: 26px; margin-top: 26px; page-break-inside: avoid; }
@@ -10378,22 +10769,23 @@ function docShell(title, brand2, bodyHtml, opts = {}) {
 </style></head><body>
 <div class="bar noprint">
   <button onclick="window.print()">Save as PDF / Print</button>
+  <button onclick="window.close()">Close</button>
   <span>Choose "Save to Files" or "Save as PDF" in the print dialog.</span>
 </div>
 ${opts.bare ? "" : `<div class="head">
   <div>${logo}<div class="co">${[
-    brand2.showAddress !== false ? esc2(brand2.address) : "",
-    [brand2.showPhone !== false ? esc2(brand2.phone) : "", brand2.showEmail !== false ? esc2(brand2.email) : ""].filter(Boolean).join("   "),
-    brand2.showLicense !== false && brand2.license ? esc2(brand2.license) : ""
+    brand.showAddress !== false ? esc2(brand.address) : "",
+    [brand.showPhone !== false ? esc2(brand.phone) : "", brand.showEmail !== false ? esc2(brand.email) : ""].filter(Boolean).join("   "),
+    brand.showLicense !== false && brand.license ? esc2(brand.license) : ""
   ].filter(Boolean).join("\n")}</div></div>
   <div><div class="title">${esc2(title)}</div></div>
 </div>`}
 ${bodyHtml}
-${opts.bare ? "" : `<div class="foot">${esc2(brand2.company)}${brand2.showSlogan !== false ? " \xB7 " + esc2(brand2.slogan) : ""}</div>`}
+${opts.bare ? "" : `<div class="foot">${esc2(brand.company)}${brand.showSlogan !== false ? " \xB7 " + esc2(brand.slogan) : ""}</div>`}
 </body></html>`;
 }
-function openDoc(title, brand2, bodyHtml, toast, opts = {}) {
-  const html = docShell(title, brand2, bodyHtml, opts);
+function openDoc(title, brand, bodyHtml, toast, opts = {}) {
+  const html = docShell(title, brand, bodyHtml, opts);
   try {
     const w = window.open("", "_blank");
     if (w) {
@@ -10410,9 +10802,6 @@ function openDoc(title, brand2, bodyHtml, toast, opts = {}) {
     document.body.appendChild(frame);
     const doc = frame.contentWindow && frame.contentWindow.document;
     if (doc) {
-      doc.open();
-      doc.write(html);
-      doc.close();
       const done = () => {
         try {
           frame.contentWindow.focus();
@@ -10420,7 +10809,10 @@ function openDoc(title, brand2, bodyHtml, toast, opts = {}) {
         } catch (e) {
         }
       };
-      setTimeout(done, 400);
+      frame.addEventListener("load", done, { once: true });
+      doc.open();
+      doc.write(html);
+      doc.close();
       setTimeout(() => {
         try {
           document.body.removeChild(frame);
@@ -10691,7 +11083,7 @@ function concealedTableHtml(est) {
   if (!rows.length) return "";
   return `<section><h2>Concealed conditions \u2014 unit pricing</h2><div class="muted" style="margin-bottom:8px">Pre-agreed pricing for conditions found after tear-off. Billed as change orders only when found and documented.</div><table><thead><tr><th>Condition</th><th>Unit</th><th class="r">Price</th></tr></thead><tbody>` + rows.map((c) => `<tr><td>${esc(c.desc)}</td><td>${esc(c.unit || "")}</td><td class="r">${num(c.price) ? money(num(c.price)) : "\u2014"}</td></tr>`).join("") + `</tbody></table></section>`;
 }
-function tierCardsHtml(est, brand2, doc = {}) {
+function tierCardsHtml(est, brand, doc = {}) {
   const tiers = (est.tiers || []).filter((t) => (t.items || []).length);
   if (tiers.length < 2) return "";
   const chosen = est.selectedTier || (tiers[tiers.length > 2 ? 1 : 0] || {}).id;
@@ -10757,9 +11149,9 @@ function findingsHtml(job) {
     ${shots.length ? `<div class="shots">${shots.map((p) => `<figure><img src="${p.url || p.dataUrl}" alt=""><figcaption>${esc(p.label || "")}</figcaption></figure>`).join("")}</div>` : ""}
   </section>`;
 }
-function credentialsHtml(brand2, contact) {
+function credentialsHtml(brand, contact) {
   const bullets = [
-    brand2.license ? `Licensed \u2014 ${esc(brand2.license)}` : null,
+    brand.license ? `Licensed \u2014 ${esc(brand.license)}` : null,
     "Fully insured. Certificates of liability and workers' compensation available on request.",
     "Our own crews. We do not sell your job to the lowest bidder.",
     "Every roof is inspected by a company representative before we call it finished."
@@ -10771,12 +11163,12 @@ function credentialsHtml(brand2, contact) {
       ${contact.title ? `<div class="rept">${esc(contact.title)}</div>` : ""}
       <div class="repc">${[esc(contact.phone || ""), esc(contact.email || "")].filter(Boolean).join(" \xB7 ")}</div>
     </div>` : "";
-  return `<section class="page"><h2>Why ${esc(brand2.company)}</h2>
+  return `<section class="page"><h2>Why ${esc(brand.company)}</h2>
     <ul class="checks">${bullets.map((b) => `<li>${b}</li>`).join("")}</ul>
     ${rep}
   </section>`;
 }
-function warrantyHtml(job, brand2) {
+function warrantyHtml(job, brand) {
   const w = job.warranty || {};
   const mfr = w.mfr || "";
   const labor = num(w.laborYears) ? `${w.laborYears}-year workmanship guarantee` : "";
@@ -10878,7 +11270,7 @@ function processHtml() {
     <ol class="steps">${PROPOSAL_STEPS.map(([t, d]) => `<li><span class="stept">${esc(t)}</span><span class="stepd">${esc(d)}</span></li>`).join("")}</ol>
   </section>`;
 }
-function estimateDocHtml(job, brand2, users = []) {
+function estimateDocHtml(job, brand, users = []) {
   const est = job.estimate;
   const doc = est.doc || {};
   const total = estimateTotal(est);
@@ -10904,14 +11296,14 @@ function estimateDocHtml(job, brand2, users = []) {
           <div><span class="cml">Date</span><span class="cmv">${esc(est.date || "")}</span></div>
           ${contact.name ? `<div><span class="cml">Your contact</span><span class="cmv">${esc(contact.name)}${contact.phone ? " \xB7 " + esc(contact.phone) : ""}</span></div>` : ""}
         </div>`;
-      const mark = brand2.logo ? `<img class="colgo" src="${brand2.logo}" alt="${esc(brand2.company)}">` : `<div class="coname">${esc(brand2.company)}</div>`;
-      const contactLine = [brand2.phone, brand2.email, brand2.website].filter(Boolean).map(esc).join("  \xB7  ");
+      const mark = brand.logo ? `<img class="colgo" src="${brand.logo}" alt="${esc(brand.company)}">` : `<div class="coname">${esc(brand.company)}</div>`;
+      const contactLine = [brand.phone, brand.email, brand.website].filter(Boolean).map(esc).join("  \xB7  ");
       if (style === "photo" && img) {
         out += `<section class="cover photo" style="background-image:url('${img}')">
           <div class="covershade">
             ${mark}
             <div class="cotitle">${title}</div>
-            <div class="coco">${esc(brand2.slogan || "")}</div>
+            <div class="coco">${esc(brand.slogan || "")}</div>
             ${meta}
             ${contactLine ? `<div class="cocontact">${contactLine}</div>` : ""}
           </div>
@@ -10919,10 +11311,10 @@ function estimateDocHtml(job, brand2, users = []) {
       } else {
         const bold = style === "bold";
         out += `<section class="cover ${bold ? "boldcover" : "plaincover"}">
-          <div class="colead">${mark}${brand2.license ? `<div class="colic">${esc(brand2.license)}</div>` : ""}</div>
+          <div class="colead">${mark}${brand.license ? `<div class="colic">${esc(brand.license)}</div>` : ""}</div>
           ${img ? `<img class="hero" src="${img}" alt="">` : ""}
           <div class="cotitle">${title}</div>
-          <div class="coco">${esc(brand2.slogan || "")}</div>
+          <div class="coco">${esc(brand.slogan || "")}</div>
           ${meta}
           ${contactLine ? `<div class="cocontact">${contactLine}</div>` : ""}
         </section>`;
@@ -10934,11 +11326,11 @@ function estimateDocHtml(job, brand2, users = []) {
       continue;
     }
     if (sec === "why") {
-      out += credentialsHtml(brand2, contact);
+      out += credentialsHtml(brand, contact);
       continue;
     }
     if (sec === "options") {
-      out += tierCardsHtml(est, brand2, doc);
+      out += tierCardsHtml(est, brand, doc);
       continue;
     }
     if (sec === "concealed") {
@@ -10946,7 +11338,7 @@ function estimateDocHtml(job, brand2, users = []) {
       continue;
     }
     if (sec === "warranty") {
-      out += warrantyHtml(job, brand2);
+      out += warrantyHtml(job, brand);
       continue;
     }
     if (sec === "process") {
@@ -10993,7 +11385,6 @@ function estimateDocHtml(job, brand2, users = []) {
       ${qr ? `<div class="qr">${qr}</div>` : ""}
       <div class="qrtext">
         <div class="qrh">Accept and sign online</div>
-        <div class="qru">${esc(portalUrl)}</div>
         <div class="qrn">Opens your private project page \u2014 no login or account needed.</div>
       </div>
     </div>` : ""}
@@ -11001,15 +11392,15 @@ function estimateDocHtml(job, brand2, users = []) {
       &nbsp;&nbsp;<b>Upgrades:</b> ______________________________</div>` : ""}
     <div class="sig">
       <div><div class="sigline"></div><div class="siglbl">${esc(job.name)} \u2014 signature / date</div></div>
-      <div><div class="sigline"></div><div class="siglbl">${esc(brand2.company)} representative</div></div>
+      <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative</div></div>
     </div>
   </section>
-  <div class="runfoot">${esc(brand2.company)}${est.number ? ` \xB7 ${esc(est.number)}` : ""} \xB7 Prepared for ${esc(job.name)}</div>`;
-  return out + proposalCss(brand2);
+  <div class="runfoot">${esc(brand.company)}${est.number ? ` \xB7 ${esc(est.number)}` : ""} \xB7 Prepared for ${esc(job.name)}</div>`;
+  return out + proposalCss(brand);
 }
-function proposalCss(brand2) {
-  const p = brand2.primary || "#20242A";
-  const a = brand2.accent || "#0A9E98";
+function proposalCss(brand) {
+  const p = brand.primary || "#20242A";
+  const a = brand.accent || "#0A9E98";
   return `<style>
   /* Sections get real page structure. The old proposal was one continuous
      flow, so tables split across pages wherever they happened to land. */
@@ -11147,7 +11538,6 @@ function proposalCss(brand2) {
       border: 1.5px solid ${a}; border-radius: 12px; padding: 14px 16px; }
   .accepton .qr { flex-shrink: 0; line-height: 0; }
   .qrh { font-size: 14px; font-weight: 800; color: ${p}; }
-  .qru { font-size: 11px; color: ${a}; word-break: break-all; margin-top: 3px; }
   .qrn { font-size: 11.5px; color: #6B7280; margin-top: 5px; line-height: 1.45; }
 
   /* A fixed element repeats on every printed page in Chrome and Safari, which
@@ -11173,7 +11563,7 @@ function longDate(iso) {
   if (isNaN(d.getTime())) return s;
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
-function certificateFor(job, brand2) {
+function certificateFor(job, brand) {
   const c = job.certificate || {};
   const ins = job.insurance || {};
   const claim = job.claim || {};
@@ -11208,8 +11598,8 @@ function titleish(s) {
   const map = { roofing: "Residential Roof Replacement", siding: "Residential Siding Replacement", gutter: "Gutter Replacement", window: "Window Replacement", exterior: "Residential Exterior Restoration" };
   return map[String(s || "").toLowerCase()] || "Residential Roof Replacement";
 }
-function certificateGaps(job, brand2) {
-  const a = certificateFor(job, brand2);
+function certificateGaps(job, brand) {
+  const a = certificateFor(job, brand);
   const out = [];
   if (!a.completedAt) out.push("the date the work was completed");
   if (!a.claimNo) out.push("the claim number");
@@ -11219,10 +11609,10 @@ function certificateGaps(job, brand2) {
   if (!a.address) out.push("the property address");
   return out;
 }
-function certificateReady(job, brand2) {
-  return certificateGaps(job, brand2).length === 0;
+function certificateReady(job, brand) {
+  return certificateGaps(job, brand).length === 0;
 }
-function certificateCss(brand2) {
+function certificateCss(brand) {
   const ink = "#111", sub = "#666", rule = "#bbb", band = "#f2f2f2";
   return `<style>
 @page { size: letter; margin: 0.62in 0.62in 0.55in; }
@@ -11254,9 +11644,9 @@ function certificateCss(brand2) {
 @media print { .certfoot { position: fixed; } }
 </style>`;
 }
-function certificateDocHtml(job, brand2) {
-  const a = certificateFor(job, brand2);
-  const co = [brand2.company, brand2.address, brand2.phone, brand2.email].filter(Boolean).map(esc).join(" &nbsp;|&nbsp; ");
+function certificateDocHtml(job, brand) {
+  const a = certificateFor(job, brand);
+  const co = [brand.company, brand.address, brand.phone, brand.email].filter(Boolean).map(esc).join(" &nbsp;|&nbsp; ");
   const row = (k1, v1, k2, v2) => `<tr>
     <td class="k">${esc(k1)}</td><td class="v">${esc(v1) || "&nbsp;"}</td>
     <td class="k">${esc(k2)}</td><td class="v">${esc(v2) || "&nbsp;"}</td></tr>`;
@@ -11286,7 +11676,7 @@ function certificateDocHtml(job, brand2) {
   ${a.note ? `<p class="certnote">${esc(a.note)}</p>` : `<p class="certnote">Amounts per the signed contract for this project, including any approved change orders. Recoverable depreciation and supplements are billed per that contract.</p>`}
 
   <div class="certband">CERTIFICATION</div>
-  <p class="certp">${esc(brand2.company || "The Company")} certifies that all work described above was completed on
+  <p class="certp">${esc(brand.company || "The Company")} certifies that all work described above was completed on
   ${esc(done || "____________")} at ${esc(a.address)} in a good and workmanlike manner, in accordance with the
   approved insurance scope, manufacturer instructions, and applicable building code. All debris was removed and the
   site left in clean condition. The undersigned property owner has inspected the work and accepts it as complete and
@@ -11298,7 +11688,7 @@ function certificateDocHtml(job, brand2) {
       <td class="d"><div class="certink">${esc(done)}</div></td>
     </tr>
     <tr>
-      <td class="certcap">${esc(a.signedBy)} &mdash; ${esc(brand2.company || "")}</td>
+      <td class="certcap">${esc(a.signedBy)} &mdash; ${esc(brand.company || "")}</td>
       <td class="d certcap">Date</td>
     </tr>
     <tr class="gap">
@@ -11312,12 +11702,12 @@ function certificateDocHtml(job, brand2) {
   </table>
 </div>
 <div class="certfoot">
-  <span>${esc(brand2.company || "")} &nbsp;|&nbsp; Certificate of Completion${a.owner ? " &nbsp;|&nbsp; " + esc(a.owner) : ""}${a.claimNo ? " &nbsp;|&nbsp; Claim " + esc(a.claimNo) : ""}</span>
+  <span>${esc(brand.company || "")} &nbsp;|&nbsp; Certificate of Completion${a.owner ? " &nbsp;|&nbsp; " + esc(a.owner) : ""}${a.claimNo ? " &nbsp;|&nbsp; Claim " + esc(a.claimNo) : ""}</span>
   <span>Page 1</span>
 </div>
-${certificateCss(brand2)}`;
+${certificateCss(brand)}`;
 }
-function invoiceDocHtml(job, brand2) {
+function invoiceDocHtml(job, brand) {
   const pay = paymentsSummary(job);
   const est = job.estimate;
   const num2 = job.invoiceNo || (job.contract && job.contract.number ? job.contract.number.replace("CON", "INV") : "INV-DRAFT");
@@ -11352,12 +11742,12 @@ function invoiceDocHtml(job, brand2) {
   if ((job.payments || []).length) {
     out += `<h2>Payment history</h2><table><thead><tr><th>Date</th><th>Method</th><th>Reference</th><th class="r">Amount</th></tr></thead><tbody>` + job.payments.filter((x) => x.type === "Received").map((x) => `<tr><td>${esc(x.date || "")}</td><td>${esc(x.method || "")}</td><td>${esc(x.ref || "")}</td><td class="r">${money(num(x.amt))}</td></tr>`).join("") + `</tbody></table>`;
   }
-  out += `<div class="box" style="margin-top:20px"><b>Remit to</b><div class="muted">${esc(brand2.company)}
-${esc(brand2.address)}
-${esc(brand2.phone)}</div></div>`;
+  out += `<div class="box" style="margin-top:20px"><b>Remit to</b><div class="muted">${esc(brand.company)}
+${esc(brand.address)}
+${esc(brand.phone)}</div></div>`;
   return out;
 }
-function workOrderDocHtml(job, brand2, crew) {
+function workOrderDocHtml(job, brand, crew) {
   const m = job.measurements || {};
   const wo = job.workOrder || {};
   let out = `<div style="display:flex;justify-content:space-between;gap:20px">
@@ -11389,10 +11779,10 @@ function workOrderDocHtml(job, brand2, crew) {
   }
   if (wo.notes) out += `<h2>Instructions</h2><div class="muted">${esc(wo.notes)}</div>`;
   out += `<div class="box" style="margin-top:18px"><b>Pricing is intentionally omitted from work orders.</b>
-    <div class="muted">Questions on scope go to the office at ${esc(brand2.phone)}.</div></div>`;
+    <div class="muted">Questions on scope go to the office at ${esc(brand.phone)}.</div></div>`;
   return out;
 }
-function subInvoiceDocHtml(job, brand2, crew) {
+function subInvoiceDocHtml(job, brand, crew) {
   const inv = job.subInvoice || { lines: [] };
   const total = subInvoiceTotal(inv);
   const pay = crew && crew.payment || {};
@@ -11415,7 +11805,7 @@ function subInvoiceDocHtml(job, brand2, crew) {
   out += `<table style="margin-top:6px"><tbody><tr><td><b>Total due</b></td><td class="r"><b>${money(total)}</b></td></tr></tbody></table>`;
   return out;
 }
-function contractDocHtml(job, brand2) {
+function contractDocHtml(job, brand) {
   const con = job.contract || {};
   const mode = con.depositMode || "pct";
   const deposit = mode === "fixed" ? num(con.depositFixed) : (con.price || 0) * ((con.depositPct || 0) / 100);
@@ -11440,7 +11830,7 @@ function contractDocHtml(job, brand2) {
   }
   out += `<div class="sig">
     <div><div class="sigline"></div><div class="siglbl">Customer signature / date</div></div>
-    <div><div class="sigline"></div><div class="siglbl">${esc(brand2.company)} representative / date</div></div>
+    <div><div class="sigline"></div><div class="siglbl">${esc(brand.company)} representative / date</div></div>
   </div>`;
   return out;
 }
@@ -11450,7 +11840,7 @@ var AGREEMENT_SPEC = [
   ] },
   { n: "2", title: "ROOF DECK PROTECTION", col: "L", rows: [
     [{ t: "t", v: "A. Felt Underlayment 15lb" }, { t: "c", k: "felt15" }, { t: "t", v: "B. 30lb" }, { t: "c", k: "felt30" }],
-    [{ t: "t", v: "C. Synthetic" }, { t: "b", k: "synthetic", w: 175 }]
+    [{ t: "t", v: "C. Synthetic" }, { t: "c", k: "syntheticOn" }, { t: "b", k: "synthetic", w: 175 }]
   ] },
   { n: "3", title: "DRIP EDGE / GUTTER APRON", col: "L", rows: [
     [{ t: "t", v: "A. Drip Edge Color" }, { t: "b", k: "dripColor", w: 90 }, { t: "t", v: "Rakes" }],
@@ -11504,8 +11894,8 @@ var AGREEMENT_HEADER = [
   ] },
   { box: "INSURANCE & CLAIM", tint: true, rows: [
     [{ k: "carrier", label: "INSURANCE CARRIER" }],
-    [{ k: "claimNumber", label: "CLAIM NUMBER" }, { k: "dateOfLoss", label: "DATE OF LOSS" }],
-    [{ k: "outOfPocket", label: "OUT OF POCKET" }, { k: "agreementDate", label: "DATE" }],
+    [{ k: "claimNumber", label: "CLAIM NUMBER" }, { k: "dateOfLoss", label: "DATE OF LOSS", t: "date" }],
+    [{ k: "outOfPocket", label: "OUT OF POCKET", t: "money" }, { k: "agreementDate", label: "DATE", t: "date" }],
     [{ k: "projectAddress", label: "PROJECT ADDRESS (IF DIFFERENT)" }]
   ] }
 ];
@@ -11551,44 +11941,17 @@ var AGREEMENT_TERMS = [
   "You, the consumer, may cancel this transaction at any time prior to midnight of {rescission} after the date of this transaction."
 ];
 var AGREEMENT_DIAGRAM_DEFAULT = "/reference-diagram.jpg";
-function agreementDiagram(brand2) {
-  return brand2 && brand2.agreementDiagram || AGREEMENT_DIAGRAM_DEFAULT;
+function agreementDiagram(brand) {
+  return brand && brand.agreementDiagram || AGREEMENT_DIAGRAM_DEFAULT;
 }
-function agreementTermsFor(brand2) {
-  const custom = brand2 && Array.isArray(brand2.agreementTerms) && brand2.agreementTerms.length ? brand2.agreementTerms : AGREEMENT_TERMS;
+function agreementTermsFor(brand) {
+  const custom = brand && Array.isArray(brand.agreementTerms) && brand.agreementTerms.length ? brand.agreementTerms : AGREEMENT_TERMS;
   return custom;
 }
-var LEGAL_TOKENS = { state: "choiceOfLaw", rescission: "rescission" };
-function agreementFillLegal(text, brand2, state) {
-  const pack = legalPack(state);
-  const unresolved = [];
-  let out = String(text || "").replace(/\{company\}/g, brand2 && brand2.company || "the Company");
-  out = out.replace(/\{(\w+)\}/g, (m, key) => {
-    const field = LEGAL_TOKENS[key];
-    if (!field) return m;
-    const f = pack[field];
-    if (printable(f)) return f.value;
-    const spec = LEGAL_FIELDS.find((x) => x.key === field);
-    unresolved.push({ token: key, field, label: spec && spec.label || field, fact: f });
-    return `[${spec && spec.label || field} for ${state || "this state"} \u2014 not confirmed]`;
-  });
-  return { text: out, unresolved };
+function agreementFill(text, brand, state) {
+  return String(text || "").replace(/\{company\}/g, brand && brand.company || "the Company").replace(/\{state\}/g, stateName(state) || "the property's state").replace(/\{rescission\}/g, "three (3) business days");
 }
-function agreementFill(text, brand2, state) {
-  return agreementFillLegal(text, brand2, state).text;
-}
-var LEGAL_PACK_VERSION = 1;
-function renderedLegalText(job) {
-  const st = job && job.state || "";
-  const pack = legalPack(st);
-  return LEGAL_FIELDS.filter((f) => f.binding).map((f) => `${f.label}: ${printable(pack[f.key]) ? pack[f.key].value : "[not confirmed]"}`).join("\n");
-}
-function agreementBlockers(job) {
-  const st = job && job.state || "";
-  if (!st) return [{ key: "state", label: "Property state", note: "The job has no state, so no legal pack applies." }];
-  return legalGaps(st);
-}
-function agreementPrefill(job, brand2) {
+function agreementPrefill(job, brand) {
   const ins = job.insurance || {};
   const cl = job.claim || {};
   const con = job.contract || {};
@@ -11612,7 +11975,7 @@ function agreementPrefill(job, brand2) {
     carrier: ins.carrier || "",
     claimNumber: ins.claim || "",
     dateOfLoss: cl.dateOfLoss || "",
-    outOfPocket: ins.deductible ? money(num(ins.deductible)) : "",
+    outOfPocket: ins.deductible ? String(num(ins.deductible)) : "",
     agreementDate: todayIso(),
     projectAddress: "",
     tearoffLayers: layers,
@@ -11622,8 +11985,8 @@ function agreementPrefill(job, brand2) {
     balance: ""
   };
 }
-function agreementFor(job, brand2) {
-  return { ...agreementPrefill(job, brand2), ...job.agreement || {} };
+function agreementFor(job, brand) {
+  return { ...agreementPrefill(job, brand), ...job.agreement || {} };
 }
 function agMoney(v) {
   const t = String(v == null ? "" : v).trim();
@@ -11643,10 +12006,10 @@ function agRowHtml(parts, a) {
     return `<span class="aglb">${esc(p.v)}</span>`;
   }).join("")}</div>`;
 }
-function agSecHtml(sec, a, brand2) {
+function agSecHtml(sec, a, brand) {
   if (sec.kind === "figure") {
     return `<figure class="agfig">
-      <img src="${esc(agreementDiagram(brand2))}" alt="Roof reference diagram, numbered to the specification">
+      <img src="${esc(agreementDiagram(brand))}" alt="Roof reference diagram, numbered to the specification">
       <figcaption>REFERENCE DIAGRAM &mdash; NUMBERED TO SPECIFICATION</figcaption>
     </figure>`;
   }
@@ -11660,18 +12023,19 @@ function agSecHtml(sec, a, brand2) {
   return `<div class="agsec">${head}${note}${body}</div>`;
 }
 function agFieldHtml(f, a) {
+  const val = f.t === "money" ? agMoney(a[f.k]) : f.t === "date" ? esc(longDate(a[f.k])) : esc(a[f.k] || "");
   return `<div class="agfield" style="flex:${f.flex || 1}">
     <div class="agflb">${esc(f.label)}</div>
-    <div class="agfval">${esc(a[f.k] || "")}</div>
+    <div class="agfval">${val}</div>
   </div>`;
 }
-function agreementDocHtml(job, brand2) {
-  const a = agreementFor(job, brand2);
+function agreementDocHtml(job, brand) {
+  const a = agreementFor(job, brand);
   const con = job.contract || {};
   const st = job.state || "";
   const left = AGREEMENT_SPEC.filter((s) => s.col === "L");
   const right = AGREEMENT_SPEC.filter((s) => s.col === "R");
-  const mark = brand2.logo ? `<img class="aglogo" src="${brand2.logo}" alt="${esc(brand2.company)}">` : `<div class="agmark">${esc(brand2.company)}</div>`;
+  const mark = brand.logo ? `<img class="aglogo" src="${brand.logo}" alt="${esc(brand.company)}">` : `<div class="agmark">${esc(brand.company)}</div>`;
   const price = moneyNum(a.finalPrice);
   const dep = moneyNum(a.deposit);
   const balance = String(a.balance || "").trim() ? agMoney(a.balance) : price ? money(price - dep) : "";
@@ -11684,10 +12048,10 @@ function agreementDocHtml(job, brand2) {
   <div class="agtop">
     <div>${mark}</div>
     <div class="agco">
-      <div class="agconame">${esc(brand2.company)}</div>
-      ${brand2.address ? `<div>${esc(brand2.address)}</div>` : ""}
-      <div>${[brand2.phone ? "Office " + esc(brand2.phone) : "", esc(brand2.email || "")].filter(Boolean).join(" &bull; ")}</div>
-      ${brand2.website ? `<div class="agweb">${esc(brand2.website)}</div>` : ""}
+      <div class="agconame">${esc(brand.company)}</div>
+      ${brand.address ? `<div>${esc(brand.address)}</div>` : ""}
+      <div>${[brand.phone ? "Office " + esc(brand.phone) : "", esc(brand.email || "")].filter(Boolean).join(" &bull; ")}</div>
+      ${brand.website ? `<div class="agweb">${esc(brand.website)}</div>` : ""}
     </div>
   </div>
   <div class="agbar"><span class="agbart">CONSTRUCTION AGREEMENT</span><span class="agbars">INSURANCE RESTORATION &bull; ROOFING &amp; EXTERIORS</span></div>
@@ -11701,8 +12065,8 @@ function agreementDocHtml(job, brand2) {
 
   <div class="agrule"><span>ROOFING SPECIFICATION</span></div>
   <div class="agspec">
-    <div class="agcol">${left.map((s) => agSecHtml(s, a, brand2)).join("")}</div>
-    <div class="agcol">${right.map((s) => agSecHtml(s, a, brand2)).join("")}</div>
+    <div class="agcol">${left.map((s) => agSecHtml(s, a, brand)).join("")}</div>
+    <div class="agcol">${right.map((s) => agSecHtml(s, a, brand)).join("")}</div>
   </div>
 
   <div class="agbox agnotes">
@@ -11724,7 +12088,7 @@ function agreementDocHtml(job, brand2) {
 
   <div class="agterm">
     <p><b>Defective Decking and Plywood Policy</b>&nbsp; ${AGREEMENT_DECK_POLICY.split("%RATE%").map(esc).join(agBlank(a.deckRate, 70))}</p>
-    <p><b>Terms</b>&nbsp; ${esc(agreementFill(AGREEMENT_TERMS_PARA, brand2, st))}</p>
+    <p><b>Terms</b>&nbsp; ${esc(agreementFill(AGREEMENT_TERMS_PARA, brand, st))}</p>
     <p>${esc(AGREEMENT_READ_PARA)}</p>
   </div>
 
@@ -11738,13 +12102,13 @@ function agreementDocHtml(job, brand2) {
     </div>
     <div class="agbox tint agcancel">
       <div class="agboxt">RIGHT TO CANCEL</div>
-      <div class="agcanp">${esc(agreementFill(AGREEMENT_CANCEL_PARA, brand2, st))}</div>
+      <div class="agcanp">${esc(agreementFill(AGREEMENT_CANCEL_PARA, brand, st))}</div>
       <div class="aginit">INITIALS ${agBlank(a.cancelInit, 70)}</div>
     </div>
   </div>
 
   <div class="agsigs">
-    ${sigCell(con.contractorSig && con.contractorSig !== "signed" ? con.contractorSig : null, brand2.company, "REPRESENTATIVE SIGNATURE / DATE")}
+    ${sigCell(con.contractorSig && con.contractorSig !== "signed" ? con.contractorSig : null, brand.company, "REPRESENTATIVE SIGNATURE / DATE")}
     ${sigCell(con.clientSig && con.clientSig !== "signed" ? con.clientSig : null, "PROPERTY OWNER", "SIGNATURE / DATE")}
     ${sigCell(null, "CO-OWNER", "SIGNATURE / DATE")}
   </div>
@@ -11753,14 +12117,14 @@ function agreementDocHtml(job, brand2) {
 <section class="agpage agrev">
   <div class="agrevlogo">${mark}</div>
   <h1 class="agrevh">TERMS AND CONDITIONS</h1>
-  <p class="agrevi">${esc(agreementFill(brand2.agreementIntro || AGREEMENT_TERMS_INTRO, brand2, st))}</p>
-  <ol class="agrevo">${agreementTermsFor(brand2).map((c) => `<li>${esc(agreementFill(c, brand2, st))}</li>`).join("")}</ol>
+  <p class="agrevi">${esc(agreementFill(brand.agreementIntro || AGREEMENT_TERMS_INTRO, brand, st))}</p>
+  <ol class="agrevo">${agreementTermsFor(brand).map((c) => `<li>${esc(agreementFill(c, brand, st))}</li>`).join("")}</ol>
 </section>
-<div class="agfoot">${esc(brand2.company)} &bull; Construction Agreement${a.customerName ? " &bull; " + esc(a.customerName) : ""}</div>
-${agreementCss(brand2)}`;
+<div class="agfoot">${esc(brand.company)} &bull; Construction Agreement${a.customerName ? " &bull; " + esc(a.customerName) : ""}</div>
+${agreementCss(brand)}`;
 }
-function agreementCss(brand2) {
-  const p = brand2.primary || "#2B3440";
+function agreementCss(brand) {
+  const p = brand.primary || "#2B3440";
   return `<style>
   /* The paper form is printed edge-to-edge; the shell's 0.6in document
      margin would cost a full inch of the one page this has to fit on. */
@@ -11872,7 +12236,7 @@ function agreementCss(brand2) {
   @media print { body { padding-bottom: 16px; } }
 </style>`;
 }
-function reportDocHtml(job, brand2) {
+function reportDocHtml(job, brand) {
   const c = job.checklist || {};
   const m = job.measurements || {};
   let out = `<div style="display:flex;justify-content:space-between;gap:20px">
@@ -11911,6 +12275,7 @@ function reportDocHtml(job, brand2) {
 function PortalThread({ token, meRole, meName, accent }) {
   const [msgs, setMsgs] = (0, import_react.useState)([]);
   const [txt, setTxt] = (0, import_react.useState)("");
+  const [sendErr, setSendErr] = (0, import_react.useState)("");
   const load = () => {
     const db = DB();
     if (!db || !token) return;
@@ -11968,11 +12333,20 @@ function PortalThread({ token, meRole, meName, accent }) {
   const send = async () => {
     const db = DB();
     const t = txt.trim();
-    if (!db || !t) return;
+    if (!t) return;
+    if (!db) {
+      setSendErr("Not connected \u2014 try again in a moment.");
+      return;
+    }
+    setSendErr("");
     const row = { id: uid("pm"), token, by_role: meRole, by_name: meName, body: t };
-    setTxt("");
     const { error } = await db.from("crm_portal_msgs").insert(row);
-    if (!error) setMsgs((prev) => prev.some((m) => m.id === row.id) ? prev : [...prev, { ...row, at: (/* @__PURE__ */ new Date()).toISOString() }]);
+    if (error) {
+      setSendErr("Couldn't send that message. Try again.");
+      return;
+    }
+    setTxt("");
+    setMsgs((prev) => prev.some((m) => m.id === row.id) ? prev : [...prev, { ...row, at: (/* @__PURE__ */ new Date()).toISOString() }]);
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { maxHeight: 260, overflowY: "auto" }, children: [
@@ -11993,6 +12367,7 @@ function PortalThread({ token, meRole, meName, accent }) {
         ] }) }, m.id);
       })
     ] }),
+    sendErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "#B42318", marginTop: 8 }, children: sendErr }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 10 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "input",
@@ -12019,14 +12394,29 @@ var PORTAL_STEPS = [
   "Installation",
   "Complete"
 ];
+var DEFAULT_STAGE_PORTAL_STEP = {
+  s1: 0,
+  s2: 0,
+  s3: 1,
+  s4: 1,
+  s5: 2,
+  s6: 2,
+  s7: 4,
+  s8: 5,
+  s9: 6,
+  s10: 6
+};
 function portalProgressFor(job) {
   if (Number.isInteger(job.portalProgress)) return Math.max(0, Math.min(PORTAL_STEPS.length - 1, job.portalProgress));
+  if (job.stageId && Object.prototype.hasOwnProperty.call(DEFAULT_STAGE_PORTAL_STEP, job.stageId)) {
+    return DEFAULT_STAGE_PORTAL_STEP[job.stageId];
+  }
   const stage = String(job.stageLabel || "").toLowerCase();
   if (/complete|closed/.test(stage)) return 6;
   if (/install|production/.test(stage)) return 5;
-  if (/scheduled/.test(stage)) return 4;
   if (/material|order/.test(stage)) return 3;
   if (/approved|deposit|won|sold/.test(stage)) return 2;
+  if (/scheduled/.test(stage)) return 4;
   if (/estimate|inspect|follow/.test(stage)) return 1;
   return 0;
 }
@@ -12073,8 +12463,9 @@ function PortalReview({ token, jobId, review, accent, company }) {
   const link = review && review.googleLink || "";
   const gate = review ? review.gateNegative !== false : true;
   const happy = rating >= 4;
+  const [logErr, setLogErr] = (0, import_react.useState)(false);
   const log = async () => {
-    if (!db || !token) return;
+    if (!db || !token) return false;
     const row = {
       id: uid("rev"),
       token,
@@ -12085,23 +12476,27 @@ function PortalReview({ token, jobId, review, accent, company }) {
       status: "New",
       requested_by: "Customer"
     };
-    try {
-      await db.from("crm_portal_requests").insert(row);
-    } catch (e) {
-    }
+    const { error } = await db.from("crm_portal_requests").insert(row);
+    return !error;
   };
   const finishHappy = async () => {
     setBusy(true);
-    await log();
+    const ok = await log();
     setBusy(false);
     setDone(true);
+    if (!ok) setLogErr(true);
     if (link) window.open(link, "_blank", "noopener");
   };
   const finishUnhappy = async () => {
     if (!text.trim()) return;
     setBusy(true);
-    await log();
+    const ok = await log();
     setBusy(false);
+    if (!ok) {
+      setLogErr(true);
+      return;
+    }
+    setLogErr(false);
     setDone(true);
   };
   if (review && review.submitted && !done) {
@@ -12151,7 +12546,8 @@ function PortalReview({ token, jobId, review, accent, company }) {
           style: { ...inputStyle, width: "100%", minHeight: 90, marginBottom: 10 }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { onClick: finishUnhappy, disabled: busy || !text.trim(), style: { background: accent, borderColor: accent }, children: "Send private feedback" }),
+      logErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { tone: "red", label: "Couldn't send that", children: "Your connection dropped before this reached us \u2014 nothing was lost, just try again." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { onClick: finishUnhappy, disabled: busy || !text.trim(), style: { background: accent, borderColor: accent, marginTop: logErr ? 10 : 0 }, children: "Send private feedback" }),
       !gate && link && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 10, fontSize: 12.5 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: link, target: "_blank", rel: "noreferrer", style: { color: accent }, children: "Or leave a public review anyway \u2192" }) })
     ] })
   ] });
@@ -12265,7 +12661,7 @@ function projectNoun(job) {
   if (has("window")) return "window";
   return "roofing";
 }
-function portalDocuments(job, brand2, portal) {
+function portalDocuments(job, brand, portal) {
   const out = portal.documents ? (job.files || []).filter((file) => file.shared).map((file) => ({
     name: file.name,
     category: file.cat,
@@ -12273,36 +12669,35 @@ function portalDocuments(job, brand2, portal) {
     url: file.url || null
   })) : [];
   const cert = job.certificate || {};
-  if (portal.certificate !== false && cert.shared !== false && certificateReady(job, brand2)) {
-    const a = certificateFor(job, brand2);
+  if (portal.certificate !== false && cert.shared !== false && certificateReady(job, brand)) {
+    const a = certificateFor(job, brand);
     out.unshift({
       name: "Certificate of Completion",
       category: "Insurance",
       date: longDate(a.completedAt),
       url: null,
-      html: certificateDocHtml(job, brand2)
+      html: certificateDocHtml(job, brand)
     });
   }
   return out;
 }
-function buildPortalSnapshot(job, brand2, token, users = []) {
+function buildPortalSnapshot(job, brand, token, users = []) {
   const portal = { ...DEFAULT_PORTAL_SETTINGS, ...job.portal || {} };
   const pay = paymentsSummary(job);
-  const portalDocs = portalDocuments(job, brand2, portal);
+  const portalDocs = portalDocuments(job, brand, portal);
   return {
     token,
     job_id: job.id,
     data: {
-      company: brand2.company,
-      logo: brand2.logo || null,
-      primary: brand2.primary,
-      slogan: brand2.slogan,
-      phone: brand2.phone,
-      email: brand2.email,
+      company: brand.company,
+      logo: brand.logo || null,
+      primary: brand.primary,
+      slogan: brand.slogan,
+      phone: brand.phone,
+      email: brand.email,
       jobId: job.id,
       name: job.name,
       address: job.address,
-      projectType: projectNoun(job),
       stageLabel: job.stageLabel || "",
       order: portalOrderOf(portal).filter((sid) => sid === "documents" ? portalDocs.length > 0 : portalSectionOn(portal, sid)),
       /* Rep block: a per-job override wins over the assigned seat, so a
@@ -12333,12 +12728,18 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
           });
         }
         const con = job.contract;
-        if (con && con.price && con.status !== "Signed" && portal.contract && legalReady(job.state)) {
+        if (con && con.price && con.status !== "Signed" && portal.contract) {
           out.push({
             type: "contract",
             id: con.number || "con",
             title: `Contract ${con.number || ""}`.trim(),
             subtitle: job.address,
+            /* The construction-agreement form (not the plain contract) has
+               three numbered acknowledgment lines that used to be typed by
+               a rep on the customer's behalf — genuine customer initials,
+               same as the signature, only make sense to collect when this
+               is the form that actually carries those paragraphs. */
+            needsInitials: con.form === "agreement",
             lines: [
               { label: "Property", value: job.address },
               { label: "Scope", value: (job.intake?.workRequested || []).join(", ") || "Roof replacement" },
@@ -12353,19 +12754,7 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
                points at the signed agreement, which carries the notice that
                actually applies, rather than naming the wrong statute. */
             terms: "By signing you enter into a binding agreement for the work described, at the price shown. Your signed agreement sets out your right to cancel and the notice period that applies where the property is located.",
-            /* The rendered legal text travels with the signature, not just
-               a reference to the pack. Editing a state's pack later must
-               not retroactively change what a past signature appears to
-               have covered — the hash has to bind to the words the
-               homeowner actually read. */
-            snapshot: {
-              number: con.number,
-              price: con.price,
-              address: job.address,
-              legalPackState: job.state || "",
-              legalPackVersion: LEGAL_PACK_VERSION,
-              renderedLegalText: renderedLegalText(job)
-            }
+            snapshot: { number: con.number, price: con.price, address: job.address }
           });
         }
         (job.changeOrders || []).filter((c) => c.status === "Sent").forEach((c) => {
@@ -12448,8 +12837,8 @@ function buildPortalSnapshot(job, brand2, token, users = []) {
       contract: portal.contract ? { number: job.contract.number, price: job.contract.price, status: job.contract.status } : null,
       invoice: portal.invoice ? { contract: pay.contract, received: pay.received, balance: pay.balance } : null,
       review: portal.review !== false ? {
-        googleLink: brand2.googleReviewLink || "",
-        gateNegative: brand2.gateNegativeReviews === true,
+        googleLink: brand.googleReviewLink || "",
+        gateNegative: brand.gateNegativeReviews === true,
         rating: (job.review || {}).rating || null,
         submitted: !!(job.review || {}).rating
       } : null,
@@ -12705,13 +13094,14 @@ function SignConsent({ checked, onChange, what, accent = "#0A9E98" }) {
     ] })
   ] });
 }
-function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2, estSelection = null }) {
+function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estimate = null, estSelection = null }) {
   const [openDoc2, setOpenDoc] = (0, import_react.useState)(null);
   const [sig, setSig] = (0, import_react.useState)(null);
   const [consent, setConsent] = (0, import_react.useState)(false);
   const [busy, setBusy] = (0, import_react.useState)(false);
   const [err, setErr] = (0, import_react.useState)("");
   const [signed, setSigned] = (0, import_react.useState)([]);
+  const [initials, setInitials] = (0, import_react.useState)({ owner: "", hoa: "", cancel: "" });
   (0, import_react.useEffect)(() => {
     const db = DB();
     if (!db || !token) return;
@@ -12724,6 +13114,28 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
     };
   }, [token]);
   const isSigned = (d) => signed.some((s) => s.doc_type === d.type && String(s.doc_id) === String(d.id) && s.signer_role === "customer");
+  const effectiveSnapshot = (0, import_react.useMemo)(() => {
+    if (!openDoc2) return null;
+    if (openDoc2.type === "estimate" && estSelection) {
+      return { ...openDoc2.snapshot, selection: estSelection, total: estSelection.total };
+    }
+    if (openDoc2.needsInitials) {
+      return { ...openDoc2.snapshot, initials: { owner: initials.owner.trim(), hoa: initials.hoa.trim(), cancel: initials.cancel.trim() } };
+    }
+    return openDoc2.snapshot;
+  }, [openDoc2, estSelection, initials]);
+  const effectiveDoc = (0, import_react.useMemo)(() => {
+    if (!openDoc2) return null;
+    if (openDoc2.type !== "estimate" || !estSelection || !estimate) return openDoc2;
+    const tierObj = (estimate.tiers || []).find((t) => t.id === estSelection.tierId) || null;
+    if (!tierObj) return openDoc2;
+    const upgradeObjs = (estimate.upgrades || []).filter((u) => (estSelection.upgradeIds || []).includes(u.id));
+    const lines = [
+      ...(tierObj.items || []).map((it) => ({ label: `${it.desc} \u2014 ${it.qty} ${it.unit}`, value: money(num(it.qty) * num(it.price)) })),
+      ...upgradeObjs.map((u) => ({ label: u.desc, value: `+${money(num(u.price))}` }))
+    ];
+    return { ...openDoc2, lines, total: estSelection.total };
+  }, [openDoc2, estSelection, estimate]);
   const submit = async () => {
     if (!openDoc2 || !sig || !consent) return;
     const db = DB();
@@ -12733,15 +13145,14 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
     }
     setBusy(true);
     setErr("");
-    const snapshot = openDoc2.type === "estimate" && estSelection ? { ...openDoc2.snapshot, selection: estSelection, total: estSelection.total } : openDoc2.snapshot;
     const row = {
       id: uid("sig"),
       job_id: jobId,
       doc_type: openDoc2.type,
       doc_id: String(openDoc2.id || ""),
       doc_title: openDoc2.title,
-      doc_hash: docHash(snapshot),
-      doc_snapshot: snapshot,
+      doc_hash: docHash(effectiveSnapshot),
+      doc_snapshot: effectiveSnapshot,
       signer_role: "customer",
       signer_name: customer.name || "Customer",
       signer_email: customer.email || null,
@@ -12764,6 +13175,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
     setOpenDoc(null);
     setSig(null);
     setConsent(false);
+    setInitials({ owner: "", hoa: "", cancel: "" });
   };
   const pending = (docs || []).filter((d) => !isSigned(d));
   const done = (docs || []).filter((d) => isSigned(d));
@@ -12772,7 +13184,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: pending.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "amber", children: [
       pending.length,
       " to sign"
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "All signed" }), children: "Documents to sign" }),
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "All signed" }), children: "Agreements & signatures" }),
     pending.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: "Nothing needs your signature right now." }),
     pending.map((d) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "center", padding: "11px 0", borderTop: `1px solid ${S.line}` }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.FileText, { size: 18, color: accent, style: { flexShrink: 0 } }),
@@ -12790,6 +13202,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
             setSig(null);
             setConsent(false);
             setErr("");
+            setInitials({ owner: "", hoa: "", cancel: "" });
           },
           children: "Review & sign"
         }
@@ -12812,7 +13225,10 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
       Sheet,
       {
         open: !!openDoc2,
-        onClose: () => setOpenDoc(null),
+        onClose: () => {
+          setOpenDoc(null);
+          setInitials({ owner: "", hoa: "", cancel: "" });
+        },
         title: openDoc2 ? openDoc2.title : "Sign",
         wide: true,
         footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
@@ -12830,16 +13246,60 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
         ] }),
         children: openDoc2 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 11, padding: 14, marginBottom: 14, background: S.card }, children: [
-            (openDoc2.lines || []).map((l, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5, padding: "6px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }, children: [
+            (effectiveDoc.lines || []).map((l, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5, padding: "6px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.ink }, children: l.label }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.ink, fontWeight: 600, whiteSpace: "nowrap" }, children: l.value })
             ] }, i2)),
-            openDoc2.total != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: `2px solid ${S.line}` }, children: [
+            effectiveDoc.total != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: `2px solid ${S.line}` }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14.5, fontWeight: 800, color: S.ink }, children: "Total" }),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 18, fontWeight: 800, color: S.ink }, children: money(openDoc2.total) })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 18, fontWeight: 800, color: S.ink }, children: money(effectiveDoc.total) })
             ] })
           ] }),
           openDoc2.terms && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.6, marginBottom: 14 }, children: openDoc2.terms }),
+          openDoc2.needsInitials && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 14 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.ink, marginBottom: 8 }, children: "Initial to acknowledge" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, flexWrap: "wrap" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 130 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginBottom: 4 }, children: "Insurance-dependent pricing" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    style: { ...inputStyle, width: "100%" },
+                    value: initials.owner,
+                    maxLength: 6,
+                    onChange: (e) => setInitials({ ...initials, owner: e.target.value }),
+                    placeholder: "Initials"
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 130 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginBottom: 4 }, children: "HOA approval, if required" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    style: { ...inputStyle, width: "100%" },
+                    value: initials.hoa,
+                    maxLength: 6,
+                    onChange: (e) => setInitials({ ...initials, hoa: e.target.value }),
+                    placeholder: "Initials"
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 130 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginBottom: 4 }, children: "Right to cancel" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    style: { ...inputStyle, width: "100%" },
+                    value: initials.cancel,
+                    maxLength: 6,
+                    onChange: (e) => setInitials({ ...initials, cancel: e.target.value }),
+                    placeholder: "Initials"
+                  }
+                )
+              ] })
+            ] })
+          ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.ink, marginBottom: 8 }, children: "Your signature" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
             SignatureField,
@@ -12863,7 +13323,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand: brand2,
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11, color: S.sub, marginTop: 12, lineHeight: 1.55 }, children: [
             "The date, time and network address of your signature are recorded by our system when you sign, not by your device, so the record cannot be altered afterwards. Document reference",
             " ",
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: docHash(openDoc2.snapshot) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: docHash(effectiveSnapshot) }),
             "."
           ] })
         ] })
@@ -13111,21 +13571,31 @@ function PortalEnRoute({ er, accent }) {
   ] });
 }
 function PublicPortal({ token }) {
-  const [state, setState] = (0, import_react.useState)({ loading: true, data: null, err: "" });
+  const [state, setState] = (0, import_react.useState)({ loading: true, data: null, err: "", hint: "" });
   const [estSel, setEstSel] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
     const db = DB();
     if (!db) {
-      setState({ loading: false, data: null, err: "This link needs a live connection." });
+      setState({
+        loading: false,
+        data: null,
+        err: "This link needs a live connection.",
+        hint: "This looks like a site configuration issue, not something a new link would fix \u2014 please contact your contractor directly."
+      });
       return;
     }
     db.rpc("portal_get_data", { p_token: token }).then(({ data, error }) => {
       const row = Array.isArray(data) ? data[0] : data;
       if (error || !row) {
-        setState({ loading: false, data: null, err: "This link isn't valid or has been turned off." });
+        setState({
+          loading: false,
+          data: null,
+          err: "This link isn't valid or has been turned off.",
+          hint: "Please contact your contractor for a new one."
+        });
         return;
       }
-      setState({ loading: false, data: row.data, err: "" });
+      setState({ loading: false, data: row.data, err: "", hint: "" });
     });
   }, [token]);
   if (state.loading) {
@@ -13136,7 +13606,8 @@ function PublicPortal({ token }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 16, fontWeight: 700, color: S.ink }, children: "Link unavailable" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14, color: S.sub, marginTop: 8, lineHeight: 1.55 }, children: [
         state.err,
-        " Please contact your contractor for a new one."
+        " ",
+        state.hint
       ] })
     ] }) });
   }
@@ -13145,11 +13616,7 @@ function PublicPortal({ token }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minHeight: "100vh", background: S.bg, fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: prim, color: "#fff", padding: "22px 18px 26px" }, children: [
       d.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: d.logo, alt: "", style: { height: 44, objectFit: "contain", marginBottom: 10, display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, opacity: 0.8 }, children: d.company }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 21, fontWeight: 800, marginTop: 4 }, children: [
-        "Your ",
-        d.projectType || "roofing",
-        " project"
-      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 21, fontWeight: 800, marginTop: 4 }, children: "Your project" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, opacity: 0.85, marginTop: 3 }, children: d.address })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 60px" }, children: [
@@ -13302,6 +13769,7 @@ function PublicPortal({ token }) {
               docs: d.signDocs || [],
               accent: prim,
               brand: d,
+              estimate: d.estimate || null,
               estSelection: estSel
             }
           )
@@ -13361,7 +13829,7 @@ function CheckoutReturnScreen({ sessionId, onDone }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.5 }, children: "Confirming with Stripe \u2014 this only takes a moment." })
   ] }) }) });
 }
-function PasswordSetScreen({ brand: brand2, mode, onDone, toast }) {
+function PasswordSetScreen({ brand, mode, onDone, toast }) {
   const [pw, setPw] = (0, import_react.useState)("");
   const [pw2, setPw2] = (0, import_react.useState)("");
   const [busy, setBusy] = (0, import_react.useState)(false);
@@ -13396,19 +13864,19 @@ function PasswordSetScreen({ brand: brand2, mode, onDone, toast }) {
     fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif"
   }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "100%", maxWidth: 380 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center", marginBottom: 22 }, children: [
-      brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "", style: { height: 60, maxWidth: 200, objectFit: "contain", margin: "0 auto 12px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      brand.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand.logo, alt: "", style: { height: 60, maxWidth: 200, objectFit: "contain", margin: "0 auto 12px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
         width: 58,
         height: 58,
         margin: "0 auto 12px",
         borderRadius: 15,
-        background: brand2.primary,
+        background: brand.primary,
         color: "#fff",
         display: "grid",
         placeItems: "center",
         fontWeight: 800
-      }, children: brand2.short }),
+      }, children: brand.short }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800, color: S.ink }, children: mode === "invite" ? "Welcome \u2014 set your password" : mode === "recovery" ? "Choose a new password" : "Change your password" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, marginTop: 5, lineHeight: 1.5 }, children: mode === "invite" ? `You've been added to the ${brand2.company} team. Choose a password to finish setting up your account.` : mode === "recovery" ? "You followed a reset link. Pick a new password to finish signing in." : "Enter a new password for your account." })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, marginTop: 5, lineHeight: 1.5 }, children: mode === "invite" ? `You've been added to the ${brand.company} team. Choose a password to finish setting up your account.` : mode === "recovery" ? "You followed a reset link. Pick a new password to finish signing in." : "Enter a new password for your account." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", { onSubmit: (e) => {
@@ -14148,7 +14616,7 @@ function PropertyPhoto({ job, mut, toast }) {
     toast && toast("Property photo saved");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 12 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: fileRef, type: "file", accept: "image/*", capture: "environment", onChange: onFile, style: { display: "none" } }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: fileRef, type: "file", accept: "image/*", onChange: onFile, style: { display: "none" } }),
     photo ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "relative", borderRadius: 12, overflow: "hidden", background: S.soft }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: photo.url, alt: `${job.address}`, style: { width: "100%", height: 168, objectFit: "cover", display: "block" } }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "absolute", right: 8, bottom: 8, display: "flex", gap: 6 }, children: [
@@ -14927,7 +15395,7 @@ function CallLog({ jobs, leadSources, calls, setCalls, onOpenJob, onBack, curren
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { textAlign: "right", fontWeight: 700 }, children: money(r.value) })
         ] }, r.src))
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "True per-source tracking numbers (a different phone number on each yard sign and ad) can come later through Twilio \u2014 this report gets its answers from reps asking the question, which costs nothing." })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "True per-source tracking numbers (a different phone number on each yard sign and ad) can come later through a texting provider \u2014 this report gets its answers from reps asking the question, which costs nothing." })
     ] }),
     calls.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Recent calls" }),
@@ -15116,7 +15584,7 @@ var STAGE_CHECKS = {
   },
   deposit: {
     label: "Deposit collected or waived",
-    test: (j) => num((j.payments || []).reduce((a, p) => a + num(p.amount), 0)) > 0 || !!j.depositWaived,
+    test: (j) => num((j.payments || []).reduce((a, p) => a + num(p.amt), 0)) > 0 || !!j.depositWaived,
     fix: "Payments section \u2014 record the deposit, or tick waived on the approval."
   },
   measure: {
@@ -15562,7 +16030,7 @@ function changeOrderTotals(job) {
     pendingCount: pending.length
   };
 }
-function TabChangeOrders({ job, mut, toast, currentUser, brand: brand2, showMoney = true }) {
+function TabChangeOrders({ job, mut, toast, currentUser, brand, showMoney = true }) {
   const t = changeOrderTotals(job);
   const base = num(job.contract && job.contract.price) || num(job.fin && job.fin.contract);
   const [openId, setOpenId] = (0, import_react.useState)(null);
@@ -15647,7 +16115,7 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand: brand2, showMone
         <div><div class="sigline"></div><div class="siglbl">Homeowner signature / date</div></div>
         <div><div class="sigline"></div><div class="siglbl">Company representative / date</div></div>
       </div>`;
-    openDoc(`Change order - ${job.name}`, brand2, html, toast);
+    openDoc(`Change order - ${job.name}`, brand, html, toast);
     if (co.status === "Draft") editCo(co.id, "status", "Sent");
     editCo(co.id, "sentAt", nowStamp());
   };
@@ -15770,7 +16238,8 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand: brand2, showMone
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 5, marginTop: 11, flexWrap: "wrap" }, children: CO_STATUS.map((st) => {
               const on = (c.status || "Draft") === st;
               const col = st === "Declined" ? "#B3261E" : st === "Approved" ? "#177245" : T.accent;
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => editCo(c.id, "status", st), style: {
+              const gated = st === "Approved";
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { disabled: gated, onClick: gated ? void 0 : () => editCo(c.id, "status", st), style: {
                 border: `1.5px solid ${on ? col : S.line}`,
                 background: on ? st === "Declined" ? "#FDECEA" : st === "Approved" ? "#EAF6EE" : T.accentSoft : "#fff",
                 color: on ? col : S.sub,
@@ -15778,10 +16247,16 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand: brand2, showMone
                 padding: "5px 11px",
                 fontSize: 12,
                 fontWeight: 800,
-                cursor: "pointer",
-                fontFamily: "inherit"
+                cursor: gated ? "default" : "pointer",
+                fontFamily: "inherit",
+                opacity: gated && !on ? 0.45 : 1
               }, children: st }, st);
             }) }),
+            c.status !== "Approved" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 6, lineHeight: 1.5 }, children: job.portalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+              "Approval happens when the homeowner signs at ",
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `${window.location.origin}/?portal=${job.portalToken}`, target: "_blank", rel: "noreferrer", style: { color: T.accent, fontWeight: 700 }, children: "the client portal" }),
+              " \u2014 open it there for an in-person signature, or send the link."
+            ] }) : "Publish a client portal link (Client portal tab) so the homeowner can sign there." }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 11 }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => delCo(c.id), children: "Delete" }),
               /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
@@ -15811,7 +16286,7 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand: brand2, showMone
     ] })
   ] });
 }
-function TabSignatures({ job, mut, toast, currentUser, brand: brand2 }) {
+function TabSignatures({ job, mut, toast, currentUser, brand }) {
   const [rows, setRows] = (0, import_react.useState)([]);
   const [loading, setLoading] = (0, import_react.useState)(true);
   const [signing, setSigning] = (0, import_react.useState)(null);
@@ -15860,7 +16335,7 @@ function TabSignatures({ job, mut, toast, currentUser, brand: brand2 }) {
       signature_type: sig.type,
       signature_data: sig.data,
       consent: true,
-      intent_text: `Countersigned ${signing.doc_title} on behalf of ${brand2?.name || "the company"}.`,
+      intent_text: `Countersigned ${signing.doc_title} on behalf of ${brand?.name || "the company"}.`,
       portal_token: signing.portal_token || null
     };
     const { error } = await db.from("crm_signatures").insert(row);
@@ -15870,7 +16345,17 @@ function TabSignatures({ job, mut, toast, currentUser, brand: brand2 }) {
       return;
     }
     if (signing.doc_type === "contract") {
-      mut((j) => ({ ...j, contract: { ...j.contract || {}, status: "Signed", signedAt: todayIso() } }));
+      const custInitials = signing.doc_snapshot && signing.doc_snapshot.initials || null;
+      mut((j) => ({
+        ...j,
+        contract: { ...j.contract || {}, status: "Signed", signedAt: todayIso() },
+        ...custInitials ? { agreement: {
+          ...j.agreement || {},
+          ownerInit1: custInitials.owner || (j.agreement || {}).ownerInit1 || "",
+          ownerInit2: custInitials.hoa || (j.agreement || {}).ownerInit2 || "",
+          cancelInit: custInitials.cancel || (j.agreement || {}).cancelInit || ""
+        } } : {}
+      }));
     }
     if (signing.doc_type === "estimate") {
       const sel = (signing.doc_snapshot || {}).selection || null;
@@ -15889,6 +16374,12 @@ function TabSignatures({ job, mut, toast, currentUser, brand: brand2 }) {
         const withEst = { ...j, estimate: est };
         return { ...withEst, contract: convertEstimateToContract(withEst) };
       });
+    }
+    if (signing.doc_type === "change_order") {
+      mut((j) => ({
+        ...j,
+        changeOrders: (j.changeOrders || []).map((c) => c.id === signing.doc_id ? { ...c, status: "Approved", approvedAt: todayIso() } : c)
+      }));
     }
     toast(signing.doc_type === "estimate" ? "Estimate accepted \u2014 contract ready" : "Countersigned");
     setSigning(null);
@@ -16144,7 +16635,7 @@ function StormLookup({ job, dol, onPick, toast }) {
     }) })
   ] });
 }
-function TabClaim({ job, mut, toast, brand: brand2 }) {
+function TabClaim({ job, mut, toast, brand }) {
   const c = job.claim || {};
   const ins = job.insurance || {};
   const m = claimMath(job);
@@ -16588,7 +17079,7 @@ function TabChecklist({ job, mut, toast }) {
         })()
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Inspection method", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"], value: c.method, onPick: set("method") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Layers", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ["1 Layer", "2 Layers", "3+ Layers"], value: c.layers, onPick: set("layers") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Layers", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["1 Layer", "2 Layers", "3+ Layers"], value: c.layers, onPick: set("layers") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Roof covering", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { multi: true, options: ROOF_COVERING_OPTIONS, value: c.roofType, onPick: set("roofType") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: isFlatRoof ? "Pitch / drainage slope (optional for flat roof)" : "Pitch (primary)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PillGroup, { options: ["Flat / low slope", "1/12", "2/12", "3/12", "4/12", "5/12", "6/12", "7/12", "8/12", "9/12+"], value: c.pitch, onPick: set("pitch") }) }),
       isFlatRoof && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: "#ECFDF3", borderRadius: 10, padding: "10px 12px", marginTop: -4, marginBottom: 12, fontSize: 12.5, color: "#176B3A" }, children: "Pitch is not required to complete a flat-roof inspection." })
@@ -16727,6 +17218,62 @@ function bytesToDataUrl(bytes, mime) {
   const chunk = 32768;
   for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
   return `data:${mime};base64,${btoa(bin)}`;
+}
+function pdfRowsFromItems(items, tolerance = 2.5) {
+  const points = (items || []).filter((it) => it.str && it.str.trim()).map((it) => ({ x: it.transform[4], y: it.transform[5], str: it.str }));
+  points.sort((a, b) => b.y - a.y || a.x - b.x);
+  const rows = [];
+  points.forEach((p) => {
+    const last = rows[rows.length - 1];
+    if (last && Math.abs(last.y - p.y) <= tolerance) last.items.push(p);
+    else rows.push({ y: p.y, items: [p] });
+  });
+  return rows.map((r) => r.items.sort((a, b) => a.x - b.x).map((p) => p.str.trim()).join(" ").replace(/\s+/g, " ").trim()).filter(Boolean);
+}
+async function extractSubSheetRowsFromPdf(file) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf");
+  const workerSrc = (await import("pdfjs-dist/legacy/build/pdf.worker.min.js?url")).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjs.getDocument({ data: buf }).promise;
+  const pageCount = Math.min(doc.numPages, 20);
+  let rows = [];
+  let hadText = false;
+  for (let i = 1; i <= pageCount; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    if (content.items.some((it) => it.str && it.str.trim())) hadText = true;
+    rows = rows.concat(pdfRowsFromItems(content.items));
+  }
+  return { rows, noText: !hadText };
+}
+var SUB_PDF_LABEL_STOPWORDS = /\b(insur|indemnif|arbitrat|agree|hereby|shall|warrant|liabilit|attorney|govern|terminat|severab|jurisdiction|witness|notary|claus|provision|covenant|pursuant|aggregate|occurrence|per annum|state of|effective|operating at|policy|address|suite|\bste\b|\bllc\b|\binc\b)/i;
+var SUB_PDF_NOISE_SHAPES = [/,\s*[A-Z]{2}\b/, /\|/, /\bLLC\b/i];
+var SUB_PDF_UNIT_TOKENS = ["SQ", "EA", "LF", "SF", "SHT", "HR", "JOB", "YD", "GAL", "BOX", "ROLL", "BUNDLE", "EACH", "DAY", "PAIL", "CAN", "TUBE", "BAG", "PALLET"];
+function parseSubSheetPdfRows(rows) {
+  const out = [];
+  (rows || []).forEach((raw) => {
+    const row = String(raw || "").trim();
+    if (!row || row.length > 90) return;
+    const m = row.match(/\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)\s*$/);
+    if (!m) return;
+    const price = num(m[1].replace(/,/g, ""));
+    if (!(price > 0 && price < 5e4)) return;
+    let rest = row.slice(0, m.index).trim().replace(/[-–—:]+$/, "").trim();
+    if (!rest) return;
+    let unit = "flat";
+    const words = rest.split(/\s+/);
+    const lastWord = words[words.length - 1].toUpperCase().replace(/[^A-Z]/g, "");
+    if (SUB_PDF_UNIT_TOKENS.includes(lastWord)) {
+      unit = lastWord;
+      rest = words.slice(0, -1).join(" ").trim();
+    }
+    if (!rest || rest.length < 3 || SUB_PDF_LABEL_STOPWORDS.test(rest) || !/[a-zA-Z]{3}/.test(rest)) return;
+    if (SUB_PDF_NOISE_SHAPES.some((re) => re.test(rest))) return;
+    const code = subCodeFor(rest);
+    out.push({ id: uid("rc"), category: "Other", code: code || "custom", label: rest, unit, price, notes: "" });
+  });
+  return out;
 }
 function PdfFiller({ open, onClose, onExport }) {
   const [buf, setBuf] = (0, import_react.useState)(null);
@@ -17051,7 +17598,7 @@ function TabMeasure({ job, mut, toast }) {
     ] })
   ] });
 }
-function TabMaterials({ job, mut, toast }) {
+function TabMaterials({ job, mut, toast, brand }) {
   const list = generateRoofingMaterials(job.measurements);
   const copyText = () => {
     if (!list) return;
@@ -17267,9 +17814,18 @@ function supplementFindings(job) {
   }
   return out;
 }
+function supplementJustification(f, job) {
+  const cf = asFact(f);
+  const citeClause = printable(cf) ? ` per ${cf.value}` : "";
+  const addr = job.address || "the property";
+  const claimNo = (job.claim || {}).claim || (job.insurance || {}).claim || "";
+  const claimClause = claimNo ? ` (claim #${claimNo})` : "";
+  return `${f.title} \u2014 ${f.why}${citeClause}. This is part of the necessary and reasonable scope of repair at ${addr}${claimClause} and should be included as an approved supplement.`;
+}
 function SupplementCheck({ job, mut, toast, locked = false }) {
   const [open, setOpen] = (0, import_react.useState)(true);
   const [done, setDone] = (0, import_react.useState)({});
+  const [tagging, setTagging] = (0, import_react.useState)(null);
   const found = supplementFindings(job);
   const items = (job.estimate || {}).items || [];
   if (items.length === 0) return null;
@@ -17303,11 +17859,27 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
       at: nowStamp(),
       cite: cf.value || "",
       citeConfidence: cf.confidence,
-      citeState: f.state || ""
+      citeState: f.state || "",
+      justification: supplementJustification(f, job)
     };
     mut((j) => ({ ...j, claim: { ...j.claim || {}, supplements: [...(j.claim || {}).supplements || [], row] } }));
     setDone((d) => ({ ...d, [f.title]: "supplement" }));
     toast && toast(printable(cf) || !cf.value ? `Added "${f.title}" to the claim supplements` : `Added "${f.title}" \u2014 the code cite was left off because it is not verified for this state`);
+  };
+  const copyJustification = (f) => {
+    const text = supplementJustification(f, job);
+    if (navigator.clipboard) navigator.clipboard.writeText(text);
+    toast && toast("Justification copied \u2014 paste it into your supplement email or portal message");
+  };
+  const tagPhoto = (f, photoId) => {
+    if (!mut) return;
+    const cf = asFact(f);
+    mut((j) => ({
+      ...j,
+      photos: (j.photos || []).map((p) => p.id === photoId ? { ...p, findingTag: { title: f.title, cite: printable(cf) ? cf.value : null } } : p)
+    }));
+    setTagging(null);
+    toast && toast(`Tagged a photo as evidence for "${f.title}"`);
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginBottom: 12 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: found.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Clear" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: found.some((f) => f.sev === "HIGH") ? "red" : "amber", children: found.length }), children: "Supplement check" }),
@@ -17325,16 +17897,39 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
             f.cite && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 5 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: f, compact: true }) })
           ] })
         ] }),
-        !locked && mut && (done[f.title] || f.line || isClaim) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, marginTop: 8, marginLeft: 0, flexWrap: "wrap" }, children: done[f.title] ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: done[f.title] === "estimate" ? "\u2713 Added to estimate" : "\u2713 Added as supplement" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-          f.line && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => addToEstimate(f), children: [
+        !locked && mut && (done[f.title] || f.line || isClaim) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 7, marginTop: 8, marginLeft: 0, flexWrap: "wrap", alignItems: "center" }, children: [
+          done[f.title] && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: done[f.title] === "estimate" ? "\u2713 Added to estimate" : "\u2713 Added as supplement" }),
+          !done[f.title] && f.line && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => addToEstimate(f), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 12 }),
             " Add to estimate"
           ] }),
-          isClaim && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => addAsSupplement(f), children: [
+          !done[f.title] && isClaim && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => addAsSupplement(f), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 12 }),
             " Add as supplement"
+          ] }),
+          !done[f.title] && isClaim && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => copyJustification(f), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Copy, { size: 12 }),
+            " Copy justification"
+          ] }),
+          isClaim && job.photos.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => setTagging(tagging === f.title ? null : f.title), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Image, { size: 12 }),
+            " Tag a photo"
           ] })
-        ] }) })
+        ] }),
+        tagging === f.title && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginTop: 8, overflowX: "auto" }, children: job.photos.map((p) => {
+          const active = p.findingTag && p.findingTag.title === f.title;
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => tagPhoto(f, p.id), title: p.label, style: {
+            border: `1.5px solid ${active ? T.accent : S.line}`,
+            borderRadius: 8,
+            padding: 0,
+            width: 52,
+            height: 52,
+            overflow: "hidden",
+            flexShrink: 0,
+            cursor: "pointer",
+            background: "#EEF1F4"
+          }, children: p.url ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: p.url, alt: p.label, style: { width: "100%", height: "100%", objectFit: "cover" } }) : null }, p.id);
+        }) })
       ] }, i)),
       found.length > 3 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setOpen(!open), style: {
         border: "none",
@@ -17562,7 +18157,7 @@ function LineItemEditor({ items, setItems, locked, addLabel = "Add line item", p
     ] })
   ] });
 }
-function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast, total, onClose, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
+function ProposalBuilder({ job, brand, est, setEst, locked, toast, total, onClose, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
 }, users = [] }) {
   const doc = normalizeProposalDoc(est.doc);
   const setDoc = (patch) => setEst({ doc: { ...doc, ...patch } });
@@ -17650,7 +18245,7 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast, total
           est.number || "Draft"
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => openDoc(`Estimate \u2014 ${job.name}`, brand2, estimateDocHtml(job, brand2, users), toast, { bare: true }), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => openDoc(`Estimate \u2014 ${job.name}`, brand, estimateDocHtml(job, brand, users), toast, { bare: true }), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 14 }),
         " PDF"
       ] })
@@ -17861,7 +18456,7 @@ function ProposalBuilder({ job, brand: brand2, est, setEst, locked, toast, total
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: { ...chip(false), color: S.sub }, onClick: () => setAddOpen(false), children: "Cancel" })
         ] })
       ] })
-    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProposalPreview, { job, brand: brand2, est, doc, total, users }) })
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ProposalPreview, { job, brand, est, doc, total, users }) })
   ] });
 }
 function CoverThumb({ style, accent, primary }) {
@@ -17897,10 +18492,10 @@ function CoverThumb({ style, accent, primary }) {
     ] })
   ] });
 }
-function ProposalPreview({ job, brand: brand2, est, doc, total, users = [] }) {
+function ProposalPreview({ job, brand, est, doc, total, users = [] }) {
   const html = (0, import_react.useMemo)(
-    () => docShell(doc.title || "Roofing Proposal", brand2, estimateDocHtml({ ...job, estimate: { ...est, doc } }, brand2, users), { bare: true }),
-    [job, brand2, est, doc, users]
+    () => docShell(doc.title || "Roofing Proposal", brand, estimateDocHtml({ ...job, estimate: { ...est, doc } }, brand, users), { bare: true }),
+    [job, brand, est, doc, users]
   );
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, padding: "9px 12px", borderBottom: `1px solid ${S.line}` }, children: "Exactly what the customer receives \u2014 same renderer as the PDF." }),
@@ -17993,11 +18588,10 @@ function TemplateBar({ label, list = [], setList, value, onApply, locked }) {
     }, children: "+ Save current" }))
   ] });
 }
-function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {
+function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstimateTemplates = () => {
 }, priceList = [], docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
 }, users = [] }) {
   const est = { ...job.estimate, tiers: job.estimate.tiers || [], upgrades: job.estimate.upgrades || [] };
-  const [sigOpen, setSigOpen] = (0, import_react.useState)(false);
   const locked = est.status === "Signed";
   const setEst = (patch) => mut((j) => ({ ...j, estimate: { ...j.estimate, ...patch } }));
   const setItem = (id, k, v) => setEst({ items: est.items.map((it) => it.id === id ? { ...it, [k]: v } : it) });
@@ -18136,14 +18730,24 @@ function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], s
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "input",
           {
-            style: inputStyle,
-            value: est.date || (/* @__PURE__ */ new Date()).toLocaleDateString(void 0, { month: "short", day: "numeric", year: "numeric" }),
+            style: dateInputStyle,
+            type: "date",
             disabled: locked,
-            onChange: (e) => setEst({ date: e.target.value })
+            value: humanToIso(est.date) || todayIso(),
+            onChange: (e) => setEst({ date: isoToHuman(e.target.value) })
           }
         ) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Valid through", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: est.validThrough, disabled: locked, onChange: (e) => setEst({ validThrough: e.target.value }) }) })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Valid through", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "input",
+        {
+          style: dateInputStyle,
+          type: "date",
+          disabled: locked,
+          value: humanToIso(est.validThrough),
+          onChange: (e) => setEst({ validThrough: isoToHuman(e.target.value) })
+        }
+      ) })
     ] }),
     num(m.squares) > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Roof measurements (reference)" }),
@@ -18357,39 +18961,25 @@ function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], s
           ". Document locked."
         ] }),
         est.clientSig !== "signed" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: est.clientSig, alt: "Client signature", style: { maxWidth: 260, border: `1px solid ${S.line}`, borderRadius: 10 } })
-      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "Client signs on-screen at the kitchen table, or through the shared portal link." })
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: job.portalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        "Ready to sign at ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `${window.location.origin}/?portal=${job.portalToken}`, target: "_blank", rel: "noreferrer", style: { color: T.accent, fontWeight: 700 }, children: "the client portal" }),
+        " \u2014 open it there yourself for an in-person signature, or send the link."
+      ] }) : "Publish a client portal link (Client portal tab) so the customer can sign there \u2014 in person or remotely." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => openDoc(`Estimate \u2014 ${job.name}`, brand2, estimateDocHtml(job, brand2, users), toast, { bare: true }), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => openDoc(`Estimate \u2014 ${job.name}`, brand, estimateDocHtml(job, brand, users), toast, { bare: true }), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
         " PDF"
       ] }),
-      !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => {
-          setEst({ status: "Sent" });
-          toast(job.portalToken ? "Sent \u2014 it's live in the client portal to choose and sign" : "Marked sent \u2014 publish the client portal to share it");
-        }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }),
-          " Send"
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { onClick: () => setSigOpen(true), children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.PenLine, { size: 15 }),
-          " Client signature"
-        ] })
+      !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => {
+        setEst({ status: "Sent" });
+        toast(job.portalToken ? "Sent \u2014 it's live in the client portal to choose and sign" : "Marked sent \u2014 publish the client portal to share it");
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }),
+        " Send"
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-      SignaturePad,
-      {
-        open: sigOpen,
-        onClose: () => setSigOpen(false),
-        title: "Client acceptance \u2014 estimate",
-        onApply: (dataUrl, at) => {
-          setEst({ clientSig: dataUrl, sigAt: at, status: "Signed" });
-          toast("Estimate signed and locked");
-        }
-      }
-    ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open: marginSheet, onClose: () => setMarginSheet(false), title: "Pricing controls", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 14, lineHeight: 1.5 }, children: "Margin is profit as a share of the sell price; markup is a percentage added on top of cost. Lines with a unit cost are computed from cost; lines without one scale from their current price." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center" }, children: [
@@ -18516,7 +19106,7 @@ function TabEstimate({ job, brand: brand2, mut, toast, estimateTemplates = [], s
       ProposalBuilder,
       {
         job,
-        brand: brand2,
+        brand,
         est,
         setEst,
         locked,
@@ -18568,14 +19158,14 @@ function AgreementBox({ on, onClick, label, disabled }) {
     }
   );
 }
-function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
-  const a = agreementFor(job, brand2);
+function AgreementForm({ job, brand, mut, toast, locked }) {
+  const a = agreementFor(job, brand);
   const set = (k, v) => mut((j) => ({
     ...j,
-    agreement: { ...agreementPrefill(j, brand2), ...j.agreement || {}, [k]: v }
+    agreement: { ...agreementPrefill(j, brand), ...j.agreement || {}, [k]: v }
   }));
   const repull = () => {
-    mut((j) => ({ ...j, agreement: { ...j.agreement || {}, ...agreementPrefill(j, brand2) } }));
+    mut((j) => ({ ...j, agreement: { ...j.agreement || {}, ...agreementPrefill(j, brand) } }));
     toast("Re-read the job file into the agreement");
   };
   const txt = (k, extra = {}) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -18587,6 +19177,21 @@ function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
       onChange: (e) => set(k, e.target.value)
     }
   );
+  const moneyTxt = (k) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: a[k] || "", disabled: locked, onChange: (v) => set(k, v) });
+  const dateTxt = (k) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    "input",
+    {
+      style: dateInputStyle,
+      type: "date",
+      value: a[k] || "",
+      disabled: locked,
+      onChange: (e) => set(k, e.target.value)
+    }
+  );
+  const InitialsStatus = ({ value }) => value ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { ...inputStyle, width: 120, display: "flex", alignItems: "center", fontWeight: 700 }, children: value }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, lineHeight: 1.4, maxWidth: 220 }, children: job.portalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    "Collected with the signature at ",
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `${window.location.origin}/?portal=${job.portalToken}`, target: "_blank", rel: "noreferrer", style: { color: T.accent, fontWeight: 700 }, children: "the client portal" })
+  ] }) : "Collected with the signature once a client portal link is published" });
   const partInput = (p, i) => {
     if (p.t === "t") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, color: S.ink }, children: p.v }, i);
     if (p.t === "c") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AgreementBox, { on: !!a[p.k], disabled: locked, onClick: () => set(p.k, !a[p.k]) }, i);
@@ -18614,7 +19219,7 @@ function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
     ] }),
     AGREEMENT_HEADER.map((box) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: box.box.charAt(0) + box.box.slice(1).toLowerCase() }),
-      box.rows.map((row, ri) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }, children: row.map((f) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: f.label.charAt(0) + f.label.slice(1).toLowerCase(), children: txt(f.k) }, f.k)) }, ri))
+      box.rows.map((row, ri) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }, children: row.map((f) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: f.label.charAt(0) + f.label.slice(1).toLowerCase(), children: f.t === "money" ? moneyTxt(f.k) : f.t === "date" ? dateTxt(f.k) : txt(f.k) }, f.k)) }, ri))
     ] }, box.box)),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Roofing specification" }),
@@ -18653,34 +19258,18 @@ function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Acknowledgements & schedule" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 8 }, children: AGREEMENT_ACK_INSURANCE }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Owner initials", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "input",
-        {
-          style: { ...inputStyle, width: 120 },
-          value: a.ownerInit1 || "",
-          disabled: locked,
-          onChange: (e) => set("ownerInit1", e.target.value)
-        }
-      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Owner initials", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InitialsStatus, { value: a.ownerInit1 }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 16, alignItems: "center", marginBottom: 8 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700 }, children: "HOA approval required" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AgreementBox, { on: !!a.hoaYes, disabled: locked, label: "Yes", onClick: () => set("hoaYes", !a.hoaYes) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AgreementBox, { on: !!a.hoaNo, disabled: locked, label: "No", onClick: () => set("hoaNo", !a.hoaNo) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Owner initials (HOA)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "input",
-        {
-          style: { ...inputStyle, width: 120 },
-          value: a.ownerInit2 || "",
-          disabled: locked,
-          onChange: (e) => set("ownerInit2", e.target.value)
-        }
-      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Owner initials (HOA)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InitialsStatus, { value: a.ownerInit2 }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Anticipated start (weeks)", children: txt("startWeeks") }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Anticipated completion (weeks)", children: txt("endWeeks") })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Defective decking rate ($ per sheet)", hint: "Printed into the Defective Decking and Plywood Policy paragraph.", children: txt("deckRate") })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Defective decking rate ($ per sheet)", hint: "Printed into the Defective Decking and Plywood Policy paragraph.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: inputStyle, value: a.deckRate || "", disabled: locked, onChange: (v) => set("deckRate", v) }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Agreement price" }),
@@ -18710,22 +19299,14 @@ function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
           )
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Right-to-cancel initials", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "input",
-        {
-          style: { ...inputStyle, width: 120 },
-          value: a.cancelInit || "",
-          disabled: locked,
-          onChange: (e) => set("cancelInit", e.target.value)
-        }
-      ) })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Right-to-cancel initials", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(InitialsStatus, { value: a.cancelInit }) })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
       Btn,
       {
         kind: "ghost",
         style: { marginTop: 14, width: "100%" },
-        onClick: () => openDoc(`Construction Agreement \u2014 ${job.name}`, brand2, agreementDocHtml(job, brand2), toast, { bare: true }),
+        onClick: () => openDoc(`Construction Agreement \u2014 ${job.name}`, brand, agreementDocHtml(job, brand), toast, { bare: true }),
         children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
           " Print the agreement"
@@ -18734,7 +19315,7 @@ function AgreementForm({ job, brand: brand2, mut, toast, locked }) {
     )
   ] });
 }
-function TabContract({ job, brand: brand2, setBrand = () => {
+function TabContract({ job, brand, setBrand = () => {
 }, mut, toast, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {
 }, currentUser = null, integrations = {} }) {
   const con = job.contract;
@@ -18751,12 +19332,11 @@ function TabContract({ job, brand: brand2, setBrand = () => {
     r.readAsDataURL(file);
   };
   const removeAttachment = (id) => setCon({ attachments: (con.attachments || []).filter((a) => a.id !== id) });
-  const blockers = agreementBlockers(job);
   const estTotal = estimateTotal(job.estimate);
   const depositMode = con.depositMode || "pct";
   const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
   const form = con.form === "agreement" ? "agreement" : "simple";
-  const SigLine = ({ label, value, onSign }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 220 }, children: [
+  const SigLine = ({ label, value, onSign, portalPrompt }) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 220 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
       height: 74,
       border: `1.5px dashed ${S.line}`,
@@ -18765,10 +19345,10 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       placeItems: "center",
       background: "#FAFBFC",
       overflow: "hidden"
-    }, children: value ? value === "signed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontFamily: "cursive", fontSize: 22 }, children: label === "Client" ? job.name : "Supreme Building Group" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: value, alt: `${label} signature`, style: { maxHeight: 66 } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", onClick: onSign, disabled: locked || blockers.length > 0, children: [
+    }, children: value ? value === "signed" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontFamily: "cursive", fontSize: 22 }, children: label === "Client" ? job.name : "Supreme Building Group" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: value, alt: `${label} signature`, style: { maxHeight: 66 } }) : onSign ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "soft", onClick: onSign, disabled: locked, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.PenLine, { size: 13 }),
       " Sign here"
-    ] }) }),
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, textAlign: "center", padding: "0 10px", lineHeight: 1.4 }, children: portalPrompt }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 6 }, children: [
       label,
       " ",
@@ -18783,11 +19363,11 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55 }, children: [
         "This agreement is between ",
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: brand2.company }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: brand.company }),
         ", ",
-        brand2.address,
+        brand.address,
         ", ",
-        brand2.phone,
+        brand.phone,
         ", and",
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("b", { children: [
           " ",
@@ -18922,7 +19502,7 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: depositMode === "fixed" ? "Due at signing (fixed)" : `Due at signing (${con.depositPct}%)`, v: money(deposit) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Due on substantial completion", v: money((con.price || 0) - deposit), strong: true })
     ] }),
-    form === "agreement" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AgreementForm, { job, brand: brand2, mut, toast, locked }),
+    form === "agreement" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AgreementForm, { job, brand, mut, toast, locked }),
     form === "simple" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Terms" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -18947,10 +19527,10 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       ),
       !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => {
-          setBrand({ ...brand2, contractTerms: con.terms });
+          setBrand({ ...brand, contractTerms: con.terms });
           toast("Saved as your default terms for new contracts");
         }, children: "Save as company default" }),
-        brand2.contractTerms && brand2.contractTerms !== con.terms && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => setCon({ terms: brand2.contractTerms }), children: "Load company default" })
+        brand.contractTerms && brand.contractTerms !== con.terms && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => setCon({ terms: brand.contractTerms }), children: "Load company default" })
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
@@ -19012,21 +19592,15 @@ function TabContract({ job, brand: brand2, setBrand = () => {
     ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Signatures" }),
-      !locked && blockers.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { tone: "amber", label: `Not ready to sign in ${stateName(job.state) || "an unknown state"}`, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { lineHeight: 1.55 }, children: [
-        "This contract states rights that are set by state law, and nobody has confirmed them for ",
-        stateName(job.state) || "this property's state",
-        " yet. Until they are confirmed the agreement prints a labelled placeholder wherever one of those clauses belongs, and it cannot be signed or sent.",
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8 }, children: blockers.map((b) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, marginTop: 3 }, children: [
-          "\u2022 ",
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: b.label }),
-          b.help ? ` \u2014 ${b.help}` : ""
-        ] }, b.key)) })
-      ] }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 14, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SigLine, { label: "Client", value: con.clientSig, onSign: () => setSigFor("client") }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SigLine, { label: `${brand2.company} representative`, value: con.contractorSig, onSign: () => setSigFor("contractor") })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SigLine, { label: "Client", value: con.clientSig, portalPrompt: job.portalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          "Signs at ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: `${window.location.origin}/?portal=${job.portalToken}`, target: "_blank", rel: "noreferrer", style: { color: T.accent, fontWeight: 700 }, children: "the client portal" }),
+          " \u2014 open it there for an in-person signature, or send the link"
+        ] }) : "Publish a client portal link (Client portal tab) so the customer can sign there" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SigLine, { label: `${brand.company} representative`, value: con.contractorSig, onSign: () => setSigFor("contractor") })
       ] }),
-      con.clientSig && con.contractorSig && !locked && blockers.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "green", style: { marginTop: 14, width: "100%" }, onClick: () => {
+      con.clientSig && con.contractorSig && !locked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "green", style: { marginTop: 14, width: "100%" }, onClick: () => {
         setCon({ status: "Signed", signedAt: nowStamp() });
         toast("Contract executed and locked");
       }, children: [
@@ -19040,38 +19614,34 @@ function TabContract({ job, brand: brand2, setBrand = () => {
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 14 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => form === "agreement" ? openDoc(`Construction Agreement \u2014 ${job.name}`, brand2, agreementDocHtml(job, brand2), toast, { bare: true }) : openDoc(`Contract \u2014 ${job.name}`, brand2, contractDocHtml(job, brand2), toast), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => form === "agreement" ? openDoc(`Construction Agreement \u2014 ${job.name}`, brand, agreementDocHtml(job, brand), toast, { bare: true }) : openDoc(`Contract \u2014 ${job.name}`, brand, contractDocHtml(job, brand), toast), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
         " PDF"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", disabled: blockers.length > 0, onClick: () => sendClientEmail(job, mut, currentUser, integrations, toast, {
-        subject: `Your contract is ready \u2014 ${brand2.company}`,
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => sendClientEmail(job, mut, currentUser, integrations, toast, {
+        subject: `Your contract is ready \u2014 ${brand.company}`,
         body: `Hi ${job.name}, your contract for ${job.address} is ready to review and sign. Reply to this email with any questions.`
       }), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }),
         " Email to client"
       ] })
     ] }),
-    blockers.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: [
-      "Printing the draft still works so you can see exactly which clauses are unfilled. Confirm ",
-      stateName(job.state) || "the state",
-      "'s contract law under More \u2192 Insurance & resources \u2192 Coverage by state to unlock signing and sending."
-    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       SignaturePad,
       {
         open: !!sigFor,
         onClose: () => setSigFor(null),
-        title: sigFor === "client" ? "Client signature" : "Company signature",
+        title: "Company signature",
         onApply: (dataUrl, at) => {
-          setCon(sigFor === "client" ? { clientSig: dataUrl } : { contractorSig: dataUrl });
+          setCon({ contractorSig: dataUrl });
           toast("Signature captured");
         }
       }
     )
   ] });
 }
-function TabReport({ job, brand: brand2, juris, mut, toast, currentUser = null, integrations = {} }) {
+var listVal = (v) => Array.isArray(v) ? v.join(", ") : v;
+function TabReport({ job, brand, juris, mut, toast, currentUser = null, integrations = {} }) {
   const c = job.checklist;
   if (!c.complete) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
@@ -19109,14 +19679,14 @@ function TabReport({ job, brand: brand2, juris, mut, toast, currentUser = null, 
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800, margin: "6px 0 2px" }, children: job.name }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, opacity: 0.85 }, children: job.address }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, opacity: 0.7, marginTop: 10 }, children: [
-        brand2.company,
+        brand.company,
         " \xB7 ",
-        brand2.phone
+        brand.phone
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
         "button",
         {
-          onClick: () => openDoc(`Inspection report \u2014 ${job.name}`, brand2, reportDocHtml(job, brand2), toast),
+          onClick: () => openDoc(`Inspection report \u2014 ${job.name}`, brand, reportDocHtml(job, brand), toast),
           style: {
             marginTop: 12,
             border: "1.5px solid rgba(255,255,255,.4)",
@@ -19140,11 +19710,11 @@ function TabReport({ job, brand: brand2, juris, mut, toast, currentUser = null, 
     ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Section, { n: 1, title: "Overview & property facts", children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Structure", v: c.structure }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Roof covering", v: c.roofType }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Roof covering", v: listVal(c.roofType) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Approximate age", v: `${c.roofAge} years` }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Layers", v: c.layers }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Layers", v: listVal(c.layers) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Predominant pitch", v: c.pitch }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Method", v: c.method || "Visual, non-invasive" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Method", v: listVal(c.method) || "Visual, non-invasive" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Section, { n: 2, title: "Summary of findings", children: findings.map((f, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, padding: "10px 0", borderBottom: `1px solid ${S.line}` }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: pTone[f.p], children: f.p }),
@@ -19154,9 +19724,9 @@ function TabReport({ job, brand: brand2, juris, mut, toast, currentUser = null, 
       ] })
     ] }, i)) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Section, { n: 3, title: "Decking & structure", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Decking type", v: c.deckingType || "\u2014" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Decking type", v: listVal(c.deckingType) || "\u2014" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Condition (surface)", v: c.deckingCond || "\u2014" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Condition (attic view)", v: c.atticDecking || "\u2014" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Condition (attic view)", v: listVal(c.atticDecking) || "\u2014" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Daylight through decking", v: c.lightCheck || "\u2014" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Section, { n: 4, title: "Ventilation", children: [
@@ -19186,12 +19756,12 @@ function TabReport({ job, brand: brand2, juris, mut, toast, currentUser = null, 
       ] })
     ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => openDoc(`Inspection report \u2014 ${job.name}`, brand2, reportDocHtml(job, brand2), toast), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => openDoc(`Inspection report \u2014 ${job.name}`, brand, reportDocHtml(job, brand), toast), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
         " Print / PDF"
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", onClick: () => sendClientEmail(job, mut, currentUser, integrations, toast, {
-        subject: `Your inspection report \u2014 ${brand2.company}`,
+        subject: `Your inspection report \u2014 ${brand.company}`,
         body: `Hi ${job.name}, your roof inspection report for ${job.address} is ready. Reply to this email with any questions.`
       }), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Send, { size: 15 }),
@@ -19261,22 +19831,13 @@ async function sendClientEmail(job, mut, currentUser, integrations, toast, { sub
   record("Queued \u2014 no provider connected");
   toast("Saved to thread \u2014 connect your Gmail to deliver");
 }
-async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, integrations, currentUser) {
-  const consent = job.consent || {};
-  const smsOk = !!(consent.sms && consent.sms.granted) && !!job.phone;
-  const emailOk = !!(consent.email && consent.email.granted) && !!job.email;
-  const kind = prefer === "sms" && smsOk ? "sms" : prefer === "email" && emailOk ? "email" : smsOk ? "sms" : emailOk ? "email" : null;
-  if (!kind) {
-    const why = consent.sms && consent.sms.granted || consent.email && consent.email.granted ? "Not sent \u2014 no contact details on file" : "Not sent \u2014 no messaging consent on file";
-    return { kind: prefer, to: "", status: why, delivered: false };
-  }
-  const to = kind === "sms" ? job.phone : job.email;
+async function deliverMessage({ to, kind, subject = "", body, jobId }, integrations, currentUser) {
   const auth = AUTH();
   const notSetUp = (m) => /not configured|Function not found|Failed to send a request|non-2xx|isn't connected/i.test(m);
   if (kind === "sms") {
     if (!(auth && auth.sendSms)) return { kind, to, status: "Queued \u2014 no provider connected", delivered: false };
     try {
-      await auth.sendSms({ to, body, jobId: job.id });
+      await auth.sendSms({ to, body, jobId });
       return { kind, to, status: "Sent", delivered: true };
     } catch (e) {
       const m = e && e.message || "Could not send";
@@ -19295,13 +19856,25 @@ async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, in
     return { kind, to, status: notSetUp(m) ? "Queued \u2014 email not set up yet" : `Failed \u2014 ${m}`, delivered: false };
   }
 }
-function TabMessages({ job, mut, toast, brand: brand2, templates, crews, integrations, currentUser, users }) {
+async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, integrations, currentUser) {
+  const consent = job.consent || {};
+  const smsOk = !!(consent.sms && consent.sms.granted) && !!job.phone;
+  const emailOk = !!(consent.email && consent.email.granted) && !!job.email;
+  const kind = prefer === "sms" && smsOk ? "sms" : prefer === "email" && emailOk ? "email" : smsOk ? "sms" : emailOk ? "email" : null;
+  if (!kind) {
+    const why = consent.sms && consent.sms.granted || consent.email && consent.email.granted ? "Not sent \u2014 no contact details on file" : "Not sent \u2014 no messaging consent on file";
+    return { kind: prefer, to: "", status: why, delivered: false };
+  }
+  const to = kind === "sms" ? job.phone : job.email;
+  return deliverMessage({ to, kind, subject, body, jobId: job.id }, integrations, currentUser);
+}
+function TabMessages({ job, mut, toast, brand, templates, crews, integrations, currentUser, users }) {
   const [compose, setCompose] = (0, import_react.useState)(null);
   const [to, setTo] = (0, import_react.useState)("Customer");
   const [subject, setSubject] = (0, import_react.useState)("");
   const [body, setBody] = (0, import_react.useState)("");
   const crew = crews.find((c) => c.id === job.crewId) || null;
-  const ctx = templateContext(job, brand2, crew, users);
+  const ctx = templateContext(job, brand, crew, users);
   const thread = job.messages || [];
   const consentOk = (channel, audience) => {
     if (audience === "Crew") return true;
@@ -19362,7 +19935,7 @@ function TabMessages({ job, mut, toast, brand: brand2, templates, crews, integra
           const m = e && e.message || "Could not send";
           const notSetUp = /not configured|Function not found|Failed to send a request|non-2xx/i.test(m);
           record(notSetUp ? "Queued \u2014 texting not set up yet" : `Failed \u2014 ${m}`);
-          toast(notSetUp ? "Texting isn't set up on this project yet \u2014 saved to the thread" : `Twilio: ${m}`);
+          toast(notSetUp ? "Texting isn't set up on this project yet \u2014 saved to the thread" : `Texting: ${m}`);
           setCompose(null);
         }
         setSending(false);
@@ -19601,8 +20174,46 @@ function TabPhotos({ job, mut, toast, ccToken }) {
   const [geoErr, setGeoErr] = (0, import_react.useState)("");
   const [uploading, setUploading] = (0, import_react.useState)(false);
   const [upErr, setUpErr] = (0, import_react.useState)("");
+  const [pairBefore, setPairBefore] = (0, import_react.useState)("");
+  const [pairAfter, setPairAfter] = (0, import_react.useState)("");
+  const [pairLabel, setPairLabel] = (0, import_react.useState)("");
+  const [scanning, setScanning] = (0, import_react.useState)(null);
   const fileRef = (0, import_react.useRef)(null);
   const pendingLabel = (0, import_react.useRef)("");
+  const scanPhoto = async (p) => {
+    const a = AUTH();
+    if (!a || !a.detectPhotoDamage) {
+      toast("Damage detection isn't available in demo mode");
+      return;
+    }
+    if (!p.url) {
+      toast("This photo has no image to scan");
+      return;
+    }
+    setScanning(p.id);
+    try {
+      const split = splitDataUrl(await dataUrlFromImageUrl(p.url));
+      if (!split) {
+        toast("Couldn't read that photo");
+        return;
+      }
+      const findings = await a.detectPhotoDamage({ imageBase64: split.base64, mimeType: split.mime });
+      if (!findings) {
+        toast("Damage detection isn't available right now");
+        return;
+      }
+      mut((j) => ({ ...j, photos: j.photos.map((x) => x.id === p.id ? { ...x, aiScan: { at: nowStamp(), findings } } : x) }));
+      toast(findings.length ? `${findings.length} possible finding${findings.length === 1 ? "" : "s"} \u2014 verify in person before using` : "No damage detected in this photo");
+    } catch (e) {
+      toast("Couldn't scan that photo");
+    } finally {
+      setScanning(null);
+    }
+  };
+  const useAiFinding = (p, finding) => {
+    mut((j) => ({ ...j, photos: j.photos.map((x) => x.id === p.id ? { ...x, findingTag: { title: finding.type, cite: null } } : x) }));
+    toast(`Tagged as evidence for "${finding.type}"`);
+  };
   const getFix = async () => {
     setLocating(true);
     setGeoErr("");
@@ -19671,6 +20282,19 @@ function TabPhotos({ job, mut, toast, ccToken }) {
     e.target.value = "";
   };
   const shotsDone = new Set(job.photos.map((p) => p.label));
+  const createPair = () => {
+    if (!pairBefore || !pairAfter || pairBefore === pairAfter) return;
+    mut((j) => ({
+      ...j,
+      photoPairs: [...j.photoPairs || [], { id: uid("pp"), label: pairLabel.trim() || "Before / after", beforeId: pairBefore, afterId: pairAfter }]
+    }));
+    setPairBefore("");
+    setPairAfter("");
+    setPairLabel("");
+    toast("Before/after pair saved");
+  };
+  const deletePair = (id) => mut((j) => ({ ...j, photoPairs: (j.photoPairs || []).filter((pp) => pp.id !== id) }));
+  const photoById = (id) => job.photos.find((p) => p.id === id);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       "input",
@@ -19785,6 +20409,10 @@ function TabPhotos({ job, mut, toast, ccToken }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "8px 10px" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, fontWeight: 700 }, children: p.label }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub, marginTop: 2 }, children: p.at }),
+          p.findingTag && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 5 }, title: p.findingTag.cite ? `Cite: ${p.findingTag.cite}` : "Cite not verified for this state", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
+            "Evidence: ",
+            p.findingTag.title
+          ] }) }),
           p.lat != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: mapLinkForCoords(p.lat, p.lng), target: "_blank", rel: "noreferrer", style: {
             display: "inline-flex",
             alignItems: "center",
@@ -19816,6 +20444,46 @@ function TabPhotos({ job, mut, toast, ccToken }) {
             p.shared ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Check, { size: 10 }) : null,
             " ",
             p.shared ? "Shared" : "Share"
+          ] }),
+          p.url && !p.aiScan && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => scanPhoto(p), disabled: scanning === p.id, style: {
+            marginTop: 7,
+            marginLeft: 6,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            border: `1px solid ${S.line}`,
+            background: S.card,
+            color: S.sub,
+            borderRadius: 999,
+            padding: "4px 10px",
+            fontSize: 10.5,
+            fontWeight: 700,
+            cursor: scanning === p.id ? "default" : "pointer",
+            opacity: scanning === p.id ? 0.6 : 1
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Sparkles, { size: 10 }),
+            " ",
+            scanning === p.id ? "Scanning\u2026" : "Scan for damage"
+          ] }),
+          p.aiScan && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10, fontWeight: 800, letterSpacing: ".03em", color: S.sub, marginBottom: 4 }, children: "AI SCAN \xB7 VERIFY IN PERSON" }),
+            p.aiScan.findings.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, color: S.sub }, children: "No damage detected." }) : p.aiScan.findings.map((f, fi) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 6, paddingBottom: 6, borderBottom: fi < p.aiScan.findings.length - 1 ? `1px solid ${S.line}` : "none" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 5 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: f.confidence === "high" ? "amber" : "gray", children: f.confidence }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11, fontWeight: 700, color: S.ink }, children: f.type })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, lineHeight: 1.4, marginTop: 2 }, children: f.description }),
+              (!p.findingTag || p.findingTag.title !== f.type) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => useAiFinding(p, f), style: {
+                marginTop: 4,
+                border: "none",
+                background: "none",
+                color: T.accent,
+                fontSize: 10.5,
+                fontWeight: 700,
+                cursor: "pointer",
+                padding: 0
+              }, children: "Use as evidence" })
+            ] }, fi))
           ] })
         ] })
       ] }, p.id)) }),
@@ -19830,6 +20498,57 @@ function TabPhotos({ job, mut, toast, ccToken }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Download, { size: 13 }),
         " Export photo log (CSV)"
       ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: (job.photoPairs || []).length }), children: "Before / after" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Pair a before shot with an after shot of the same area \u2014 the comparison is what a homeowner, and an adjuster, actually reads as proof of the work." }),
+      job.photos.length < 2 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "Add at least two photos to create a pair." }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: { ...selStyle, flex: 1, minWidth: 130 }, value: pairBefore, onChange: (e) => setPairBefore(e.target.value), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Before photo\u2026" }),
+            job.photos.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: p.id, children: [
+              p.label,
+              " \u2014 ",
+              p.at
+            ] }, p.id))
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: { ...selStyle, flex: 1, minWidth: 130 }, value: pairAfter, onChange: (e) => setPairAfter(e.target.value), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "After photo\u2026" }),
+            job.photos.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: p.id, children: [
+              p.label,
+              " \u2014 ",
+              p.at
+            ] }, p.id))
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            style: { ...inputStyle, marginTop: 8 },
+            placeholder: "Area label (optional) \u2014 e.g. Front slope",
+            value: pairLabel,
+            onChange: (e) => setPairLabel(e.target.value)
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, style: { marginTop: 8 }, disabled: !pairBefore || !pairAfter || pairBefore === pairAfter, onClick: createPair, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+          " Save pair"
+        ] })
+      ] }),
+      (job.photoPairs || []).map((pp) => {
+        const before = photoById(pp.beforeId), after = photoById(pp.afterId);
+        if (!before || !after) return null;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14, borderTop: `1px solid ${S.line}`, paddingTop: 12 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 700, color: S.ink }, children: pp.label }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => deletePair(pp.id), style: { border: "none", background: "none", cursor: "pointer", lineHeight: 0 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14, color: "#B42318" }) })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }, children: [["BEFORE", before], ["AFTER", after]].map(([tag, p]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { height: 110, background: "#EEF1F4", borderRadius: 10, overflow: "hidden", display: "grid", placeItems: "center" }, children: p.url ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: p.url, alt: tag, style: { width: "100%", height: "100%", objectFit: "cover" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Image, { size: 20, color: "#9CA3AF" }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, marginTop: 4, textAlign: "center", fontWeight: 800, letterSpacing: ".04em" }, children: tag })
+          ] }, tag)) })
+        ] }, pp.id);
+      })
     ] })
   ] });
 }
@@ -19898,7 +20617,7 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
     ] })
   ] });
 }
-function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand: brand2, integrations = {}, onLog = () => {
+function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, integrations = {}, onLog = () => {
 } }) {
   const [sub, setSub] = (0, import_react.useState)("costs");
   const SUBS = [["costs", "Costs & profit"], ["payments", "Payments"], ["invoice", "Invoice"]];
@@ -19915,12 +20634,12 @@ function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand: b
       cursor: "pointer",
       fontFamily: "inherit"
     }, children: label }, id)) }),
-    sub === "costs" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancials, { job, mut, toast, isAdmin, currentUser, brand: brand2 }),
+    sub === "costs" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancials, { job, mut, toast, isAdmin, currentUser, brand }),
     sub === "payments" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPayments, { job, mut, toast, onLog }),
-    sub === "invoice" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabInvoice, { job, brand: brand2, mut, toast, currentUser, integrations })
+    sub === "invoice" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabInvoice, { job, brand, mut, toast, currentUser, integrations })
   ] });
 }
-function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand: brand2 = DEFAULT_BRAND }) {
+function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_BRAND }) {
   const cap = computeCapOut(job);
   const fin = job.fin;
   const structure = fin.structure || "grossProfit";
@@ -20018,7 +20737,7 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand: brand2 = 
         table.cap td.muted{color:#667085}
         table.cap tr{page-break-inside:avoid}
       </style>`;
-    openDoc(`Cap out \u2014 ${job.name}`, brand2, html, toast);
+    openDoc(`Cap out \u2014 ${job.name}`, brand, html, toast);
   };
   const exportCsv = () => {
     downloadCsv(`capout-${job.name.replace(/\s+/g, "-").toLowerCase()}.csv`, [
@@ -20335,7 +21054,7 @@ function TabPayments({ job, mut, toast, onLog = () => {
         }
       ) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%" }, disabled: !form.label.trim() || !num(form.amt), onClick: () => {
-        mut((j) => ({ ...j, payments: [...j.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp() }] }));
+        mut((j) => ({ ...j, payments: [...j.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp(), dateIso: todayIso() }] }));
         setForm({ type: "Received", label: "", amt: "" });
         toast("Payment logged");
       }, children: [
@@ -20382,10 +21101,10 @@ function TabPayments({ job, mut, toast, onLog = () => {
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
               "input",
               {
-                style: inputStyle,
+                style: dateInputStyle,
                 type: "date",
-                value: ef2.date || "",
-                onChange: (e) => setEf2({ ...ef2, date: e.target.value })
+                value: payDateIso(ef2),
+                onChange: (e) => setEf2({ ...ef2, dateIso: e.target.value, date: isoToHuman(e.target.value) })
               }
             ) })
           ] }),
@@ -20407,9 +21126,9 @@ function TabPayments({ job, mut, toast, onLog = () => {
     )
   ] });
 }
-function TabCertificate({ job, brand: brand2, mut, toast, currentUser = null, integrations = {} }) {
-  const a = certificateFor(job, brand2);
-  const gaps = certificateGaps(job, brand2);
+function TabCertificate({ job, brand, mut, toast, currentUser = null, integrations = {} }) {
+  const a = certificateFor(job, brand);
+  const gaps = certificateGaps(job, brand);
   const ready = gaps.length === 0;
   const cert = job.certificate || {};
   const set = (k) => (v) => mut((j) => ({ ...j, certificate: { ...j.certificate || {}, [k]: v } }));
@@ -20528,7 +21247,7 @@ function TabCertificate({ job, brand: brand2, mut, toast, currentUser = null, in
         {
           kind: "ghost",
           style: { flex: 1 },
-          onClick: () => openDoc(docTitle, brand2, certificateDocHtml(job, brand2), toast, { bare: true }),
+          onClick: () => openDoc(docTitle, brand, certificateDocHtml(job, brand), toast, { bare: true }),
           children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
             " PDF"
@@ -20554,7 +21273,7 @@ function TabCertificate({ job, brand: brand2, mut, toast, currentUser = null, in
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 8, lineHeight: 1.5 }, children: ready ? "Print it for a wet signature from the homeowner, or email it as it stands. The owner's signature line is left blank on purpose." : "Printing a draft works so you can see what is still blank. Emailing is off until it is complete." })
   ] });
 }
-function TabInvoice({ job, brand: brand2, mut, toast, currentUser = null, integrations = {} }) {
+function TabInvoice({ job, brand, mut, toast, currentUser = null, integrations = {} }) {
   const pay = paymentsSummary(job);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
@@ -20571,7 +21290,7 @@ function TabInvoice({ job, brand: brand2, mut, toast, currentUser = null, integr
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Due date", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "input",
           {
-            style: inputStyle,
+            style: dateInputStyle,
             type: "date",
             value: job.invoiceDue || "",
             onChange: (e) => mut((j) => ({ ...j, invoiceDue: e.target.value }))
@@ -20589,11 +21308,11 @@ function TabInvoice({ job, brand: brand2, mut, toast, currentUser = null, integr
       ) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 14 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 18, fontWeight: 800 }, children: brand2.company }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 18, fontWeight: 800 }, children: brand.company }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 3, whiteSpace: "pre-line" }, children: [
-            brand2.address,
+            brand.address,
             "\n",
-            brand2.phone
+            brand.phone
           ] })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "right" }, children: [
@@ -20615,7 +21334,7 @@ function TabInvoice({ job, brand: brand2, mut, toast, currentUser = null, integr
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 12 }, children: "Balances unpaid 30 days after completion accrue 1.5% monthly. Thank you for your business." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, marginTop: 14 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => openDoc(`Invoice \u2014 ${job.name}`, brand2, invoiceDocHtml(job, brand2), toast), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => openDoc(`Invoice \u2014 ${job.name}`, brand, invoiceDocHtml(job, brand), toast), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 15 }),
         " PDF"
       ] }),
@@ -20629,7 +21348,7 @@ function TabInvoice({ job, brand: brand2, mut, toast, currentUser = null, integr
     ] })
   ] });
 }
-function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand: brand2 }) {
+function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
   const [menuOpen, setMenuOpen] = (0, import_react.useState)(false);
   const [menuQ, setMenuQ] = (0, import_react.useState)("");
   const inv = job.subInvoice || null;
@@ -20659,7 +21378,7 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand: brand2 }) {
     toast(docAlerts.length ? `Confirmed \u2014 heads up: ${crew.name} has ${docAlerts.length} expired/expiring doc(s)` : "Sub invoice confirmed");
   };
   const submitInv = () => {
-    const acct = brand2 && brand2.accountingEmail || "";
+    const acct = brand && brand.accountingEmail || "";
     mut((j) => {
       const amt = subInvoiceTotal(j.subInvoice);
       return {
@@ -20773,7 +21492,7 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand: brand2 }) {
         money(total),
         " to job costs"
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => openDoc(`Sub invoice \u2014 ${crew.name} \u2014 ${job.name}`, brand2, subInvoiceDocHtml(job, brand2, crew), toast), children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => openDoc(`Sub invoice \u2014 ${crew.name} \u2014 ${job.name}`, brand, subInvoiceDocHtml(job, brand, crew), toast), children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 13 }),
         " Export / PDF"
       ] })
@@ -20843,7 +21562,7 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand: brand2 }) {
     ] })
   ] });
 }
-function TabWorkOrder({ job, mut, toast, brand: brand2, crews, templates, currentUser, users }) {
+function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, users }) {
   const [picking, setPicking] = (0, import_react.useState)(false);
   const [sending, setSending] = (0, import_react.useState)(false);
   const [notes, setNotes] = (0, import_react.useState)(job.workOrder ? job.workOrder.notes : "");
@@ -20863,14 +21582,15 @@ function TabWorkOrder({ job, mut, toast, brand: brand2, crews, templates, curren
     toast(`${c.name} assigned`);
   };
   const openSend = () => {
-    const ctx = templateContext(job, brand2, crew, users);
+    const ctx = templateContext(job, brand, crew, users);
     const t = templates.find((x) => x.kind === "email" && x.audience === "Crew");
-    setSubject(t ? mergeTemplate(t.subject, ctx) : `${brand2.company} \u2014 work order for ${job.address}`);
+    setSubject(t ? mergeTemplate(t.subject, ctx) : `${brand.company} \u2014 work order for ${job.address}`);
     setBody(t ? mergeTemplate(t.body, ctx) : "");
     setSending(true);
   };
   const send = () => {
     const stamp = nowStamp();
+    const status = crew.email ? "Queued" : "Queued \u2014 add an email on this crew's file to notify them";
     mut((j) => ({
       ...j,
       workOrder: { ...wo, number: wo.number || `WO-${String(Math.floor(Math.random() * 900) + 100)}`, sentAt: stamp, status: "Sent", notes },
@@ -20883,11 +21603,11 @@ function TabWorkOrder({ job, mut, toast, brand: brand2, crews, templates, curren
         body,
         at: stamp,
         by: currentUser.name,
-        status: "Queued \u2014 no provider connected"
+        status
       }]
     }));
     setSending(false);
-    toast("Work order sent to crew");
+    toast("Work order queued to crew \u2014 send it from the Inbox");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
@@ -20935,7 +21655,7 @@ function TabWorkOrder({ job, mut, toast, brand: brand2, crews, templates, curren
         ] })
       ] })
     ] }),
-    crew && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubInvoiceCard, { job, crew, mut, toast, currentUser, brand: brand2 }),
+    crew && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubInvoiceCard, { job, crew, mut, toast, currentUser, brand }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "No pricing" }), children: [
         "Work order \u2014 ",
@@ -20957,7 +21677,20 @@ function TabWorkOrder({ job, mut, toast, brand: brand2, crews, templates, curren
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: directionsLink(job.address), target: "_blank", rel: "noreferrer", style: { textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { width: "100%", marginTop: 10 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 13 }),
         " Directions to site"
-      ] }) })
+      ] }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+        Btn,
+        {
+          kind: "ghost",
+          small: true,
+          style: { width: "100%", marginTop: 8 },
+          onClick: () => openDoc(`Work order \u2014 ${job.name}`, brand, workOrderDocHtml(job, brand, crew), toast),
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Printer, { size: 13 }),
+            " Print / PDF"
+          ]
+        }
+      )
     ] }),
     coverage && coverage.lines.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
@@ -21419,7 +22152,7 @@ function TabTasks({ job, mut, toast }) {
           }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 138 }, type: "date", value: due, onChange: (e) => setDue(e.target.value) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...dateInputStyle, width: 138 }, type: "date", value: due, onChange: (e) => setDue(e.target.value) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 108 }, type: "time", value: time, onChange: (e) => setTime(e.target.value) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, disabled: !txt.trim(), onClick: () => {
         mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: txt.trim(), done: false, due: due || null, time: time || null }] }));
@@ -21439,6 +22172,16 @@ function readAsDataUrl(file) {
     r.onerror = () => reject(new Error("read failed"));
     r.readAsDataURL(file);
   });
+}
+async function dataUrlFromImageUrl(url) {
+  if (String(url).startsWith("data:")) return url;
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return readAsDataUrl(blob);
+}
+function splitDataUrl(dataUrl) {
+  const m = /^data:([^;]+);base64,([\s\S]*)$/.exec(dataUrl || "");
+  return m ? { mime: m[1], base64: m[2] } : null;
 }
 async function uploadJobFile(jobId, file) {
   const db = DB();
@@ -21460,6 +22203,9 @@ async function uploadJobFile(jobId, file) {
   }
   const url = await readAsDataUrl(file);
   return { storage: "inline", key, url, size: file.size, mime: file.type };
+}
+function uploadCompanyFile(file) {
+  return uploadJobFile("_company", file);
 }
 function TabFiles({ job, mut, toast }) {
   const [cat, setCat] = (0, import_react.useState)(FILE_CATS[0]);
@@ -21615,19 +22361,20 @@ function PortalContactApprovals({ token, job, mut, toast }) {
     ] }, r.id))
   ] });
 }
-function TabPortal({ job, brand: brand2, mut, toast, currentUser, stageLabel = "", users = [] }) {
+function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "", users = [] }) {
   const [busy, setBusy] = (0, import_react.useState)(false);
   const portalUrl = (tok) => `${window.location.origin}/?portal=${tok}`;
   const portalSettings = { ...DEFAULT_PORTAL_SETTINGS, ...job.portal || {} };
   const progress = portalProgressFor({ ...job, stageLabel });
-  const snapshot = (tok) => buildPortalSnapshot({ ...job, stageLabel }, brand2, tok, users);
+  const snapshot = (tok) => buildPortalSnapshot({ ...job, stageLabel }, brand, tok, users);
   const contact = repContactFor(users, job);
   const publishPortal = async () => {
     const db = DB();
     const tok = job.portalToken || uid("p") + Math.random().toString(36).slice(2, 10);
     if (!db) {
       mut((j) => ({ ...j, portalToken: tok }));
-      toast("Link created \u2014 it goes live once the app is connected to the database");
+      const copied = navigator.clipboard ? await navigator.clipboard.writeText(portalUrl(tok)).then(() => true, () => false) : false;
+      toast(copied ? "Link copied \u2014 it goes live once the app is connected to the database" : "Link created \u2014 it goes live once the app is connected to the database");
       return;
     }
     setBusy(true);
@@ -21886,12 +22633,8 @@ function TabPortal({ job, brand: brand2, mut, toast, currentUser, stageLabel = "
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "Client view" }), children: "Portal preview" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: T.primary, padding: "16px 16px 14px", color: "#fff" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, opacity: 0.75 }, children: brand2.company }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 17, fontWeight: 800, marginTop: 3 }, children: [
-            "Your ",
-            projectNoun(job),
-            " project"
-          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, opacity: 0.75 }, children: brand.company }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, marginTop: 3 }, children: "Your project" }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, opacity: 0.75, marginTop: 2 }, children: job.address })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: 14 }, children: [
@@ -21910,9 +22653,9 @@ function TabPortal({ job, brand: brand2, mut, toast, currentUser, stageLabel = "
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 14 }, children: [
             "Questions? ",
-            brand2.phone,
+            brand.phone,
             " \xB7 ",
-            brand2.email
+            brand.email
           ] })
         ] })
       ] })
@@ -22385,162 +23128,102 @@ function ClaimAssistant({ job = null, defaultState = "" }) {
     ] })
   ] });
 }
-function CoverageByState({ jobs = [], stateFacts = {}, onConfirm, onClear, toast = () => {
-} }) {
-  const active = (0, import_react.useMemo)(() => {
-    const set = /* @__PURE__ */ new Set();
-    (jobs || []).forEach((j) => {
-      if (j && j.state) set.add(j.state);
-    });
-    Object.keys(stateFacts || {}).forEach((s) => set.add(s));
-    return [...set].sort();
-  }, [jobs, stateFacts]);
-  const [sel, setSel] = (0, import_react.useState)(active[0] || "");
-  (0, import_react.useEffect)(() => {
-    if (!sel && active.length) setSel(active[0]);
-  }, [active.length]);
-  const [draft, setDraft] = (0, import_react.useState)({});
-  const [openField, setOpenField] = (0, import_react.useState)(null);
-  (0, import_react.useEffect)(() => {
-    setDraft({});
-    setOpenField(null);
-  }, [sel]);
-  const pack = legalPackFor(sel, stateFacts);
-  const gaps = legalPackGaps(sel, stateFacts);
-  const ready = legalPackReady(sel, stateFacts);
-  const jobCount = (jobs || []).filter((j) => j && j.state === sel).length;
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }, children: "A contract states rights that are set by the state the property is in. This is where those get confirmed. Until a state's binding fields are confirmed, its contracts print a labelled placeholder where the clause belongs and cannot be signed or sent \u2014 which is the point: the app does not know your states' law and will not pretend to." }),
-    !active.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: "No jobs with a state on file yet. A state appears here as soon as there is a job in it." }) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 14 }, children: active.map((st) => {
-        const on = st === sel;
-        const good = legalPackReady(st, stateFacts);
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setSel(st), style: {
-          border: `1px solid ${on ? T.accent : S.line}`,
-          background: on ? T.accentSoft : S.card,
-          color: on ? T.accent : S.ink,
-          borderRadius: 999,
-          padding: "7px 14px",
-          fontSize: 13,
-          fontWeight: 700,
-          cursor: "pointer",
-          fontFamily: "inherit",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6
-        }, children: [
-          stateName(st) || st,
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
-            width: 8,
-            height: 8,
-            borderRadius: 99,
-            background: good ? "var(--rl-green-fg)" : "var(--rl-amber-fg)"
-          } })
-        ] }, st);
-      }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: ready ? "green" : "amber", children: ready ? "Contracts can be signed" : `${gaps.length} to confirm` }), children: stateName(sel) || sel }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: [
-          jobCount,
-          " ",
-          jobCount === 1 ? "job" : "jobs",
-          " on file.",
-          ready ? " Every binding field has been confirmed, so agreements here render and sign normally." : " Agreements in this state are blocked from signing until the fields marked below are confirmed."
+function parseNowStamp(s) {
+  const m = /^([A-Za-z]{3})\s+(\d{1,2}),\s+(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(String(s || "").trim());
+  if (!m) return null;
+  const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+  const [, mon, day, hh, mm, ap] = m;
+  if (!(mon in MONTHS)) return null;
+  let hour = parseInt(hh, 10) % 12;
+  if (ap.toUpperCase() === "PM") hour += 12;
+  const now = /* @__PURE__ */ new Date();
+  const d = new Date(now.getFullYear(), MONTHS[mon], parseInt(day, 10), hour, parseInt(mm, 10));
+  if (d.getTime() - now.getTime() > 864e5) d.setFullYear(d.getFullYear() - 1);
+  return d;
+}
+function parseAnyStamp(raw) {
+  if (!raw) return null;
+  const viaNowStamp = parseNowStamp(raw);
+  if (viaNowStamp) return viaNowStamp;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+}
+function SupplementPipeline({ jobs, onOpenJob, embedded = false, onBack }) {
+  const [stage, setStage] = (0, import_react.useState)("all");
+  const rows = jobs.flatMap((j) => ((j.claim || {}).supplements || []).map((s) => ({ job: j, s })));
+  const daysOld = (s) => {
+    const d = parseNowStamp(s.at);
+    if (!d) return null;
+    return Math.max(0, Math.round((Date.now() - d.getTime()) / 864e5));
+  };
+  const shown = stage === "all" ? rows : rows.filter(({ s }) => (s.status || "Draft") === stage);
+  const atTime = (s) => {
+    const d = parseNowStamp(s.at);
+    return d ? d.getTime() : 0;
+  };
+  const sorted = [...shown].sort((a, b) => atTime(b.s) - atTime(a.s));
+  const totalFor = (st) => rows.filter(({ s }) => (s.status || "Draft") === st).reduce((a, { s }) => a + num(s.amount), 0);
+  const grandTotal = rows.reduce((a, { s }) => a + num(s.amount), 0);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: embedded ? 0 : "20px 16px 28px", background: embedded ? "transparent" : S.bg, minHeight: embedded ? void 0 : "100%" }, children: [
+    !embedded && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Supplement queue", onBack }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: embedded ? 0 : 14, borderLeft: `4px solid ${grandTotal > 0 ? "#E8B931" : S.line}` }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }, children: "ACROSS THE WHOLE QUEUE" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 30, fontWeight: 800, color: grandTotal > 0 ? "#9A6B00" : S.ink, marginTop: 4, lineHeight: 1.1 }, children: money(grandTotal) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 6 }, children: [
+        rows.length,
+        " ",
+        rows.length === 1 ? "supplement" : "supplements",
+        " across every open claim, whichever job they belong to."
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, overflowX: "auto", margin: "14px 0 4px", paddingBottom: 2 }, children: ["all", ...SUPPLEMENT_STATUS].map((id) => {
+      const n = id === "all" ? rows.length : rows.filter(({ s }) => (s.status || "Draft") === id).length;
+      const amt = id === "all" ? grandTotal : totalFor(id);
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setStage(id), style: {
+        border: `1.5px solid ${stage === id ? T.accent : S.line}`,
+        background: stage === id ? T.accentSoft : "#fff",
+        color: stage === id ? T.accent : S.ink,
+        borderRadius: 999,
+        padding: "7px 12px",
+        fontSize: 12.5,
+        fontWeight: 700,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        fontFamily: "inherit"
+      }, children: [
+        id === "all" ? "All" : id,
+        n > 0 ? ` \xB7 ${n}` : "",
+        amt > 0 ? ` \xB7 ${money(amt)}` : ""
+      ] }, id);
+    }) }),
+    sorted.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 18, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub }, children: "Nothing in this part of the queue." }) }),
+    sorted.map(({ job, s }) => {
+      const age = daysOld(s);
+      const tone = s.status === "Denied" ? "red" : s.status === "Approved" || s.status === "Paid" ? "green" : "amber";
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 10 }, pad: 0, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onOpenJob(job.id, "claim"), style: {
+        width: "100%",
+        textAlign: "left",
+        border: "none",
+        background: "none",
+        cursor: "pointer",
+        padding: 15,
+        fontFamily: "inherit"
+      }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700, color: S.ink }, children: job.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 2 }, children: s.desc || "Untitled supplement" }),
+          age != null && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 4 }, children: age === 0 ? "added today" : `${age} ${age === 1 ? "day" : "days"} in this status` })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "right", flexShrink: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone, children: s.status || "Draft" }),
+          num(s.amount) > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 800, color: S.ink, marginTop: 6 }, children: money(num(s.amount)) })
         ] })
-      ] }),
-      LEGAL_FIELDS.map((f) => {
-        const cur = pack[f.key];
-        const conf = ((stateFacts || {})[sel] || {})[f.key];
-        const open = openField === f.key;
-        const val = draft[f.key] !== void 0 ? draft[f.key] : conf ? conf.value : cur.value;
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 10 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 180 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14.5, fontWeight: 800, color: S.ink, lineHeight: 1.3 }, children: [
-              f.label,
-              f.binding && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--rl-amber-fg)", marginLeft: 6, fontSize: 11.5, fontWeight: 800 }, children: "BINDING" })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 3 }, children: f.help })
-          ] }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cited, { fact: cur, style: { marginTop: 8 } }),
-          cur.value && cur.note && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 6 }, children: cur.note }),
-          cur.value && cur.sourceUrl && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-            "a",
-            {
-              href: cur.sourceUrl,
-              target: "_blank",
-              rel: "noreferrer",
-              style: { display: "inline-block", fontSize: 12.5, fontWeight: 700, color: T.accent, textDecoration: "none", marginTop: 6 },
-              children: [
-                cur.sourceName || "Open the source",
-                " \u2192"
-              ]
-            }
-          ),
-          conf && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 6 }, children: [
-            "Confirmed by ",
-            conf.by,
-            " on ",
-            conf.at,
-            "."
-          ] }),
-          !open ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: () => setOpenField(f.key), children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.PenLine, { size: 13 }),
-              " ",
-              conf ? "Update" : "Confirm for " + (stateName(sel) || sel)
-            ] }),
-            conf && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => onClear(sel, f.key), children: "Withdraw" })
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 10 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-              Field,
-              {
-                label: `What ${stateName(sel) || sel} requires`,
-                hint: "Write it as it should read to a homeowner. This text goes into the contract wherever this clause belongs.",
-                children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-                  "textarea",
-                  {
-                    style: { ...inputStyle, minHeight: 72, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.55 },
-                    value: val,
-                    onChange: (e) => setDraft({ ...draft, [f.key]: e.target.value })
-                  }
-                )
-              }
-            ),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, lineHeight: 1.5, marginBottom: 8 }, children: "Confirming records your name and today's date against this field. Only confirm what you have actually read at the source \u2014 the whole gate is worthless if it is clicked through." }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
-                Btn,
-                {
-                  kind: "green",
-                  small: true,
-                  disabled: !String(val || "").trim(),
-                  onClick: () => {
-                    onConfirm(sel, f.key, { value: String(val).trim(), sourceUrl: cur.sourceUrl, sourceName: cur.sourceName });
-                    setOpenField(null);
-                    setDraft({ ...draft, [f.key]: void 0 });
-                  },
-                  children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 14 }),
-                    " I've read the source \u2014 confirm"
-                  ]
-                }
-              ),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => {
-                setOpenField(null);
-                setDraft({ ...draft, [f.key]: void 0 });
-              }, children: "Cancel" })
-            ] })
-          ] })
-        ] }, f.key);
-      }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, lineHeight: 1.5, marginTop: 14 }, children: "This is a record of what your office has checked. It is not legal advice, and confirming a field here does not make it correct \u2014 it records that a named person read the source on a date." })
-    ] })
+      ] }) }) }, s.id);
+    })
   ] });
 }
 function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
 }, onSaveJurisdiction = () => {
-}, stateFacts = {}, onConfirmLegal = () => {
-}, onClearLegal = () => {
 }, seed = null, onConsumeSeed = () => {
 } }) {
   const [tab, setTab] = (0, import_react.useState)(seed && seed.tab ? seed.tab : seed && seed.zip ? "codes" : "clients");
@@ -22565,7 +23248,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
   }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["coverage", "Coverage"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["supqueue", "Supplement queue"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Wording library"], ["codes", "Code lookup"], ["resources", "Resources"]];
   const kbHits = (() => {
     const q = kbQ.trim().toLowerCase();
     if (!q) return null;
@@ -22600,16 +23283,6 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {
       color: tab === id ? "#fff" : S.ink
     }, children: label }, id)) }),
     tab === "ask" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimAssistant, { defaultState: tplState }),
-    tab === "coverage" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-      CoverageByState,
-      {
-        jobs,
-        stateFacts,
-        toast,
-        onConfirm: onConfirmLegal,
-        onClear: onClearLegal
-      }
-    ),
     tab === "storm" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StormScout, { toast }),
     tab === "search" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -22786,6 +23459,7 @@ Reference: ${c.cite} (confirm before citing)` : c.supplement;
       insJobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, marginTop: 8 }, children: "No insurance jobs yet." })
     ] }),
     tab === "claims" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimsDashboard, { jobs, onOpenJob, embedded: true }) }),
+    tab === "supqueue" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SupplementPipeline, { jobs, onOpenJob, embedded: true }) }),
     tab === "supplements" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 14, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10 }, children: "One template library, every state \u2014 pick the job's state and every template renders with the right code citation." }),
@@ -23326,6 +24000,34 @@ var REVIEW_STEPS = [
     body: (c) => `Hi ${c.first}, last note from us on this. If you were happy with the work: ${c.link}. If you weren't, we would genuinely rather hear it directly \u2014 just reply.`
   }
 ];
+var REVIEW_PLATFORMS = [
+  {
+    id: "google",
+    name: "Google",
+    blurb: "The one that moves the needle locally",
+    label: "Google review link",
+    hint: "Google Business Profile \u2192 Ask for reviews \u2192 copy the short link.",
+    source: "brand",
+    field: "googleReviewLink"
+  },
+  {
+    id: "facebook",
+    name: "Facebook",
+    blurb: "Useful for social proof",
+    label: "Facebook reviews link",
+    placeholder: "https://facebook.com/yourpage/reviews",
+    source: "settings",
+    field: "facebookLink"
+  },
+  {
+    id: "bbb",
+    name: "BBB",
+    blurb: "Matters to older and insurance-minded customers",
+    label: "BBB profile link",
+    source: "settings",
+    field: "bbbLink"
+  }
+];
 function reviewState(job) {
   const r = job.review || {};
   if (r.posted) return { key: "posted", label: "Posted", tone: "green" };
@@ -23348,7 +24050,7 @@ function nextReviewStep(job, settings) {
   d.setDate(d.getDate() + step.delay);
   return { step, due: isoLocal(d) };
 }
-function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, setBrandFromReviews, mut, toast }) {
+function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFromReviews, mut, toast }) {
   const [rating, setRating] = (0, import_react.useState)({});
   const [fbOpen, setFbOpen] = (0, import_react.useState)(null);
   const [fbText, setFbText] = (0, import_react.useState)("");
@@ -23367,8 +24069,8 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Review automation", onBack }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, paddingRight: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700 }, children: "Automatic review requests" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 3, lineHeight: 1.5 }, children: "A four-touch sequence starting the day after a job completes, stopping the moment they review." })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700 }, children: "Review request sequence" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 3, lineHeight: 1.5 }, children: "A four-touch sequence you work from the Due now list below \u2014 mark each touch sent as you make it and the sequence advances on its own timing. Pauses automatically the moment someone rates three or below." })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Toggle, { on: settings.enabled, onClick: () => set("enabled")(!settings.enabled) })
     ] }) }),
@@ -23441,31 +24143,26 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: st.label }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: st.channel === "sms" ? "Text" : "Email" })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 3, lineHeight: 1.5 }, children: st.body({ first: "Sarah", company: brand2.company || "your company", link: "[review link]" }) })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 3, lineHeight: 1.5 }, children: st.body({ first: "Sarah", company: brand.company || "your company", link: "[review link]" }) })
         ] })
       ] }, st.id)),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: "The sequence stops as soon as someone reviews, and pauses entirely for anyone who rates three or below so a human can call first." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Where reviews go" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Google review link", hint: "Google Business Profile \u2192 Ask for reviews \u2192 copy the short link.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      REVIEW_PLATFORMS.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: p.label, hint: p.hint, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "input",
         {
           style: inputStyle,
-          value: brand2.googleReviewLink || "",
-          onChange: (e) => setBrandFromReviews && setBrandFromReviews({ ...brand2, googleReviewLink: e.target.value })
+          placeholder: p.placeholder,
+          value: (p.source === "brand" ? brand[p.field] : settings[p.field]) || "",
+          onChange: (e) => {
+            if (p.source === "brand") {
+              if (setBrandFromReviews) setBrandFromReviews({ ...brand, [p.field]: e.target.value });
+            } else set(p.field)(e.target.value);
+          }
         }
-      ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Facebook reviews link", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        "input",
-        {
-          style: inputStyle,
-          value: settings.facebookLink || "",
-          onChange: (e) => set("facebookLink")(e.target.value),
-          placeholder: "https://facebook.com/yourpage/reviews"
-        }
-      ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "BBB profile link", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: settings.bbbLink || "", onChange: (e) => set("bbbLink")(e.target.value) }) }),
+      ) }, p.id)),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "flex-start", gap: 12, borderTop: `1px solid ${S.line}`, paddingTop: 14, marginTop: 4 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14.5, fontWeight: 700, color: S.ink }, children: "Only send happy customers to Google" }),
@@ -23474,12 +24171,12 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           Toggle,
           {
-            on: brand2.gateNegativeReviews === true,
-            onClick: () => setBrandFromReviews && setBrandFromReviews({ ...brand2, gateNegativeReviews: !(brand2.gateNegativeReviews === true) })
+            on: brand.gateNegativeReviews === true,
+            onClick: () => setBrandFromReviews && setBrandFromReviews({ ...brand, gateNegativeReviews: !(brand.gateNegativeReviews === true) })
           }
         )
       ] }),
-      brand2.gateNegativeReviews === true && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Heads up \u2014 this is review gating", tone: "red", children: "Google's review policies prohibit soliciting reviews only from customers you expect to be positive, and the FTC treats suppressing negative reviews as a deceptive practice \u2014 it can get reviews removed or your Business Profile penalized. Asking for feedback first is fine and good business; hiding the public link from unhappy customers is the part that carries risk. Leave this off unless you understand that trade-off." })
+      brand.gateNegativeReviews === true && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Heads up \u2014 this is review gating", tone: "red", children: "Google's review policies prohibit soliciting reviews only from customers you expect to be positive, and the FTC treats suppressing negative reviews as a deceptive practice \u2014 it can get reviews removed or your Business Profile penalized. Asking for feedback first is fine and good business; hiding the public link from unhappy customers is the part that carries risk. Leave this off unless you understand that trade-off." })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
@@ -23490,8 +24187,8 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
         "input",
         {
           style: inputStyle,
-          value: brand2.googleReviewLink,
-          onChange: (e) => setBrandFromReviews && setBrandFromReviews({ ...brand2, googleReviewLink: e.target.value })
+          value: brand.googleReviewLink,
+          onChange: (e) => setBrandFromReviews && setBrandFromReviews({ ...brand, googleReviewLink: e.target.value })
         }
       ) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 6, lineHeight: 1.5 }, children: `Every job in "Job completed." Toggle what's been sent and what's posted. Log the customer's rating when they answer the "how did we do?" message \u2014 anything under 5 opens the internal feedback form so you can make it right first.` }),
@@ -23547,11 +24244,11 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
                 setFbText(j.review.feedback || "");
               }
             }, style: { border: "none", background: "none", cursor: "pointer", padding: 2 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Star, { size: 19, color: n <= r ? "#D3860A" : "#D6D9DE", fill: n <= r ? "#D3860A" : "none" }) }, n)),
-            r === 5 && brand2.googleReviewLink && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            r === 5 && brand.googleReviewLink && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                 "a",
                 {
-                  href: brand2.googleReviewLink,
+                  href: brand.googleReviewLink,
                   target: "_blank",
                   rel: "noreferrer",
                   style: { fontSize: 12.5, color: T.accent, fontWeight: 700, marginLeft: 6 },
@@ -23560,11 +24257,11 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
               ),
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { style: { ...linkBtn, fontSize: 12.5, marginLeft: 8 }, onClick: () => {
                 const first = (j.name || "").split(" ")[0];
-                const body = `Hi ${first}, thank you again for trusting ${brand2.company} with your roof. If you have a moment, a short Google review helps our small team more than you know: ${brand2.googleReviewLink}`;
+                const body = `Hi ${first}, thank you again for trusting ${brand.company} with your roof. If you have a moment, a short Google review helps our small team more than you know: ${brand.googleReviewLink}`;
                 if (j.consent.sms.granted && j.phone) {
                   window.location.href = `sms:${String(j.phone).replace(/\D/g, "")}&body=${encodeURIComponent(body)}`;
                 } else if (j.consent.email.granted && j.email) {
-                  window.location.href = `mailto:${j.email}?subject=${encodeURIComponent("Thank you from " + brand2.company)}&body=${encodeURIComponent(body)}`;
+                  window.location.href = `mailto:${j.email}?subject=${encodeURIComponent("Thank you from " + brand.company)}&body=${encodeURIComponent(body)}`;
                 } else {
                   if (navigator.clipboard) navigator.clipboard.writeText(body);
                   toast("No consent on file \u2014 message copied instead");
@@ -23650,7 +24347,7 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand: brand2, se
         ", ",
         "{review_link}",
         ". Review link: ",
-        brand2.googleReviewLink
+        brand.googleReviewLink
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
@@ -24450,12 +25147,12 @@ function LeadSourceManager({ sources, setSources, jobs, onBack, toast }) {
     ] }) }, src))
   ] });
 }
-function AgreementBranding({ brand: brand2, setBrand, toast }) {
+function AgreementBranding({ brand, setBrand, toast }) {
   const diagRef = (0, import_react.useRef)(null);
   const [openTerms, setOpenTerms] = (0, import_react.useState)(false);
-  const terms = agreementTermsFor(brand2);
-  const custom = Array.isArray(brand2.agreementTerms) && brand2.agreementTerms.length;
-  const setClause = (i, v) => setBrand({ ...brand2, agreementTerms: terms.map((c, x) => x === i ? v : c) });
+  const terms = agreementTermsFor(brand);
+  const custom = Array.isArray(brand.agreementTerms) && brand.agreementTerms.length;
+  const setClause = (i, v) => setBrand({ ...brand, agreementTerms: terms.map((c, x) => x === i ? v : c) });
   const onDiagram = async (e) => {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
@@ -24469,7 +25166,7 @@ function AgreementBranding({ brand: brand2, setBrand, toast }) {
       toast("Couldn't read that image");
       return;
     }
-    setBrand({ ...brand2, agreementDiagram: url });
+    setBrand({ ...brand, agreementDiagram: url });
     toast(`Reference diagram updated (${Math.round(url.length / 1024)} KB)`);
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
@@ -24484,7 +25181,7 @@ function AgreementBranding({ brand: brand2, setBrand, toast }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "img",
         {
-          src: agreementDiagram(brand2),
+          src: agreementDiagram(brand),
           alt: "Agreement reference diagram",
           style: { width: 130, borderRadius: 8, border: `1px solid ${S.line}`, background: "#fff" }
         }
@@ -24493,17 +25190,17 @@ function AgreementBranding({ brand: brand2, setBrand, toast }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => diagRef.current && diagRef.current.click(), children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
           " ",
-          brand2.agreementDiagram ? "Replace" : "Upload"
+          brand.agreementDiagram ? "Replace" : "Upload"
         ] }),
-        brand2.agreementDiagram && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setBrand({ ...brand2, agreementDiagram: null }), children: "Reset" })
+        brand.agreementDiagram && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setBrand({ ...brand, agreementDiagram: null }), children: "Reset" })
       ] })
     ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Opening paragraph", hint: "Sets out who the parties are and which state's law applies.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       "textarea",
       {
         style: { ...inputStyle, minHeight: 90, resize: "vertical", fontSize: 13, lineHeight: 1.6 },
-        value: brand2.agreementIntro === void 0 ? AGREEMENT_TERMS_INTRO : brand2.agreementIntro,
-        onChange: (e) => setBrand({ ...brand2, agreementIntro: e.target.value })
+        value: brand.agreementIntro === void 0 ? AGREEMENT_TERMS_INTRO : brand.agreementIntro,
+        onChange: (e) => setBrand({ ...brand, agreementIntro: e.target.value })
       }
     ) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 8, borderTop: `1px solid ${S.line}` }, children: [
@@ -24537,20 +25234,20 @@ function AgreementBranding({ brand: brand2, setBrand, toast }) {
         }
       ) }, i)),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => setBrand({ ...brand2, agreementTerms: [...terms, ""] }), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => setBrand({ ...brand, agreementTerms: [...terms, ""] }), children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
           " Add a clause"
         ] }),
         custom && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => {
-          setBrand({ ...brand2, agreementTerms: null, agreementIntro: void 0 });
+          setBrand({ ...brand, agreementTerms: null, agreementIntro: void 0 });
           toast("Terms reset to the supplied text");
         }, children: "Reset to supplied text" })
       ] })
     ] })
   ] });
 }
-function BrandingEditor({ brand: brand2, setBrand, onBack, toast, brandErr = "" }) {
-  const set = (k) => (e) => setBrand({ ...brand2, [k]: e.target.value });
+function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", currentUser = null }) {
+  const set = (k) => (e) => setBrand({ ...brand, [k]: e.target.value });
   const logoRef = (0, import_react.useRef)(null);
   const onLogo = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -24575,15 +25272,15 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast, brandErr = "" 
           ctx.drawImage(img, 0, 0, w, h);
           const out = canvas.toDataURL("image/png");
           const chosen = out.length < String(r.result).length ? out : String(r.result);
-          setBrand({ ...brand2, logo: chosen });
+          setBrand({ ...brand, logo: chosen });
           toast(`Logo updated (${Math.round(chosen.length / 1024)} KB)`);
         } catch {
-          setBrand({ ...brand2, logo: String(r.result) });
+          setBrand({ ...brand, logo: String(r.result) });
           toast("Logo updated");
         }
       };
       img.onerror = () => {
-        setBrand({ ...brand2, logo: String(r.result) });
+        setBrand({ ...brand, logo: String(r.result) });
         toast("Logo updated");
       };
       img.src = String(r.result);
@@ -24591,13 +25288,23 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast, brandErr = "" 
     r.readAsDataURL(file);
     e.target.value = "";
   };
-  const locations = brand2.locations || [];
+  const locations = brand.locations || [];
   const setLoc = (i, k, v) => {
     const next = locations.map((l, x) => x === i ? { ...l, [k]: v } : l);
-    setBrand({ ...brand2, locations: next });
+    setBrand({ ...brand, locations: next });
   };
-  const addLoc = () => setBrand({ ...brand2, locations: [...locations, { id: uid("loc"), label: "", phone: "", address: "" }] });
-  const rmLoc = (i) => setBrand({ ...brand2, locations: locations.filter((_, x) => x !== i) });
+  const addLoc = () => setBrand({ ...brand, locations: [...locations, { id: uid("loc"), label: "", phone: "", address: "" }] });
+  const rmLoc = (i) => setBrand({ ...brand, locations: locations.filter((_, x) => x !== i) });
+  const canEdit = !currentUser || currentUser.role === "admin" || currentUser.role === "manager";
+  if (!canEdit) {
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Company branding", onBack }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Lock, { size: 18, color: S.sub, style: { flexShrink: 0, marginTop: 2 } }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: "Branding is admin/manager-only \u2014 it controls the logo, colors, and company name on every document and the login screen. Ask the office to make a change." })
+      ] }) })
+    ] });
+  }
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: logoRef, type: "file", accept: "image/*", onChange: onLogo, style: { display: "none" } }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Company branding", onBack }),
@@ -24614,35 +25321,35 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast, brandErr = "" 
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 14 }, children: "One place for company identity. Login, documents, the client portal, and review messages all read from here \u2014 colors repaint the whole app the moment you change them." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Logo", hint: "Shows on the login screen, the loading screen, and document headers. PNG with a transparent background works best.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 14 }, children: [
-        brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: "Company logo", style: { height: 56, maxWidth: 160, objectFit: "contain", borderRadius: 8, border: `1px solid ${S.line}`, padding: 4, background: S.card } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: T.primary, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }, children: brand2.short }),
+        brand.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand.logo, alt: "Company logo", style: { height: 56, maxWidth: 160, objectFit: "contain", borderRadius: 8, border: `1px solid ${S.line}`, padding: 4, background: S.card } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 56, height: 56, borderRadius: 14, background: T.primary, color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }, children: brand.short }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => logoRef.current && logoRef.current.click(), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
             " ",
-            brand2.logo ? "Replace" : "Upload"
+            brand.logo ? "Replace" : "Upload"
           ] }),
-          brand2.logo && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setBrand({ ...brand2, logo: null }), children: "Remove" })
+          brand.logo && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => setBrand({ ...brand, logo: null }), children: "Remove" })
         ] })
       ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Company name", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.company, onChange: set("company") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Short mark (fallback when no logo)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.short, onChange: set("short") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Slogan", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.slogan, onChange: set("slogan") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Main phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.phone, onChange: set("phone") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.email, onChange: set("email") }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Accounting email", hint: "Where sub-invoice payment notices are sent when a sub invoice is submitted.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: brand2.accountingEmail || "", onChange: set("accountingEmail"), placeholder: "accounting@yourcompany.com" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Company name", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.company, onChange: set("company") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Short mark (fallback when no logo)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.short, onChange: set("short") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Slogan", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.slogan, onChange: set("slogan") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Main phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.phone, onChange: set("phone") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.email, onChange: set("email") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Accounting email", hint: "Where sub-invoice payment notices are sent when a sub invoice is submitted.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: brand.accountingEmail || "", onChange: set("accountingEmail"), placeholder: "accounting@yourcompany.com" }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Head office address", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         AddressAutocomplete,
         {
-          value: brand2.address,
+          value: brand.address,
           placeholder: "Start typing the address\u2026",
-          onChange: (v) => setBrand({ ...brand2, address: v }),
-          onPick: (p2) => setBrand({ ...brand2, address: p2.formatted || p2.street || brand2.address })
+          onChange: (v) => setBrand({ ...brand, address: v }),
+          onPick: (p2) => setBrand({ ...brand, address: p2.formatted || p2.street || brand.address })
         }
       ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Google review link", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand2.googleReviewLink, onChange: set("googleReviewLink") }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Google review link", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.googleReviewLink, onChange: set("googleReviewLink") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Primary color", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "color", value: brand2.primary, onChange: set("primary"), style: { ...inputStyle, height: 46, padding: 4 } }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Accent color", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "color", value: brand2.accent, onChange: set("accent"), style: { ...inputStyle, height: 46, padding: 4 } }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Primary color", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "color", value: brand.primary, onChange: set("primary"), style: { ...inputStyle, height: 46, padding: 4 } }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Accent color", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "color", value: brand.accent, onChange: set("accent"), style: { ...inputStyle, height: 46, padding: 4 } }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub }, children: "The soft accent (chips, highlights) is derived from the accent automatically." })
     ] }),
@@ -24656,10 +25363,10 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast, brandErr = "" 
         ["showLicense", "License number"],
         ["showSlogan", "Slogan in the footer"]
       ].map(([k, label]) => {
-        const on = brand2[k] !== false;
+        const on = brand[k] !== false;
         return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderTop: `1px solid ${S.line}` }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14 }, children: label }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setBrand({ ...brand2, [k]: !on }), style: {
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setBrand({ ...brand, [k]: !on }), style: {
             width: 46,
             height: 27,
             borderRadius: 99,
@@ -24671,7 +25378,7 @@ function BrandingEditor({ brand: brand2, setBrand, onBack, toast, brandErr = "" 
         ] }, k);
       })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AgreementBranding, { brand: brand2, setBrand, toast }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AgreementBranding, { brand, setBrand, toast }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "soft", small: true, onClick: addLoc, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
@@ -24710,7 +25417,10 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   const [q, setQ] = (0, import_react.useState)("");
   const [adding, setAdding] = (0, import_react.useState)(false);
   const [f, setF] = (0, import_react.useState)({ name: "", cat: DOC_CATEGORIES[0], expires: "" });
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const [err, setErr] = (0, import_react.useState)("");
   const fileRef = (0, import_react.useRef)(null);
+  const pendingFile = (0, import_react.useRef)(null);
   const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
   const today = todayIso();
   const soon = isoLocal(new Date(Date.now() + 60 * 864e5));
@@ -24733,24 +25443,48 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   const onFile = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    pendingFile.current = file;
     setF({ name: file.name, cat: f.cat, expires: "" });
+    setErr("");
     setAdding(true);
     e.target.value = "";
   };
-  const save = () => {
+  const save = async () => {
+    const file = pendingFile.current;
+    if (!file) {
+      setErr("Choose a file first.");
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    let up = null;
+    try {
+      up = await uploadCompanyFile(file);
+    } catch (e) {
+      setBusy(false);
+      setErr(e && e.message || "Couldn't save that file.");
+      return;
+    }
+    setBusy(false);
+    const sizeKb = up.size ? `${Math.max(1, Math.round(up.size / 1024))} KB` : "\u2014";
     setDocs([...docs, {
       id: uid("d"),
       name: f.name.trim(),
       cat: f.cat,
-      size: "\u2014",
+      size: sizeKb,
       at: today,
       by: currentUser.name,
       pinned: false,
-      expires: f.expires || null
+      expires: f.expires || null,
+      url: up.url,
+      storage: up.storage,
+      storageKey: up.key,
+      mime: up.mime
     }]);
+    pendingFile.current = null;
     setAdding(false);
     setF({ name: "", cat: DOC_CATEGORIES[0], expires: "" });
-    toast("Document added");
+    toast("Document saved");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: fileRef, type: "file", onChange: onFile, style: { display: "none" } }),
@@ -24839,7 +25573,24 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Category", v: viewing.cat }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Added", v: `${viewing.at} by ${viewing.by}` }),
       viewing.expires && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Expires", v: viewing.expires }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+      viewing.url ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: viewing.url, target: "_blank", rel: "noreferrer", style: { textDecoration: "none" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+        marginTop: 14,
+        border: `1.5px solid ${S.line}`,
+        borderRadius: 12,
+        padding: "20px 16px",
+        textAlign: "center",
+        color: T.accent,
+        fontSize: 13.5,
+        lineHeight: 1.6,
+        cursor: "pointer"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.FileText, { size: 28, color: T.accent, style: { marginBottom: 8 } }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontWeight: 700 }, children: [
+          "Open ",
+          viewing.name
+        ] }),
+        viewing.storage === "inline" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 4, fontWeight: 400 }, children: "Stored inline \u2014 connect Supabase Storage under Setup & keys for full-size files." })
+      ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
         marginTop: 14,
         border: `1.5px dashed ${S.line}`,
         borderRadius: 12,
@@ -24850,20 +25601,24 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
         lineHeight: 1.6
       }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.FileText, { size: 28, color: "#C7CBD1", style: { marginBottom: 8 } }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: "Preview isn't available yet \u2014 files aren't stored anywhere while the app runs on in-memory data. Once documents are wired to Supabase Storage, this opens the actual PDF." })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { children: "This record predates file storage and has no file attached \u2014 only the name and category were saved. Delete it and re-upload to attach the actual document." })
       ] })
     ] }) }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
       Sheet,
       {
         open: adding,
-        onClose: () => setAdding(false),
+        onClose: () => {
+          setAdding(false);
+          setErr("");
+        },
         title: "Add document",
-        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, disabled: !f.name.trim(), onClick: save, children: "Save document" }),
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, disabled: !f.name.trim() || busy, onClick: save, children: busy ? "Saving\u2026" : "Save document" }),
         children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "File name", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.name, onChange: (e) => setF({ ...f, name: e.target.value }) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Category", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", { style: selStyle, value: f.cat, onChange: (e) => setF({ ...f, cat: e.target.value }), children: DOC_CATEGORIES.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { children: c }, c)) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Expiration date", hint: "Optional. Certificates and licenses get an expiry warning 60 days out.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "date", value: f.expires, onChange: (e) => setF({ ...f, expires: e.target.value }) }) })
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Expiration date", hint: "Optional. Certificates and licenses get an expiry warning 60 days out.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: f.expires, onChange: (e) => setF({ ...f, expires: e.target.value }) }) }),
+          err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginTop: 4 }, children: err })
         ]
       }
     )
@@ -25118,7 +25873,7 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
     )
   ] });
 }
-function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, brand: brand2 }) {
+function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, brand }) {
   const [kind, setKind] = (0, import_react.useState)("email");
   const [aud, setAud] = (0, import_react.useState)("All");
   const [editing, setEditing] = (0, import_react.useState)(null);
@@ -25293,6 +26048,10 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const [range, setRange] = (0, import_react.useState)("all");
   const docRef = (0, import_react.useRef)(null);
   const priceRef = (0, import_react.useRef)(null);
+  const [docBusy, setDocBusy] = (0, import_react.useState)(false);
+  const [docErr, setDocErr] = (0, import_react.useState)("");
+  const [pdfBusy, setPdfBusy] = (0, import_react.useState)(false);
+  const [pdfImport, setPdfImport] = (0, import_react.useState)(null);
   const parseSubSheet = (text) => {
     const rows0 = String(text).split(/\r?\n/).filter((l) => l.trim());
     if (!rows0.length) return [];
@@ -25343,9 +26102,35 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
       };
     }).filter((r) => r.label && r.price > 0);
   };
+  const onPdfImportDone = (fileName, patch) => setPdfImport({ fileName, mode: "replace", ...patch });
+  const applyPdfImport = (mode) => {
+    if (!pdfImport || pdfImport.error) return;
+    setF((prev) => ({
+      ...prev,
+      rateCard: mode === "append" ? [...prev.rateCard || [], ...pdfImport.candidates] : pdfImport.candidates,
+      docs: [
+        ...(prev.docs || []).filter((d) => d.type !== "Pricing sheet"),
+        { id: uid("cd"), name: pdfImport.fileName, at: todayIso(), type: "Pricing sheet", expires: "", rows: pdfImport.candidates.length }
+      ]
+    }));
+    toast(mode === "append" ? `${pdfImport.candidates.length} rows added` : `Price sheet replaced \u2014 ${pdfImport.candidates.length} rows`);
+    setPdfImport(null);
+  };
   const onPriceFile = (e) => {
     const file = e.target.files && e.target.files[0];
+    e.target.value = "";
     if (!file) return;
+    if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
+      setPdfBusy(true);
+      extractSubSheetRowsFromPdf(file).then(({ rows, noText }) => {
+        setPdfBusy(false);
+        onPdfImportDone(file.name, { candidates: parseSubSheetPdfRows(rows), noText });
+      }).catch((ex) => {
+        setPdfBusy(false);
+        onPdfImportDone(file.name, { error: ex && ex.message || "Couldn't read that PDF." });
+      });
+      return;
+    }
     const r = new FileReader();
     r.onload = () => {
       const rows = parseSubSheet(String(r.result));
@@ -25364,7 +26149,6 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
       } else toast("Couldn't read that sheet \u2014 needs an item column and a price column");
     };
     r.readAsText(file);
-    e.target.value = "";
   };
   const paidFor = (crewId) => {
     const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 864e5;
@@ -25375,10 +26159,11 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   };
   const open = (c) => {
     setEditing(c || "new");
-    setF(c ? { ...c } : blank);
+    setF(c ? { ...c } : { ...blank, id: uid("c") });
+    setDocErr("");
   };
   const save = () => {
-    if (editing === "new") setCrews([...crews, { ...f, id: uid("c") }]);
+    if (editing === "new") setCrews([...crews, f]);
     else setCrews(crews.map((c) => c.id === editing.id ? { ...c, ...f } : c));
     setEditing(null);
     toast("Crew saved");
@@ -25485,11 +26270,32 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
                 ref: docRef,
                 type: "file",
                 style: { display: "none" },
-                onChange: (e) => {
+                onChange: async (e) => {
                   const file = e.target.files && e.target.files[0];
-                  if (!file) return;
-                  setF({ ...f, docs: [...f.docs || [], { id: uid("cd"), name: file.name, at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10), type: "", expires: "" }] });
                   e.target.value = "";
+                  if (!file) return;
+                  setDocBusy(true);
+                  setDocErr("");
+                  let up = null;
+                  try {
+                    up = await uploadCompanyFile(file);
+                  } catch (ex) {
+                    setDocBusy(false);
+                    setDocErr(ex && ex.message || "Couldn't save that file.");
+                    return;
+                  }
+                  setDocBusy(false);
+                  setF((prev) => ({ ...prev, docs: [...prev.docs || [], {
+                    id: uid("cd"),
+                    name: file.name,
+                    at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
+                    type: "",
+                    expires: "",
+                    url: up.url,
+                    storage: up.storage,
+                    storageKey: up.key,
+                    mime: up.mime
+                  }] }));
                 }
               }
             ),
@@ -25498,12 +26304,20 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
               const setDoc = (patch) => setF({ ...f, docs: (f.docs || []).map((x) => x.id === d.id ? { ...x, ...patch } : x) });
               return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "9px 0", borderBottom: `1px solid ${S.line}` }, children: [
                 /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }, children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, flex: 1, minWidth: 0 }, children: [
+                  d.url ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("a", { href: d.url, target: "_blank", rel: "noreferrer", style: { flex: 1, minWidth: 0, fontSize: 13.5, color: T.accent, textDecoration: "none" }, children: [
                     d.name,
                     " ",
                     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub, fontSize: 12 }, children: [
                       "\xB7 ",
                       d.at
+                    ] })
+                  ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 13.5, flex: 1, minWidth: 0 }, children: [
+                    d.name,
+                    " ",
+                    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub, fontSize: 12 }, children: [
+                      "\xB7 ",
+                      d.at,
+                      " \xB7 no file attached \u2014 re-upload to attach it"
                     ] })
                   ] }),
                   d.expires && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: expired ? "red" : "green", children: expired ? "Expired" : "Valid" }),
@@ -25529,9 +26343,11 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
                 ] })
               ] }, d.id);
             }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { marginTop: 8 }, onClick: () => docRef.current && docRef.current.click(), children: [
+            docErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginTop: 6 }, children: docErr }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, disabled: docBusy, style: { marginTop: 8 }, onClick: () => docRef.current && docRef.current.click(), children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
-              " Add document"
+              " ",
+              docBusy ? "Saving\u2026" : "Add document"
             ] })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Payment details", hint: "How this sub gets paid \u2014 stored on their file for accounting. Keep it to a handle or last 4, not full bank/SSN.", children: (() => {
@@ -25565,8 +26381,8 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, marginTop: 8 }, placeholder: "Tax ID / W-9 (EIN \u2014 never store a full SSN)", value: pay.taxId || "", onChange: (e) => setPay({ taxId: e.target.value }) })
             ] });
           })() }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Pricing sheet", hint: "Upload this sub's full price menu (CSV: category, labor_type, price, unit, notes). Install/steep/tear-off/chimney lines auto-fill a job's sub invoice; every other row is on the menu to add by hand.", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: priceRef, type: "file", accept: ".csv,text/csv", style: { display: "none" }, onChange: onPriceFile }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Pricing sheet", hint: "Upload this sub's full price menu \u2014 a CSV (category, labor_type, price, unit, notes), or their signed agreement/rate sheet as a PDF. Install/steep/tear-off/chimney lines auto-fill a job's sub invoice; every other row is on the menu to add by hand.", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: priceRef, type: "file", accept: ".csv,text/csv,.pdf,application/pdf", style: { display: "none" }, onChange: onPriceFile }),
             (f.rateCard || []).length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { border: `1px solid ${S.line}`, borderRadius: 10, overflow: "hidden", marginBottom: 8 }, children: [...new Set((f.rateCard || []).map((r) => r.category || "Other"))].map((cat) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, background: S.soft, padding: "6px 11px" }, children: cat }),
               (f.rateCard || []).filter((r) => (r.category || "Other") === cat).map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "9px 11px", borderBottom: `1px solid ${S.line}` }, children: [
@@ -25596,12 +26412,12 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             ] }, cat)) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }, children: [
               "No price sheet yet. Upload a CSV with columns like ",
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "category, labor_type, price, unit, notes" }),
-              " \u2014 every row becomes a priced menu item you can add to a job's sub invoice."
+              ", or their signed agreement as a PDF \u2014 every row becomes a priced menu item you can add to a job's sub invoice."
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => priceRef.current && priceRef.current.click(), children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, disabled: pdfBusy, onClick: () => priceRef.current && priceRef.current.click(), children: [
               /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Upload, { size: 13 }),
               " ",
-              (f.rateCard || []).length ? "Replace price sheet" : "Upload price sheet"
+              pdfBusy ? "Reading PDF\u2026" : (f.rateCard || []).length ? "Replace price sheet" : "Upload price sheet"
             ] })
           ] }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Trades", children: [
@@ -25660,6 +26476,83 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
                 t
               );
             }) })
+          ] })
+        ]
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+      Sheet,
+      {
+        open: !!pdfImport,
+        onClose: () => setPdfImport(null),
+        title: "Review price sheet from PDF",
+        footer: pdfImport && !pdfImport.error && pdfImport.candidates.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => applyPdfImport("append"), children: "Add to price sheet" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 1 }, onClick: () => applyPdfImport("replace"), children: "Replace price sheet" })
+        ] }),
+        children: [
+          pdfImport && pdfImport.error && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Could not read that PDF", tone: "red", children: pdfImport.error }),
+          pdfImport && !pdfImport.error && pdfImport.noText && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "No readable text found", tone: "amber", children: "This looks like a scanned or image-only PDF \u2014 there's no text layer to pull from, so nothing came through automatically. A CSV export, or typing the rates in below, will work instead." }),
+          pdfImport && !pdfImport.error && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }, children: [
+              pdfImport.candidates.length,
+              " possible price ",
+              pdfImport.candidates.length === 1 ? "row" : "rows",
+              " found in ",
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: pdfImport.fileName }),
+              ". Every sub's PDF is laid out differently, so check these landed right before adding \u2014 fix, remove, or add anything the parser missed."
+            ] }),
+            pdfImport.candidates.map((r, i) => {
+              const setRow = (patch) => setPdfImport((prev) => ({
+                ...prev,
+                candidates: prev.candidates.map((x, xi) => xi === i ? { ...x, ...patch } : x)
+              }));
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", padding: "8px 0", borderTop: `1px solid ${S.line}` }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    style: { ...inputStyle, flex: 1 },
+                    value: r.label,
+                    placeholder: "Item",
+                    onChange: (e) => setRow({ label: e.target.value, code: subCodeFor(e.target.value) || "custom" })
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "input",
+                  {
+                    style: { ...inputStyle, width: 58 },
+                    value: r.unit,
+                    placeholder: "Unit",
+                    onChange: (e) => setRow({ unit: e.target.value })
+                  }
+                ),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoneyInput, { style: { ...inputStyle, width: 96 }, value: r.price, onChange: (v) => setRow({ price: num(v) }) }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "button",
+                  {
+                    onClick: () => setPdfImport((prev) => ({ ...prev, candidates: prev.candidates.filter((_, xi) => xi !== i) })),
+                    style: { border: "none", background: "none", cursor: "pointer" },
+                    children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14, color: "#B42318" })
+                  }
+                )
+              ] }, r.id);
+            }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+              Btn,
+              {
+                kind: "ghost",
+                small: true,
+                style: { marginTop: 10 },
+                onClick: () => setPdfImport((prev) => ({
+                  ...prev,
+                  candidates: [...prev.candidates, { id: uid("rc"), category: "Other", code: "custom", label: "", unit: "flat", price: 0, notes: "" }]
+                })),
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+                  " Add row"
+                ]
+              }
+            )
           ] })
         ]
       }
@@ -25814,6 +26707,28 @@ function calFeedUrl(token, scheme = "https") {
   if (!host) return null;
   return `${scheme}://${host}/calendar-feed?token=${encodeURIComponent(token)}`;
 }
+async function dashLoadLayout(userId) {
+  const db = DB();
+  if (!db || !userId) return null;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    return data && data.data && data.data.dashLayout || null;
+  } catch (e) {
+    return null;
+  }
+}
+async function dashSaveLayout(userId, value) {
+  const db = DB();
+  if (!db || !userId) return false;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    const next = { ...data && data.data || {}, dashLayout: value };
+    const { error } = await db.from("crm_user_integrations").upsert({ user_id: userId, data: next, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+    return !error;
+  } catch (e) {
+    return false;
+  }
+}
 function CalendarSync({ currentUser, toast }) {
   const [token, setToken] = (0, import_react.useState)(null);
   const [loaded, setLoaded] = (0, import_react.useState)(false);
@@ -25933,7 +26848,7 @@ function CompanyCamConnect({ onConnect }) {
     cors && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Needs the CompanyCam relay", tone: "amber", children: [
       "The token may be perfectly good \u2014 CompanyCam doesn't send the cross-origin headers a browser needs to call it directly, so the app routes through a small server relay. Deploy the ",
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "companycam-proxy" }),
-      "Edge Function (see DEPLOY.md) and this connects. It's the same shape as the Twilio one."
+      "Edge Function (see DEPLOY.md) and this connects. It's the same shape as the send-sms one."
     ] })
   ] });
 }
@@ -26072,8 +26987,8 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           }
         )
       ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.55 }, children: "One provider account (Twilio or similar) with a dedicated number for the whole company \u2014 texting registration is per business, so this one stays shared. Consent is tracked per customer and sends are blocked without it." }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Before your first send", children: "US carriers require 10DLC brand and campaign registration for business texting. Unregistered traffic gets filtered or blocked outright. Registration takes a few days \u2014 start it before you need it." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.55 }, children: "One provider account (EZ Texting or similar) with a dedicated number for the whole company \u2014 texting registration is per business, so this one stays shared. Consent is tracked per customer and sends are blocked without it." }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Before your first send", children: "A standard 10-digit business number requires US carriers' 10DLC brand and campaign registration \u2014 unregistered traffic gets filtered or blocked outright, and registration takes a few days. A shared short code (what EZ Texting sends from by default) is a different carrier category and does not go through 10DLC review at all \u2014 check which one your account uses before assuming this applies to you." }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%", marginTop: 12 }, onClick: () => setConnecting("sms"), children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MessageCircle, { size: 15 }),
           " Connect SMS provider"
@@ -26097,7 +27012,7 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
             setMyGmail({ connected: true, email: addr.trim(), at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10) });
             toast("Your Gmail account is recorded");
           } else {
-            setIntegrations({ ...integrations, sms: { connected: true, provider: "Twilio", number: addr.trim() } });
+            setIntegrations({ ...integrations, sms: { connected: true, provider: "EZ Texting", number: addr.trim() } });
             toast("SMS number recorded");
           }
           setConnecting(null);
@@ -26476,7 +27391,7 @@ function JobImport({ jobs, setJobs, stages, users, onBack, toast, currentUser })
     )
   ] });
 }
-function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand: brand2 }) {
+function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand }) {
   const [editing, setEditing] = (0, import_react.useState)(null);
   const isAdmin = canManageSeats(currentUser);
   const blank = { name: "", email: "", phone: "", role: "rep", title: "Sales Rep", commissionRate: 60, active: true };
@@ -26578,7 +27493,13 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand:
     }
     setSaving(false);
   };
+  const activeAdmins = users.filter((u) => u.active && u.role === "admin");
+  const [confirmDeactivate, setConfirmDeactivate] = (0, import_react.useState)(null);
   const toggleActive = async (u) => {
+    if (u.active && u.role === "admin" && activeAdmins.length === 1 && activeAdmins[0].id === u.id) {
+      toast(`Can't deactivate ${u.name} \u2014 they're the only active admin. Make someone else an admin first.`);
+      return;
+    }
     const auth = AUTH();
     const next = { ...u, active: !u.active };
     try {
@@ -26632,7 +27553,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand:
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55 }, children: [
         "Every active seat is a login for ",
-        brand2.company,
+        brand.company,
         ". Adding a seat emails an invite to set a password. Deactivating keeps the person's job history intact but blocks sign-in immediately.",
         !liveAuth() && " Demo mode \u2014 no backend connected, so invites are not actually sent."
       ] }),
@@ -26703,7 +27624,13 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand:
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Pencil, { size: 13 }),
             " Edit"
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => toggleActive(u), children: u.active ? "Deactivate" : "Reactivate" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => {
+            if (u.active && u.id === currentUser.id) {
+              setConfirmDeactivate(u);
+              return;
+            }
+            toggleActive(u);
+          }, children: u.active ? "Deactivate" : "Reactivate" }),
           u.id !== currentUser.id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "danger", small: true, onClick: () => remove(u), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 13 }) })
         ] })
       ] }, u.id);
@@ -26735,9 +27662,9 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand:
           }, children: ROLES.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: r.id, children: r.label }, r.id)) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: T.accentSoft, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.primary, marginBottom: 14, lineHeight: 1.5 }, children: (ROLES.find((r) => r.id === f.role) || {}).blurb }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Job title (shown in the app)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.title, onChange: set("title") }) }),
-          (brand2.locations || []).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Location", hint: "Documents and messages for this rep's jobs show this office's phone and address.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: f.locationId || "", onChange: (e) => setF((p2) => ({ ...p2, locationId: e.target.value || null })), children: [
+          (brand.locations || []).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Location", hint: "Documents and messages for this rep's jobs show this office's phone and address.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: f.locationId || "", onChange: (e) => setF((p2) => ({ ...p2, locationId: e.target.value || null })), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Head office" }),
-            (brand2.locations || []).map((l) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: l.id, children: l.label || l.address }, l.id))
+            (brand.locations || []).map((l) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: l.id, children: l.label || l.address }, l.id))
           ] }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Direct phone", hint: "Shows on this rep's documents.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.repPhone || "", inputMode: "tel", onChange: (e) => setF((p2) => ({ ...p2, repPhone: formatPhone(e.target.value) })) }) }),
@@ -26798,6 +27725,31 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand:
           ] })
         ]
       }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      Sheet,
+      {
+        open: !!confirmDeactivate,
+        onClose: () => setConfirmDeactivate(null),
+        title: "Deactivate your own seat?",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => setConfirmDeactivate(null), children: "Cancel" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            Btn,
+            {
+              kind: "danger",
+              style: { flex: 1 },
+              onClick: () => {
+                const u = confirmDeactivate;
+                setConfirmDeactivate(null);
+                toggleActive(u);
+              },
+              children: "Deactivate my seat"
+            }
+          )
+        ] }),
+        children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "This signs you out immediately", tone: "red", children: "You'll be logged out right away and won't be able to sign back in until another admin reactivates you." })
+      }
     )
   ] });
 }
@@ -26819,19 +27771,19 @@ var SETUP_ITEMS = [
     note: "Never add this with a VITE_ prefix, and never put it in Vercel. VITE_ variables are compiled into the browser bundle and would be public. The key belongs only in the Edge Function, which is why the assistant calls a server function instead of the API directly."
   },
   {
-    id: "twilio",
-    label: "Texting (Twilio)",
+    id: "eztexting",
+    label: "Texting (EZ Texting)",
     secret: true,
     unlocks: "Outbound texts, stage-change notifications, appointment reminders.",
     where: "Supabase \u2192 Edge Functions \u2192 Secrets",
-    keyName: "TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER",
+    keyName: "EZTEXTING_API_KEY",
     steps: [
-      "Twilio console \u2192 rotate the auth token (the old one was pasted in chat).",
-      "Supabase \u2192 Edge Functions \u2192 Secrets \u2192 add all three values.",
-      "Deploy the send-sms function.",
-      "Check toll-free verification status for the sending number."
+      "Log into app.eztexting.com \u2192 Settings \u2192 Integrations / Developer API \u2192 generate an API key.",
+      "Supabase \u2192 Edge Functions \u2192 Secrets \u2192 add EZTEXTING_API_KEY with that value.",
+      "Deploy the send-sms function: supabase functions deploy send-sms",
+      "Send a real test text before relying on this \u2014 the exact request shape in send-sms/index.ts was built from third-party integration guides, not a confirmed read of EZ Texting's own docs (see the comment at the top of that file), because this environment's network policy blocked developers.eztexting.com directly."
     ],
-    config: [["twilioFrom", "Sending number", "+1 855 600 0482"]]
+    config: [["smsFrom", "Sending number", "+1 855 600 0482"]]
   },
   {
     id: "gmail",
@@ -27784,7 +28736,7 @@ function HelpBody({ body }) {
     return null;
   }) });
 }
-function HelpDesk({ onBack, brand: brand2 }) {
+function HelpDesk({ onBack, brand }) {
   const [q, setQ] = (0, import_react.useState)("");
   const [open, setOpen] = (0, import_react.useState)(null);
   const needle = q.trim().toLowerCase();
@@ -27905,7 +28857,7 @@ function HelpDesk({ onBack, brand: brand2 }) {
     })
   ] });
 }
-function MoreMenu({ onNav, onLogout, brand: brand2, currentUser, theme = "light", setTheme = () => {
+function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setTheme = () => {
 } }) {
   const admin = currentUser && currentUser.role === "admin";
   const groups = [
@@ -27932,7 +28884,6 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser, theme = "light"
       ["insurance:ask", import_lucide_react.MessageCircle, "Roofing assistant", "Code, manufacturers, NRCA, claims \u2014 cited answers"],
       ["insurance", import_lucide_react.Shield, "Insurance & claims", "Clients, claims, supplements & depreciation"],
       ["insurance:codes", import_lucide_react.ScrollText, "Code lookup", "Adopted code & building department by zip"],
-      ["insurance:coverage", import_lucide_react.MapPin, "Coverage by state", "Confirm the contract law for every state you work"],
       ["insurance:resources", import_lucide_react.BookOpen, "Roofing resources", "Manufacturer specs, policy provisions, letters, playbook"]
     ]],
     ["Customers & documents", [
@@ -27960,7 +28911,7 @@ function MoreMenu({ onNav, onLogout, brand: brand2, currentUser, theme = "light"
   const matches = needle ? groups.flatMap(([, items]) => items.filter(Boolean).filter(([, , label, sub]) => (label + " " + (sub || "")).toLowerCase().includes(needle))) : null;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 24, fontWeight: 800, color: S.ink, marginBottom: 4 }, children: "More" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 4 }, children: brand2.company }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 4 }, children: brand.company }),
     currentUser && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13, fontWeight: 700, color: S.ink }, children: currentUser.name }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: currentUser.role === "admin" ? "slate" : "blue", children: currentUser.title })
@@ -28186,7 +29137,7 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
 var DB = () => typeof window !== "undefined" ? window.__SUPABASE__ || null : null;
 var liveDb = () => !!DB();
 var EMPTY_FIN = () => ({ costLines: [], reimbursements: [] });
-function useBrandSync(brand2, setBrand, hasSession, tenantId) {
+function useBrandSync(brand, setBrand, hasSession, tenantId) {
   const lastSaved = (0, import_react.useRef)(null);
   const timer = (0, import_react.useRef)(null);
   const [loaded, setLoaded] = (0, import_react.useState)(!DB());
@@ -28221,10 +29172,10 @@ function useBrandSync(brand2, setBrand, hasSession, tenantId) {
   (0, import_react.useEffect)(() => {
     const db = DB();
     if (!db || !hasSession || !loaded) return;
-    if (JSON.stringify(brand2) === JSON.stringify(lastSaved.current)) return;
+    if (JSON.stringify(brand) === JSON.stringify(lastSaved.current)) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
-      const payload = brand2;
+      const payload = brand;
       const write = tenantId ? db.from("crm_brand").upsert({ tenant_id: tenantId, data: payload, updated_at: (/* @__PURE__ */ new Date()).toISOString() }, { onConflict: "tenant_id" }) : db.from("crm_brand").upsert({ id: 1, data: payload, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
       write.then(({ error }) => {
         if (error) {
@@ -28243,7 +29194,7 @@ function useBrandSync(brand2, setBrand, hasSession, tenantId) {
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [brand2, hasSession, loaded, tenantId]);
+  }, [brand, hasSession, loaded, tenantId]);
   return brandErr;
 }
 function useDbSync(st) {
@@ -28648,7 +29599,7 @@ function SupremeCRM() {
   const [appointments, setAppointments] = (0, import_react.useState)([]);
   const [estimateTemplates, setEstimateTemplates] = (0, import_react.useState)([]);
   const [docTemplates, setDocTemplates] = (0, import_react.useState)({ notes: [], terms: [], scope: [] });
-  const [activity, setActivity] = (0, import_react.useState)([]);
+  const [activity, setActivity] = (0, import_react.useState)(() => liveDb() ? [] : buildSeedActivity());
   const [chatMsgs, setChatMsgs] = (0, import_react.useState)([]);
   const [announcements, setAnnouncements] = (0, import_react.useState)([]);
   const [calls, setCalls] = (0, import_react.useState)([]);
@@ -28675,6 +29626,8 @@ function SupremeCRM() {
     "Adjuster meeting",
     "Estimate presentation",
     "Production start",
+    "Punch list",
+    "Material selection",
     "Final walkthrough",
     "Service issue",
     "Material delivery",
@@ -28688,7 +29641,7 @@ function SupremeCRM() {
     sms: { connected: false, provider: "", number: "" }
   });
   const [ccToken, setCcToken] = (0, import_react.useState)(null);
-  const [brand2, setBrand] = (0, import_react.useState)(DEFAULT_BRAND);
+  const [brand, setBrand] = (0, import_react.useState)(DEFAULT_BRAND);
   const [stages, setStages] = (0, import_react.useState)(DEFAULT_STAGES);
   const [stageRules, setStageRules] = (0, import_react.useState)(DEFAULT_STAGE_RULES);
   const [jobs, setJobs] = (0, import_react.useState)(() => liveDb() ? [] : seedJobs);
@@ -28769,7 +29722,7 @@ function SupremeCRM() {
   const [apiSetup, setApiSetup] = (0, import_react.useState)({});
   const [ccAutoCreate, setCcAutoCreate] = (0, import_react.useState)(true);
   const [jurisContacts, setJurisContacts] = (0, import_react.useState)({});
-  const [stateFacts, setStateFacts] = (0, import_react.useState)({});
+  const [dashLayout, setDashLayout] = (0, import_react.useState)(DEFAULT_DASHBOARD_LAYOUT);
   const [learnedJuris, setLearnedJuris] = (0, import_react.useState)({});
   const [features, setFeatures] = (0, import_react.useState)({});
   const [security, setSecurity] = (0, import_react.useState)({ anomalyLogout: true });
@@ -28793,7 +29746,7 @@ function SupremeCRM() {
       setNav("home");
     }
   };
-  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, stateFacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
     announcements,
     calls,
@@ -28814,7 +29767,6 @@ function SupremeCRM() {
     features,
     security,
     jurisContacts,
-    stateFacts,
     learnedJuris,
     version: 1
   });
@@ -28840,10 +29792,6 @@ function SupremeCRM() {
       setJurisContacts(d.jurisContacts);
       setJurisOverrides(d.jurisContacts);
     }
-    if (d.stateFacts) {
-      setStateFacts(d.stateFacts);
-      setLegalOverrides(d.stateFacts);
-    }
     if (d.learnedJuris) {
       setLearnedJuris(d.learnedJuris);
       setLearnedJurisdictions(d.learnedJuris);
@@ -28851,7 +29799,7 @@ function SupremeCRM() {
     if (d.security) setSecurity(d.security);
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
-  const brandErr = useBrandSync(brand2, setBrand, liveAuth() ? !!currentUser : true, currentUser && currentUser.tenantId);
+  const brandErr = useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true, currentUser && currentUser.tenantId);
   const { hydrated, syncErr } = useDbSync({
     ready: liveAuth() ? !!currentUser : true,
     isCrew: !!(currentUser && currentUser.role === "crew"),
@@ -28868,13 +29816,13 @@ function SupremeCRM() {
     orgPack,
     unpackOrg,
     orgDeps,
-    brandRef: brand2,
+    brandRef: brand,
     stagesRef: stages,
     usersRef: users
   });
-  T.primary = brand2.primary || "#28373E";
-  T.accent = brand2.accent || "#0A9E98";
-  T.accentSoft = brand2.accentSoft && brand2.accentSoftCustom ? brand2.accentSoft : softOf(T.accent);
+  T.primary = brand.primary || "#28373E";
+  T.accent = brand.accent || "#0A9E98";
+  T.accentSoft = brand.accentSoft && brand.accentSoftCustom ? brand.accentSoft : softOf(T.accent);
   (0, import_react.useEffect)(() => {
     let alive = true;
     if (!currentUser || !currentUser.id) {
@@ -29001,7 +29949,7 @@ function SupremeCRM() {
         }
       }
       if (stageId === "s10" && !next.completedAt) next.completedAt = todayIso();
-      if (j.portal?.notifyStage && stage) {
+      if (j.portal?.notifyStage && rule.notify && stage) {
         const channel = j.consent?.sms?.granted ? "sms" : j.consent?.email?.granted ? "email" : null;
         if (channel) {
           const first = (j.name || "").split(" ")[0];
@@ -29045,7 +29993,7 @@ function SupremeCRM() {
     const jb = jobs.find((j) => j.id === jobId);
     const msg = jb && (jb.messages || []).find((m) => m.id === msgId);
     if (!jb || !msg) return;
-    const out = await deliverToCustomer(
+    const out = msg.audience && msg.audience !== "Customer" ? msg.to ? await deliverMessage({ to: msg.to, kind: msg.kind || "email", subject: msg.subject || "", body: msg.body, jobId }, integrations, liveUser) : { kind: msg.kind || "email", to: "", status: `Not sent \u2014 no address on file for ${msg.audience}`, delivered: false } : await deliverToCustomer(
       jb,
       { prefer: msg.kind || "sms", subject: msg.subject || "", body: msg.body },
       integrations,
@@ -29215,7 +30163,7 @@ function SupremeCRM() {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       PasswordSetScreen,
       {
-        brand: brand2,
+        brand,
         mode: authFlow === "invite" ? "invite" : "recovery",
         toast,
         onDone: () => {
@@ -29229,21 +30177,21 @@ function SupremeCRM() {
     );
   }
   if (changePwOpen) {
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PasswordSetScreen, { brand: brand2, mode: "change", toast, onDone: () => setChangePwOpen(false) });
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PasswordSetScreen, { brand, mode: "change", toast, onDone: () => setChangePwOpen(false) });
   }
   if (booting || liveAuth() && currentUser && !hydrated) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", background: S.card }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center" }, children: [
-      brand2.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand2.logo, alt: brand2.company, style: { height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      brand.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand.logo, alt: brand.company, style: { height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
         width: 56,
         height: 56,
         borderRadius: 14,
-        background: brand2.primary,
+        background: brand.primary,
         color: "#fff",
         display: "grid",
         placeItems: "center",
         fontWeight: 800,
         margin: "0 auto 14px"
-      }, children: brand2.short }),
+      }, children: brand.short }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub }, children: "Loading\u2026" })
     ] }) });
   }
@@ -29268,7 +30216,7 @@ function SupremeCRM() {
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         Login,
         {
-          brand: brand2,
+          brand,
           users,
           onLogin: setCurrentUser,
           initialMode: authMode,
@@ -29335,12 +30283,30 @@ function SupremeCRM() {
     setNav("insurance");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "rl-shell", style: { fontFamily: "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif", background: S.bg }, children: [
+    !liveDb() && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      flexShrink: 0,
+      background: "#7A1D12",
+      color: "#fff",
+      fontSize: 12.5,
+      lineHeight: 1.45,
+      padding: "9px 14px",
+      textAlign: "center"
+    }, children: "Demo mode \u2014 not connected to the database. Nothing saves, no emails send. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to this Vercel project, then redeploy." }),
+    (syncErr || brandErr) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      flexShrink: 0,
+      background: "#7A1D12",
+      color: "#fff",
+      fontSize: 12.5,
+      lineHeight: 1.45,
+      padding: "9px 14px",
+      textAlign: "center"
+    }, children: brandErr || syncErr }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "rl-scroll", ref: scrollPane, children: openJob ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       JobDetail,
       {
         job: openJob,
         stages,
-        brand: brand2,
+        brand,
         onBack: backToBoard,
         onMoveStage: moveStage,
         mut: mutJob(openJob.id),
@@ -29389,7 +30355,7 @@ function SupremeCRM() {
             setBoardStage(id);
             setNav("jobs");
           },
-          brand: brand2,
+          brand,
           appointments,
           apptTypes,
           crews,
@@ -29404,6 +30370,7 @@ function SupremeCRM() {
           currentUser: liveUser,
           showMoney,
           isAdmin,
+          activity,
           onToggleTask: (jobId, taskId) => mutJob(jobId, (j) => ({ ...j, tasks: j.tasks.map((x) => x.id === taskId ? { ...x, done: !x.done, doneAt: !x.done ? (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ") : null } : x) })),
           chatMsgs,
           onSendChat: (text) => {
@@ -29441,6 +30408,8 @@ function SupremeCRM() {
         setView: setBoardView,
         stageRules,
         onBulkMoveStage: bulkMoveStage,
+        appointments,
+        users,
         onBulkUpdate: (ids, patch) => setJobs((prev) => prev.map((j) => ids.includes(j.id) ? { ...j, ...patch } : j))
       }
     ) : nav === "inbox" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -29464,7 +30433,7 @@ function SupremeCRM() {
         integrations,
         onSendQueued: sendQueuedMessage
       }
-    ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand: brand2, onNav: (id) => {
+    ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand, onNav: (id) => {
       if (id === "password") return setChangePwOpen(true);
       if (id === "workflow") return setWorkflowOpen(true);
       if (id === "insurance:ask") {
@@ -29477,10 +30446,6 @@ function SupremeCRM() {
       }
       if (id === "insurance:resources") {
         setCodeSeed({ tab: "resources" });
-        return setNav("insurance");
-      }
-      if (id === "insurance:coverage") {
-        setCodeSeed({ tab: "coverage" });
         return setNav("insurance");
       }
       return setNav(id);
@@ -29514,23 +30479,6 @@ function SupremeCRM() {
           logAct({ type: "code", text: `Added ${rec.city || rec.zip}, ${rec.county} to the jurisdiction list` });
           toast(rec.needsContact ? "Saved \u2014 add the permit office when you have it" : "Saved with its building department");
         },
-        stateFacts,
-        onConfirmLegal: (st, key, rec) => {
-          const next = { ...stateFacts, [st]: { ...stateFacts[st] || {}, [key]: { ...rec, at: todayIso(), by: userName } } };
-          setStateFacts(next);
-          setLegalOverrides(next);
-          logAct({ type: "code", text: `Confirmed ${key} for ${st}` });
-          toast("Confirmed for the whole company");
-        },
-        onClearLegal: (st, key) => {
-          const rest = { ...stateFacts[st] || {} };
-          delete rest[key];
-          const next = { ...stateFacts, [st]: rest };
-          setStateFacts(next);
-          setLegalOverrides(next);
-          logAct({ type: "code", text: `Withdrew the confirmation of ${key} for ${st}` });
-          toast("Withdrawn \u2014 contracts in that state are blocked again");
-        },
         seed: codeSeed,
         onConsumeSeed: () => setCodeSeed(null)
       }
@@ -29544,7 +30492,10 @@ function SupremeCRM() {
         isAdmin,
         currentUser: liveUser,
         toast,
-        crews
+        crews,
+        setUsers,
+        dashLayout,
+        setDashLayout
       }
     ) : nav === "calendar" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       CalendarView,
@@ -29559,6 +30510,7 @@ function SupremeCRM() {
         toast,
         onLog: logAct,
         users,
+        crews,
         onQueueMessage: (jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))
       }
     ) : nav === "contacts" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -29582,7 +30534,7 @@ function SupremeCRM() {
         setSettings: setReviewSettings,
         jobs,
         onBack: () => setNav("more"),
-        brand: brand2,
+        brand,
         setBrandFromReviews: setBrand,
         mut: mutJob,
         toast
@@ -29687,7 +30639,7 @@ function SupremeCRM() {
         currentUser: liveUser,
         onBack: () => setNav("more"),
         toast,
-        brand: brand2
+        brand
       }
     ) : nav === "crews" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       CrewManager,
@@ -29751,35 +30703,9 @@ function SupremeCRM() {
         jobs,
         onBack: () => setNav("more"),
         toast,
-        brand: brand2
+        brand
       }
-    ) : nav === "help" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelpDesk, { onBack: () => setNav("more"), brand: brand2 }) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand: brand2, setBrand, onBack: () => setNav("more"), toast, brandErr }) : null }),
-    !liveDb() && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 95,
-      background: "#7A1D12",
-      color: "#fff",
-      fontSize: 12.5,
-      lineHeight: 1.45,
-      padding: "9px 14px",
-      textAlign: "center"
-    }, children: "Demo mode \u2014 not connected to the database. Nothing saves, no emails send. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to this Vercel project, then redeploy." }),
-    (syncErr || brandErr) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      zIndex: 90,
-      background: "#7A1D12",
-      color: "#fff",
-      fontSize: 12.5,
-      lineHeight: 1.45,
-      padding: "9px 14px",
-      textAlign: "center"
-    }, children: brandErr || syncErr }),
+    ) : nav === "help" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelpDesk, { onBack: () => setNav("more"), brand }) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand, setBrand, onBack: () => setNav("more"), toast, brandErr, currentUser: liveUser }) : null }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
       flexShrink: 0,
       zIndex: 50,
@@ -29895,7 +30821,7 @@ function SupremeCRM() {
           setLeadSeed(null);
         },
         onCreate: createLead,
-        brand: brand2,
+        brand,
         leadSources,
         users,
         jobs,
@@ -29955,7 +30881,7 @@ function SupremeCRM() {
           ] }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Task", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: qt.label, onChange: (e) => setQt({ ...qt, label: e.target.value }), placeholder: "Call adjuster back, order materials\u2026" }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Deadline (optional)", hint: "Tasks with deadlines show on the calendar.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, flex: 1 }, type: "date", value: qt.due, onChange: (e) => setQt({ ...qt, due: e.target.value }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...dateInputStyle, flex: 1 }, type: "date", value: qt.due, onChange: (e) => setQt({ ...qt, due: e.target.value }) }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: { ...inputStyle, width: 110 }, type: "time", value: qt.time || "", onChange: (e) => setQt({ ...qt, time: e.target.value }) })
           ] }) })
         ]
@@ -29984,7 +30910,8 @@ function SupremeCRM() {
         stages,
         setStages: applyRemovedStages,
         stageRules,
-        setStageRules
+        setStageRules,
+        currentUser: liveUser
       }
     ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(

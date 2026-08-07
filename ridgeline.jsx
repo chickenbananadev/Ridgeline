@@ -8,7 +8,7 @@ import {
   BookOpen, Printer, Copy, PenLine, Landmark, Package, Receipt, HardHat, CloudRain,
   Share2, Upload, AlertTriangle, RefreshCw, Building2, ScrollText, Wrench,
   Scale, Lightbulb, ExternalLink, Lock, Layers, Smile
-, Filter , Megaphone, Clock, Zap, Sun, Moon, Navigation, Award, ClipboardCheck } from "lucide-react";
+, Filter , Megaphone, Clock, Zap, Sun, Moon, Navigation, Award, ClipboardCheck, Sparkles } from "lucide-react";
 
 /* ================================================================
    BRANDING — single source of company identity. Everything company-
@@ -1094,134 +1094,6 @@ function renderLetter(tpl, state) {
   return { body, used, blocking, ready: blocking.length === 0 };
 }
 
-/* ==================================================================
-   LEGAL PACKS — what a contract has to say, per state.
-
-   The construction agreement recited "the State of Ohio and Kentucky"
-   on every tenant's contract, baked a 3-day rescission window, a
-   5-year workmanship warranty and 1.5%/month into `mkContract` for
-   every new tenant on day one, and defaulted the deposit to 50% — a
-   per-se violation in states that cap it at a third. None of that was
-   keyed to where the roof is.
-
-   Every state gets a row for every field. What a field does NOT do is
-   guess: outbound research here returns lead-generation aggregators
-   that contradict each other, so a field with nothing checked behind
-   it reads "not established" and carries the body that can settle it
-   plus a direct link. Naming the right door beats guessing what is
-   behind it — the same choice `regulatorFor` already makes.
-
-   `verified` is the only tier that prints into a binding document,
-   and only a human standing behind it on a date can set that. So even
-   Ohio's seeded values start at `derived` and the owner confirms them
-   once on the Coverage screen. That is deliberate: a seeded value
-   auto-promoted to verified is exactly the bug the ladder exists to
-   stop, and it has already shipped twice.
-================================================================== */
-/* National directories. Each is the canonical index for its field —
-   not a per-state URL invented to look precise. */
-const NAAG_DIRECTORY = "https://www.naag.org/find-my-ag/";
-const NASCLA_DIRECTORY = "https://www.nascla.org/page/licensing_boards";
-const LEGAL_AUTHORITIES = {
-  ag: { name: "State attorney general — consumer protection division", url: NAAG_DIRECTORY },
-  doi: { name: "State department of insurance", url: NAIC_DIRECTORY },
-  lic: { name: "State contractor licensing board", url: NASCLA_DIRECTORY },
-};
-/* `binding: true` means the field fills a slot in a document somebody
-   signs. Those gate signing. The rest inform the rep and appear on
-   Coverage, but an unconfirmed one does not stop a contract going out,
-   because it does not appear in the contract. */
-const LEGAL_FIELDS = [
-  { key: "choiceOfLaw", label: "Governing law", authority: "ag", binding: true,
-    help: "Which state's law the agreement is written under. Reciting the wrong one is the defect that started this." },
-  { key: "rescission", label: "Right to cancel", authority: "ag", binding: true,
-    help: "How long the owner has to cancel, and whether the clock runs in business or calendar days." },
-  { key: "noticeOfCancellation", label: "Notice of Cancellation", authority: "ag", binding: true,
-    help: "Whether a separate cancellation notice must be handed over, in how many copies, and at what type size." },
-  { key: "insuranceRescission", label: "Insurance-restoration cancellation", authority: "doi", binding: true,
-    help: "Several states give a separate right to cancel once the carrier denies the claim. Where one exists it must be in the contract." },
-  { key: "deductibleNotice", label: "Deductible-rebate notice", authority: "doi", binding: true,
-    help: "The statutory notice that the insured is responsible for the deductible and it cannot be waived or absorbed." },
-  { key: "financeCharge", label: "Finance-charge ceiling", authority: "ag", binding: true,
-    help: "The maximum late charge on an unpaid balance. The supplied terms assert 1.5% per month, which exceeds the cap in some states." },
-  { key: "downPayment", label: "Down-payment cap", authority: "ag", binding: true,
-    help: "The most that may be collected before work starts. The supplied terms say half down." },
-  { key: "cancellationFee", label: "Cancellation-fee limit", authority: "ag", binding: true,
-    help: "Whether a liquidated-damages fee on late cancellation is enforceable, and at what ceiling. The supplied terms assert 15% of the insurance proceeds." },
-  { key: "warrantyFloor", label: "Workmanship warranty floor", authority: "ag", binding: true,
-    help: "Any statutory minimum the written warranty has to meet." },
-  { key: "licenceOnContract", label: "Licence number on the contract", authority: "lic", binding: true,
-    help: "Where a licence number must be printed on the agreement, omitting it can void the contract or bar a lien." },
-  { key: "licensing", label: "Licence or registration required", authority: "lic", binding: false,
-    help: "Whether roofing work needs a state licence, a registration, or neither — and who issues it." },
-  { key: "consumerIndemnity", label: "Consumer indemnity permissible", authority: "ag", binding: false,
-    help: "The supplied terms have the homeowner indemnify the company. Several states will not enforce that against a consumer." },
-  { key: "aob", label: "Assignment of benefits", authority: "doi", binding: false,
-    help: "Whether an AOB is permitted, restricted, or prohibited for residential property claims." },
-];
-const LEGAL_FIELD_KEYS = LEGAL_FIELDS.map((f) => f.key);
-const BINDING_LEGAL_FIELDS = LEGAL_FIELDS.filter((f) => f.binding).map((f) => f.key);
-/* The only curated rows. Ohio's are the assertions the app already
-   makes elsewhere, moved here so there is one place to confirm them;
-   Kentucky asserts nothing today and so seeds nothing. Both sit at
-   `derived` until somebody opens the source and initials it. */
-const LEGAL_PACK_SEED = {
-  OH: {
-    choiceOfLaw: { value: "Ohio", note: "The property is in Ohio, so Ohio law governs the agreement.", srcId: "ORC1345" },
-    rescission: { value: "Three (3) business days from the date of the transaction",
-      note: "Ohio's Home Solicitation Sales Act. Confirm the current text and whether this sale is within its scope before relying on it.",
-      srcId: "ORC1345" },
-  },
-};
-/* A pack is never borrowed from another state. `citeFor` learned this
-   lesson first: an unknown topic returns nothing rather than Ohio's
-   answer, and the same rule has to hold for contract law. */
-function legalPackFor(state, overrides = {}) {
-  const st = String(state || "").toUpperCase();
-  const seed = LEGAL_PACK_SEED[st] || {};
-  const conf = (overrides && overrides[st]) || {};
-  const pack = {};
-  LEGAL_FIELDS.forEach((f) => {
-    const auth = LEGAL_AUTHORITIES[f.authority];
-    /* A confirmation from the Coverage screen is the only thing that
-       reaches `verified`, and it carries who and when. */
-    const c = conf[f.key];
-    if (c && c.value) {
-      pack[f.key] = fact(c.value, {
-        note: c.note || "", sourceUrl: c.sourceUrl || auth.url, sourceName: c.sourceName || auth.name,
-        asOf: c.at || null, verifiedBy: c.by || null, confidence: "verified",
-      });
-      return;
-    }
-    const s = seed[f.key];
-    if (s) {
-      const src = s.srcId ? SOURCES[s.srcId] : null;
-      pack[f.key] = fact(s.value, {
-        note: s.note || "", srcId: s.srcId || "",
-        sourceUrl: (src && src.url) || auth.url, sourceName: (src && src.name) || auth.name,
-        confidence: "derived",
-      });
-      return;
-    }
-    pack[f.key] = fact("", {
-      note: st
-        ? `Not established for ${st}. ${auth.name} is the body that settles this — check it and confirm here.`
-        : "Pick the property's state.",
-      sourceUrl: auth.url, sourceName: auth.name, confidence: "unknown",
-    });
-  });
-  return pack;
-}
-/* What is stopping this state's contracts from being signed. Empty
-   means every binding slot resolves to something a human stood behind. */
-function legalPackGaps(state, overrides = {}) {
-  const pack = legalPackFor(state, overrides);
-  return LEGAL_FIELDS.filter((f) => f.binding && !printable(pack[f.key]));
-}
-function legalPackReady(state, overrides = {}) {
-  return !!String(state || "").trim() && legalPackGaps(state, overrides).length === 0;
-}
-
 function regulatorFor(state) {
   const r = STATE_REGULATORS[state];
   if (r) {
@@ -1444,7 +1316,12 @@ const DEFAULT_STAGES = [
    an ordered list of the tasks that job type actually works through;
    completing one offers the next. Kept deliberately human — these are
    the steps a rep would tick off, not internal stage ids. */
-const JOB_TYPES = ["Retail", "Insurance", "Commercial"];
+/* The real source for every claim-type picker in the app — previously
+   declared and never referenced, while NewLeadSheet and TabOverview each
+   hand-rolled their own copy of this list in a different order (and
+   neither included "Unknown"), so the two pickers could drift apart
+   without anyone noticing. */
+const JOB_TYPES = ["Retail", "Insurance", "Commercial", "Unknown"];
 const JOB_PATHS = {
   Retail: [
     "Schedule inspection", "Complete inspection", "Build estimate",
@@ -1681,7 +1558,7 @@ const PORTAL_SECTIONS = [
   ["invoice", "Invoice & balance"],
   ["documents", "Documents"],
   ["photos", "Project photos"],
-  ["sign", "Documents to sign"],
+  ["sign", "Agreements & signatures"],
   ["requests", "Quotes & future projects"],
   ["messages", "Messages"],
   ["review", "Rate your experience"],
@@ -2033,6 +1910,43 @@ const seedJobs = [
     }],
   },
 ];
+
+/* Demo mode has no database to load a real activity history from, so
+   without this the stage-move log a fresh session starts with is empty —
+   every history-dependent feature (predicted stall risk, chief among them)
+   would look broken rather than merely quiet on a brand-new demo. This
+   backfills the moves the seed jobs would have logged getting to where
+   they sit today. A real tenant's own crm_activity load overwrites this
+   the moment it hydrates (see the `liveDb()` guard where it's used), so
+   it's seed-only and never a source of truth once a backend is connected. */
+function buildSeedActivity() {
+  const now = Date.now();
+  const chain = (jobId, jobName, steps) => {
+    const totalPastDays = steps.reduce((sum, [, days]) => sum + days, 0);
+    let t = now - totalPastDays * 86400000;
+    return steps.map(([stageName, days]) => {
+      const entry = {
+        id: uid("act"), kind: "stage", jobId, jobName, by: "Jacob Henderson",
+        at: new Date(t).toISOString().slice(0, 16).replace("T", " "),
+        text: `moved ${jobName} to "${stageName}"`,
+      };
+      t += days * 86400000;
+      return entry;
+    });
+  };
+  return [
+    ...chain("j1", "Rob Kennard", [["New lead", 3], ["Appointment scheduled", 0]]),
+    ...chain("j2", "Omkar Hirekhan", [["New lead", 2], ["Appointment scheduled", 5], ["Estimate sent / Follow up", 0]]),
+    ...chain("j3", "Roger Perry", [["New lead", 2], ["Appointment scheduled", 4], ["Estimate sent / Follow up", 5],
+      ["Claim filed", 3], ["Job approved", 4], ["Supplementing", 3], ["Deposit paid — job scheduled", 4], ["Production", 5],
+      ["Payments / Invoicing / Cap out", 0]]),
+    ...chain("j4", "Jill Neitzel", [["New lead", 2], ["Appointment scheduled", 3], ["Estimate sent / Follow up", 4],
+      ["Claim filed", 3], ["Job approved", 0]]),
+    ...chain("j6", "Dale Whitfield", [["New lead", 2], ["Appointment scheduled", 4], ["Estimate sent / Follow up", 5],
+      ["Claim filed", 3], ["Job approved", 4], ["Supplementing", 3], ["Deposit paid — job scheduled", 4], ["Production", 5],
+      ["Payments / Invoicing / Cap out", 3], ["Job completed", 0]]),
+  ].sort((a, b) => (b.at || "").localeCompare(a.at || ""));
+}
 
 /* ================================================================
    HELPERS
@@ -2444,18 +2358,6 @@ function stateForZip(zip) {
 let JURIS_OVERRIDES = {};
 function setJurisOverrides(map) { JURIS_OVERRIDES = map || {}; }
 
-/* Confirmed per-state contract law, saved from the Coverage screen.
-   Module scope for the same reason as JURIS_OVERRIDES: the document
-   builders are plain functions called from a dozen places and cannot
-   be handed React state, and a contract that silently rendered the
-   unconfirmed pack because the state did not reach it would defeat
-   the entire gate. */
-let LEGAL_OVERRIDES = {};
-function setLegalOverrides(map) { LEGAL_OVERRIDES = map || {}; }
-function legalPack(state) { return legalPackFor(state, LEGAL_OVERRIDES); }
-function legalGaps(state) { return legalPackGaps(state, LEGAL_OVERRIDES); }
-function legalReady(state) { return legalPackReady(state, LEGAL_OVERRIDES); }
-
 /* ZIPs looked up on demand and saved, so the database grows with use
    rather than needing every ZIP in the country shipped up front. */
 let LEARNED_JURISDICTIONS = {};
@@ -2729,6 +2631,16 @@ const money = (n) =>
    price; "$20,911.00" reads as an invoice line. */
 const money0 = (n) =>
   (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString();
+/* For labels that sit inside something narrow — a chart bar, a column —
+   where "$30,870.00" is more precision than the space, or the reader,
+   needs. */
+const moneyCompact = (n) => {
+  const sign = n < 0 ? "-$" : "$";
+  const v = Math.abs(n);
+  if (v >= 1000000) return `${sign}${(v / 1000000).toFixed(v >= 10000000 ? 0 : 1)}M`;
+  if (v >= 1000) return `${sign}${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`;
+  return `${sign}${Math.round(v)}`;
+};
 const pct1 = (n) => `${n.toFixed(2)}%`;
 
 /* ==================================================================
@@ -2916,10 +2828,14 @@ function repSplitValid(job) {
 function computeCapOut(job) {
   const { materials, labor, other, cogs } = computeFin(job.fin);
   /* Approved change orders move the contract. Leaving them out is the
-     most common way a job reads profitable and is not. */
+     most common way a job reads profitable and is not. Approved insurance
+     supplements move it the same way — the carrier approved more scope,
+     which is more contract value, exactly like a signed change order. */
   const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : [])
     .filter((c) => c.status === "Approved").reduce((a2, c) => a2 + coTotal(c), 0);
-  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved;
+  const supApproved = (Array.isArray((job.claim || {}).supplements) ? job.claim.supplements : [])
+    .filter((s) => s.status === "Approved" || s.status === "Paid").reduce((a2, s) => a2 + num(s.amount), 0);
+  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved + supApproved;
   const gross = contract - cogs;
   const structure = job.fin.structure || "grossProfit";
   const rate = job.fin.commissionRate;
@@ -2999,7 +2915,9 @@ function paymentsSummary(job) {
   const paidOut = job.payments.filter((p) => p.type !== "Received").reduce((s, p) => s + p.amt, 0);
   const coApproved = (Array.isArray(job.changeOrders) ? job.changeOrders : [])
     .filter((c) => c.status === "Approved").reduce((a2, c) => a2 + coTotal(c), 0);
-  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved;
+  const supApproved = (Array.isArray((job.claim || {}).supplements) ? job.claim.supplements : [])
+    .filter((s) => s.status === "Approved" || s.status === "Paid").reduce((a2, s) => a2 + num(s.amount), 0);
+  const contract = (job.contract.price || estimateTotal(job.estimate) || job.value || 0) + coApproved + supApproved;
   return { received, paidOut, contract, balance: contract - received };
 }
 /* Export gate. Reps cannot pull data out — this is what stops a
@@ -3650,6 +3568,17 @@ function AddressAutocomplete({ value, onChange, onPick, placeholder }) {
 }
 
 function Sheet({ open, onClose, title, children, footer, wide, tall, center = true }) {
+  /* Escape closing a dialog is the instinct a keyboard/trackpad user
+     reaches for before hunting for the X — every other dismissible
+     surface in this file (the combobox dropdown, inline rename fields)
+     already honours it; Sheet never did. The listener has to attach
+     even when closed (hooks can't be conditional) — it just no-ops. */
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   if (!open) return null;
   /* Dialogs float centered by default (pass center={false} for a bottom sheet).
      `center` renders a floating, vertically-centered dialog (rounded on all
@@ -3663,18 +3592,27 @@ function Sheet({ open, onClose, title, children, footer, wide, tall, center = tr
     }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
         background: S.card, width: "100%", maxWidth: wide ? 760 : 560,
-        maxHeight: center ? "82vh" : "90vh", minHeight: tall ? "55vh" : undefined,
+        /* `vh` is the layout viewport, which on iOS Safari can be taller
+           than what's actually on screen while the address bar is
+           showing — the footer (the button that submits the sheet) would
+           render below the real visible area with no way to reach it,
+           since this outer overlay has no scroll of its own. `dvh` tracks
+           the real, currently-visible viewport instead. */
+        maxHeight: center ? "82dvh" : "90dvh", minHeight: tall ? "55dvh" : undefined,
         borderRadius: center ? 18 : "18px 18px 0 0", display: "flex", flexDirection: "column",
         boxShadow: center ? "0 24px 60px rgba(17,24,39,.28)" : undefined,
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px 12px" }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: S.ink }}>{title}</div>
-          <button onClick={onClose} style={{
+          <button onClick={onClose} aria-label="Close" style={{
             border: "none", background: S.soft, borderRadius: 999, width: 34, height: 34,
             display: "grid", placeItems: "center", cursor: "pointer", color: S.ink,
           }}><X size={17} /></button>
         </div>
-        <div style={{ overflowY: "auto", padding: "4px 20px 20px", flex: 1 }}>{children}</div>
+        <div style={{
+          overflowY: "auto", padding: "4px 20px 20px", flex: 1,
+          WebkitOverflowScrolling: "touch", overscrollBehavior: "contain",
+        }}>{children}</div>
         {footer && <div style={{ padding: "12px 20px 20px", borderTop: `1px solid ${S.line}` }}>{footer}</div>}
       </div>
     </div>
@@ -3688,6 +3626,11 @@ function Toast({ msg }) {
       position: "fixed", bottom: 96, left: "50%", transform: "translateX(-50%)",
       background: "#111827", color: "#fff", borderRadius: 999, padding: "10px 18px",
       fontSize: 14, fontWeight: 600, zIndex: 90, whiteSpace: "nowrap",
+      /* Purely informational, never itself tappable — without this its
+         screen rect can sit on top of a Sheet's footer button (e.g. an
+         Add-appointment save) and silently swallow a real tap meant for
+         what's underneath. */
+      pointerEvents: "none",
     }}>{msg}</div>
   );
 }
@@ -4811,6 +4754,78 @@ function exceptionFeed(jobs, ctx) {
   return all.sort((a, b) => (a.tone === b.tone ? 0 : a.tone === "red" ? -1 : 1));
 }
 
+/* ==================================================================
+   PREDICTIVE STAGE RISK
+
+   Every other "this job needs attention" signal in the app compares a
+   job against a rule someone configured (an SLA day count, a gate
+   check). This compares a job against what actually happened to every
+   other job that passed through the same stage — a genuinely different
+   kind of signal, so it gets its own function and its own surface
+   rather than folding into jobExceptions.
+
+   The only historical record of how long a job actually sat in a stage
+   is the activity feed: moveStage logs one "moved X to \"Stage\""
+   entry per move, with a real timestamp, and nothing else persists a
+   job's stage history once it moves on. Reconstructing "how long did
+   job J spend in stage S" means pairing up a job's own consecutive
+   stage-move log entries and reading the gap between them — the
+   duration between move N and move N+1 is how long the job sat in
+   whichever stage move N put it into.
+================================================================== */
+const STAGE_MOVE_RE = / to "([^"]*)"$/;
+
+/* Per-stage historical duration samples, in days, keyed by stage id.
+   Parses the stage NAME back out of the log text (that's all it ever
+   recorded) and resolves it against the tenant's current stage list —
+   a stage renamed since some of these jobs moved through it will just
+   fail to resolve for those older entries, which undercounts the
+   sample rather than mis-attributing it to the wrong stage. */
+function stageDurationSamples(activity, stages) {
+  const byName = new Map((stages || []).map((s) => [s.name, s.id]));
+  const moves = (activity || [])
+    .filter((a) => a.kind === "stage" && a.jobId && STAGE_MOVE_RE.test(a.text || ""))
+    .map((a) => ({ jobId: a.jobId, at: a.at, stageId: byName.get(STAGE_MOVE_RE.exec(a.text)[1]) }))
+    .filter((m) => m.stageId)
+    .sort((a, b) => (a.at || "").localeCompare(b.at || ""));
+  const byJob = new Map();
+  moves.forEach((m) => { if (!byJob.has(m.jobId)) byJob.set(m.jobId, []); byJob.get(m.jobId).push(m); });
+  const samples = {}; // stageId -> days[]
+  byJob.forEach((seq) => {
+    for (let i = 0; i < seq.length - 1; i++) {
+      const days = (Date.parse(seq[i + 1].at) - Date.parse(seq[i].at)) / 86400000;
+      if (!(days >= 0)) continue; // clock skew / bad data — skip rather than pollute the sample
+      (samples[seq[i].stageId] || (samples[seq[i].stageId] = [])).push(days);
+    }
+  });
+  return samples;
+}
+
+/* Jobs sitting in their current stage longer than half of historical
+   jobs took to move on — median, not mean, so one job that sat for
+   four months while permits cleared doesn't drag the bar up for
+   everyone after it. Stages with fewer than MIN_SAMPLE data points
+   report nothing rather than a prediction with no real basis, the same
+   "unknown beats a confident guess" discipline citeFor already uses. */
+const STALL_MIN_SAMPLE = 3;
+function predictedStallRisk(jobs, activity, stages) {
+  const samples = stageDurationSamples(activity, stages);
+  const median = (arr) => { const s = [...arr].sort((a, b) => a - b); const mid = Math.floor(s.length / 2); return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2; };
+  const done = ["s10", "s11", "s12"];
+  return (jobs || [])
+    .filter((j) => !done.includes(j.stageId))
+    .map((j) => {
+      const pool = samples[j.stageId];
+      if (!pool || pool.length < STALL_MIN_SAMPLE) return null;
+      const typicalDays = median(pool);
+      const daysIn = stageDays(j);
+      if (daysIn <= typicalDays) return null;
+      return { job: j, stageId: j.stageId, daysIn, typicalDays: Math.round(typicalDays * 10) / 10, sampleSize: pool.length };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (b.daysIn - b.typicalDays) - (a.daysIn - a.typicalDays));
+}
+
 function FocusList({ jobs, onOpenJob, stages = [] }) {
   const ranked = jobs
     .map((j) => ({ j, f: focusScore(j) }))
@@ -4865,7 +4880,7 @@ function FocusList({ jobs, onOpenJob, stages = [] }) {
 
 function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, onQuickTask, onOpenStage, brand = DEFAULT_BRAND,
   appointments = [], apptTypes = [], crews = [], setAppointments, setApptTypes, toast, onQueueMessage, onLog, users = [], mutJob, onToggleTask,
-  chatMsgs = [], onSendChat, stageRules = {}, currentUser = null, showMoney = true, isAdmin = true }) {
+  chatMsgs = [], onSendChat, stageRules = {}, currentUser = null, showMoney = true, isAdmin = true, activity = [] }) {
   /* Scope. An owner wants the company; a rep wants their own book and is
      actively hurt by a feed full of other people's problems. Reps land on
      "Mine" and can look wider; admins land on the company. The prop is
@@ -4877,6 +4892,11 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
     if (scope !== "mine" || !currentUser) return allJobs;
     return allJobs.filter((j) => j.assignee === currentUser.name);
   }, [allJobs, scope, currentUser]);
+  /* Historical pattern is a company-wide fact regardless of who's looking —
+     a rep's own stage history is too sparse to be a meaningful baseline —
+     but which jobs get flagged still respects the Mine/All toggle like
+     everything else on this screen. */
+  const stallRisk = useMemo(() => predictedStallRisk(jobs, activity, stages), [jobs, activity, stages]);
   const [homeBoard, setHomeBoard] = useState("calendar");
   const [showAllBlockers, setShowAllBlockers] = useState(false);
   const [quick, setQuick] = useState(null);        // "note" | "call" | "task"
@@ -4933,7 +4953,10 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
   const wonCount = approvedPlus.length;
   const avgSale = wonCount ? signedValue / wonCount : 0;
   const collected = jobs.reduce((s, j) => s + paymentsSummary(j).received, 0);
-  const closeRate = jobs.length ? wonCount / jobs.length : 0;
+  /* pct1() expects an already-0-100-scaled value, same as every other
+     caller in the file — this is the sole exception; leaving it as a raw
+     0-1 fraction displays 50% won as "0.50%". */
+  const closeRate = jobs.length ? (wonCount / jobs.length) * 100 : 0;
   /* Reviews in the daily workflow: real funnel status across sold/completed
      jobs. "Posted" is who has actually left one; "recover" is a 1–3★ that
      needs a call before anything public. */
@@ -5132,6 +5155,43 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
 
       {/* Team chat lives in the Inbox, not on the home page. */}
       <FocusList jobs={jobs} onOpenJob={onOpenJob} stages={stages} />
+
+      {/* Likely to stall — a different kind of signal than FocusList or the
+          exception feed: not a broken rule, a job trending past how long
+          jobs like it actually took historically. Only ever shows up once
+          there's enough real history to say so. */}
+      {stallRisk.length > 0 && (
+        <Card style={{ marginTop: 16 }}>
+          <CardTitle right={<Chip tone="amber">{stallRisk.length}</Chip>}>Likely to stall</CardTitle>
+          <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
+            Sitting longer than half of past jobs took to move past this stage.
+          </div>
+          {stallRisk.slice(0, 5).map(({ job: j, stageId, daysIn, typicalDays, sampleSize }, i) => {
+            const stage = stages.find((s) => s.id === stageId);
+            return (
+              <button key={j.id} onClick={() => onOpenJob(j.id)} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%",
+                border: "none", background: "none", cursor: "pointer", textAlign: "left", fontFamily: "inherit",
+                padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none",
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: S.ink }}>{j.name}</div>
+                  <div style={{ fontSize: 12, color: S.sub, marginTop: 1 }}>
+                    {stage ? stage.name : "this stage"} · based on {sampleSize} past {sampleSize === 1 ? "job" : "jobs"}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 10 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800, color: "#9A6B00" }}>{daysIn}d</div>
+                  <div style={{ fontSize: 11, color: S.sub }}>typically {typicalDays}d</div>
+                </div>
+              </button>
+            );
+          })}
+          {stallRisk.length > 5 && (
+            <div style={{ fontSize: 12, color: S.sub, paddingTop: 8 }}>+ {stallRisk.length - 5} more</div>
+          )}
+        </Card>
+      )}
 
       {/* Week ahead — the next seven days of appointments and crew
           assignments, so the calendar and the dispatch board are answered
@@ -5465,13 +5525,86 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
   );
 }
 
+/* Catalog for the "My dashboard" tab — every widget renders from data the
+   Summary/Commission/By rep/Pipeline tabs already compute, so this is a
+   picker over existing numbers, not a second reporting engine. w is the
+   default grid width (1 = half, 2 = full) a widget starts at; the user can
+   flip it once it's on their board. adminOnly widgets show company-wide
+   figures a rep shouldn't see about teammates. */
+const WIDGET_DEFS = [
+  { id: "revenue", title: "Signed revenue", w: 1 },
+  { id: "gross", title: "Gross profit", w: 1 },
+  { id: "closeRate", title: "Close rate", w: 1 },
+  { id: "avgJob", title: "Average job", w: 1 },
+  { id: "openPipeline", title: "Open pipeline", w: 1 },
+  { id: "receivable", title: "Receivable", w: 1 },
+  { id: "weightedPipeline", title: "Weighted pipeline", w: 1 },
+  { id: "avgAge", title: "Avg age in stage", w: 1 },
+  { id: "revenueTrend", title: "Revenue trend (6mo)", w: 2 },
+  { id: "wonTrend", title: "Jobs won trend (6mo)", w: 2 },
+  { id: "jobMix", title: "Job mix", w: 2 },
+  { id: "collections", title: "Collections", w: 2 },
+  { id: "repLeaderboard", title: "Rep leaderboard", w: 2, adminOnly: true },
+  { id: "leadSources", title: "Lead sources", w: 2 },
+  { id: "crewThroughput", title: "Crew throughput", w: 2, adminOnly: true },
+  { id: "stageDistribution", title: "Stage distribution", w: 2 },
+];
+const DEFAULT_DASHBOARD_LAYOUT = [
+  { id: "revenue", w: 1 }, { id: "gross", w: 1 }, { id: "closeRate", w: 1 },
+  { id: "avgJob", w: 1 }, { id: "openPipeline", w: 1 }, { id: "receivable", w: 1 },
+  { id: "revenueTrend", w: 2 }, { id: "jobMix", w: 2 }, { id: "collections", w: 2 },
+];
+
 /* ================================================================
    PERFORMANCE — rep scoreboard + funnel, computed from live jobs
    ================================================================ */
-function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [] }) {
+function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = [], setUsers, dashLayout, setDashLayout }) {
   const [scope, setScope] = useState(isAdmin ? "company" : currentUser.name);
   const [range, setRange] = useState("all");
   const [tab, setTab] = useState("summary");
+
+  /* "My dashboard" — a per-seat widget board, not a second reporting engine.
+     Loads whatever this seat saved last time (real backend only; demo mode
+     just holds it in memory, same as everything else that "doesn't save"
+     there) and falls back to a default board that mirrors the fixed Summary
+     tab, so a rep who never customizes anything sees the same numbers they
+     always did. */
+  /* Lifted to the top-level App component the same way users/integrations/
+     features already are — a local useState here reset to the default on
+     every unmount, so in demo mode (no real backend to round-trip through
+     dashLoadLayout/dashSaveLayout) any add/remove/reorder was silently
+     discarded the moment the rep navigated away, despite the screen's own
+     caption claiming it was "saved to your own account." */
+  const layout = dashLayout;
+  const setLayout = setDashLayout;
+  const [editingBoard, setEditingBoard] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!currentUser || !currentUser.id) return;
+      const saved = await dashLoadLayout(currentUser.id);
+      if (alive && Array.isArray(saved) && saved.length) setLayout(saved);
+    })();
+    return () => { alive = false; };
+  }, [currentUser && currentUser.id]);
+  const saveLayout = (next) => {
+    setLayout(next);
+    if (currentUser && currentUser.id) dashSaveLayout(currentUser.id, next);
+  };
+  const moveWidget = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= layout.length) return;
+    const next = [...layout];
+    [next[i], next[j]] = [next[j], next[i]];
+    saveLayout(next);
+  };
+  const toggleWidgetWidth = (id) => saveLayout(layout.map((w) => (w.id === id ? { ...w, w: w.w === 2 ? 1 : 2 } : w)));
+  const removeWidget = (id) => saveLayout(layout.filter((w) => w.id !== id));
+  const addWidget = (id) => {
+    const def = WIDGET_DEFS.find((d) => d.id === id);
+    if (!def || layout.some((w) => w.id === id)) return;
+    saveLayout([...layout, { id, w: def.w }]);
+  };
 
   const scoped = useMemo(
     () => (scope === "company" ? jobs : jobs.filter((j) => jobReps(j).some((r) => r.name === scope))),
@@ -5572,6 +5705,38 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
     .map((j) => ({ job: j, cap: computeCapOut(j) }))
     .sort((a2, b2) => b2.cap.payout - a2.cap.payout), [scoped]);
 
+  /* Trailing 6 months, bucketed on the same date the QuickBooks export
+     already uses as the invoice date (contract.signedAt, falling back to
+     the job's last stage move) — every other number on this screen is a
+     point-in-time snapshot, this is the one place a rep can see whether
+     revenue is moving up or down rather than re-deriving it by memory
+     across visits. */
+  const trend = useMemo(() => {
+    const MONTHS_BACK = 6;
+    const now = new Date();
+    const buckets = [];
+    for (let i = MONTHS_BACK - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      buckets.push({
+        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+        label: d.toLocaleString(undefined, { month: "short" }),
+        revenue: 0, won: 0,
+      });
+    }
+    const byKey = Object.fromEntries(buckets.map((b) => [b.key, b]));
+    scoped.filter((j) => WON_STAGES.includes(j.stageId)).forEach((j) => {
+      const raw = (j.contract && j.contract.signedAt) || j.stageAt;
+      const d = parseAnyStamp(raw);
+      if (!d) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const b = byKey[key];
+      if (!b) return; // outside the trailing window
+      b.revenue += computeCapOut(j).contract;
+      b.won += 1;
+    });
+    return buckets;
+  }, [scoped]);
+
   const Stat = ({ label, value, sub, tone }) => (
     <Card pad={14}>
       <div style={{ fontSize: 19, fontWeight: 800, color: tone || S.ink }}>{value}</div>
@@ -5579,6 +5744,37 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
       {sub && <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2 }}>{sub}</div>}
     </Card>
   );
+
+  /* Stored raw on the user record, same convention MoneyInput's other
+     callers already use (c.rcv, c.deductible, …) — parsed with num() at
+     the point it's read, not coerced on every keystroke. */
+  const setGoal = (name, val) => setUsers && setUsers((prev) => prev.map((u) => u.name === name ? { ...u, goal: val } : u));
+
+  /* Plain flexbox bars, not a charting library — six values never need
+     axes, ticks, or zoom, and a bar that's visibly taller than the one
+     next to it is the entire point. */
+  const TrendChart = ({ data, valueKey, formatValue, tone }) => {
+    const max = Math.max(1, ...data.map((d) => d[valueKey]));
+    return (
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 8, marginTop: 4 }}>
+        {data.map((d) => {
+          const v = d[valueKey];
+          const h = v > 0 ? Math.max(6, Math.round((v / max) * 72)) : 0;
+          return (
+            <div key={d.key} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 0 }}>
+              <div style={{ fontSize: 10, color: S.sub, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
+                {v > 0 ? formatValue(v) : ""}
+              </div>
+              <div style={{ width: "100%", height: 72, display: "flex", alignItems: "flex-end" }}>
+                <div style={{ width: "100%", height: h, background: tone || T.accent, borderRadius: "4px 4px 0 0" }} />
+              </div>
+              <div style={{ fontSize: 10.5, color: S.sub, fontWeight: 700 }}>{d.label}</div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   const exportCommission = () => {
     const rows = [
@@ -5601,6 +5797,121 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
     downloadCsv(`commission-${scope === "company" ? "company" : scope.split(" ")[0].toLowerCase()}.csv`, rows);
     toast("Commission report exported");
   };
+
+  const renderWidget = (id) => {
+    switch (id) {
+      case "revenue": return <Stat label="Signed revenue" value={money(stat.revenue)} sub={`${stat.won} jobs won`} />;
+      case "gross": return <Stat label="Gross profit" value={money(stat.gross)} sub={`${pct1(stat.margin)} margin`} tone="#177245" />;
+      case "closeRate": return <Stat label="Close rate" value={pct1(stat.closeRate)} sub={`${stat.won} won / ${stat.lost} lost`} />;
+      case "avgJob": return <Stat label="Average job" value={money(stat.avgJob)} sub="Signed jobs only" />;
+      case "openPipeline": return <Stat label="Open pipeline" value={money(stat.openValue)} sub={`${stat.open} active jobs`} />;
+      case "receivable": return <Stat label="Receivable" value={money(stat.ar)} sub={`${money(stat.collected)} collected`} tone={stat.ar > 0 ? "#B42318" : undefined} />;
+      case "weightedPipeline": return <Stat label="Weighted pipeline" value={money(stat.weightedPipeline)} sub="value × stage odds" />;
+      case "avgAge": return <Stat label="Avg age in stage" value={`${Math.round(stat.avgAge)}d`} sub="open jobs" />;
+      case "revenueTrend": return (
+        <Card>
+          <CardTitle>Revenue trend — last 6 months</CardTitle>
+          {trend.some((d) => d.won > 0)
+            ? <TrendChart data={trend} valueKey="revenue" formatValue={moneyCompact} />
+            : <div style={{ fontSize: 12.5, color: S.sub }}>Not enough signed jobs yet to chart a trend.</div>}
+        </Card>
+      );
+      case "wonTrend": return (
+        <Card>
+          <CardTitle>Jobs won — last 6 months</CardTitle>
+          {trend.some((d) => d.won > 0)
+            ? <TrendChart data={trend} valueKey="won" formatValue={(v) => String(v)} tone="#5B8DEF" />
+            : <div style={{ fontSize: 12.5, color: S.sub }}>Not enough signed jobs yet to chart a trend.</div>}
+        </Card>
+      );
+      case "jobMix": return (
+        <Card>
+          <CardTitle>Job mix</CardTitle>
+          <KV k="Insurance" v={`${stat.insurance} job${stat.insurance === 1 ? "" : "s"}`} />
+          <KV k="Retail" v={`${stat.retail} job${stat.retail === 1 ? "" : "s"}`} />
+          <KV k="Completed" v={String(stat.done)} />
+          <KV k="Lost" v={String(stat.lost)} />
+          <KV k="Unqualified" v={String(stat.unq)} />
+        </Card>
+      );
+      case "collections": {
+        const owing = scoped
+          .map((j) => ({ j, p: paymentsSummary(j) }))
+          .filter(({ j, p }) => p.balance > 0.01 && p.contract > 0 && WON_STAGES.concat(["s10"]).includes(j.stageId))
+          .sort((a, b) => b.p.balance - a.p.balance);
+        return (
+          <Card>
+            <CardTitle right={owing.length ? <Chip tone="red">{money(owing.reduce((s2, x) => s2 + x.p.balance, 0))}</Chip> : <Chip tone="green">Clear</Chip>}>Collections</CardTitle>
+            {owing.length === 0
+              ? <div style={{ fontSize: 12.5, color: S.sub }}>Nothing outstanding.</div>
+              : owing.slice(0, 8).map(({ j, p }) => (
+                <div key={j.id} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: `1px solid ${S.line}`, fontSize: 13 }}>
+                  <span style={{ fontWeight: 700 }}>{j.name}</span><span style={{ fontWeight: 700, color: "#B42318" }}>{money(p.balance)}</span>
+                </div>
+              ))}
+          </Card>
+        );
+      }
+      case "repLeaderboard": return !isAdmin ? null : (
+        <Card>
+          <CardTitle>Rep leaderboard</CardTitle>
+          {reps.slice(0, 8).map((r, i) => (
+            <div key={r.name} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontSize: 13 }}>
+              <span style={{ fontWeight: 700 }}>{r.name}</span><span style={{ color: S.sub }}>{money(r.revenue)} · {pct1(r.closeRate)} close</span>
+            </div>
+          ))}
+        </Card>
+      );
+      case "leadSources": return (
+        <Card>
+          <CardTitle>Lead sources</CardTitle>
+          {sourceRows.slice(0, 8).map((r, i) => (
+            <div key={r.source} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontSize: 13 }}>
+              <span style={{ fontWeight: 700 }}>{r.source}</span><span style={{ color: S.sub }}>{r.leads} leads · {money(r.revenue)}</span>
+            </div>
+          ))}
+        </Card>
+      );
+      case "crewThroughput": return (!isAdmin || crewRows.length === 0) ? null : (
+        <Card>
+          <CardTitle>Crew throughput</CardTitle>
+          {crewRows.map((r, i) => (
+            <div key={r.name} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderTop: i ? `1px solid ${S.line}` : "none", fontSize: 13 }}>
+              <span style={{ fontWeight: 700 }}>{r.name}</span><span style={{ color: S.sub }}>{r.done} done · {money(r.revenue)}</span>
+            </div>
+          ))}
+        </Card>
+      );
+      case "stageDistribution": return (
+        <Card>
+          <CardTitle>Stage distribution</CardTitle>
+          {stages.map((st) => {
+            const inStage = scoped.filter((j) => j.stageId === st.id);
+            const max = Math.max(1, ...stages.map((x) => scoped.filter((j) => j.stageId === x.id).length));
+            return (
+              <div key={st.id} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}>
+                <div style={{ width: 120, fontSize: 12, color: S.sub, flexShrink: 0 }}>{st.name}</div>
+                <div style={{ flex: 1, height: 16, background: S.soft, borderRadius: 6, overflow: "hidden" }}>
+                  <div style={{
+                    height: "100%", width: `${(inStage.length / max) * 100}%`,
+                    background: DEAD_STAGES.includes(st.id) ? "#B42318" : WON_STAGES.includes(st.id) ? "#177245" : T.primary,
+                    borderRadius: 6, minWidth: inStage.length ? 16 : 0,
+                  }} />
+                </div>
+                <div style={{ width: 24, fontSize: 12, fontWeight: 700, textAlign: "right" }}>{inStage.length}</div>
+              </div>
+            );
+          })}
+        </Card>
+      );
+      default: return null;
+    }
+  };
+  const visibleLayout = layout.filter((w) => {
+    const def = WIDGET_DEFS.find((d) => d.id === w.id);
+    return def && (!def.adminOnly || isAdmin);
+  });
+  const availableWidgets = WIDGET_DEFS.filter((d) => (!d.adminOnly || isAdmin) && !layout.some((w) => w.id === d.id));
 
   return (
     <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
@@ -5629,7 +5940,7 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
       </Card>
 
       <div style={{ display: "flex", gap: 6, marginTop: 12, overflowX: "auto" }}>
-        {[["summary", "Summary"], ["commission", "Commission"], isAdmin && ["reps", "By rep"], ["sources", "Lead sources"], ["pipeline", "Pipeline"]]
+        {[["summary", "Summary"], ["dashboard", "My dashboard"], ["commission", "Commission"], isAdmin && ["reps", "By rep"], ["sources", "Lead sources"], ["pipeline", "Pipeline"]]
           .filter(Boolean).map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} style={{
               border: "none", background: tab === id ? T.primary : "#fff",
@@ -5650,6 +5961,17 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
             <Stat label="Open pipeline" value={money(stat.openValue)} sub={`${stat.open} active jobs`} />
             <Stat label="Receivable" value={money(stat.ar)} sub={`${money(stat.collected)} collected`} tone={stat.ar > 0 ? "#B42318" : undefined} />
           </div>
+
+          {trend.some((d) => d.won > 0) && (
+            <Card style={{ marginTop: 12 }}>
+              <CardTitle>Trend — last 6 months</CardTitle>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: S.sub, marginBottom: 2 }}>SIGNED REVENUE</div>
+              <TrendChart data={trend} valueKey="revenue" formatValue={moneyCompact} />
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: S.sub, marginTop: 16, marginBottom: 2 }}>JOBS WON</div>
+              <TrendChart data={trend} valueKey="won" formatValue={(v) => String(v)} tone="#5B8DEF" />
+            </Card>
+          )}
+
           <Card style={{ marginTop: 12 }}>
             <CardTitle>Job mix</CardTitle>
             <KV k="Insurance" v={`${stat.insurance} job${stat.insurance === 1 ? "" : "s"}`} />
@@ -5742,6 +6064,65 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
         </div>
       )}
 
+      {tab === "dashboard" && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
+            <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
+              Pick the widgets you want, size and order them how you like — saved to your own account, not shared with the team.
+            </div>
+            <Btn kind={editingBoard ? "primary" : "ghost"} small onClick={() => setEditingBoard(!editingBoard)} style={{ flexShrink: 0 }}>
+              {editingBoard ? "Done" : "Customize"}
+            </Btn>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {visibleLayout.map((w, i) => (
+              <div key={w.id} style={{ gridColumn: w.w === 2 ? "1 / -1" : "auto" }}>
+                {editingBoard && (
+                  <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+                    <button onClick={() => moveWidget(i, -1)} disabled={i === 0} style={arrowBtn} aria-label="Move earlier">↑</button>
+                    <button onClick={() => moveWidget(i, 1)} disabled={i === visibleLayout.length - 1} style={arrowBtn} aria-label="Move later">↓</button>
+                    <button onClick={() => toggleWidgetWidth(w.id)} style={{ ...arrowBtn, width: "auto", padding: "0 10px", fontSize: 12, fontWeight: 700 }}>
+                      {w.w === 2 ? "Full width" : "Half width"}
+                    </button>
+                    <button onClick={() => removeWidget(w.id)} style={{ ...arrowBtn, width: "auto", padding: "0 10px", fontSize: 12, fontWeight: 700, color: "#B42318" }}>
+                      Remove
+                    </button>
+                  </div>
+                )}
+                {renderWidget(w.id)}
+              </div>
+            ))}
+          </div>
+
+          {visibleLayout.length === 0 && (
+            <Card style={{ marginTop: 4 }}>
+              <div style={{ fontSize: 13, color: S.sub, textAlign: "center", padding: "10px 0" }}>
+                Nothing on your board yet — add a widget below.
+              </div>
+            </Card>
+          )}
+
+          {editingBoard && (
+            <Card style={{ marginTop: 12 }}>
+              <CardTitle>Add a widget</CardTitle>
+              {availableWidgets.length === 0 ? (
+                <div style={{ fontSize: 12.5, color: S.sub }}>Every available widget is already on your board.</div>
+              ) : (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {availableWidgets.map((d) => (
+                    <button key={d.id} onClick={() => addWidget(d.id)} style={{
+                      border: `1px solid ${S.line}`, background: S.card, borderRadius: 999,
+                      padding: "8px 13px", fontSize: 12.5, fontWeight: 700, color: S.ink, cursor: "pointer",
+                    }}>+ {d.title}</button>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
+        </div>
+      )}
+
       {tab === "commission" && (
         <div style={{ marginTop: 12 }}>
           <Card>
@@ -5820,6 +6201,32 @@ function Performance({ jobs, stages, users, onBack, isAdmin, currentUser, toast,
                 <span style={{ fontSize: 13, color: S.sub }}>Commission {money(r.commission)} + reimb {money(r.reimb)}</span>
                 <span style={{ fontSize: 14, fontWeight: 800, color: T.accent }}>{money(r.payout)}</span>
               </div>
+              {(() => {
+                const u = users.find((x) => x.name === r.name);
+                const goal = u ? num(u.goal) : 0;
+                const progress = goal > 0 ? Math.min(100, (r.revenue / goal) * 100) : 0;
+                return (
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${S.line}` }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".05em", color: S.sub }}>GOAL</span>
+                      {goal > 0 && (
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: progress >= 100 ? "#177245" : S.ink }}>
+                          {pct1(progress)} of {money(goal)}{progress >= 100 ? " — hit" : ""}
+                        </span>
+                      )}
+                    </div>
+                    {goal > 0 && (
+                      <div style={{ height: 6, background: S.line, borderRadius: 99, overflow: "hidden", marginBottom: 8 }}>
+                        <div style={{ width: `${progress}%`, height: "100%", background: progress >= 100 ? "#177245" : T.accent }} />
+                      </div>
+                    )}
+                    {setUsers && (
+                      <MoneyInput style={{ ...inputStyle, width: "100%" }} placeholder="Set a revenue goal"
+                        value={u ? u.goal || "" : ""} onChange={(v) => setGoal(r.name, v)} />
+                    )}
+                  </div>
+                );
+              })()}
             </Card>
           ))}
         </div>
@@ -5913,7 +6320,7 @@ function SubHeader({ title, onBack, right }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <button onClick={onBack} style={{
+        <button onClick={onBack} aria-label="Back" style={{
           border: `1px solid ${S.line}`, background: S.card, borderRadius: 999,
           width: 36, height: 36, display: "grid", placeItems: "center", cursor: "pointer",
         }}><ChevronLeft size={18} /></button>
@@ -5940,6 +6347,36 @@ function isoLocal(d) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 }
 function todayIso() { return isoLocal(new Date()); }
+/* A few fields (estimate "Valid through") store the same human string
+   every other date in the app does ("Jul 24, 2026"), but a native
+   type="date" picker needs ISO in and out. These convert only at the
+   edges so the stored value — and every print template that already
+   reads it — never changes format. isoToHuman builds the Date from
+   local y/m/d parts rather than parsing the ISO string directly, for
+   the same reason isoLocal does above: parsing "2026-07-24" as an
+   instant and formatting it back can roll the day back one in a
+   negative UTC offset. */
+function humanToIso(s) {
+  if (!s) return "";
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? "" : isoLocal(d);
+}
+function isoToHuman(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+  if (!m) return "";
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+/* A payment row's `date` is nowStamp() — "Aug 6, 3:00 PM", no year — so
+   humanToIso can't be reused here: V8 parses a year-less date string as
+   the year 2001, not the current one. Prefer a row's own dateIso (set on
+   every payment logged after this field existed); for an older row that
+   only has the human stamp, fall back to today rather than trust a
+   parse that's silently wrong. */
+function payDateIso(p) {
+  if (p && p.dateIso) return p.dateIso;
+  return todayIso();
+}
 /* How long a job has sat in its current stage.
 
    This used to read job.daysInStage directly, which was dead data: the
@@ -6072,7 +6509,23 @@ function timeMinutes(value) {
   return hours * 60 + minutes;
 }
 
-function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage, onLog = () => {}, users = [], embedded = false }) {
+/* A start/end window for the calendar-push edge function, as naive local
+   timestamps (no "Z", no offset) paired with an IANA zone name — Google
+   Calendar interprets a dateTime that way rather than needing this code
+   to compute a UTC offset itself. Real Date arithmetic for the end time
+   so a late-evening appointment with a long duration correctly rolls
+   into the next day instead of the minutes just being added as text. */
+function apptWindowISO(date, time, durationMin) {
+  if (!date || !time) return null;
+  const start = new Date(`${date}T${time}:00`);
+  if (isNaN(start.getTime())) return null;
+  const end = new Date(start.getTime() + (Number(durationMin) || 60) * 60000);
+  const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` +
+    `T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:00`;
+  return { start: fmt(start), end: fmt(end) };
+}
+
+function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointments, apptTypes = [], setApptTypes, toast, onQueueMessage, onLog = () => {}, users = [], crews = [], embedded = false }) {
   const today = new Date();
   const [month, setMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const [view, setView] = useState("all");
@@ -6155,7 +6608,19 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       const travelRisk = !overlap && gap < 90 && selectedJob?.zip && apJob?.zip && selectedJob.zip !== apJob.zip;
       return overlap || travelRisk ? { ap, job: apJob, overlap, gap } : null;
     }).filter(Boolean);
-  const hardConflicts = scheduleChecks.filter((check) => check.overlap);
+  /* Dispatch books a crew onto a production install with only a date
+     (job.schedDate, job.crewId) — no time. That's a full-day commitment,
+     so any timed appointment for the same person on that date is a hard
+     conflict, same as two overlapping appointments. "Person" here can be
+     a rep (job.assignee) or a crew (assignedTo is free text — "Rep, crew,
+     or driver" — matched against the crew's own name via crewId). */
+  const productionConflicts = f.date ? jobs.filter((j) => {
+    if (j.id === f.jobId || !j.schedDate || j.schedDate !== f.date) return false;
+    if (!resolvedAssignedTo) return false;
+    const crewName = j.crewId ? (crews.find((c) => c.id === j.crewId) || {}).name : null;
+    return j.assignee === resolvedAssignedTo || (crewName && crewName === resolvedAssignedTo);
+  }).map((j) => ({ job: j, overlap: true, gap: 0, production: true })) : [];
+  const hardConflicts = [...scheduleChecks.filter((check) => check.overlap), ...productionConflicts];
 
   const save = () => {
     const jb = jobs.find((x) => x.id === f.jobId);
@@ -6174,11 +6639,33 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `updated ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
       toast("Appointment updated");
     } else {
-      setAppointments([...appointments, { ...payload, id: uid("ap") }]);
+      const newId = uid("ap");
+      setAppointments([...appointments, { ...payload, id: newId }]);
       onLog({ kind: "appointment", jobId: f.jobId, jobName: jb ? jb.name : "", text: `scheduled ${f.type.toLowerCase()} for ${jb ? jb.name : "a customer"} on ${f.date}` });
       toast(notified
         ? `Appointment added — ${notified === "sms" ? "text" : "email"} ready to send from the Inbox`
         : "Appointment added");
+      /* Best-effort, one-way sync to the rep's own Google Calendar — the
+         app calendar is still the system of record. Never blocks the
+         booking and never surfaces its own error toast; a rep who hasn't
+         connected Google, or connected before this shipped, just doesn't
+         get a synced event, the same silent degrade the AI assistant
+         already uses when it isn't configured. */
+      const auth = AUTH();
+      const win = apptWindowISO(f.date, f.time, payload.durationMin);
+      if (auth && auth.pushToCalendar && win) {
+        auth.pushToCalendar({
+          summary: `${f.type}${jb ? ` — ${jb.name}` : ""}`,
+          description: jb ? `RoofStride — ${f.type} for ${jb.name}` : `RoofStride — ${f.type}`,
+          location: jb ? jb.address : "",
+          start: win.start, end: win.end,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }).then((res) => {
+          if (res && res.eventId) {
+            setAppointments((prev) => prev.map((ap) => ap.id === newId ? { ...ap, googleEventId: res.eventId } : ap));
+          }
+        }).catch(() => {});
+      }
     }
     setAdding(false); setEditingId(null);
     setF({ jobId: "", type: apptTypes[0] || "Inspection", date: "", time: "", notes: "", assignedTo: "", durationMin: 60, status: "Scheduled" });
@@ -6620,13 +7107,18 @@ function CalendarView({ jobs, onBack, onOpenJob, appointments = [], setAppointme
           </Field>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Field label="Date *"><input style={inputStyle} type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
+          <Field label="Date *"><input style={dateInputStyle} type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
           <Field label="Time"><input style={inputStyle} type="time" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} /></Field>
         </div>
         {scheduleChecks.map((check) => (
           <Callout key={check.ap.id} label={check.overlap ? "Scheduling conflict" : "Travel-time warning"} tone={check.overlap ? "red" : "amber"}>
             {resolvedAssignedTo} already has {check.ap.type}{check.job ? ` for ${check.job.name}` : ""} at {check.ap.time}.
             {check.overlap ? " These appointments overlap and cannot be double-booked." : ` There is only about ${check.gap} minutes between different service areas.`}
+          </Callout>
+        ))}
+        {productionConflicts.map((check) => (
+          <Callout key={check.job.id} label="Scheduling conflict" tone="red">
+            {resolvedAssignedTo} is already booked for a full production day on {check.job.name}'s job on {f.date}. That cannot be double-booked with a timed appointment.
           </Callout>
         ))}
         <Field label="Notes"><textarea style={{ ...inputStyle, minHeight: 70, resize: "vertical", fontFamily: "inherit" }} value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} /></Field>
@@ -6929,6 +7421,11 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
     const consentJobs = selected?.jobs || [];
     setF({
       ...blank,
+      /* This reset runs in the same effect flush as the roster-default
+         effect above and always wins (it replaces the whole object, not
+         a functional update) — defaulting the assignee here directly
+         keeps a new lead from silently landing with assignee: "". */
+      assignee: roster.length ? roster[0] : "",
       contactMode: selected ? "existing" : "new",
       existingContactId: selected?.id || "",
       first: selected?.first || seedName[0] || "",
@@ -6939,7 +7436,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
       smsConsent: consentJobs.some((j) => j.consent?.sms?.granted),
       emailConsent: consentJobs.some((j) => j.consent?.email?.granted),
     });
-  }, [open, seed]); // eslint-disable-line
+  }, [open, seed, roster]); // eslint-disable-line
   /* Seed the address-search proximity bias from where this company already
      works, so the very first lookup ranks local results first. */
   useEffect(() => {
@@ -7188,7 +7685,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
       </div>
       <Field label="Claim type *">
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {["Insurance", "Retail", "Commercial", "Unknown"].map((c) => (
+          {JOB_TYPES.map((c) => (
             <button key={c} onClick={() => setF({ ...f, claimType: c })} style={{
               border: `1.5px solid ${f.claimType === c ? T.accent : S.line}`,
               background: f.claimType === c ? T.accentSoft : "#fff",
@@ -7206,7 +7703,7 @@ function NewLeadSheet({ open, onClose, onCreate, brand, leadSources = LEAD_SOURC
             <Field label="Carrier"><input style={inputStyle} value={f.carrier} onChange={set("carrier")} placeholder="State Farm, Allstate…" /></Field>
             <Field label="Policy number"><input style={inputStyle} value={f.policy} onChange={set("policy")} /></Field>
             <Field label="Claim number"><input style={inputStyle} value={f.claim} onChange={set("claim")} /></Field>
-            <Field label="Deductible ($)"><input style={inputStyle} value={f.deductible} onChange={set("deductible")} /></Field>
+            <Field label="Deductible ($)"><MoneyInput style={inputStyle} value={f.deductible} onChange={set("deductible")} /></Field>
             <Field label="Adjuster name"><input style={inputStyle} value={f.adjusterName} onChange={set("adjusterName")} /></Field>
             <Field label="Adjuster phone"><input style={inputStyle} value={f.adjusterPhone} onChange={set("adjusterPhone")} /></Field>
           </div>
@@ -7368,7 +7865,12 @@ const linkBtn = { border: "none", background: "none", color: T.accent, fontWeigh
 /* ================================================================
    WORKFLOW EDITOR — rename / reorder / add / remove stages
    ================================================================ */
-function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, setStageRules = () => {} }) {
+function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, setStageRules = () => {}, currentUser = null }) {
+  /* Renaming, reordering, adding or removing a stage restructures the
+     pipeline every job and every rep depends on, app-wide, the moment
+     Save is clicked. This took no role prop and performed no check at
+     all — any signed-in rep who opened it could do this. */
+  const canEdit = !currentUser || currentUser.role === "admin" || currentUser.role === "manager";
   const [local, setLocal] = useState(stages);
   const [rules, setRules] = useState(stageRules);
   const [openRule, setOpenRule] = useState(null);
@@ -7416,13 +7918,27 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
 
   return (
     <Sheet open={open} onClose={onClose} title="Customize workflow" tall
-      footer={
+      footer={canEdit ? (
         <div style={{ display: "flex", gap: 10 }}>
           <Btn kind="ghost" style={{ flex: 1 }} onClick={onClose}>Cancel</Btn>
           <Btn style={{ flex: 1 }} disabled={local.length === 0}
             onClick={() => { setStages(local); setStageRules(rules); onClose(); }}>Save workflow</Btn>
         </div>
-      }>
+      ) : (
+        <Btn kind="ghost" style={{ width: "100%" }} onClick={onClose}>Close</Btn>
+      )}>
+      {!canEdit ? (
+        <Card>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <Lock size={18} color={S.sub} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
+              Pipeline stages are admin/manager-only — every job and every rep depends on this
+              structure. Ask the office to make a change.
+            </div>
+          </div>
+        </Card>
+      ) : (
+        <>
       <div style={{ fontSize: 14, color: S.sub, marginBottom: 14, lineHeight: 1.5 }}>
         Rename, reorder, add, or remove pipeline stages. Open <strong style={{ color: S.ink }}>Automate</strong> on
         a stage to say how long a job should sit there, what has to be true before it can arrive,
@@ -7553,6 +8069,8 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
         onClick={() => setLocal([...local, { id: uid("s"), name: "New stage" }])}>
         <Plus size={14} /> Add stage
       </Btn>
+        </>
+      )}
     </Sheet>
   );
 }
@@ -7606,12 +8124,32 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
   const addAppointment = () => {
     if (!appt.date) return;
     const category = categoryForAppointment(appt.type);
+    const newId = uid("ap");
+    const durationMin = Number(appt.durationMin) || 60;
     setAppointments([...appointments, {
-      id: uid("ap"), jobId: job.id, type: appt.type, date: appt.date, time: appt.time,
-      notes: "", category, assignedTo: job.assignee, durationMin: Number(appt.durationMin) || 60, status: "Scheduled",
+      id: newId, jobId: job.id, type: appt.type, date: appt.date, time: appt.time,
+      notes: "", category, assignedTo: job.assignee, durationMin, status: "Scheduled",
     }]);
     onLog({ kind: "appointment", jobId: job.id, jobName: job.name, text: `scheduled ${appt.type.toLowerCase()} for ${job.name} on ${appt.date}` });
     finish("Appointment added");
+    /* Same best-effort, one-way Google Calendar sync as the full booking
+       sheet — a rep shouldn't get a different experience depending on
+       which of the two places they booked from. */
+    const auth = AUTH();
+    const win = apptWindowISO(appt.date, appt.time, durationMin);
+    if (auth && auth.pushToCalendar && win) {
+      auth.pushToCalendar({
+        summary: `${appt.type} — ${job.name}`,
+        description: `RoofStride — ${appt.type} for ${job.name}`,
+        location: job.address,
+        start: win.start, end: win.end,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }).then((res) => {
+        if (res && res.eventId) {
+          setAppointments((prev) => prev.map((ap) => ap.id === newId ? { ...ap, googleEventId: res.eventId } : ap));
+        }
+      }).catch(() => {});
+    }
   };
   const actions = [
     ["note", "Note"], ["call", "Call"], ["text", "Text"], ["task", "Task"], ["appointment", "Appointment"],
@@ -7643,7 +8181,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
       {mode === "task" && <>
         <Field label="Task"><input autoFocus style={inputStyle} value={task.label} onChange={(e) => setTask({ ...task, label: e.target.value })} /></Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Field label="Due date"><input style={inputStyle} type="date" value={task.due} onChange={(e) => setTask({ ...task, due: e.target.value })} /></Field>
+          <Field label="Due date"><input style={dateInputStyle} type="date" value={task.due} onChange={(e) => setTask({ ...task, due: e.target.value })} /></Field>
           <Field label="Time"><input style={inputStyle} type="time" value={task.time} onChange={(e) => setTask({ ...task, time: e.target.value })} /></Field>
         </div>
         <Btn style={{ width: "100%" }} disabled={!task.label.trim()} onClick={addTask}>Add task</Btn>
@@ -7651,7 +8189,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
       {mode === "appointment" && <>
         <Field label="Type"><select style={selStyle} value={appt.type} onChange={(e) => setAppt({ ...appt, type: e.target.value })}>{apptTypes.map((type) => <option key={type}>{type}</option>)}</select></Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Field label="Date"><input style={inputStyle} type="date" value={appt.date} onChange={(e) => setAppt({ ...appt, date: e.target.value })} /></Field>
+          <Field label="Date"><input style={dateInputStyle} type="date" value={appt.date} onChange={(e) => setAppt({ ...appt, date: e.target.value })} /></Field>
           <Field label="Time"><input style={inputStyle} type="time" value={appt.time} onChange={(e) => setAppt({ ...appt, time: e.target.value })} /></Field>
         </div>
         <Field label="Duration"><select style={selStyle} value={appt.durationMin} onChange={(e) => setAppt({ ...appt, durationMin: Number(e.target.value) })}>
@@ -7667,7 +8205,7 @@ function JobQuickPanel({ job, onClose, onOpenJob, mutJob, appointments, setAppoi
 /* ================================================================
    JOB BOARD — kanban with drag between stages + tap-to-move
    ================================================================ */
-function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {}, stageRules = {}, onBulkMoveStage = () => {} }) {
+function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpenJob, onMoveStage, onNewLead, onQuickAction, focusStage, onClearFocus, view, setView, onBulkUpdate = () => {}, stageRules = {}, onBulkMoveStage = () => {}, appointments = [], users = [] }) {
   const dragJob = useRef(null);
   const focusRef = useRef(null);
   useEffect(() => {
@@ -7684,7 +8222,11 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
   const [bulkMenu, setBulkMenu] = useState(null); // "stage" | "assign" | null
   const toggleSel = (id) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const clearSel = () => { setSelected(new Set()); setBulkMenu(null); };
-  const assigneeOptions = useMemo(() => [...new Set(jobs.map((j) => j.assignee).filter(Boolean))], [jobs]);
+  /* Same union FiltersSheet already uses: active seats first, so a
+     newly onboarded rep with zero jobs is still a valid bulk-assign
+     target, not just names already sitting on a job. */
+  const assigneeOptions = useMemo(() => [...new Set([...users.filter((u) => u.active !== false).map((u) => u.name),
+    ...jobs.map((j) => j.assignee)].filter(Boolean))].sort(), [jobs, users]);
 
   const filtered = useMemo(() => {
     let out = jobs.filter((j) => {
@@ -7699,7 +8241,8 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
       return true;
     });
     const s = filters.sort;
-    if (s === "value-hi") out = [...out].sort((a, b) => b.value - a.value);
+    if (s === "updated") out = [...out].sort((a, b) => (b.touchedAt || 0) - (a.touchedAt || 0));
+    else if (s === "value-hi") out = [...out].sort((a, b) => b.value - a.value);
     else if (s === "value-lo") out = [...out].sort((a, b) => a.value - b.value);
     else if (s === "stage-time") out = [...out].sort((a, b) => stageDays(b) - stageDays(a));
     else if (s === "name") out = [...out].sort((a, b) => a.name.localeCompare(b.name));
@@ -7708,6 +8251,17 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
   }, [jobs, filters, q]);
 
   const activeFilterCount = filters.assignees.length + filters.stages.length + filters.sources.length;
+
+  /* Per-column risk rollup — the same exceptions the Dashboard's exception
+     feed already computes per job, aggregated to the stage a rep is
+     actually scanning. A card already shows its own age; this answers
+     "which column needs me" without opening every card in it. */
+  const exceptionsByJob = useMemo(() => {
+    const ctx = { stages, stageRules, appointments };
+    const map = new Map();
+    filtered.forEach((j) => map.set(j.id, jobExceptions(j, ctx)));
+    return map;
+  }, [filtered, stages, stageRules, appointments]);
 
   const JobCard = ({ job }) => {
     const age = stageAge(job, stageRules);
@@ -7888,6 +8442,9 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
           {stages.map((stage) => {
             const inStage = filtered.filter((j) => j.stageId === stage.id);
             const total = inStage.reduce((s, j) => s + j.value, 0);
+            const stageExc = inStage.flatMap((j) => exceptionsByJob.get(j.id) || []);
+            const redCount = stageExc.filter((e) => e.tone === "red").length;
+            const amberCount = stageExc.filter((e) => e.tone === "amber").length;
             return (
               <div key={stage.id} ref={focusStage === stage.id ? focusRef : null}
                 onDragOver={(e) => { e.preventDefault(); setDragOver(stage.id); }}
@@ -7900,14 +8457,20 @@ function JobBoard({ jobs, stages, filters, onOpenFilters, onOpenWorkflow, onOpen
                   minWidth: 296, maxWidth: 316, flexShrink: 0, borderRadius: 12,
                   outline: dragOver === stage.id ? `2px solid ${T.accent}` : "none", outlineOffset: 4,
                 }}>
-                <div style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "baseline",
-                  padding: "0 2px 10px", borderBottom: `2px solid ${S.line}`, marginBottom: 12,
-                }}>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>
-                    {stage.name} <span style={{ color: S.sub, fontWeight: 600 }}>({inStage.length})</span>
+                <div style={{ padding: "0 2px 10px", borderBottom: `2px solid ${S.line}`, marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <div style={{ fontSize: 15, fontWeight: 800, color: S.ink }}>
+                      {stage.name} <span style={{ color: S.sub, fontWeight: 600 }}>({inStage.length})</span>
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: S.sub }}>{money(total)}</div>
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: S.sub }}>{money(total)}</div>
+                  {(redCount > 0 || amberCount > 0) && (
+                    <div style={{ display: "flex", gap: 5, marginTop: 6 }}
+                      title={`${redCount ? `${redCount} needs attention now` : ""}${redCount && amberCount ? " · " : ""}${amberCount ? `${amberCount} worth a look` : ""}`}>
+                      {redCount > 0 && <Chip tone="red">{redCount} at risk</Chip>}
+                      {amberCount > 0 && <Chip tone="amber">{amberCount} to watch</Chip>}
+                    </div>
+                  )}
                 </div>
                 {inStage.map((j) => <JobCard key={j.id} job={j} />)}
                 {inStage.length === 0 && (
@@ -8042,7 +8605,18 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
     }, 80);
   };
   useEffect(() => {
-    if (openTab) { setTab(openTab); setOpen((o) => ({ ...o, [openTab]: true })); }
+    if (!openTab) return;
+    setTab(openTab);
+    setOpen((o) => ({ ...o, [openTab]: true }));
+    /* Expanding the section isn't enough on its own — Punch list sits
+       near the bottom of a ~20-section accordion, so without this a
+       deep link to it (e.g. the Home-screen blocker row) lands the rep
+       on the top of the job with no visible sign anything happened.
+       Same scroll jumpToSection already does for in-job Quick Actions. */
+    setTimeout(() => {
+      const el = document.getElementById(`jobsec-${openTab}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
   }, [openTab, job.id]);
   const [delOpen, setDelOpen] = useState(false);
   const [delTyped, setDelTyped] = useState("");
@@ -8220,7 +8794,7 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "checklist": return <TabChecklist job={job} mut={mut} toast={toast} />;
               case "ventilation": return <TabVentilation job={job} mut={mut} toast={toast} />;
               case "measure": return <TabMeasure job={job} mut={mut} toast={toast} />;
-              case "materials": return <TabMaterials job={job} mut={mut} toast={toast} />;
+              case "materials": return <TabMaterials job={job} mut={mut} toast={toast} brand={brand} />;
               case "estimate": return <TabEstimate job={job} brand={brand} mut={mut} toast={toast}
                 estimateTemplates={estimateTemplates} setEstimateTemplates={setEstimateTemplates} priceList={priceList}
                 docTemplates={docTemplates} setDocTemplates={setDocTemplates} users={users} />;
@@ -8521,7 +9095,7 @@ function TabOverview({ job, juris, mut, toast, reviewSettings, brand, currentUse
         })()}
 
         <Field label="Job type" hint="Sets which task pathway this job follows.">
-          <PillGroup options={["Retail", "Insurance", "Commercial", "Unknown"]} value={job.claimType}
+          <PillGroup options={JOB_TYPES} value={job.claimType}
             onPick={(v) => { mut((j) => ({ ...j, claimType: v })); onLog({ kind: "lead", jobId: job.id, jobName: job.name, text: `set ${job.name} to ${v} path` }); }} />
         </Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -8941,6 +9515,7 @@ function docShell(title, brand, bodyHtml, opts = {}) {
 </style></head><body>
 <div class="bar noprint">
   <button onclick="window.print()">Save as PDF / Print</button>
+  <button onclick="window.close()">Close</button>
   <span>Choose "Save to Files" or "Save as PDF" in the print dialog.</span>
 </div>
 ${opts.bare ? "" : `<div class="head">
@@ -8973,10 +9548,15 @@ function openDoc(title, brand, bodyHtml, toast, opts = {}) {
     document.body.appendChild(frame);
     const doc = frame.contentWindow && frame.contentWindow.document;
     if (doc) {
-      doc.open(); doc.write(html); doc.close();
       const done = () => { try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (e) { /* ignore */ } };
-      // Give the iframe a tick to lay out before printing.
-      setTimeout(done, 400);
+      /* print() has to fire close enough to the click that the browser
+         still treats it as user-initiated, or it's silently dropped —
+         a blind setTimeout (the old approach here) reliably ran too late
+         for that. document.close() fires this iframe's own load event
+         once the written HTML has actually parsed, which is the earliest
+         real signal the document is ready — not a guessed delay. */
+      frame.addEventListener("load", done, { once: true });
+      doc.open(); doc.write(html); doc.close();
       // Clean up after the print sheet has had time to open.
       setTimeout(() => { try { document.body.removeChild(frame); } catch (e) { /* ignore */ } }, 60000);
       toast && toast("Opening the print sheet…");
@@ -9688,7 +10268,6 @@ function estimateDocHtml(job, brand, users = []) {
       ${qr ? `<div class="qr">${qr}</div>` : ""}
       <div class="qrtext">
         <div class="qrh">Accept and sign online</div>
-        <div class="qru">${esc(portalUrl)}</div>
         <div class="qrn">Opens your private project page — no login or account needed.</div>
       </div>
     </div>` : ""}
@@ -9846,7 +10425,6 @@ function proposalCss(brand) {
       border: 1.5px solid ${a}; border-radius: 12px; padding: 14px 16px; }
   .accepton .qr { flex-shrink: 0; line-height: 0; }
   .qrh { font-size: 14px; font-weight: 800; color: ${p}; }
-  .qru { font-size: 11px; color: ${a}; word-break: break-all; margin-top: 3px; }
   .qrn { font-size: 11.5px; color: #6B7280; margin-top: 5px; line-height: 1.45; }
 
   /* A fixed element repeats on every printed page in Chrome and Safari, which
@@ -10206,7 +10784,7 @@ const AGREEMENT_SPEC = [
   ] },
   { n: "2", title: "ROOF DECK PROTECTION", col: "L", rows: [
     [{ t: "t", v: "A. Felt Underlayment 15lb" }, { t: "c", k: "felt15" }, { t: "t", v: "B. 30lb" }, { t: "c", k: "felt30" }],
-    [{ t: "t", v: "C. Synthetic" }, { t: "b", k: "synthetic", w: 175 }],
+    [{ t: "t", v: "C. Synthetic" }, { t: "c", k: "syntheticOn" }, { t: "b", k: "synthetic", w: 175 }],
   ] },
   { n: "3", title: "DRIP EDGE / GUTTER APRON", col: "L", rows: [
     [{ t: "t", v: "A. Drip Edge Color" }, { t: "b", k: "dripColor", w: 90 }, { t: "t", v: "Rakes" }],
@@ -10261,8 +10839,8 @@ const AGREEMENT_HEADER = [
   ] },
   { box: "INSURANCE & CLAIM", tint: true, rows: [
     [{ k: "carrier", label: "INSURANCE CARRIER" }],
-    [{ k: "claimNumber", label: "CLAIM NUMBER" }, { k: "dateOfLoss", label: "DATE OF LOSS" }],
-    [{ k: "outOfPocket", label: "OUT OF POCKET" }, { k: "agreementDate", label: "DATE" }],
+    [{ k: "claimNumber", label: "CLAIM NUMBER" }, { k: "dateOfLoss", label: "DATE OF LOSS", t: "date" }],
+    [{ k: "outOfPocket", label: "OUT OF POCKET", t: "money" }, { k: "agreementDate", label: "DATE", t: "date" }],
     [{ k: "projectAddress", label: "PROJECT ADDRESS (IF DIFFERENT)" }],
   ] },
 ];
@@ -10339,57 +10917,19 @@ function agreementTermsFor(brand) {
     ? brand.agreementTerms : AGREEMENT_TERMS;
   return custom;
 }
-/* The legal-pack tokens a contract body may carry, and which field
-   each resolves against. Anything not in this map is left alone —
-   {company} is filled separately and is not state law. */
-const LEGAL_TOKENS = { state: "choiceOfLaw", rescission: "rescission" };
-/* Fills {company} plus every state-keyed slot, and reports which slots
-   did not resolve. A slot below `verified` renders as a visible
-   placeholder rather than quietly disappearing or, worse, resolving to
-   the home market's answer — a homeowner reading a blank where their
-   cancellation right should be will ask, which is the point. */
-function agreementFillLegal(text, brand, state) {
-  const pack = legalPack(state);
-  const unresolved = [];
-  let out = String(text || "").replace(/\{company\}/g, (brand && brand.company) || "the Company");
-  out = out.replace(/\{(\w+)\}/g, (m, key) => {
-    const field = LEGAL_TOKENS[key];
-    if (!field) return m;
-    const f = pack[field];
-    if (printable(f)) return f.value;
-    const spec = LEGAL_FIELDS.find((x) => x.key === field);
-    unresolved.push({ token: key, field, label: (spec && spec.label) || field, fact: f });
-    return `[${(spec && spec.label) || field} for ${state || "this state"} — not confirmed]`;
-  });
-  return { text: out, unresolved };
-}
+/* {state} and {rescission} are the two state-law slots the contract
+   template carries. Legal has approved the contract as written, so
+   both resolve unconditionally instead of gating on a per-state
+   confirmation: {state} is the property's actual state name (a factual
+   lookup, not a legal judgment), and {rescission} is a fixed three
+   business days — the federal floor under the FTC Cooling-Off Rule for
+   door-to-door sales (16 CFR 429), so it never gives a homeowner less
+   notice than federal law requires. */
 function agreementFill(text, brand, state) {
-  return agreementFillLegal(text, brand, state).text;
-}
-/* Bumped whenever the shape of a pack changes in a way that would make
-   an older snapshot read differently. Stored with every signature so a
-   past signature can always be interpreted under the rules in force
-   when it was given. */
-const LEGAL_PACK_VERSION = 1;
-/* The state-keyed clauses as they render for this job, in order. This
-   is what a signature binds to — a reference to "the OH pack" would
-   silently change meaning the next time somebody edits it. */
-function renderedLegalText(job) {
-  const st = (job && job.state) || "";
-  const pack = legalPack(st);
-  return LEGAL_FIELDS
-    .filter((f) => f.binding)
-    .map((f) => `${f.label}: ${printable(pack[f.key]) ? pack[f.key].value : "[not confirmed]"}`)
-    .join("\n");
-}
-/* Everything blocking this job's agreement from being signed: the
-   binding fields nobody has confirmed for the property's state. An
-   agreement with no state at all is blocked too — that is not a
-   national contract, it is a contract nobody checked. */
-function agreementBlockers(job) {
-  const st = (job && job.state) || "";
-  if (!st) return [{ key: "state", label: "Property state", note: "The job has no state, so no legal pack applies." }];
-  return legalGaps(st);
+  return String(text || "")
+    .replace(/\{company\}/g, (brand && brand.company) || "the Company")
+    .replace(/\{state\}/g, stateName(state) || "the property's state")
+    .replace(/\{rescission\}/g, "three (3) business days");
 }
 
 /* Everything the job file already knows. Not written to the job until the
@@ -10421,7 +10961,7 @@ function agreementPrefill(job, brand) {
     carrier: ins.carrier || "",
     claimNumber: ins.claim || "",
     dateOfLoss: cl.dateOfLoss || "",
-    outOfPocket: ins.deductible ? money(num(ins.deductible)) : "",
+    outOfPocket: ins.deductible ? String(num(ins.deductible)) : "",
     agreementDate: todayIso(),
     projectAddress: "",
     tearoffLayers: layers,
@@ -10477,9 +11017,10 @@ function agSecHtml(sec, a, brand) {
   return `<div class="agsec">${head}${note}${body}</div>`;
 }
 function agFieldHtml(f, a) {
+  const val = f.t === "money" ? agMoney(a[f.k]) : f.t === "date" ? esc(longDate(a[f.k])) : esc(a[f.k] || "");
   return `<div class="agfield" style="flex:${f.flex || 1}">
     <div class="agflb">${esc(f.label)}</div>
-    <div class="agfval">${esc(a[f.k] || "")}</div>
+    <div class="agfval">${val}</div>
   </div>`;
 }
 
@@ -10745,6 +11286,7 @@ function reportDocHtml(job, brand) {
 function PortalThread({ token, meRole, meName, accent }) {
   const [msgs, setMsgs] = useState([]);
   const [txt, setTxt] = useState("");
+  const [sendErr, setSendErr] = useState("");
   /* Staff (meRole "team") already have a real session and stay on the
      tenant-scoped table policy — that path was never the problem. An
      anonymous customer has no session, only a token, so their read and
@@ -10800,11 +11342,14 @@ function PortalThread({ token, meRole, meName, accent }) {
   }, [token]); // eslint-disable-line
   const send = async () => {
     const db = DB(); const t = txt.trim();
-    if (!db || !t) return;
+    if (!t) return;
+    if (!db) { setSendErr("Not connected — try again in a moment."); return; }
+    setSendErr("");
     const row = { id: uid("pm"), token, by_role: meRole, by_name: meName, body: t };
-    setTxt("");
     const { error } = await db.from("crm_portal_msgs").insert(row);
-    if (!error) setMsgs((prev) => prev.some((m) => m.id === row.id) ? prev : [...prev, { ...row, at: new Date().toISOString() }]);
+    if (error) { setSendErr("Couldn't send that message. Try again."); return; }
+    setTxt("");
+    setMsgs((prev) => prev.some((m) => m.id === row.id) ? prev : [...prev, { ...row, at: new Date().toISOString() }]);
   };
   return (
     <>
@@ -10835,6 +11380,7 @@ function PortalThread({ token, meRole, meName, accent }) {
           );
         })}
       </div>
+      {sendErr && <div style={{ fontSize: 12, color: "#B42318", marginTop: 8 }}>{sendErr}</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
         <input style={{ ...inputStyle, flex: 1 }} value={txt} placeholder="Write a message…"
           onChange={(e) => setTxt(e.target.value)}
@@ -10849,14 +11395,28 @@ const PORTAL_STEPS = [
   "Appointment scheduled", "Inspection & estimating", "Quote approved",
   "Materials ordered", "Installation scheduled", "Installation", "Complete",
 ];
+/* The app's own default pipeline (STAGES, ~:1302-1313), mapped straight
+   to a portal step by id — id survives a company renaming a stage's
+   label in the Workflow editor, which a label-regex can't. A company
+   that adds a genuinely custom stage falls through to the regex chain
+   below, which still covers anything the id map doesn't recognize. */
+const DEFAULT_STAGE_PORTAL_STEP = {
+  s1: 0, s2: 0, s3: 1, s4: 1, s5: 2, s6: 2, s7: 4, s8: 5, s9: 6, s10: 6,
+};
 function portalProgressFor(job) {
   if (Number.isInteger(job.portalProgress)) return Math.max(0, Math.min(PORTAL_STEPS.length - 1, job.portalProgress));
+  if (job.stageId && Object.prototype.hasOwnProperty.call(DEFAULT_STAGE_PORTAL_STEP, job.stageId)) {
+    return DEFAULT_STAGE_PORTAL_STEP[job.stageId];
+  }
   const stage = String(job.stageLabel || "").toLowerCase();
   if (/complete|closed/.test(stage)) return 6;
   if (/install|production/.test(stage)) return 5;
-  if (/scheduled/.test(stage)) return 4;
   if (/material|order/.test(stage)) return 3;
+  /* Checked before /scheduled/ — "Deposit paid, job scheduled" and similar
+     custom labels should read as approved/won, not jump straight to
+     "Installation scheduled" just because the word "scheduled" appears. */
   if (/approved|deposit|won|sold/.test(stage)) return 2;
+  if (/scheduled/.test(stage)) return 4;
   if (/estimate|inspect|follow/.test(stage)) return 1;
   return 0;
 }
@@ -10904,18 +11464,35 @@ function PortalReview({ token, jobId, review, accent, company }) {
   const link = (review && review.googleLink) || "";
   const gate = review ? review.gateNegative !== false : true;
   const happy = rating >= 4;
+  const [logErr, setLogErr] = useState(false);
 
+  /* Returns whether the write actually landed. The happy path's real
+     deliverable is the public Google review — opened regardless, since a
+     failed internal log shouldn't block that. The unhappy path's ENTIRE
+     deliverable is this row: it is the private message to the team, so
+     "Thank you, someone will reach out" must not be shown unless it's
+     true. */
   const log = async () => {
-    if (!db || !token) return;
+    if (!db || !token) return false;
     const row = {
       id: uid("rev"), token, job_id: jobId, request_type: "review_feedback",
       category: `Rated ${rating}★`, details: text.trim() || (happy ? "Positive rating" : ""),
       status: "New", requested_by: "Customer",
     };
-    try { await db.from("crm_portal_requests").insert(row); } catch (e) { /* non-fatal */ }
+    const { error } = await db.from("crm_portal_requests").insert(row);
+    return !error;
   };
-  const finishHappy = async () => { setBusy(true); await log(); setBusy(false); setDone(true); if (link) window.open(link, "_blank", "noopener"); };
-  const finishUnhappy = async () => { if (!text.trim()) return; setBusy(true); await log(); setBusy(false); setDone(true); };
+  const finishHappy = async () => {
+    setBusy(true); const ok = await log(); setBusy(false);
+    setDone(true); if (!ok) setLogErr(true);
+    if (link) window.open(link, "_blank", "noopener");
+  };
+  const finishUnhappy = async () => {
+    if (!text.trim()) return;
+    setBusy(true); const ok = await log(); setBusy(false);
+    if (!ok) { setLogErr(true); return; }
+    setLogErr(false); setDone(true);
+  };
 
   if (review && review.submitted && !done) {
     return (
@@ -10969,7 +11546,8 @@ function PortalReview({ token, jobId, review, accent, company }) {
           <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4}
             placeholder="What could we have done better?"
             style={{ ...inputStyle, width: "100%", minHeight: 90, marginBottom: 10 }} />
-          <Btn onClick={finishUnhappy} disabled={busy || !text.trim()} style={{ background: accent, borderColor: accent }}>
+          {logErr && <Callout tone="red" label="Couldn't send that">Your connection dropped before this reached us — nothing was lost, just try again.</Callout>}
+          <Btn onClick={finishUnhappy} disabled={busy || !text.trim()} style={{ background: accent, borderColor: accent, marginTop: logErr ? 10 : 0 }}>
             Send private feedback
           </Btn>
           {!gate && link && (
@@ -11128,7 +11706,6 @@ function buildPortalSnapshot(job, brand, token, users = []) {
       company: brand.company, logo: brand.logo || null, primary: brand.primary,
       slogan: brand.slogan, phone: brand.phone, email: brand.email,
       jobId: job.id, name: job.name, address: job.address,
-      projectType: projectNoun(job),
       stageLabel: job.stageLabel || "",
       order: portalOrderOf(portal).filter((sid) => (sid === "documents" ? portalDocs.length > 0 : portalSectionOn(portal, sid))),
       /* Rep block: a per-job override wins over the assigned seat, so a
@@ -11157,14 +11734,16 @@ function buildPortalSnapshot(job, brand, token, users = []) {
           });
         }
         const con = job.contract;
-        /* Same gate as the in-app signature pad. A homeowner opening the
-           portal is the one path where nobody from the office is looking
-           at the screen, so it is the last place a contract with an
-           unconfirmed state-law clause should be signable. */
-        if (con && con.price && con.status !== "Signed" && portal.contract && legalReady(job.state)) {
+        if (con && con.price && con.status !== "Signed" && portal.contract) {
           out.push({
             type: "contract", id: con.number || "con", title: `Contract ${con.number || ""}`.trim(),
             subtitle: job.address,
+            /* The construction-agreement form (not the plain contract) has
+               three numbered acknowledgment lines that used to be typed by
+               a rep on the customer's behalf — genuine customer initials,
+               same as the signature, only make sense to collect when this
+               is the form that actually carries those paragraphs. */
+            needsInitials: con.form === "agreement",
             lines: [
               { label: "Property", value: job.address },
               { label: "Scope", value: (job.intake?.workRequested || []).join(", ") || "Roof replacement" },
@@ -11179,17 +11758,7 @@ function buildPortalSnapshot(job, brand, token, users = []) {
                points at the signed agreement, which carries the notice that
                actually applies, rather than naming the wrong statute. */
             terms: "By signing you enter into a binding agreement for the work described, at the price shown. Your signed agreement sets out your right to cancel and the notice period that applies where the property is located.",
-            /* The rendered legal text travels with the signature, not just
-               a reference to the pack. Editing a state's pack later must
-               not retroactively change what a past signature appears to
-               have covered — the hash has to bind to the words the
-               homeowner actually read. */
-            snapshot: {
-              number: con.number, price: con.price, address: job.address,
-              legalPackState: job.state || "",
-              legalPackVersion: LEGAL_PACK_VERSION,
-              renderedLegalText: renderedLegalText(job),
-            },
+            snapshot: { number: con.number, price: con.price, address: job.address },
           });
         }
         (job.changeOrders || []).filter((c) => c.status === "Sent").forEach((c) => {
@@ -11531,13 +12100,21 @@ function SignConsent({ checked, onChange, what, accent = "#0A9E98" }) {
    signed. The signature row is written by the portal itself so the
    server stamps the time and IP; nothing about the timestamp comes
    from the customer's device. */
-function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSelection = null }) {
+function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estimate = null, estSelection = null }) {
   const [openDoc, setOpenDoc] = useState(null);
   const [sig, setSig] = useState(null);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [signed, setSigned] = useState([]);
+  /* The construction agreement's three acknowledgment lines (insurance
+     dependency, HOA approval, right to cancel) — collected here, next to
+     the real signature, so a value in them is genuinely the homeowner's
+     own rather than typed in for them back at the office. Optional, same
+     as the printed form always treated them: a blank initial today prints
+     the same blank it always did, just never a rep's handwriting standing
+     in for the customer's. */
+  const [initials, setInitials] = useState({ owner: "", hoa: "", cancel: "" });
 
   useEffect(() => {
     const db = DB();
@@ -11551,25 +12128,57 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
 
   const isSigned = (d) => signed.some((s) => s.doc_type === d.type && String(s.doc_id) === String(d.id) && s.signer_role === "customer");
 
+  /* The exact record that will be stored and hashed if the customer signs
+     right now — computed once, here, and used for BOTH what's displayed
+     (lines/total/hash below) and what submit() actually inserts. Before
+     this, the displayed hash was always docHash(openDoc.snapshot) — the
+     static, office-authored snapshot — while submit() hashed a DIFFERENT,
+     live-substituted object (the customer's actual tier/upgrade pick, or
+     their just-typed initials). A customer could review and attest to one
+     document while a materially different one got permanently recorded
+     under their signature. Deriving both from the same value makes that
+     divergence structurally impossible. */
+  const effectiveSnapshot = useMemo(() => {
+    if (!openDoc) return null;
+    if (openDoc.type === "estimate" && estSelection) {
+      return { ...openDoc.snapshot, selection: estSelection, total: estSelection.total };
+    }
+    if (openDoc.needsInitials) {
+      return { ...openDoc.snapshot, initials: { owner: initials.owner.trim(), hoa: initials.hoa.trim(), cancel: initials.cancel.trim() } };
+    }
+    return openDoc.snapshot;
+  }, [openDoc, estSelection, initials]);
+
+  /* Same idea for the itemized lines/total shown above the signature pad:
+     for an estimate with tiers, rebuild them from the customer's live
+     selection (using the exact label/value shape buildPortalSnapshot uses
+     for a flat estimate) instead of the office's default-tier snapshot. */
+  const effectiveDoc = useMemo(() => {
+    if (!openDoc) return null;
+    if (openDoc.type !== "estimate" || !estSelection || !estimate) return openDoc;
+    const tierObj = (estimate.tiers || []).find((t) => t.id === estSelection.tierId) || null;
+    if (!tierObj) return openDoc;
+    const upgradeObjs = (estimate.upgrades || []).filter((u) => (estSelection.upgradeIds || []).includes(u.id));
+    const lines = [
+      ...(tierObj.items || []).map((it) => ({ label: `${it.desc} — ${it.qty} ${it.unit}`, value: money(num(it.qty) * num(it.price)) })),
+      ...upgradeObjs.map((u) => ({ label: u.desc, value: `+${money(num(u.price))}` })),
+    ];
+    return { ...openDoc, lines, total: estSelection.total };
+  }, [openDoc, estSelection, estimate]);
+
   const submit = async () => {
     if (!openDoc || !sig || !consent) return;
     const db = DB();
     if (!db) { setErr("No connection. Please try again in a moment."); return; }
     setBusy(true); setErr("");
-    /* Bind an estimate signature to the option the customer actually chose in
-       the proposal above, not the rep's default, so what they sign is what
-       they picked and the team can apply it on countersign. */
-    const snapshot = (openDoc.type === "estimate" && estSelection)
-      ? { ...openDoc.snapshot, selection: estSelection, total: estSelection.total }
-      : openDoc.snapshot;
     const row = {
       id: uid("sig"),
       job_id: jobId,
       doc_type: openDoc.type,
       doc_id: String(openDoc.id || ""),
       doc_title: openDoc.title,
-      doc_hash: docHash(snapshot),
-      doc_snapshot: snapshot,
+      doc_hash: docHash(effectiveSnapshot),
+      doc_snapshot: effectiveSnapshot,
       signer_role: "customer",
       signer_name: customer.name || "Customer",
       signer_email: customer.email || null,
@@ -11592,7 +12201,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
       return;
     }
     setSigned((prev) => [{ ...row, signed_at: new Date().toISOString() }, ...prev]);
-    setOpenDoc(null); setSig(null); setConsent(false);
+    setOpenDoc(null); setSig(null); setConsent(false); setInitials({ owner: "", hoa: "", cancel: "" });
   };
 
   const pending = (docs || []).filter((d) => !isSigned(d));
@@ -11602,7 +12211,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
   return (
     <Card>
       <CardTitle right={pending.length ? <Chip tone="amber">{pending.length} to sign</Chip> : <Chip tone="green">All signed</Chip>}>
-        Documents to sign
+        Agreements & signatures
       </CardTitle>
 
       {pending.length === 0 && (
@@ -11619,7 +12228,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
             {d.subtitle && <div style={{ fontSize: 12, color: S.sub, marginTop: 1 }}>{d.subtitle}</div>}
           </div>
           <Btn small style={{ background: accent, borderColor: accent }}
-            onClick={() => { setOpenDoc(d); setSig(null); setConsent(false); setErr(""); }}>
+            onClick={() => { setOpenDoc(d); setSig(null); setConsent(false); setErr(""); setInitials({ owner: "", hoa: "", cancel: "" }); }}>
             Review &amp; sign
           </Btn>
         </div>
@@ -11642,7 +12251,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
         );
       })}
 
-      <Sheet open={!!openDoc} onClose={() => setOpenDoc(null)} title={openDoc ? openDoc.title : "Sign"} wide
+      <Sheet open={!!openDoc} onClose={() => { setOpenDoc(null); setInitials({ owner: "", hoa: "", cancel: "" }); }} title={openDoc ? openDoc.title : "Sign"} wide
         footer={
           <div style={{ display: "flex", gap: 10 }}>
             <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setOpenDoc(null)}>Cancel</Btn>
@@ -11654,23 +12263,49 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
         }>
         {openDoc && (
           <div>
-            {/* What they are agreeing to, in full, above the signature. */}
+            {/* What they are agreeing to, in full, above the signature —
+                effectiveDoc, not openDoc: for an estimate this reflects
+                the tier/upgrades actually picked above, not the office's
+                default snapshot. */}
             <div style={{ border: `1px solid ${S.line}`, borderRadius: 11, padding: 14, marginBottom: 14, background: S.card }}>
-              {(openDoc.lines || []).map((l, i2) => (
+              {(effectiveDoc.lines || []).map((l, i2) => (
                 <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13.5, padding: "6px 0", borderTop: i2 ? `1px solid ${S.line}` : "none" }}>
                   <span style={{ color: S.ink }}>{l.label}</span>
                   <span style={{ color: S.ink, fontWeight: 600, whiteSpace: "nowrap" }}>{l.value}</span>
                 </div>
               ))}
-              {openDoc.total != null && (
+              {effectiveDoc.total != null && (
                 <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: `2px solid ${S.line}` }}>
                   <span style={{ fontSize: 14.5, fontWeight: 800, color: S.ink }}>Total</span>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: S.ink }}>{money(openDoc.total)}</span>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: S.ink }}>{money(effectiveDoc.total)}</span>
                 </div>
               )}
             </div>
             {openDoc.terms && (
               <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.6, marginBottom: 14 }}>{openDoc.terms}</div>
+            )}
+
+            {openDoc.needsInitials && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: S.ink, marginBottom: 8 }}>Initial to acknowledge</div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <div style={{ flex: 1, minWidth: 130 }}>
+                    <div style={{ fontSize: 11.5, color: S.sub, marginBottom: 4 }}>Insurance-dependent pricing</div>
+                    <input style={{ ...inputStyle, width: "100%" }} value={initials.owner} maxLength={6}
+                      onChange={(e) => setInitials({ ...initials, owner: e.target.value })} placeholder="Initials" />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 130 }}>
+                    <div style={{ fontSize: 11.5, color: S.sub, marginBottom: 4 }}>HOA approval, if required</div>
+                    <input style={{ ...inputStyle, width: "100%" }} value={initials.hoa} maxLength={6}
+                      onChange={(e) => setInitials({ ...initials, hoa: e.target.value })} placeholder="Initials" />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 130 }}>
+                    <div style={{ fontSize: 11.5, color: S.sub, marginBottom: 4 }}>Right to cancel</div>
+                    <input style={{ ...inputStyle, width: "100%" }} value={initials.cancel} maxLength={6}
+                      onChange={(e) => setInitials({ ...initials, cancel: e.target.value })} placeholder="Initials" />
+                  </div>
+                </div>
+              </div>
             )}
 
             <div style={{ fontSize: 13, fontWeight: 700, color: S.ink, marginBottom: 8 }}>Your signature</div>
@@ -11688,7 +12323,7 @@ function PortalSignCenter({ token, jobId, customer, docs, accent, brand, estSele
               The date, time and network address of your signature are recorded
               by our system when you sign, not by your device, so the record
               cannot be altered afterwards. Document reference{" "}
-              <b>{docHash(openDoc.snapshot)}</b>.
+              <b>{docHash(effectiveSnapshot)}</b>.
             </div>
           </div>
         )}
@@ -11973,11 +12608,20 @@ function PortalEnRoute({ er, accent }) {
 }
 
 function PublicPortal({ token }) {
-  const [state, setState] = useState({ loading: true, data: null, err: "" });
+  const [state, setState] = useState({ loading: true, data: null, err: "", hint: "" });
   const [estSel, setEstSel] = useState(null);
   useEffect(() => {
     const db = DB();
-    if (!db) { setState({ loading: false, data: null, err: "This link needs a live connection." }); return; }
+    /* Two genuinely different failures need genuinely different advice:
+       a missing database connection is a site configuration problem no
+       new link would fix, while an invalid or revoked token is exactly
+       what a fresh link from the contractor DOES fix. A single generic
+       "contact your contractor for a new one" used to follow both. */
+    if (!db) {
+      setState({ loading: false, data: null, err: "This link needs a live connection.",
+        hint: "This looks like a site configuration issue, not something a new link would fix — please contact your contractor directly." });
+      return;
+    }
     /* Goes through a security-definer function, not a direct table
        read — see migration 018. The old direct SELECT worked fine for
        a well-behaved client (it always filtered by token), but RLS
@@ -11988,8 +12632,12 @@ function PublicPortal({ token }) {
        actually passed in. */
     db.rpc("portal_get_data", { p_token: token }).then(({ data, error }) => {
       const row = Array.isArray(data) ? data[0] : data;
-      if (error || !row) { setState({ loading: false, data: null, err: "This link isn't valid or has been turned off." }); return; }
-      setState({ loading: false, data: row.data, err: "" });
+      if (error || !row) {
+        setState({ loading: false, data: null, err: "This link isn't valid or has been turned off.",
+          hint: "Please contact your contractor for a new one." });
+        return;
+      }
+      setState({ loading: false, data: row.data, err: "", hint: "" });
     });
   }, [token]);
 
@@ -12001,7 +12649,7 @@ function PublicPortal({ token }) {
       <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: S.bg, padding: 24, fontFamily: "'Inter',system-ui,sans-serif" }}>
         <div style={{ textAlign: "center", maxWidth: 340 }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: S.ink }}>Link unavailable</div>
-          <div style={{ fontSize: 14, color: S.sub, marginTop: 8, lineHeight: 1.55 }}>{state.err} Please contact your contractor for a new one.</div>
+          <div style={{ fontSize: 14, color: S.sub, marginTop: 8, lineHeight: 1.55 }}>{state.err} {state.hint}</div>
         </div>
       </div>
     );
@@ -12014,7 +12662,7 @@ function PublicPortal({ token }) {
         {d.logo
           ? <img src={d.logo} alt="" style={{ height: 44, objectFit: "contain", marginBottom: 10, display: "block" }} />
           : <div style={{ fontSize: 13, opacity: 0.8 }}>{d.company}</div>}
-        <div style={{ fontSize: 21, fontWeight: 800, marginTop: 4 }}>Your {d.projectType || "roofing"} project</div>
+        <div style={{ fontSize: 21, fontWeight: 800, marginTop: 4 }}>Your project</div>
         <div style={{ fontSize: 13.5, opacity: 0.85, marginTop: 3 }}>{d.address}</div>
       </div>
       <div style={{ padding: "16px 16px 60px" }}>
@@ -12157,7 +12805,7 @@ function PublicPortal({ token }) {
 
           if (sid === "sign") return wrap(
             <PortalSignCenter token={token} jobId={d.jobId || null} customer={d.customer || {}}
-              docs={d.signDocs || []} accent={prim} brand={d} estSelection={estSel} />
+              docs={d.signDocs || []} accent={prim} brand={d} estimate={d.estimate || null} estSelection={estSel} />
           );
 
           if (sid === "yourinfo") return wrap(
@@ -13061,7 +13709,12 @@ function PropertyPhoto({ job, mut, toast }) {
 
   return (
     <div style={{ marginBottom: 12 }}>
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onFile} style={{ display: "none" }} />
+      {/* No `capture` here on purpose — unlike the on-site inspection/punch-
+          list captures (which force the live camera so they stay
+          GPS/timestamp-verifiable evidence), a property photo is just as
+          often a listing photo or a Street View screenshot, so the OS's
+          normal "Photo Library / Take Photo" choice belongs here. */}
+      <input ref={fileRef} type="file" accept="image/*" onChange={onFile} style={{ display: "none" }} />
       {photo ? (
         <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: S.soft }}>
           <img src={photo.url} alt={`${job.address}`} style={{ width: "100%", height: 168, objectFit: "cover", display: "block" }} />
@@ -13801,7 +14454,7 @@ function CallLog({ jobs, leadSources, calls, setCalls, onOpenJob, onBack, curren
         )}
         <div style={{ fontSize: 11.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
           True per-source tracking numbers (a different phone number on each yard sign and ad) can come later
-          through Twilio — this report gets its answers from reps asking the question, which costs nothing.
+          through a texting provider — this report gets its answers from reps asking the question, which costs nothing.
         </div>
       </Card>
 
@@ -14044,7 +14697,7 @@ const STAGE_CHECKS = {
     test: (j) => num(j.contract && j.contract.price) > 0 || num(j.fin && j.fin.contract) > 0,
     fix: "Contract or Financials — a job with no price cannot be capped out." },
   deposit: { label: "Deposit collected or waived",
-    test: (j) => num((j.payments || []).reduce((a, p) => a + num(p.amount), 0)) > 0 || !!j.depositWaived,
+    test: (j) => num((j.payments || []).reduce((a, p) => a + num(p.amt), 0)) > 0 || !!j.depositWaived,
     fix: "Payments section — record the deposit, or tick waived on the approval." },
   measure: { label: "Measurements recorded",
     test: (j) => num(j.measurements && j.measurements.squares) > 0,
@@ -14671,16 +15324,30 @@ function TabChangeOrders({ job, mut, toast, currentUser, brand, showMoney = true
                     {CO_STATUS.map((st) => {
                       const on = (c.status || "Draft") === st;
                       const col = st === "Declined" ? "#B3261E" : st === "Approved" ? "#177245" : T.accent;
+                      /* Approved changes what's billed, so — same as Contract
+                         and Estimate — it is never a status a staff member
+                         clicks into directly. It only ever lands here via
+                         countersign() below, once the homeowner has actually
+                         signed for this change order in the portal. */
+                      const gated = st === "Approved";
                       return (
-                        <button key={st} onClick={() => editCo(c.id, "status", st)} style={{
+                        <button key={st} disabled={gated} onClick={gated ? undefined : () => editCo(c.id, "status", st)} style={{
                           border: `1.5px solid ${on ? col : S.line}`,
                           background: on ? (st === "Declined" ? "#FDECEA" : st === "Approved" ? "#EAF6EE" : T.accentSoft) : "#fff",
                           color: on ? col : S.sub, borderRadius: 8, padding: "5px 11px",
-                          fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
+                          fontSize: 12, fontWeight: 800, cursor: gated ? "default" : "pointer", fontFamily: "inherit",
+                          opacity: gated && !on ? 0.45 : 1,
                         }}>{st}</button>
                       );
                     })}
                   </div>
+                  {c.status !== "Approved" && (
+                    <div style={{ fontSize: 12, color: S.sub, marginTop: 6, lineHeight: 1.5 }}>
+                      {job.portalToken
+                        ? <>Approval happens when the homeowner signs at <a href={`${window.location.origin}/?portal=${job.portalToken}`} target="_blank" rel="noreferrer" style={{ color: T.accent, fontWeight: 700 }}>the client portal</a> — open it there for an in-person signature, or send the link.</>
+                        : "Publish a client portal link (Client portal tab) so the homeowner can sign there."}
+                    </div>
+                  )}
 
                   <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
                     <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => delCo(c.id)}>Delete</Btn>
@@ -14755,9 +15422,24 @@ function TabSignatures({ job, mut, toast, currentUser, brand }) {
     const { error } = await db.from("crm_signatures").insert(row);
     setBusy(false);
     if (error) { setErr(dbErrorMessage(error, { table: "signatures", migration: "014" })); return; }
-    /* Contracts flip to Signed once both sides are on the same hash. */
+    /* Contracts flip to Signed once both sides are on the same hash. If
+       the customer's own signature carried the agreement's acknowledgment
+       initials (construction-agreement form only), they land in
+       job.agreement here — the same field the printed agreement already
+       reads, now sourced from the portal instead of a rep typing on the
+       customer's behalf. */
     if (signing.doc_type === "contract") {
-      mut((j) => ({ ...j, contract: { ...(j.contract || {}), status: "Signed", signedAt: todayIso() } }));
+      const custInitials = (signing.doc_snapshot && signing.doc_snapshot.initials) || null;
+      mut((j) => ({
+        ...j,
+        contract: { ...(j.contract || {}), status: "Signed", signedAt: todayIso() },
+        ...(custInitials ? { agreement: {
+          ...(j.agreement || {}),
+          ownerInit1: custInitials.owner || (j.agreement || {}).ownerInit1 || "",
+          ownerInit2: custInitials.hoa || (j.agreement || {}).ownerInit2 || "",
+          cancelInit: custInitials.cancel || (j.agreement || {}).cancelInit || "",
+        } } : {}),
+      }));
     }
     /* An accepted estimate applies the customer's chosen tier + add-ons
        (recorded in the signature snapshot), flips the estimate to Signed, and
@@ -14779,6 +15461,18 @@ function TabSignatures({ job, mut, toast, currentUser, brand }) {
         const withEst = { ...j, estimate: est };
         return { ...withEst, contract: convertEstimateToContract(withEst) };
       });
+    }
+    /* Change orders had no branch here at all — the customer's portal
+       signature landed in crm_signatures same as any other doc, but
+       nothing ever flipped the change order's own status, so it sat at
+       "Sent" forever even once fully executed. doc_id is the change
+       order's id (see portalDocuments' signDocs, which sets id: c.id). */
+    if (signing.doc_type === "change_order") {
+      mut((j) => ({
+        ...j,
+        changeOrders: (j.changeOrders || []).map((c) =>
+          c.id === signing.doc_id ? { ...c, status: "Approved", approvedAt: todayIso() } : c),
+      }));
     }
     toast(signing.doc_type === "estimate" ? "Estimate accepted — contract ready" : "Countersigned");
     setSigning(null); setSig(null); setConsent(false);
@@ -15536,7 +16230,7 @@ function TabChecklist({ job, mut, toast }) {
           })()}
         </Field>
         <Field label="Inspection method"><PillGroup multi options={["Visual, non-invasive; roof surface accessed directly", "Drone-assisted visual inspection", "Ground + ladder at eave only"]} value={c.method} onPick={set("method")} /></Field>
-        <Field label="Layers"><PillGroup multi options={["1 Layer", "2 Layers", "3+ Layers"]} value={c.layers} onPick={set("layers")} /></Field>
+        <Field label="Layers"><PillGroup options={["1 Layer", "2 Layers", "3+ Layers"]} value={c.layers} onPick={set("layers")} /></Field>
         <Field label="Roof covering"><PillGroup multi options={ROOF_COVERING_OPTIONS} value={c.roofType} onPick={set("roofType")} /></Field>
         <Field label={isFlatRoof ? "Pitch / drainage slope (optional for flat roof)" : "Pitch (primary)"}>
           <PillGroup options={["Flat / low slope", "1/12", "2/12", "3/12", "4/12", "5/12", "6/12", "7/12", "8/12", "9/12+"]} value={c.pitch} onPick={set("pitch")} />
@@ -15706,6 +16400,90 @@ function bytesToDataUrl(bytes, mime) {
   const chunk = 0x8000;
   for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
   return `data:${mime};base64,${btoa(bin)}`;
+}
+
+/* ------------------------------------------------------------------
+   Subcontractor pricing from a PDF, not just a CSV.
+
+   A sub's rate sheet is usually an exhibit buried inside their signed
+   agreement, not a clean two-column export — and pdf.js's own text
+   order often pulls a table apart into column blocks (every label,
+   then every unit, then every price) rather than reading order,
+   because that is drawing order on the page, not visual layout. Text
+   position (x/y) is what actually says which cells belong to which
+   row, so rows are rebuilt from position instead of trusting
+   extraction order — this is what makes it work across differently
+   laid-out PDFs rather than only the one sub whose table happened to
+   already read top-to-bottom.
+
+   Nothing here writes to a crew's rate card directly: every row is a
+   candidate the office reviews, edits, or drops before it becomes a
+   real pay rate — a wrong number here changes what a sub gets paid.
+------------------------------------------------------------------- */
+function pdfRowsFromItems(items, tolerance = 2.5) {
+  const points = (items || [])
+    .filter((it) => it.str && it.str.trim())
+    .map((it) => ({ x: it.transform[4], y: it.transform[5], str: it.str }));
+  points.sort((a, b) => b.y - a.y || a.x - b.x);
+  const rows = [];
+  points.forEach((p) => {
+    const last = rows[rows.length - 1];
+    if (last && Math.abs(last.y - p.y) <= tolerance) last.items.push(p);
+    else rows.push({ y: p.y, items: [p] });
+  });
+  return rows
+    .map((r) => r.items.sort((a, b) => a.x - b.x).map((p) => p.str.trim()).join(" ").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+async function extractSubSheetRowsFromPdf(file) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf");
+  const workerSrc = (await import("pdfjs-dist/legacy/build/pdf.worker.min.js?url")).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+  const buf = await file.arrayBuffer();
+  const doc = await pdfjs.getDocument({ data: buf }).promise;
+  const pageCount = Math.min(doc.numPages, 20);
+  let rows = [];
+  let hadText = false;
+  for (let i = 1; i <= pageCount; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    if (content.items.some((it) => it.str && it.str.trim())) hadText = true;
+    rows = rows.concat(pdfRowsFromItems(content.items));
+  }
+  return { rows, noText: !hadText };
+}
+/* Words that show up in the surrounding legal text (insurance limits,
+   liquidated-damages clauses, effective dates) but never in a real
+   pricing line — without this, a wrapped sentence that happens to end
+   in a number reads exactly like a price row. */
+const SUB_PDF_LABEL_STOPWORDS = /\b(insur|indemnif|arbitrat|agree|hereby|shall|warrant|liabilit|attorney|govern|terminat|severab|jurisdiction|witness|notary|claus|provision|covenant|pursuant|aggregate|occurrence|per annum|state of|effective|operating at|policy|address|suite|\bste\b|\bllc\b|\binc\b)/i;
+/* Row reconstruction pulls in the letterhead and exhibit headers the
+   same as any other row on the page — an address or a policy number
+   ends in digits exactly like a price does. These shapes only ever
+   show up in that boilerplate, never in a real labor-item label. */
+const SUB_PDF_NOISE_SHAPES = [/,\s*[A-Z]{2}\b/, /\|/, /\bLLC\b/i];
+const SUB_PDF_UNIT_TOKENS = ["SQ", "EA", "LF", "SF", "SHT", "HR", "JOB", "YD", "GAL", "BOX", "ROLL", "BUNDLE", "EACH", "DAY", "PAIL", "CAN", "TUBE", "BAG", "PALLET"];
+function parseSubSheetPdfRows(rows) {
+  const out = [];
+  (rows || []).forEach((raw) => {
+    const row = String(raw || "").trim();
+    if (!row || row.length > 90) return;
+    const m = row.match(/\$?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)\s*$/);
+    if (!m) return;
+    const price = num(m[1].replace(/,/g, ""));
+    if (!(price > 0 && price < 50000)) return;
+    let rest = row.slice(0, m.index).trim().replace(/[-–—:]+$/, "").trim();
+    if (!rest) return;
+    let unit = "flat";
+    const words = rest.split(/\s+/);
+    const lastWord = words[words.length - 1].toUpperCase().replace(/[^A-Z]/g, "");
+    if (SUB_PDF_UNIT_TOKENS.includes(lastWord)) { unit = lastWord; rest = words.slice(0, -1).join(" ").trim(); }
+    if (!rest || rest.length < 3 || SUB_PDF_LABEL_STOPWORDS.test(rest) || !/[a-zA-Z]{3}/.test(rest)) return;
+    if (SUB_PDF_NOISE_SHAPES.some((re) => re.test(rest))) return;
+    const code = subCodeFor(rest);
+    out.push({ id: uid("rc"), category: "Other", code: code || "custom", label: rest, unit, price, notes: "" });
+  });
+  return out;
 }
 
 /* True PDF form-filler. Upload a PDF (a carrier form, a T&C, a permit
@@ -15962,7 +16740,7 @@ function TabMeasure({ job, mut, toast }) {
 }
 
 /* ---------- Materials ---------- */
-function TabMaterials({ job, mut, toast }) {
+function TabMaterials({ job, mut, toast, brand }) {
   const list = generateRoofingMaterials(job.measurements);
   const copyText = () => {
     if (!list) return;
@@ -16155,9 +16933,27 @@ function supplementFindings(job) {
   return out;
 }
 
+/* A ready-to-send paragraph for a single supplement finding, phrased the
+   way an adjuster reads a scope: what it is, why it's owed, and the code
+   basis — but only when that citation is actually verified for this job's
+   state. A rep writing this from scratch is exactly what gets a supplement
+   waved off on presentation regardless of merit; this hands back the same
+   "never assert an unconfirmed cite" wording the letter-template library
+   already follows, scoped to this job's own finding instead of a generic
+   template. */
+function supplementJustification(f, job) {
+  const cf = asFact(f);
+  const citeClause = printable(cf) ? ` per ${cf.value}` : "";
+  const addr = job.address || "the property";
+  const claimNo = (job.claim || {}).claim || (job.insurance || {}).claim || "";
+  const claimClause = claimNo ? ` (claim #${claimNo})` : "";
+  return `${f.title} — ${f.why}${citeClause}. This is part of the necessary and reasonable scope of repair at ${addr}${claimClause} and should be included as an approved supplement.`;
+}
+
 function SupplementCheck({ job, mut, toast, locked = false }) {
   const [open, setOpen] = useState(true);
   const [done, setDone] = useState({}); // title -> "estimate" | "supplement"
+  const [tagging, setTagging] = useState(null); // finding title currently picking a photo for
   const found = supplementFindings(job);
   const items = ((job.estimate || {}).items || []);
   if (items.length === 0) return null; // No estimate yet — nothing to audit.
@@ -16192,12 +16988,36 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
     const cf = asFact(f);
     const cite = printable(cf) && cf.value ? ` [${cf.value}]` : "";
     const row = { id: uid("sup"), desc: `${f.title}${cite}`, amount: "", status: "Draft", at: nowStamp(),
-      cite: cf.value || "", citeConfidence: cf.confidence, citeState: f.state || "" };
+      cite: cf.value || "", citeConfidence: cf.confidence, citeState: f.state || "",
+      justification: supplementJustification(f, job) };
     mut((j) => ({ ...j, claim: { ...(j.claim || {}), supplements: [...((j.claim || {}).supplements || []), row] } }));
     setDone((d) => ({ ...d, [f.title]: "supplement" }));
     toast && toast(printable(cf) || !cf.value
       ? `Added "${f.title}" to the claim supplements`
       : `Added "${f.title}" — the code cite was left off because it is not verified for this state`);
+  };
+  const copyJustification = (f) => {
+    const text = supplementJustification(f, job);
+    if (navigator.clipboard) navigator.clipboard.writeText(text);
+    toast && toast("Justification copied — paste it into your supplement email or portal message");
+  };
+  /* Tagging a photo to a finding is what turns the album from a generic
+     gallery into claim evidence — a photo that shows up next to "Ice &
+     water shield — eaves [R905.1.2]" in the album is legible as proof of
+     that specific gap, not just "a roof photo." Storing the tag on the
+     photo itself (not a separate join table) keeps it visible everywhere
+     the album already renders, including the portal share view. */
+  const tagPhoto = (f, photoId) => {
+    if (!mut) return;
+    const cf = asFact(f);
+    mut((j) => ({
+      ...j,
+      photos: (j.photos || []).map((p) => p.id === photoId
+        ? { ...p, findingTag: { title: f.title, cite: printable(cf) ? cf.value : null } }
+        : p),
+    }));
+    setTagging(null);
+    toast && toast(`Tagged a photo as evidence for "${f.title}"`);
   };
 
   return (
@@ -16228,15 +17048,31 @@ function SupplementCheck({ job, mut, toast, locked = false }) {
                 </div>
               </div>
               {!locked && mut && (done[f.title] || f.line || isClaim) && (
-                <div style={{ display: "flex", gap: 7, marginTop: 8, marginLeft: 0, flexWrap: "wrap" }}>
-                  {done[f.title] ? (
-                    <Chip tone="green">{done[f.title] === "estimate" ? "✓ Added to estimate" : "✓ Added as supplement"}</Chip>
-                  ) : (
-                    <>
-                      {f.line && <Btn kind="soft" small onClick={() => addToEstimate(f)}><Plus size={12} /> Add to estimate</Btn>}
-                      {isClaim && <Btn kind="ghost" small onClick={() => addAsSupplement(f)}><Plus size={12} /> Add as supplement</Btn>}
-                    </>
+                <div style={{ display: "flex", gap: 7, marginTop: 8, marginLeft: 0, flexWrap: "wrap", alignItems: "center" }}>
+                  {done[f.title] && <Chip tone="green">{done[f.title] === "estimate" ? "✓ Added to estimate" : "✓ Added as supplement"}</Chip>}
+                  {!done[f.title] && f.line && <Btn kind="soft" small onClick={() => addToEstimate(f)}><Plus size={12} /> Add to estimate</Btn>}
+                  {!done[f.title] && isClaim && <Btn kind="ghost" small onClick={() => addAsSupplement(f)}><Plus size={12} /> Add as supplement</Btn>}
+                  {!done[f.title] && isClaim && <Btn kind="ghost" small onClick={() => copyJustification(f)}><Copy size={12} /> Copy justification</Btn>}
+                  {isClaim && job.photos.length > 0 && (
+                    <Btn kind="ghost" small onClick={() => setTagging(tagging === f.title ? null : f.title)}>
+                      <ImageIcon size={12} /> Tag a photo
+                    </Btn>
                   )}
+                </div>
+              )}
+              {tagging === f.title && (
+                <div style={{ display: "flex", gap: 6, marginTop: 8, overflowX: "auto" }}>
+                  {job.photos.map((p) => {
+                    const active = p.findingTag && p.findingTag.title === f.title;
+                    return (
+                      <button key={p.id} onClick={() => tagPhoto(f, p.id)} title={p.label} style={{
+                        border: `1.5px solid ${active ? T.accent : S.line}`, borderRadius: 8, padding: 0,
+                        width: 52, height: 52, overflow: "hidden", flexShrink: 0, cursor: "pointer", background: "#EEF1F4",
+                      }}>
+                        {p.url ? <img src={p.url} alt={p.label} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -16783,7 +17619,6 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
      every one of those reads becomes safe without having to find and
      patch each individual call site. */
   const est = { ...job.estimate, tiers: job.estimate.tiers || [], upgrades: job.estimate.upgrades || [] };
-  const [sigOpen, setSigOpen] = useState(false);
   const locked = est.status === "Signed";
   const setEst = (patch) => mut((j) => ({ ...j, estimate: { ...j.estimate, ...patch } }));
   const setItem = (id, k, v) =>
@@ -16945,11 +17780,16 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <Field label="Estimate #"><input style={inputStyle} value={est.number} disabled={locked} onChange={(e) => setEst({ number: e.target.value })} /></Field>
           <Field label="Date">
-            <input style={inputStyle} value={est.date || new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-              disabled={locked} onChange={(e) => setEst({ date: e.target.value })} />
+            <input style={dateInputStyle} type="date" disabled={locked}
+              value={humanToIso(est.date) || todayIso()}
+              onChange={(e) => setEst({ date: isoToHuman(e.target.value) })} />
           </Field>
         </div>
-        <Field label="Valid through"><input style={inputStyle} value={est.validThrough} disabled={locked} onChange={(e) => setEst({ validThrough: e.target.value })} /></Field>
+        <Field label="Valid through">
+          <input style={dateInputStyle} type="date" disabled={locked}
+            value={humanToIso(est.validThrough)}
+            onChange={(e) => setEst({ validThrough: isoToHuman(e.target.value) })} />
+        </Field>
       </Card>
 
       {num(m.squares) > 0 && (
@@ -17153,7 +17993,13 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
           </>
         ) : (
           <div style={{ fontSize: 13, color: S.sub }}>
-            Client signs on-screen at the kitchen table, or through the shared portal link.
+            {/* Signing happens only in the client portal now — in person, hand the
+                rep's device to the customer at the portal link, or send it to sign
+                remotely — so every acceptance carries real consent and the IP and
+                timestamp our system records, not the device's own clock. */}
+            {job.portalToken
+              ? <>Ready to sign at <a href={`${window.location.origin}/?portal=${job.portalToken}`} target="_blank" rel="noreferrer" style={{ color: T.accent, fontWeight: 700 }}>the client portal</a> — open it there yourself for an in-person signature, or send the link.</>
+              : "Publish a client portal link (Client portal tab) so the customer can sign there — in person or remotely."}
           </div>
         )}
       </Card>
@@ -17161,24 +18007,16 @@ function TabEstimate({ job, brand, mut, toast, estimateTemplates = [], setEstima
       <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
         <Btn kind="ghost" onClick={() => openDoc(`Estimate — ${job.name}`, brand, estimateDocHtml(job, brand, users), toast, { bare: true })}><Printer size={15} /> PDF</Btn>
         {!locked && (
-          <>
-            <Btn kind="ghost" onClick={() => {
-              setEst({ status: "Sent" });
-              toast(job.portalToken
-                ? "Sent — it's live in the client portal to choose and sign"
-                : "Marked sent — publish the client portal to share it");
-            }}>
-              <Send size={15} /> Send
-            </Btn>
-            <Btn onClick={() => setSigOpen(true)}><PenLine size={15} /> Client signature</Btn>
-          </>
+          <Btn kind="ghost" onClick={() => {
+            setEst({ status: "Sent" });
+            toast(job.portalToken
+              ? "Sent — it's live in the client portal to choose and sign"
+              : "Marked sent — publish the client portal to share it");
+          }}>
+            <Send size={15} /> Send
+          </Btn>
         )}
       </div>
-      <SignaturePad open={sigOpen} onClose={() => setSigOpen(false)} title="Client acceptance — estimate"
-        onApply={(dataUrl, at) => {
-          setEst({ clientSig: dataUrl, sigAt: at, status: "Signed" });
-          toast("Estimate signed and locked");
-        }} />
 
       <Sheet open={marginSheet} onClose={() => setMarginSheet(false)} title="Pricing controls">
         <div style={{ fontSize: 13, color: S.sub, marginBottom: 14, lineHeight: 1.5 }}>
@@ -17309,6 +18147,31 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
     <input style={{ ...inputStyle, ...extra }} value={a[k] || ""} disabled={locked}
       onChange={(e) => set(k, e.target.value)} />
   );
+  const moneyTxt = (k) => (
+    <MoneyInput style={inputStyle} value={a[k] || ""} disabled={locked} onChange={(v) => set(k, v)} />
+  );
+  /* dateOfLoss and agreementDate are already stored as ISO — the same
+     type=date field job.claim's own Date of loss input uses — so no
+     human⇄ISO shim is needed here, unlike Valid through on the
+     Estimate tab. */
+  const dateTxt = (k) => (
+    <input style={dateInputStyle} type="date" value={a[k] || ""} disabled={locked}
+      onChange={(e) => set(k, e.target.value)} />
+  );
+  /* These three acknowledgment lines used to be a plain text input a rep
+     could type into on the customer's behalf — the same gap as the
+     signature. They're read-only here now; a real value only ever
+     arrives from the customer's own portal signature (PortalSignCenter),
+     carried back by TabSignatures' countersign step. */
+  const InitialsStatus = ({ value }) => value ? (
+    <div style={{ ...inputStyle, width: 120, display: "flex", alignItems: "center", fontWeight: 700 }}>{value}</div>
+  ) : (
+    <div style={{ fontSize: 11.5, color: S.sub, lineHeight: 1.4, maxWidth: 220 }}>
+      {job.portalToken
+        ? <>Collected with the signature at <a href={`${window.location.origin}/?portal=${job.portalToken}`} target="_blank" rel="noreferrer" style={{ color: T.accent, fontWeight: 700 }}>the client portal</a></>
+        : "Collected with the signature once a client portal link is published"}
+    </div>
+  );
   const partInput = (p, i) => {
     if (p.t === "t") return <span key={i} style={{ fontSize: 13.5, color: S.ink }}>{p.v}</span>;
     if (p.t === "c") return <AgreementBox key={i} on={!!a[p.k]} disabled={locked} onClick={() => set(p.k, !a[p.k])} />;
@@ -17344,7 +18207,9 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
           {box.rows.map((row, ri) => (
             <div key={ri} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
               {row.map((f) => (
-                <Field key={f.k} label={f.label.charAt(0) + f.label.slice(1).toLowerCase()}>{txt(f.k)}</Field>
+                <Field key={f.k} label={f.label.charAt(0) + f.label.slice(1).toLowerCase()}>
+                  {f.t === "money" ? moneyTxt(f.k) : f.t === "date" ? dateTxt(f.k) : txt(f.k)}
+                </Field>
               ))}
             </div>
           ))}
@@ -17383,21 +18248,19 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Acknowledgements &amp; schedule</CardTitle>
         <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.55, marginBottom: 8 }}>{AGREEMENT_ACK_INSURANCE}</div>
-        <Field label="Owner initials"><input style={{ ...inputStyle, width: 120 }} value={a.ownerInit1 || ""} disabled={locked}
-          onChange={(e) => set("ownerInit1", e.target.value)} /></Field>
+        <Field label="Owner initials"><InitialsStatus value={a.ownerInit1} /></Field>
         <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 8 }}>
           <span style={{ fontSize: 13.5, fontWeight: 700 }}>HOA approval required</span>
           <AgreementBox on={!!a.hoaYes} disabled={locked} label="Yes" onClick={() => set("hoaYes", !a.hoaYes)} />
           <AgreementBox on={!!a.hoaNo} disabled={locked} label="No" onClick={() => set("hoaNo", !a.hoaNo)} />
         </div>
-        <Field label="Owner initials (HOA)"><input style={{ ...inputStyle, width: 120 }} value={a.ownerInit2 || ""} disabled={locked}
-          onChange={(e) => set("ownerInit2", e.target.value)} /></Field>
+        <Field label="Owner initials (HOA)"><InitialsStatus value={a.ownerInit2} /></Field>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
           <Field label="Anticipated start (weeks)">{txt("startWeeks")}</Field>
           <Field label="Anticipated completion (weeks)">{txt("endWeeks")}</Field>
         </div>
         <Field label="Defective decking rate ($ per sheet)" hint="Printed into the Defective Decking and Plywood Policy paragraph.">
-          {txt("deckRate")}
+          <MoneyInput style={inputStyle} value={a.deckRate || ""} disabled={locked} onChange={(v) => set("deckRate", v)} />
         </Field>
       </Card>
 
@@ -17416,8 +18279,7 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
           <input style={inputStyle} value={a.balance || ""} disabled={locked} placeholder={price ? money(price - dep) : ""}
             onChange={(e) => set("balance", e.target.value)} />
         </Field>
-        <Field label="Right-to-cancel initials"><input style={{ ...inputStyle, width: 120 }} value={a.cancelInit || ""} disabled={locked}
-          onChange={(e) => set("cancelInit", e.target.value)} /></Field>
+        <Field label="Right-to-cancel initials"><InitialsStatus value={a.cancelInit} /></Field>
       </Card>
 
       <Btn kind="ghost" style={{ marginTop: 14, width: "100%" }}
@@ -17430,7 +18292,7 @@ function AgreementForm({ job, brand, mut, toast, locked }) {
 
 function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates = { notes: [], terms: [], scope: [] }, setDocTemplates = () => {}, currentUser = null, integrations = {} }) {
   const con = job.contract;
-  const [sigFor, setSigFor] = useState(null); // "client" | "contractor"
+  const [sigFor, setSigFor] = useState(null); // "contractor" — the client line signs via the portal now
   const [fillerOpen, setFillerOpen] = useState(false);
   const locked = con.status === "Signed";
   const setCon = (patch) => mut((j) => ({ ...j, contract: { ...j.contract, ...patch } }));
@@ -17445,22 +18307,21 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
     r.readAsDataURL(file);
   };
   const removeAttachment = (id) => setCon({ attachments: (con.attachments || []).filter((a) => a.id !== id) });
-  /* What the state's legal pack has not settled yet. A contract is a
-     binding document: rendering the home market's cancellation window
-     to a homeowner in another state, or a blank where their rights
-     should be, is the failure this gate exists to prevent. Signing,
-     executing and emailing are all off until somebody has confirmed the
-     binding fields for this state on the Coverage screen. Printing is
-     deliberately still allowed — a rep needs to be able to look at the
-     draft and see exactly which slots are unfilled. */
-  const blockers = agreementBlockers(job);
   const estTotal = estimateTotal(job.estimate);
   const depositMode = con.depositMode || "pct";
   const deposit = depositMode === "fixed" ? num(con.depositFixed) : (con.price || 0) * (con.depositPct / 100);
   /* Which paper this job goes out on. The signature, status, attachment and
      portal plumbing is shared — only the body of the document differs. */
   const form = con.form === "agreement" ? "agreement" : "simple";
-  const SigLine = ({ label, value, onSign }) => (
+  /* The Client line no longer opens an internal signature pad — a rep
+     drawing a signature on the customer's behalf is exactly the gap the
+     owner flagged. Real customer signing already exists and is fully
+     wired (PortalSignCenter -> crm_signatures, gated by consent, with
+     signer_ip/user_agent stamped server-side, not client-supplied) — it
+     just wasn't the only path in. Passing no onSign renders a link to
+     that portal instead of a button that draws straight into clientSig.
+     The company/rep line is unaffected; that side still signs here. */
+  const SigLine = ({ label, value, onSign, portalPrompt }) => (
     <div style={{ flex: 1, minWidth: 220 }}>
       <div style={{
         height: 74, border: `1.5px dashed ${S.line}`, borderRadius: 10,
@@ -17470,8 +18331,10 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
           value === "signed"
             ? <span style={{ fontFamily: "cursive", fontSize: 22 }}>{label === "Client" ? job.name : "Supreme Building Group"}</span>
             : <img src={value} alt={`${label} signature`} style={{ maxHeight: 66 }} />
+        ) : onSign ? (
+          <Btn small kind="soft" onClick={onSign} disabled={locked}><PenLine size={13} /> Sign here</Btn>
         ) : (
-          <Btn small kind="soft" onClick={onSign} disabled={locked || blockers.length > 0}><PenLine size={13} /> Sign here</Btn>
+          <div style={{ fontSize: 11.5, color: S.sub, textAlign: "center", padding: "0 10px", lineHeight: 1.4 }}>{portalPrompt}</div>
         )}
       </div>
       <div style={{ fontSize: 12, color: S.sub, marginTop: 6 }}>{label} {con.signedAt && value ? `· ${con.signedAt}` : ""}</div>
@@ -17623,26 +18486,19 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
         onExport={(name, dataUrl) => { setCon({ attachments: [...(con.attachments || []), { id: uid("att"), name, dataUrl }] }); toast("Filled PDF attached to the contract"); }} />
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Signatures</CardTitle>
-        {!locked && blockers.length > 0 && (
-          <Callout tone="amber" label={`Not ready to sign in ${stateName(job.state) || "an unknown state"}`}>
-            <div style={{ lineHeight: 1.55 }}>
-              This contract states rights that are set by state law, and nobody has confirmed them
-              for {stateName(job.state) || "this property's state"} yet. Until they are confirmed the
-              agreement prints a labelled placeholder wherever one of those clauses belongs, and it
-              cannot be signed or sent.
-              <div style={{ marginTop: 8 }}>
-                {blockers.map((b) => (
-                  <div key={b.key} style={{ fontSize: 12.5, marginTop: 3 }}>• <b>{b.label}</b>{b.help ? ` — ${b.help}` : ""}</div>
-                ))}
-              </div>
-            </div>
-          </Callout>
-        )}
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-          <SigLine label="Client" value={con.clientSig} onSign={() => setSigFor("client")} />
+          <SigLine label="Client" value={con.clientSig} portalPrompt={job.portalToken
+            ? <>Signs at <a href={`${window.location.origin}/?portal=${job.portalToken}`} target="_blank" rel="noreferrer" style={{ color: T.accent, fontWeight: 700 }}>the client portal</a> — open it there for an in-person signature, or send the link</>
+            : "Publish a client portal link (Client portal tab) so the customer can sign there"} />
           <SigLine label={`${brand.company} representative`} value={con.contractorSig} onSign={() => setSigFor("contractor")} />
         </div>
-        {con.clientSig && con.contractorSig && !locked && blockers.length === 0 && (
+        {/* con.clientSig can no longer be set by anything in this tab, so
+            this stays reachable only for a contract that already carried
+            both legacy signatures before this change shipped — a new
+            contract executes exclusively through the Signatures
+            countersign flow below, once the portal-recorded customer
+            signature and the company's countersign share a doc hash. */}
+        {con.clientSig && con.contractorSig && !locked && (
           <Btn kind="green" style={{ marginTop: 14, width: "100%" }} onClick={() => {
             setCon({ status: "Signed", signedAt: nowStamp() });
             toast("Contract executed and locked");
@@ -17656,25 +18512,17 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
         <Btn kind="ghost" onClick={() => (form === "agreement"
           ? openDoc(`Construction Agreement — ${job.name}`, brand, agreementDocHtml(job, brand), toast, { bare: true })
           : openDoc(`Contract — ${job.name}`, brand, contractDocHtml(job, brand), toast))}><Printer size={15} /> PDF</Btn>
-        {/* Sending it is the act that puts it in front of a homeowner to
-            sign, so it is gated with the signature. Printing is not — the
-            rep has to be able to see the draft and its gaps. */}
-        <Btn kind="ghost" disabled={blockers.length > 0} onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
+        <Btn kind="ghost" onClick={() => sendClientEmail(job, mut, currentUser, integrations, toast, {
           subject: `Your contract is ready — ${brand.company}`,
           body: `Hi ${job.name}, your contract for ${job.address} is ready to review and sign. Reply to this email with any questions.`,
         })}><Send size={15} /> Email to client</Btn>
       </div>
-      {blockers.length > 0 && (
-        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8, lineHeight: 1.5 }}>
-          Printing the draft still works so you can see exactly which clauses are unfilled.
-          Confirm {stateName(job.state) || "the state"}'s contract law under More → Insurance &amp; resources →
-          Coverage by state to unlock signing and sending.
-        </div>
-      )}
+      {/* Company side only now — sigFor can only ever be "contractor";
+          the client line no longer opens this pad (see SigLine above). */}
       <SignaturePad open={!!sigFor} onClose={() => setSigFor(null)}
-        title={sigFor === "client" ? "Client signature" : "Company signature"}
+        title="Company signature"
         onApply={(dataUrl, at) => {
-          setCon(sigFor === "client" ? { clientSig: dataUrl } : { contractorSig: dataUrl });
+          setCon({ contractorSig: dataUrl });
           toast("Signature captured");
         }} />
     </>
@@ -17682,6 +18530,11 @@ function TabContract({ job, brand, setBrand = () => {}, mut, toast, docTemplates
 }
 
 /* ---------- Inspection report (fed from checklist) ---------- */
+/* A multi-select checklist field can legitimately hold several values
+   (shingle main roof + metal porch section); JSX renders an array of
+   strings back-to-back with no separator, which reads as one garbled
+   word. Every multi-select field routes display through this. */
+const listVal = (v) => (Array.isArray(v) ? v.join(", ") : v);
 function TabReport({ job, brand, juris, mut, toast, currentUser = null, integrations = {} }) {
   const c = job.checklist;
   if (!c.complete) {
@@ -17736,11 +18589,11 @@ function TabReport({ job, brand, juris, mut, toast, currentUser = null, integrat
       </Card>
       <Section n={1} title="Overview & property facts">
         <KV k="Structure" v={c.structure} />
-        <KV k="Roof covering" v={c.roofType} />
+        <KV k="Roof covering" v={listVal(c.roofType)} />
         <KV k="Approximate age" v={`${c.roofAge} years`} />
-        <KV k="Layers" v={c.layers} />
+        <KV k="Layers" v={listVal(c.layers)} />
         <KV k="Predominant pitch" v={c.pitch} />
-        <KV k="Method" v={c.method || "Visual, non-invasive"} />
+        <KV k="Method" v={listVal(c.method) || "Visual, non-invasive"} />
       </Section>
       <Section n={2} title="Summary of findings">
         {findings.map((f, i) => (
@@ -17754,9 +18607,9 @@ function TabReport({ job, brand, juris, mut, toast, currentUser = null, integrat
         ))}
       </Section>
       <Section n={3} title="Decking & structure">
-        <KV k="Decking type" v={c.deckingType || "—"} />
+        <KV k="Decking type" v={listVal(c.deckingType) || "—"} />
         <KV k="Condition (surface)" v={c.deckingCond || "—"} />
-        <KV k="Condition (attic view)" v={c.atticDecking || "—"} />
+        <KV k="Condition (attic view)" v={listVal(c.atticDecking) || "—"} />
         <KV k="Daylight through decking" v={c.lightCheck || "—"} />
       </Section>
       <Section n={4} title="Ventilation">
@@ -17863,28 +18716,22 @@ async function sendClientEmail(job, mut, currentUser, integrations, toast, { sub
    with no email on file the "recipient" was the customer's own name.
 
    Returns the real outcome and never throws. Callers record what it says. */
-async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, integrations, currentUser) {
-  const consent = job.consent || {};
-  const smsOk = !!(consent.sms && consent.sms.granted) && !!job.phone;
-  const emailOk = !!(consent.email && consent.email.granted) && !!job.email;
-  /* Preference, then the other channel, then nothing. Consent is per
-     channel and is not transferable between them. */
-  const kind = (prefer === "sms" && smsOk) ? "sms"
-    : (prefer === "email" && emailOk) ? "email"
-    : smsOk ? "sms" : emailOk ? "email" : null;
-  if (!kind) {
-    const why = (consent.sms && consent.sms.granted) || (consent.email && consent.email.granted)
-      ? "Not sent — no contact details on file"
-      : "Not sent — no messaging consent on file";
-    return { kind: prefer, to: "", status: why, delivered: false };
-  }
-  const to = kind === "sms" ? job.phone : job.email;
+/* The actual send attempt, with no address resolution and no consent
+   gating — those are what make a recipient a *customer* recipient, and a
+   crew or the office's own accounting inbox isn't subject to either. This
+   is what deliverToCustomer delegates to once it has resolved a channel
+   and address from the job's consent; it is also what an internal-audience
+   queued message (Crew, Accounting) drains through directly, since routing
+   those through deliverToCustomer put a customer's own phone/email in as
+   `to` and gated the send on the customer's consent — consent for messages
+   the customer was never the recipient of. */
+async function deliverMessage({ to, kind, subject = "", body, jobId }, integrations, currentUser) {
   const auth = AUTH();
   const notSetUp = (m) => /not configured|Function not found|Failed to send a request|non-2xx|isn't connected/i.test(m);
   if (kind === "sms") {
     if (!(auth && auth.sendSms)) return { kind, to, status: "Queued — no provider connected", delivered: false };
     try {
-      await auth.sendSms({ to, body, jobId: job.id });
+      await auth.sendSms({ to, body, jobId });
       return { kind, to, status: "Sent", delivered: true };
     } catch (e) {
       const m = (e && e.message) || "Could not send";
@@ -17902,6 +18749,24 @@ async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, in
     const m = (e && e.message) || "Could not send";
     return { kind, to, status: notSetUp(m) ? "Queued — email not set up yet" : `Failed — ${m}`, delivered: false };
   }
+}
+async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, integrations, currentUser) {
+  const consent = job.consent || {};
+  const smsOk = !!(consent.sms && consent.sms.granted) && !!job.phone;
+  const emailOk = !!(consent.email && consent.email.granted) && !!job.email;
+  /* Preference, then the other channel, then nothing. Consent is per
+     channel and is not transferable between them. */
+  const kind = (prefer === "sms" && smsOk) ? "sms"
+    : (prefer === "email" && emailOk) ? "email"
+    : smsOk ? "sms" : emailOk ? "email" : null;
+  if (!kind) {
+    const why = (consent.sms && consent.sms.granted) || (consent.email && consent.email.granted)
+      ? "Not sent — no contact details on file"
+      : "Not sent — no messaging consent on file";
+    return { kind: prefer, to: "", status: why, delivered: false };
+  }
+  const to = kind === "sms" ? job.phone : job.email;
+  return deliverMessage({ to, kind, subject, body, jobId: job.id }, integrations, currentUser);
 }
 
 /* ================================================================
@@ -17950,7 +18815,7 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
       }],
     }));
 
-    /* Texts go through the send-sms function, which holds the Twilio
+    /* Texts go through the send-sms function, which holds the EZ Texting
        credentials. Anything client-side would expose them. */
     if (compose === "sms") {
       const auth = AUTH();
@@ -17967,7 +18832,7 @@ function TabMessages({ job, mut, toast, brand, templates, crews, integrations, c
           record(notSetUp ? "Queued — texting not set up yet" : `Failed — ${m}`);
           toast(notSetUp
             ? "Texting isn't set up on this project yet — saved to the thread"
-            : `Twilio: ${m}`);
+            : `Texting: ${m}`);
           setCompose(null);
         }
         setSending(false);
@@ -18196,8 +19061,43 @@ function TabPhotos({ job, mut, toast, ccToken }) {
   const [geoErr, setGeoErr] = useState("");
   const [uploading, setUploading] = useState(false);
   const [upErr, setUpErr] = useState("");
+  const [pairBefore, setPairBefore] = useState("");
+  const [pairAfter, setPairAfter] = useState("");
+  const [pairLabel, setPairLabel] = useState("");
+  const [scanning, setScanning] = useState(null); // photo id currently being scanned
   const fileRef = useRef(null);
   const pendingLabel = useRef("");
+
+  /* AI damage detection — one photo at a time, results written onto the
+     photo record itself (not ephemeral local state) so a scan survives a
+     reload same as every other fact on the job. A finding a rep trusts
+     becomes the exact same findingTag the manual "Tag a photo" flow in
+     SupplementCheck writes, so it's real claim evidence from here on, not
+     a second parallel system. */
+  const scanPhoto = async (p) => {
+    const a = AUTH();
+    if (!a || !a.detectPhotoDamage) { toast("Damage detection isn't available in demo mode"); return; }
+    if (!p.url) { toast("This photo has no image to scan"); return; }
+    setScanning(p.id);
+    try {
+      const split = splitDataUrl(await dataUrlFromImageUrl(p.url));
+      if (!split) { toast("Couldn't read that photo"); return; }
+      const findings = await a.detectPhotoDamage({ imageBase64: split.base64, mimeType: split.mime });
+      if (!findings) { toast("Damage detection isn't available right now"); return; }
+      mut((j) => ({ ...j, photos: j.photos.map((x) => (x.id === p.id ? { ...x, aiScan: { at: nowStamp(), findings } } : x)) }));
+      toast(findings.length
+        ? `${findings.length} possible finding${findings.length === 1 ? "" : "s"} — verify in person before using`
+        : "No damage detected in this photo");
+    } catch (e) {
+      toast("Couldn't scan that photo");
+    } finally {
+      setScanning(null);
+    }
+  };
+  const useAiFinding = (p, finding) => {
+    mut((j) => ({ ...j, photos: j.photos.map((x) => (x.id === p.id ? { ...x, findingTag: { title: finding.type, cite: null } } : x)) }));
+    toast(`Tagged as evidence for "${finding.type}"`);
+  };
 
   const getFix = async () => {
     setLocating(true); setGeoErr("");
@@ -18265,6 +19165,22 @@ function TabPhotos({ job, mut, toast, ccToken }) {
   };
 
   const shotsDone = new Set(job.photos.map((p) => p.label));
+
+  /* Before/after is a join over the photo album, not a new kind of photo —
+     a pair is just two existing photo ids with a label, the same shape the
+     app already uses for other lightweight registries (punch list items,
+     supplements) instead of mutating the photo record itself. */
+  const createPair = () => {
+    if (!pairBefore || !pairAfter || pairBefore === pairAfter) return;
+    mut((j) => ({
+      ...j,
+      photoPairs: [...(j.photoPairs || []), { id: uid("pp"), label: pairLabel.trim() || "Before / after", beforeId: pairBefore, afterId: pairAfter }],
+    }));
+    setPairBefore(""); setPairAfter(""); setPairLabel("");
+    toast("Before/after pair saved");
+  };
+  const deletePair = (id) => mut((j) => ({ ...j, photoPairs: (j.photoPairs || []).filter((pp) => pp.id !== id) }));
+  const photoById = (id) => job.photos.find((p) => p.id === id);
 
   return (
     <>
@@ -18352,6 +19268,11 @@ function TabPhotos({ job, mut, toast, ccToken }) {
               <div style={{ padding: "8px 10px" }}>
                 <div style={{ fontSize: 12, fontWeight: 700 }}>{p.label}</div>
                 <div style={{ fontSize: 11, color: S.sub, marginTop: 2 }}>{p.at}</div>
+                {p.findingTag && (
+                  <div style={{ marginTop: 5 }} title={p.findingTag.cite ? `Cite: ${p.findingTag.cite}` : "Cite not verified for this state"}>
+                    <Chip tone="blue">Evidence: {p.findingTag.title}</Chip>
+                  </div>
+                )}
                 {p.lat != null ? (
                   <a href={mapLinkForCoords(p.lat, p.lng)} target="_blank" rel="noreferrer" style={{
                     display: "inline-flex", alignItems: "center", gap: 4, marginTop: 5,
@@ -18367,6 +19288,38 @@ function TabPhotos({ job, mut, toast, ccToken }) {
                   color: p.shared ? T.accent : S.sub,
                   borderRadius: 999, padding: "4px 10px", fontSize: 10.5, fontWeight: 700, cursor: "pointer",
                 }}>{p.shared ? <Check size={10} /> : null} {p.shared ? "Shared" : "Share"}</button>
+                {p.url && !p.aiScan && (
+                  <button onClick={() => scanPhoto(p)} disabled={scanning === p.id} style={{
+                    marginTop: 7, marginLeft: 6, display: "inline-flex", alignItems: "center", gap: 5,
+                    border: `1px solid ${S.line}`, background: S.card, color: S.sub,
+                    borderRadius: 999, padding: "4px 10px", fontSize: 10.5, fontWeight: 700,
+                    cursor: scanning === p.id ? "default" : "pointer", opacity: scanning === p.id ? 0.6 : 1,
+                  }}><Sparkles size={10} /> {scanning === p.id ? "Scanning…" : "Scan for damage"}</button>
+                )}
+                {p.aiScan && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".03em", color: S.sub, marginBottom: 4 }}>
+                      AI SCAN · VERIFY IN PERSON
+                    </div>
+                    {p.aiScan.findings.length === 0 ? (
+                      <div style={{ fontSize: 11, color: S.sub }}>No damage detected.</div>
+                    ) : p.aiScan.findings.map((f, fi) => (
+                      <div key={fi} style={{ marginBottom: 6, paddingBottom: 6, borderBottom: fi < p.aiScan.findings.length - 1 ? `1px solid ${S.line}` : "none" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                          <Chip tone={f.confidence === "high" ? "amber" : "gray"}>{f.confidence}</Chip>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: S.ink }}>{f.type}</span>
+                        </div>
+                        <div style={{ fontSize: 10.5, color: S.sub, lineHeight: 1.4, marginTop: 2 }}>{f.description}</div>
+                        {(!p.findingTag || p.findingTag.title !== f.type) && (
+                          <button onClick={() => useAiFinding(p, f)} style={{
+                            marginTop: 4, border: "none", background: "none", color: T.accent,
+                            fontSize: 10.5, fontWeight: 700, cursor: "pointer", padding: 0,
+                          }}>Use as evidence</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -18381,6 +19334,59 @@ function TabPhotos({ job, mut, toast, ccToken }) {
             toast("Photo log exported");
           }}><Download size={13} /> Export photo log (CSV)</Btn>
         )}
+      </Card>
+
+      <Card style={{ marginTop: 12 }}>
+        <CardTitle right={<Chip tone="gray">{(job.photoPairs || []).length}</Chip>}>Before / after</CardTitle>
+        <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+          Pair a before shot with an after shot of the same area — the comparison is what a homeowner,
+          and an adjuster, actually reads as proof of the work.
+        </div>
+        {job.photos.length < 2 ? (
+          <div style={{ fontSize: 13, color: S.sub }}>Add at least two photos to create a pair.</div>
+        ) : (
+          <>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <select style={{ ...selStyle, flex: 1, minWidth: 130 }} value={pairBefore} onChange={(e) => setPairBefore(e.target.value)}>
+                <option value="">Before photo…</option>
+                {job.photos.map((p) => <option key={p.id} value={p.id}>{p.label} — {p.at}</option>)}
+              </select>
+              <select style={{ ...selStyle, flex: 1, minWidth: 130 }} value={pairAfter} onChange={(e) => setPairAfter(e.target.value)}>
+                <option value="">After photo…</option>
+                {job.photos.map((p) => <option key={p.id} value={p.id}>{p.label} — {p.at}</option>)}
+              </select>
+            </div>
+            <input style={{ ...inputStyle, marginTop: 8 }} placeholder="Area label (optional) — e.g. Front slope"
+              value={pairLabel} onChange={(e) => setPairLabel(e.target.value)} />
+            <Btn small style={{ marginTop: 8 }} disabled={!pairBefore || !pairAfter || pairBefore === pairAfter} onClick={createPair}>
+              <Plus size={13} /> Save pair
+            </Btn>
+          </>
+        )}
+        {(job.photoPairs || []).map((pp) => {
+          const before = photoById(pp.beforeId), after = photoById(pp.afterId);
+          if (!before || !after) return null;
+          return (
+            <div key={pp.id} style={{ marginTop: 14, borderTop: `1px solid ${S.line}`, paddingTop: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: S.ink }}>{pp.label}</div>
+                <button onClick={() => deletePair(pp.id)} style={{ border: "none", background: "none", cursor: "pointer", lineHeight: 0 }}>
+                  <Trash2 size={14} color="#B42318" />
+                </button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {[["BEFORE", before], ["AFTER", after]].map(([tag, p]) => (
+                  <div key={tag}>
+                    <div style={{ height: 110, background: "#EEF1F4", borderRadius: 10, overflow: "hidden", display: "grid", placeItems: "center" }}>
+                      {p.url ? <img src={p.url} alt={tag} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <ImageIcon size={20} color="#9CA3AF" />}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: S.sub, marginTop: 4, textAlign: "center", fontWeight: 800, letterSpacing: ".04em" }}>{tag}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </Card>
     </>
   );
@@ -18818,7 +19824,7 @@ function TabPayments({ job, mut, toast, onLog = () => {} }) {
         <Field label="Amount"><MoneyInput style={inputStyle} value={form.amt}
           onChange={(v) => setForm({ ...form, amt: v })} /></Field>
         <Btn style={{ width: "100%" }} disabled={!form.label.trim() || !num(form.amt)} onClick={() => {
-          mut((j) => ({ ...j, payments: [...j.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp() }] }));
+          mut((j) => ({ ...j, payments: [...j.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp(), dateIso: todayIso() }] }));
           setForm({ type: "Received", label: "", amt: "" });
           toast("Payment logged");
         }}><Plus size={15} /> Log payment</Btn>
@@ -18856,8 +19862,8 @@ function TabPayments({ job, mut, toast, onLog = () => {} }) {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Field label="Amount"><MoneyInput style={inputStyle} value={ef2.amt}
                 onChange={(v) => setEf2({ ...ef2, amt: v })} /></Field>
-              <Field label="Date"><input style={inputStyle} type="date" value={ef2.date || ""}
-                onChange={(e) => setEf2({ ...ef2, date: e.target.value })} /></Field>
+              <Field label="Date"><input style={dateInputStyle} type="date" value={payDateIso(ef2)}
+                onChange={(e) => setEf2({ ...ef2, dateIso: e.target.value, date: isoToHuman(e.target.value) })} /></Field>
             </div>
             <Field label="Method">
               <select style={selStyle} value={ef2.method || "Check"} onChange={(e) => setEf2({ ...ef2, method: e.target.value })}>
@@ -19066,7 +20072,7 @@ function TabInvoice({ job, brand, mut, toast, currentUser = null, integrations =
               onChange={(e) => mut((j) => ({ ...j, invoiceNo: e.target.value }))} />
           </Field>
           <Field label="Due date">
-            <input style={inputStyle} type="date" value={job.invoiceDue || ""}
+            <input style={dateInputStyle} type="date" value={job.invoiceDue || ""}
               onChange={(e) => mut((j) => ({ ...j, invoiceDue: e.target.value }))} />
           </Field>
         </div>
@@ -19308,16 +20314,22 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
   };
   const send = () => {
     const stamp = nowStamp();
+    /* Queued, not asserted as sent — nothing has attempted delivery yet.
+       "No provider connected" used to be hardcoded here regardless of
+       whether that was true; it now reads the same way the sub-invoice's
+       accounting notice already does — the actual state gets reported
+       correctly once "Send now" in the Inbox runs the real attempt. */
+    const status = crew.email ? "Queued" : "Queued — add an email on this crew's file to notify them";
     mut((j) => ({
       ...j,
       workOrder: { ...wo, number: wo.number || `WO-${String(Math.floor(Math.random() * 900) + 100)}`, sentAt: stamp, status: "Sent", notes },
       messages: [...(j.messages || []), {
         id: uid("msg"), kind: "email", audience: "Crew", to: crew.email,
-        subject, body, at: stamp, by: currentUser.name, status: "Queued — no provider connected",
+        subject, body, at: stamp, by: currentUser.name, status,
       }],
     }));
     setSending(false);
-    toast("Work order sent to crew");
+    toast("Work order queued to crew — send it from the Inbox");
   };
 
   return (
@@ -19384,6 +20396,10 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
         <a href={directionsLink(job.address)} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
           <Btn kind="ghost" small style={{ width: "100%", marginTop: 10 }}><MapPin size={13} /> Directions to site</Btn>
         </a>
+        <Btn kind="ghost" small style={{ width: "100%", marginTop: 8 }}
+          onClick={() => openDoc(`Work order — ${job.name}`, brand, workOrderDocHtml(job, brand, crew), toast)}>
+          <Printer size={13} /> Print / PDF
+        </Btn>
       </Card>
 
       {coverage && coverage.lines.length > 0 && (
@@ -19777,7 +20793,7 @@ function TabTasks({ job, mut, toast }) {
         <input style={{ ...inputStyle, flex: 1, minWidth: 160 }} placeholder="Add a task" value={txt}
           onChange={(e) => setTxt(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && txt.trim()) { mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: txt.trim(), done: false, due: due || null, time: time || null }] })); setTxt(""); setDue(""); setTime(""); } }} />
-        <input style={{ ...inputStyle, width: 138 }} type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+        <input style={{ ...dateInputStyle, width: 138 }} type="date" value={due} onChange={(e) => setDue(e.target.value)} />
         <input style={{ ...inputStyle, width: 108 }} type="time" value={time} onChange={(e) => setTime(e.target.value)} />
         <Btn small disabled={!txt.trim()} onClick={() => { mut((j) => ({ ...j, tasks: [...j.tasks, { id: uid("t"), label: txt.trim(), done: false, due: due || null, time: time || null }] })); setTxt(""); setDue(""); setTime(""); }}>
           <Plus size={14} />
@@ -19811,6 +20827,21 @@ function readAsDataUrl(file) {
   });
 }
 
+/* A stored photo's url is either an inline data: URL (demo / no Storage
+   configured) or a real https Supabase Storage URL — AI damage detection
+   needs base64 bytes either way, since the edge function takes exactly
+   what it's handed rather than fetching a tenant's storage itself. */
+async function dataUrlFromImageUrl(url) {
+  if (String(url).startsWith("data:")) return url;
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return readAsDataUrl(blob);
+}
+function splitDataUrl(dataUrl) {
+  const m = /^data:([^;]+);base64,([\s\S]*)$/.exec(dataUrl || "");
+  return m ? { mime: m[1], base64: m[2] } : null;
+}
+
 async function uploadJobFile(jobId, file) {
   const db = DB();
   const safe = String(file.name || "file").replace(/[^\w.\-]+/g, "_");
@@ -19832,6 +20863,12 @@ async function uploadJobFile(jobId, file) {
   const url = await readAsDataUrl(file);
   return { storage: "inline", key, url, size: file.size, mime: file.type };
 }
+/* Company-level documents (COIs, licenses, warranty terms) are not tied to
+   a job, so they get their own key prefix in the same bucket rather than a
+   second bucket to provision. Same storage, same inline fallback below the
+   3 MB cap — reusing uploadJobFile's tested path rather than a parallel one
+   that could drift from it. */
+function uploadCompanyFile(file) { return uploadJobFile("_company", file); }
 
 function TabFiles({ job, mut, toast }) {
   const [cat, setCat] = useState(FILE_CATS[0]);
@@ -19986,7 +21023,12 @@ function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "", users
     const tok = job.portalToken || (uid("p") + Math.random().toString(36).slice(2, 10));
     if (!db) {
       mut((j) => ({ ...j, portalToken: tok }));
-      toast("Link created — it goes live once the app is connected to the database");
+      /* The button reads "Update & copy link" — honor that even in demo
+         mode, not just on the live-database path below. */
+      const copied = navigator.clipboard ? await navigator.clipboard.writeText(portalUrl(tok)).then(() => true, () => false) : false;
+      toast(copied
+        ? "Link copied — it goes live once the app is connected to the database"
+        : "Link created — it goes live once the app is connected to the database");
       return;
     }
     setBusy(true);
@@ -20216,7 +21258,7 @@ function TabPortal({ job, brand, mut, toast, currentUser, stageLabel = "", users
         <div style={{ border: `1px solid ${S.line}`, borderRadius: 14, overflow: "hidden" }}>
           <div style={{ background: T.primary, padding: "16px 16px 14px", color: "#fff" }}>
             <div style={{ fontSize: 12, opacity: 0.75 }}>{brand.company}</div>
-            <div style={{ fontSize: 17, fontWeight: 800, marginTop: 3 }}>Your {projectNoun(job)} project</div>
+            <div style={{ fontSize: 17, fontWeight: 800, marginTop: 3 }}>Your project</div>
             <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>{job.address}</div>
           </div>
           <div style={{ padding: 14 }}>
@@ -20869,163 +21911,136 @@ function ClaimAssistant({ job = null, defaultState = "" }) {
   );
 }
 
-/* Coverage by state — where a seeded pointer becomes a fact somebody
-   stands behind, which is the only way anything reaches `verified`.
+/* nowStamp() writes "Aug 6, 11:47 PM" — a display string with no year,
+   because every place that reads it today only ever displays it back.
+   This is the first place that needs to do arithmetic on it, and
+   Date.parse() on that string is not reliable: with no year, engines
+   default to inconsistent guesses (V8 lands on 2001), which turns "added
+   an hour ago" into "9,131 days old". Reconstruct the actual date instead
+   of trusting a generic parse of a format never meant to be machine-read. */
+function parseNowStamp(s) {
+  const m = /^([A-Za-z]{3})\s+(\d{1,2}),\s+(\d{1,2}):(\d{2})\s*(AM|PM)$/.exec(String(s || "").trim());
+  if (!m) return null;
+  const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+  const [, mon, day, hh, mm, ap] = m;
+  if (!(mon in MONTHS)) return null;
+  let hour = parseInt(hh, 10) % 12;
+  if (ap.toUpperCase() === "PM") hour += 12;
+  const now = new Date();
+  const d = new Date(now.getFullYear(), MONTHS[mon], parseInt(day, 10), hour, parseInt(mm, 10));
+  /* A stamp from December read back in January is a year old, not from
+     the future — roll back once rather than showing a negative age. */
+  if (d.getTime() - now.getTime() > 86400000) d.setFullYear(d.getFullYear() - 1);
+  return d;
+}
 
-   Structured as a review, not a form: each field says what it governs,
-   what the supplied contract currently asserts, and which body settles
-   it, with a link. Confirming stamps who and when onto the org blob,
-   exactly as the building-department confirm flow does one level down.
-   Nothing here fills a value in for the reader. */
-function CoverageByState({ jobs = [], stateFacts = {}, onConfirm, onClear, toast = () => {} }) {
-  /* Every state the company actually has work in, plus anything already
-     confirmed — so a state does not vanish off this screen the moment
-     its last job closes. */
-  const active = useMemo(() => {
-    const set = new Set();
-    (jobs || []).forEach((j) => { if (j && j.state) set.add(j.state); });
-    Object.keys(stateFacts || {}).forEach((s) => set.add(s));
-    return [...set].sort();
-  }, [jobs, stateFacts]);
-  const [sel, setSel] = useState(active[0] || "");
-  useEffect(() => { if (!sel && active.length) setSel(active[0]); }, [active.length]);
-  const [draft, setDraft] = useState({});
-  const [openField, setOpenField] = useState(null);
-  useEffect(() => { setDraft({}); setOpenField(null); }, [sel]);
+/* Timestamp fields in this codebase come in at least three shapes
+   depending on which code path wrote them: an ISO date from todayIso()
+   ("2026-07-15"), a long date with a year ("Jul 15, 2026" — how the
+   seed data and several document renderers write it), or nowStamp()'s
+   year-less display string. Only the last one defeats a native Date
+   parse, so try that specific shape first and fall through to the
+   browser's own parser for everything else — one helper, instead of
+   every caller having to know which shape it might be holding. */
+function parseAnyStamp(raw) {
+  if (!raw) return null;
+  const viaNowStamp = parseNowStamp(raw);
+  if (viaNowStamp) return viaNowStamp;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? null : d;
+}
 
-  const pack = legalPackFor(sel, stateFacts);
-  const gaps = legalPackGaps(sel, stateFacts);
-  const ready = legalPackReady(sel, stateFacts);
-  const jobCount = (jobs || []).filter((j) => j && j.state === sel).length;
+/* Supplement queue — every job's claim.supplements[] flattened into one
+   cross-job pipeline instead of a status buried on each job's own claim
+   tab. This is the same thing "Supplement Tracker" and "SuppTrax" exist to
+   bolt onto other CRMs as a paid spreadsheet: proof that even a full-CRM
+   claim tab doesn't give a supplement-heavy office a real view of where
+   its money is once volume grows past what one job screen at a time can
+   show. Nothing new is tracked here — it's a rollup of the same rows the
+   claim tab already writes. */
+function SupplementPipeline({ jobs, onOpenJob, embedded = false, onBack }) {
+  const [stage, setStage] = useState("all");
+  const rows = jobs.flatMap((j) => ((j.claim || {}).supplements || []).map((s) => ({ job: j, s })));
+  const daysOld = (s) => {
+    const d = parseNowStamp(s.at);
+    if (!d) return null;
+    return Math.max(0, Math.round((Date.now() - d.getTime()) / 86400000));
+  };
+  const shown = stage === "all" ? rows : rows.filter(({ s }) => (s.status || "Draft") === stage);
+  /* Not a string sort — "Oct" < "Sep" alphabetically but not chronologically,
+     so the same real-date parse used for aging also orders the list. */
+  const atTime = (s) => { const d = parseNowStamp(s.at); return d ? d.getTime() : 0; };
+  const sorted = [...shown].sort((a, b) => atTime(b.s) - atTime(a.s));
+  const totalFor = (st) => rows.filter(({ s }) => (s.status || "Draft") === st).reduce((a, { s }) => a + num(s.amount), 0);
+  const grandTotal = rows.reduce((a, { s }) => a + num(s.amount), 0);
 
   return (
-    <div>
-      <div style={{ fontSize: 13.5, color: S.sub, lineHeight: 1.55, marginBottom: 14 }}>
-        A contract states rights that are set by the state the property is in. This is where those get
-        confirmed. Until a state's binding fields are confirmed, its contracts print a labelled
-        placeholder where the clause belongs and cannot be signed or sent — which is the point:
-        the app does not know your states' law and will not pretend to.
+    <div style={{ padding: embedded ? 0 : "20px 16px 28px", background: embedded ? "transparent" : S.bg, minHeight: embedded ? undefined : "100%" }}>
+      {!embedded && <SubHeader title="Supplement queue" onBack={onBack} />}
+
+      <Card style={{ marginTop: embedded ? 0 : 14, borderLeft: `4px solid ${grandTotal > 0 ? "#E8B931" : S.line}` }}>
+        <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".08em", color: S.sub }}>ACROSS THE WHOLE QUEUE</div>
+        <div style={{ fontSize: 30, fontWeight: 800, color: grandTotal > 0 ? "#9A6B00" : S.ink, marginTop: 4, lineHeight: 1.1 }}>
+          {money(grandTotal)}
+        </div>
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 6 }}>
+          {rows.length} {rows.length === 1 ? "supplement" : "supplements"} across every open claim, whichever job they belong to.
+        </div>
+      </Card>
+
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", margin: "14px 0 4px", paddingBottom: 2 }}>
+        {["all", ...SUPPLEMENT_STATUS].map((id) => {
+          const n = id === "all" ? rows.length : rows.filter(({ s }) => (s.status || "Draft") === id).length;
+          const amt = id === "all" ? grandTotal : totalFor(id);
+          return (
+            <button key={id} onClick={() => setStage(id)} style={{
+              border: `1.5px solid ${stage === id ? T.accent : S.line}`,
+              background: stage === id ? T.accentSoft : "#fff", color: stage === id ? T.accent : S.ink,
+              borderRadius: 999, padding: "7px 12px", fontSize: 12.5, fontWeight: 700,
+              cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit",
+            }}>{id === "all" ? "All" : id}{n > 0 ? ` · ${n}` : ""}{amt > 0 ? ` · ${money(amt)}` : ""}</button>
+          );
+        })}
       </div>
-      {!active.length ? (
-        <Card><div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
-          No jobs with a state on file yet. A state appears here as soon as there is a job in it.
-        </div></Card>
-      ) : (
-        <>
-          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 14 }}>
-            {active.map((st) => {
-              const on = st === sel;
-              const good = legalPackReady(st, stateFacts);
-              return (
-                <button key={st} onClick={() => setSel(st)} style={{
-                  border: `1px solid ${on ? T.accent : S.line}`, background: on ? T.accentSoft : S.card,
-                  color: on ? T.accent : S.ink, borderRadius: 999, padding: "7px 14px",
-                  fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                }}>
-                  {stateName(st) || st}
-                  <span style={{
-                    width: 8, height: 8, borderRadius: 99,
-                    background: good ? "var(--rl-green-fg)" : "var(--rl-amber-fg)",
-                  }} />
-                </button>
-              );
-            })}
-          </div>
-          <Card>
-            <CardTitle right={<Chip tone={ready ? "green" : "amber"}>{ready ? "Contracts can be signed" : `${gaps.length} to confirm`}</Chip>}>
-              {stateName(sel) || sel}
-            </CardTitle>
-            <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
-              {jobCount} {jobCount === 1 ? "job" : "jobs"} on file.
-              {ready
-                ? " Every binding field has been confirmed, so agreements here render and sign normally."
-                : " Agreements in this state are blocked from signing until the fields marked below are confirmed."}
-            </div>
-          </Card>
-          {LEGAL_FIELDS.map((f) => {
-            const cur = pack[f.key];
-            const conf = ((stateFacts || {})[sel] || {})[f.key];
-            const open = openField === f.key;
-            const val = draft[f.key] !== undefined ? draft[f.key] : (conf ? conf.value : cur.value);
-            return (
-              <Card key={f.key} style={{ marginTop: 10 }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
-                  <div style={{ flex: 1, minWidth: 180 }}>
-                    <div style={{ fontSize: 14.5, fontWeight: 800, color: S.ink, lineHeight: 1.3 }}>
-                      {f.label}{f.binding && <span style={{ color: "var(--rl-amber-fg)", marginLeft: 6, fontSize: 11.5, fontWeight: 800 }}>BINDING</span>}
-                    </div>
-                    <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 3 }}>{f.help}</div>
-                  </div>
-                </div>
-                {/* Not compact: this is the screen where the tier is the
-                    whole point, and compact mode drops the word for it —
-                    a seeded value would render as a chip with no label
-                    saying nobody has checked it. */}
-                {/* Cited renders the note and the authority link itself for
-                    a fact with nothing behind it — that pointer IS the
-                    unknown state. Repeating them here printed each one
-                    twice. */}
-                <Cited fact={cur} style={{ marginTop: 8 }} />
-                {cur.value && cur.note && (
-                  <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 6 }}>{cur.note}</div>
-                )}
-                {cur.value && cur.sourceUrl && (
-                  <a href={cur.sourceUrl} target="_blank" rel="noreferrer"
-                    style={{ display: "inline-block", fontSize: 12.5, fontWeight: 700, color: T.accent, textDecoration: "none", marginTop: 6 }}>
-                    {cur.sourceName || "Open the source"} →
-                  </a>
-                )}
-                {conf && (
-                  <div style={{ fontSize: 12, color: S.sub, marginTop: 6 }}>
-                    Confirmed by {conf.by} on {conf.at}.
-                  </div>
-                )}
-                {!open ? (
-                  <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                    <Btn kind="soft" small onClick={() => setOpenField(f.key)}>
-                      <PenLine size={13} /> {conf ? "Update" : "Confirm for " + (stateName(sel) || sel)}
-                    </Btn>
-                    {conf && <Btn kind="ghost" small onClick={() => onClear(sel, f.key)}>Withdraw</Btn>}
-                  </div>
-                ) : (
-                  <div style={{ marginTop: 10 }}>
-                    <Field label={`What ${stateName(sel) || sel} requires`}
-                      hint="Write it as it should read to a homeowner. This text goes into the contract wherever this clause belongs.">
-                      <textarea style={{ ...inputStyle, minHeight: 72, resize: "vertical", fontFamily: "inherit", fontSize: 13, lineHeight: 1.55 }}
-                        value={val} onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })} />
-                    </Field>
-                    <div style={{ fontSize: 12, color: S.sub, lineHeight: 1.5, marginBottom: 8 }}>
-                      Confirming records your name and today's date against this field. Only confirm what you
-                      have actually read at the source — the whole gate is worthless if it is clicked through.
-                    </div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <Btn kind="green" small disabled={!String(val || "").trim()}
-                        onClick={() => {
-                          onConfirm(sel, f.key, { value: String(val).trim(), sourceUrl: cur.sourceUrl, sourceName: cur.sourceName });
-                          setOpenField(null);
-                          setDraft({ ...draft, [f.key]: undefined });
-                        }}>
-                        <CheckCircle2 size={14} /> I've read the source — confirm
-                      </Btn>
-                      <Btn kind="ghost" small onClick={() => { setOpenField(null); setDraft({ ...draft, [f.key]: undefined }); }}>Cancel</Btn>
-                    </div>
-                  </div>
-                )}
-              </Card>
-            );
-          })}
-          <div style={{ fontSize: 11.5, color: S.sub, lineHeight: 1.5, marginTop: 14 }}>
-            This is a record of what your office has checked. It is not legal advice, and confirming a
-            field here does not make it correct — it records that a named person read the source on a date.
-          </div>
-        </>
+
+      {sorted.length === 0 && (
+        <Card pad={18}><div style={{ fontSize: 13.5, color: S.sub }}>Nothing in this part of the queue.</div></Card>
       )}
+      {sorted.map(({ job, s }) => {
+        const age = daysOld(s);
+        const tone = s.status === "Denied" ? "red" : s.status === "Approved" || s.status === "Paid" ? "green" : "amber";
+        return (
+          <Card key={s.id} style={{ marginTop: 10 }} pad={0}>
+            <button onClick={() => onOpenJob(job.id, "claim")} style={{
+              width: "100%", textAlign: "left", border: "none", background: "none",
+              cursor: "pointer", padding: 15, fontFamily: "inherit",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{job.name}</div>
+                  <div style={{ fontSize: 12.5, color: S.sub, marginTop: 2 }}>{s.desc || "Untitled supplement"}</div>
+                  {age != null && (
+                    <div style={{ fontSize: 11.5, color: S.sub, marginTop: 4 }}>
+                      {age === 0 ? "added today" : `${age} ${age === 1 ? "day" : "days"} in this status`}
+                    </div>
+                  )}
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <Chip tone={tone}>{s.status || "Draft"}</Chip>
+                  {num(s.amount) > 0 && (
+                    <div style={{ fontSize: 15, fontWeight: 800, color: S.ink, marginTop: 6 }}>{money(num(s.amount))}</div>
+                  )}
+                </div>
+              </div>
+            </button>
+          </Card>
+        );
+      })}
     </div>
   );
 }
 
-function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {}, stateFacts = {}, onConfirmLegal = () => {}, onClearLegal = () => {}, seed = null, onConsumeSeed = () => {} }) {
+function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, onSaveJurisdiction = () => {}, seed = null, onConsumeSeed = () => {} }) {
   const [tab, setTab] = useState(seed && seed.tab ? seed.tab : (seed && seed.zip ? "codes" : "clients"));
   const [zip, setZip] = useState(seed ? seed.zip || "" : "");
   const [tplState, setTplState] = useState("");
@@ -21051,7 +22066,7 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
   }, [seed]);
   const insJobs = jobs.filter((j) => j.claimType === "Insurance");
   const juris = jurisdictionForZip(zip.trim());
-  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Supplements"], ["codes", "Code lookup"], ["coverage", "Coverage"], ["resources", "Resources"]];
+  const tabs = [["clients", "Clients"], ["claims", "Claims"], ["supqueue", "Supplement queue"], ["ask", "Assistant"], ["search", "Search"], ["storm", "Storm"], ["supplements", "Wording library"], ["codes", "Code lookup"], ["resources", "Resources"]];
 
   /* One index across codes, terms and supplement triggers, so a rep
      types what they half-remember rather than guessing which tab it
@@ -21092,10 +22107,6 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
       </div>
 
       {tab === "ask" && <ClaimAssistant defaultState={tplState} />}
-      {tab === "coverage" && (
-        <CoverageByState jobs={jobs} stateFacts={stateFacts} toast={toast}
-          onConfirm={onConfirmLegal} onClear={onClearLegal} />
-      )}
 
       {tab === "storm" && <StormScout toast={toast} />}
 
@@ -21264,6 +22275,12 @@ function InsuranceHub({ jobs, onBack, onOpenJob, toast, onSaveDept = () => {}, o
       {tab === "claims" && (
         <div style={{ marginTop: 14 }}>
           <ClaimsDashboard jobs={jobs} onOpenJob={onOpenJob} embedded />
+        </div>
+      )}
+
+      {tab === "supqueue" && (
+        <div style={{ marginTop: 14 }}>
+          <SupplementPipeline jobs={jobs} onOpenJob={onOpenJob} embedded />
         </div>
       )}
 
@@ -21889,10 +22906,24 @@ const REVIEW_STEPS = [
     label: "Day 14 — last touch",
     body: (c) => `Hi ${c.first}, last note from us on this. If you were happy with the work: ${c.link}. If you weren't, we would genuinely rather hear it directly — just reply.` },
 ];
+/* The real source ReviewSettings' "Where reviews go" section maps over
+   — previously declared and never referenced, while that section
+   hand-rolled the same three platforms inline with no shared list, so a
+   fourth platform could be added to one without the other drifting into
+   sync. Google's link lives on `brand` (it's also used in merge-field
+   templates and elsewhere company-wide); Facebook/BBB are review-
+   settings-only and live in `settings` — a real, deliberate difference,
+   not something to paper over, so each entry says where its own value
+   comes from. */
 const REVIEW_PLATFORMS = [
-  ["google", "Google", "The one that moves the needle locally"],
-  ["facebook", "Facebook", "Useful for social proof"],
-  ["bbb", "BBB", "Matters to older and insurance-minded customers"],
+  { id: "google", name: "Google", blurb: "The one that moves the needle locally",
+    label: "Google review link", hint: "Google Business Profile → Ask for reviews → copy the short link.",
+    source: "brand", field: "googleReviewLink" },
+  { id: "facebook", name: "Facebook", blurb: "Useful for social proof",
+    label: "Facebook reviews link", placeholder: "https://facebook.com/yourpage/reviews",
+    source: "settings", field: "facebookLink" },
+  { id: "bbb", name: "BBB", blurb: "Matters to older and insurance-minded customers",
+    label: "BBB profile link", source: "settings", field: "bbbLink" },
 ];
 
 /* Where each completed job sits in the funnel. */
@@ -21962,10 +22993,16 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
       <Card style={{ marginTop: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ flex: 1, paddingRight: 12 }}>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>Automatic review requests</div>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>Review request sequence</div>
+            {/* Was labelled "Automatic" — the app tracks the four-touch
+                sequence, surfaces who is due next, and pauses it the moment
+                someone rates three or below, but no message goes out on its
+                own. A rep sends it (a text, a call, an email) and taps
+                "Mark sent" below to advance the sequence; nothing here
+                dispatches anything by itself. */}
             <div style={{ fontSize: 13, color: S.sub, marginTop: 3, lineHeight: 1.5 }}>
-              A four-touch sequence starting the day after a job completes,
-              stopping the moment they review.
+              A four-touch sequence you work from the Due now list below — mark each touch sent as you make it
+              and the sequence advances on its own timing. Pauses automatically the moment someone rates three or below.
             </div>
           </div>
           <Toggle on={settings.enabled} onClick={() => set("enabled")(!settings.enabled)} />
@@ -22070,17 +23107,16 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
       {/* Where reviews are sent */}
       <Card style={{ marginTop: 12 }}>
         <CardTitle>Where reviews go</CardTitle>
-        <Field label="Google review link" hint="Google Business Profile → Ask for reviews → copy the short link.">
-          <input style={inputStyle} value={brand.googleReviewLink || ""}
-            onChange={(e) => setBrandFromReviews && setBrandFromReviews({ ...brand, googleReviewLink: e.target.value })} />
-        </Field>
-        <Field label="Facebook reviews link">
-          <input style={inputStyle} value={settings.facebookLink || ""} onChange={(e) => set("facebookLink")(e.target.value)}
-            placeholder="https://facebook.com/yourpage/reviews" />
-        </Field>
-        <Field label="BBB profile link">
-          <input style={inputStyle} value={settings.bbbLink || ""} onChange={(e) => set("bbbLink")(e.target.value)} />
-        </Field>
+        {REVIEW_PLATFORMS.map((p) => (
+          <Field key={p.id} label={p.label} hint={p.hint}>
+            <input style={inputStyle} placeholder={p.placeholder}
+              value={(p.source === "brand" ? brand[p.field] : settings[p.field]) || ""}
+              onChange={(e) => {
+                if (p.source === "brand") { if (setBrandFromReviews) setBrandFromReviews({ ...brand, [p.field]: e.target.value }); }
+                else set(p.field)(e.target.value);
+              }} />
+          </Field>
+        ))}
         <div style={{ display: "flex", alignItems: "flex-start", gap: 12, borderTop: `1px solid ${S.line}`, paddingTop: 14, marginTop: 4 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 14.5, fontWeight: 700, color: S.ink }}>Only send happy customers to Google</div>
@@ -22923,7 +23959,7 @@ function AgreementBranding({ brand, setBrand, toast }) {
   );
 }
 
-function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
+function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", currentUser = null }) {
   const set = (k) => (e) => setBrand({ ...brand, [k]: e.target.value });
   const logoRef = useRef(null);
   const onLogo = (e) => {
@@ -22969,6 +24005,30 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "" }) {
   };
   const addLoc = () => setBrand({ ...brand, locations: [...locations, { id: uid("loc"), label: "", phone: "", address: "" }] });
   const rmLoc = (i) => setBrand({ ...brand, locations: locations.filter((_, x) => x !== i) });
+
+  /* Every field below writes to the tenant's brand record — logo, colors,
+     and what prints on every document — app-wide, for every job and every
+     rep, the instant it's changed. VendorManager and the other Setup
+     managers already restrict their own writes to admin/manager; this
+     screen took no role prop at all and performed no check, so any
+     signed-in rep who found the nav entry could repaint the company. */
+  const canEdit = !currentUser || currentUser.role === "admin" || currentUser.role === "manager";
+  if (!canEdit) {
+    return (
+      <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
+        <SubHeader title="Company branding" onBack={onBack} />
+        <Card style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <Lock size={18} color={S.sub} style={{ flexShrink: 0, marginTop: 2 }} />
+            <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
+              Branding is admin/manager-only — it controls the logo, colors, and company name on every
+              document and the login screen. Ask the office to make a change.
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
@@ -23088,7 +24148,10 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
   const [f, setF] = useState({ name: "", cat: DOC_CATEGORIES[0], expires: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
   const fileRef = useRef(null);
+  const pendingFile = useRef(null);
   const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
 
   const today = todayIso();
@@ -23115,17 +24178,40 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   const onFile = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
+    /* Held in a ref, not state — a File object doesn't survive being put
+       through setState-and-read-back the way this sheet's other fields do,
+       and a ref is enough since nothing here needs to re-render on it. */
+    pendingFile.current = file;
     setF({ name: file.name, cat: f.cat, expires: "" });
+    setErr("");
     setAdding(true);
     e.target.value = "";
   };
-  const save = () => {
+  /* Same rule uploadJobFile's callers already follow: an upload that fails
+     records nothing, rather than a row that claims to hold a document that
+     was never actually stored — which was the entire bug here. */
+  const save = async () => {
+    const file = pendingFile.current;
+    if (!file) { setErr("Choose a file first."); return; }
+    setBusy(true); setErr("");
+    let up = null;
+    try {
+      up = await uploadCompanyFile(file);
+    } catch (e) {
+      setBusy(false);
+      setErr((e && e.message) || "Couldn't save that file.");
+      return;
+    }
+    setBusy(false);
+    const sizeKb = up.size ? `${Math.max(1, Math.round(up.size / 1024))} KB` : "—";
     setDocs([...docs, {
-      id: uid("d"), name: f.name.trim(), cat: f.cat, size: "—",
+      id: uid("d"), name: f.name.trim(), cat: f.cat, size: sizeKb,
       at: today, by: currentUser.name, pinned: false, expires: f.expires || null,
+      url: up.url, storage: up.storage, storageKey: up.key, mime: up.mime,
     }]);
+    pendingFile.current = null;
     setAdding(false); setF({ name: "", cat: DOC_CATEGORIES[0], expires: "" });
-    toast("Document added");
+    toast("Document saved");
   };
 
   return (
@@ -23199,20 +24285,39 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
             <KV k="Category" v={viewing.cat} />
             <KV k="Added" v={`${viewing.at} by ${viewing.by}`} />
             {viewing.expires && <KV k="Expires" v={viewing.expires} />}
-            <div style={{
-              marginTop: 14, border: `1.5px dashed ${S.line}`, borderRadius: 12, padding: "34px 16px",
-              textAlign: "center", color: S.sub, fontSize: 13.5, lineHeight: 1.6,
-            }}>
-              <FileText size={28} color="#C7CBD1" style={{ marginBottom: 8 }} />
-              <div>Preview isn't available yet — files aren't stored anywhere while the app runs on in-memory data.
-              Once documents are wired to Supabase Storage, this opens the actual PDF.</div>
-            </div>
+            {viewing.url ? (
+              <a href={viewing.url} target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+                <div style={{
+                  marginTop: 14, border: `1.5px solid ${S.line}`, borderRadius: 12, padding: "20px 16px",
+                  textAlign: "center", color: T.accent, fontSize: 13.5, lineHeight: 1.6, cursor: "pointer",
+                }}>
+                  <FileText size={28} color={T.accent} style={{ marginBottom: 8 }} />
+                  <div style={{ fontWeight: 700 }}>Open {viewing.name}</div>
+                  {viewing.storage === "inline" && (
+                    <div style={{ fontSize: 11.5, color: S.sub, marginTop: 4, fontWeight: 400 }}>
+                      Stored inline — connect Supabase Storage under Setup &amp; keys for full-size files.
+                    </div>
+                  )}
+                </div>
+              </a>
+            ) : (
+              <div style={{
+                marginTop: 14, border: `1.5px dashed ${S.line}`, borderRadius: 12, padding: "34px 16px",
+                textAlign: "center", color: S.sub, fontSize: 13.5, lineHeight: 1.6,
+              }}>
+                <FileText size={28} color="#C7CBD1" style={{ marginBottom: 8 }} />
+                <div>This record predates file storage and has no file attached — only the name and category were
+                saved. Delete it and re-upload to attach the actual document.</div>
+              </div>
+            )}
           </>
         )}
       </Sheet>
 
-      <Sheet open={adding} onClose={() => setAdding(false)} title="Add document"
-        footer={<Btn style={{ width: "100%" }} disabled={!f.name.trim()} onClick={save}>Save document</Btn>}>
+      <Sheet open={adding} onClose={() => { setAdding(false); setErr(""); }} title="Add document"
+        footer={<Btn style={{ width: "100%" }} disabled={!f.name.trim() || busy} onClick={save}>
+          {busy ? "Saving…" : "Save document"}
+        </Btn>}>
         <Field label="File name"><input style={inputStyle} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
         <Field label="Category">
           <select style={selStyle} value={f.cat} onChange={(e) => setF({ ...f, cat: e.target.value })}>
@@ -23220,8 +24325,9 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
           </select>
         </Field>
         <Field label="Expiration date" hint="Optional. Certificates and licenses get an expiry warning 60 days out.">
-          <input style={inputStyle} type="date" value={f.expires} onChange={(e) => setF({ ...f, expires: e.target.value })} />
+          <input style={dateInputStyle} type="date" value={f.expires} onChange={(e) => setF({ ...f, expires: e.target.value })} />
         </Field>
+        {err && <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 4 }}>{err}</div>}
       </Sheet>
     </div>
   );
@@ -23610,6 +24716,10 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const [range, setRange] = useState("all");
   const docRef = useRef(null);
   const priceRef = useRef(null);
+  const [docBusy, setDocBusy] = useState(false);
+  const [docErr, setDocErr] = useState("");
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfImport, setPdfImport] = useState(null); // {fileName, candidates, noText} | {fileName, error} | null
   /* Read a subcontractor's uploaded price sheet (CSV: an item/description
      column and a price/rate column) and map each row to a known pay code so
      it drives pay automatically. Unrecognized rows are kept as flat add-ons. */
@@ -23644,9 +24754,41 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
       };
     }).filter((r) => r.label && r.price > 0);
   };
+  /* A PDF's pricing table always lands in the review sheet, never
+     straight into rateCard — a CSV's columns are unambiguous, but a
+     position-reconstructed PDF row is a guess, and it is real pay
+     rates riding on it being right. */
+  const onPdfImportDone = (fileName, patch) => setPdfImport({ fileName, mode: "replace", ...patch });
+  const applyPdfImport = (mode) => {
+    if (!pdfImport || pdfImport.error) return;
+    setF((prev) => ({
+      ...prev,
+      rateCard: mode === "append" ? [...(prev.rateCard || []), ...pdfImport.candidates] : pdfImport.candidates,
+      docs: [
+        ...((prev.docs || []).filter((d) => d.type !== "Pricing sheet")),
+        { id: uid("cd"), name: pdfImport.fileName, at: todayIso(), type: "Pricing sheet", expires: "", rows: pdfImport.candidates.length },
+      ],
+    }));
+    toast(mode === "append" ? `${pdfImport.candidates.length} rows added` : `Price sheet replaced — ${pdfImport.candidates.length} rows`);
+    setPdfImport(null);
+  };
   const onPriceFile = (e) => {
     const file = e.target.files && e.target.files[0];
+    e.target.value = "";
     if (!file) return;
+    if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
+      setPdfBusy(true);
+      extractSubSheetRowsFromPdf(file)
+        .then(({ rows, noText }) => {
+          setPdfBusy(false);
+          onPdfImportDone(file.name, { candidates: parseSubSheetPdfRows(rows), noText });
+        })
+        .catch((ex) => {
+          setPdfBusy(false);
+          onPdfImportDone(file.name, { error: (ex && ex.message) || "Couldn't read that PDF." });
+        });
+      return;
+    }
     const r = new FileReader();
     r.onload = () => {
       const rows = parseSubSheet(String(r.result));
@@ -23665,7 +24807,6 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
       } else toast("Couldn't read that sheet — needs an item column and a price column");
     };
     r.readAsText(file);
-    e.target.value = "";
   };
   const paidFor = (crewId) => {
     const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 86400000;
@@ -23677,9 +24818,13 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
         .reduce((t, l) => t + num(l.amt), 0);
     }, 0);
   };
-  const open = (c) => { setEditing(c || "new"); setF(c ? { ...c } : blank); };
+  /* A new crew gets its real id immediately, not at save — a document
+     uploaded while filling out a brand-new crew's sheet needs a stable id
+     to scope its storage key by, and there is otherwise no id to give it
+     until the crew is saved. */
+  const open = (c) => { setEditing(c || "new"); setF(c ? { ...c } : { ...blank, id: uid("c") }); setDocErr(""); };
   const save = () => {
-    if (editing === "new") setCrews([...crews, { ...f, id: uid("c") }]);
+    if (editing === "new") setCrews([...crews, f]);
     else setCrews(crews.map((c) => (c.id === editing.id ? { ...c, ...f } : c)));
     setEditing(null); toast("Crew saved");
   };
@@ -23746,11 +24891,27 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
         </div>
         <Field label="Documents" hint="COIs, W-9s, licenses. Add an expiry date and the app warns you before paying a sub whose paperwork has lapsed.">
           <input ref={docRef} type="file" style={{ display: "none" }}
-            onChange={(e) => {
+            onChange={async (e) => {
               const file = e.target.files && e.target.files[0];
-              if (!file) return;
-              setF({ ...f, docs: [...(f.docs || []), { id: uid("cd"), name: file.name, at: new Date().toISOString().slice(0, 10), type: "", expires: "" }] });
               e.target.value = "";
+              if (!file) return;
+              setDocBusy(true); setDocErr("");
+              /* Same storage path Company Documents uses, and the same rule:
+                 a failed upload records nothing rather than a row that
+                 claims to hold a COI or W-9 that was never actually stored. */
+              let up = null;
+              try {
+                up = await uploadCompanyFile(file);
+              } catch (ex) {
+                setDocBusy(false);
+                setDocErr((ex && ex.message) || "Couldn't save that file.");
+                return;
+              }
+              setDocBusy(false);
+              setF((prev) => ({ ...prev, docs: [...(prev.docs || []), {
+                id: uid("cd"), name: file.name, at: new Date().toISOString().slice(0, 10), type: "", expires: "",
+                url: up.url, storage: up.storage, storageKey: up.key, mime: up.mime,
+              }] }));
             }} />
           {(f.docs || []).map((d) => {
             const expired = d.expires && d.expires < todayIso();
@@ -23758,7 +24919,15 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             return (
               <div key={d.id} style={{ padding: "9px 0", borderBottom: `1px solid ${S.line}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 13.5, flex: 1, minWidth: 0 }}>{d.name} <span style={{ color: S.sub, fontSize: 12 }}>· {d.at}</span></span>
+                  {d.url ? (
+                    <a href={d.url} target="_blank" rel="noreferrer" style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: T.accent, textDecoration: "none" }}>
+                      {d.name} <span style={{ color: S.sub, fontSize: 12 }}>· {d.at}</span>
+                    </a>
+                  ) : (
+                    <span style={{ fontSize: 13.5, flex: 1, minWidth: 0 }}>
+                      {d.name} <span style={{ color: S.sub, fontSize: 12 }}>· {d.at} · no file attached — re-upload to attach it</span>
+                    </span>
+                  )}
                   {d.expires && <Chip tone={expired ? "red" : "green"}>{expired ? "Expired" : "Valid"}</Chip>}
                   <button onClick={() => setF({ ...f, docs: (f.docs || []).filter((x) => x.id !== d.id) })}
                     style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={14} color="#B42318" /></button>
@@ -23772,8 +24941,9 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
               </div>
             );
           })}
-          <Btn kind="ghost" small style={{ marginTop: 8 }} onClick={() => docRef.current && docRef.current.click()}>
-            <Upload size={13} /> Add document
+          {docErr && <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 6 }}>{docErr}</div>}
+          <Btn kind="ghost" small disabled={docBusy} style={{ marginTop: 8 }} onClick={() => docRef.current && docRef.current.click()}>
+            <Upload size={13} /> {docBusy ? "Saving…" : "Add document"}
           </Btn>
         </Field>
         <Field label="Payment details" hint="How this sub gets paid — stored on their file for accounting. Keep it to a handle or last 4, not full bank/SSN.">
@@ -23803,8 +24973,8 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             );
           })()}
         </Field>
-        <Field label="Pricing sheet" hint="Upload this sub's full price menu (CSV: category, labor_type, price, unit, notes). Install/steep/tear-off/chimney lines auto-fill a job's sub invoice; every other row is on the menu to add by hand.">
-          <input ref={priceRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={onPriceFile} />
+        <Field label="Pricing sheet" hint="Upload this sub's full price menu — a CSV (category, labor_type, price, unit, notes), or their signed agreement/rate sheet as a PDF. Install/steep/tear-off/chimney lines auto-fill a job's sub invoice; every other row is on the menu to add by hand.">
+          <input ref={priceRef} type="file" accept=".csv,text/csv,.pdf,application/pdf" style={{ display: "none" }} onChange={onPriceFile} />
           {(f.rateCard || []).length > 0 ? (
             <div style={{ border: `1px solid ${S.line}`, borderRadius: 10, overflow: "hidden", marginBottom: 8 }}>
               {[...new Set((f.rateCard || []).map((r) => r.category || "Other"))].map((cat) => (
@@ -23834,11 +25004,12 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             </div>
           ) : (
             <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 8, lineHeight: 1.5 }}>
-              No price sheet yet. Upload a CSV with columns like <b>category, labor_type, price, unit, notes</b> — every row becomes a priced menu item you can add to a job's sub invoice.
+              No price sheet yet. Upload a CSV with columns like <b>category, labor_type, price, unit, notes</b>,
+              or their signed agreement as a PDF — every row becomes a priced menu item you can add to a job's sub invoice.
             </div>
           )}
-          <Btn kind="ghost" small onClick={() => priceRef.current && priceRef.current.click()}>
-            <Upload size={13} /> {(f.rateCard || []).length ? "Replace price sheet" : "Upload price sheet"}
+          <Btn kind="ghost" small disabled={pdfBusy} onClick={() => priceRef.current && priceRef.current.click()}>
+            <Upload size={13} /> {pdfBusy ? "Reading PDF…" : (f.rateCard || []).length ? "Replace price sheet" : "Upload price sheet"}
           </Btn>
         </Field>
         <Field label="Trades">
@@ -23870,6 +25041,54 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             })}
           </div>
         </Field>
+      </Sheet>
+
+      <Sheet open={!!pdfImport} onClose={() => setPdfImport(null)} title="Review price sheet from PDF"
+        footer={pdfImport && !pdfImport.error && pdfImport.candidates.length > 0 && (
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={() => applyPdfImport("append")}>Add to price sheet</Btn>
+            <Btn style={{ flex: 1 }} onClick={() => applyPdfImport("replace")}>Replace price sheet</Btn>
+          </div>
+        )}>
+        {pdfImport && pdfImport.error && <Callout label="Could not read that PDF" tone="red">{pdfImport.error}</Callout>}
+        {pdfImport && !pdfImport.error && pdfImport.noText && (
+          <Callout label="No readable text found" tone="amber">
+            This looks like a scanned or image-only PDF — there's no text layer to pull from, so nothing came
+            through automatically. A CSV export, or typing the rates in below, will work instead.
+          </Callout>
+        )}
+        {pdfImport && !pdfImport.error && (
+          <>
+            <div style={{ fontSize: 13, color: S.sub, marginBottom: 10, lineHeight: 1.5 }}>
+              {pdfImport.candidates.length} possible price {pdfImport.candidates.length === 1 ? "row" : "rows"} found
+              in <b>{pdfImport.fileName}</b>. Every sub's PDF is laid out differently, so check these landed right
+              before adding — fix, remove, or add anything the parser missed.
+            </div>
+            {pdfImport.candidates.map((r, i) => {
+              const setRow = (patch) => setPdfImport((prev) => ({
+                ...prev, candidates: prev.candidates.map((x, xi) => (xi === i ? { ...x, ...patch } : x)),
+              }));
+              return (
+                <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "8px 0", borderTop: `1px solid ${S.line}` }}>
+                  <input style={{ ...inputStyle, flex: 1 }} value={r.label} placeholder="Item"
+                    onChange={(e) => setRow({ label: e.target.value, code: subCodeFor(e.target.value) || "custom" })} />
+                  <input style={{ ...inputStyle, width: 58 }} value={r.unit} placeholder="Unit"
+                    onChange={(e) => setRow({ unit: e.target.value })} />
+                  <MoneyInput style={{ ...inputStyle, width: 96 }} value={r.price} onChange={(v) => setRow({ price: num(v) })} />
+                  <button onClick={() => setPdfImport((prev) => ({ ...prev, candidates: prev.candidates.filter((_, xi) => xi !== i) }))}
+                    style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={14} color="#B42318" /></button>
+                </div>
+              );
+            })}
+            <Btn kind="ghost" small style={{ marginTop: 10 }}
+              onClick={() => setPdfImport((prev) => ({
+                ...prev,
+                candidates: [...prev.candidates, { id: uid("rc"), category: "Other", code: "custom", label: "", unit: "flat", price: 0, notes: "" }],
+              }))}>
+              <Plus size={13} /> Add row
+            </Btn>
+          </>
+        )}
       </Sheet>
     </div>
   );
@@ -24057,6 +25276,30 @@ function calFeedUrl(token, scheme = "https") {
   return `${scheme}://${host}/calendar-feed?token=${encodeURIComponent(token)}`;
 }
 
+/* Per-seat dashboard layout, stored beside the CompanyCam token and calendar
+   token in the same crm_user_integrations row — a widget picker is a user
+   preference, not tenant data, and every other per-seat preference already
+   lives here, so this needed no new table or migration. */
+async function dashLoadLayout(userId) {
+  const db = DB();
+  if (!db || !userId) return null;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    return (data && data.data && data.data.dashLayout) || null;
+  } catch (e) { return null; }
+}
+async function dashSaveLayout(userId, value) {
+  const db = DB();
+  if (!db || !userId) return false;
+  try {
+    const { data } = await db.from("crm_user_integrations").select("data").eq("user_id", userId).maybeSingle();
+    const next = { ...((data && data.data) || {}), dashLayout: value };
+    const { error } = await db.from("crm_user_integrations")
+      .upsert({ user_id: userId, data: next, updated_at: new Date().toISOString() });
+    return !error;
+  } catch (e) { return false; }
+}
+
 /* "Sync to your phone" — enables the per-seat calendar feed and shows the
    subscribe links for Apple and Google Calendar. */
 function CalendarSync({ currentUser, toast }) {
@@ -24175,7 +25418,7 @@ function CompanyCamConnect({ onConnect }) {
           cross-origin headers a browser needs to call it directly, so the app
           routes through a small server relay. Deploy the <b>companycam-proxy</b>
           Edge Function (see DEPLOY.md) and this connects. It's the same shape
-          as the Twilio one.
+          as the send-sms one.
         </Callout>
       )}
     </div>
@@ -24286,13 +25529,15 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
           ) : (
             <>
               <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.55 }}>
-                One provider account (Twilio or similar) with a dedicated number for the whole company — texting
+                One provider account (EZ Texting or similar) with a dedicated number for the whole company — texting
                 registration is per business, so this one stays shared. Consent is tracked per customer and sends are
                 blocked without it.
               </div>
               <Callout label="Before your first send">
-                US carriers require 10DLC brand and campaign registration for business texting. Unregistered traffic
-                gets filtered or blocked outright. Registration takes a few days — start it before you need it.
+                A standard 10-digit business number requires US carriers' 10DLC brand and campaign registration —
+                unregistered traffic gets filtered or blocked outright, and registration takes a few days. A shared
+                short code (what EZ Texting sends from by default) is a different carrier category and does not go
+                through 10DLC review at all — check which one your account uses before assuming this applies to you.
               </Callout>
               <Btn style={{ width: "100%", marginTop: 12 }} onClick={() => setConnecting("sms")}>
                 <MessageCircle size={15} /> Connect SMS provider
@@ -24319,7 +25564,7 @@ function Integrations({ integrations, setIntegrations, currentUser, users = [], 
               setMyGmail({ connected: true, email: addr.trim(), at: new Date().toISOString().slice(0, 10) });
               toast("Your Gmail account is recorded");
             } else {
-              setIntegrations({ ...integrations, sms: { connected: true, provider: "Twilio", number: addr.trim() } });
+              setIntegrations({ ...integrations, sms: { connected: true, provider: "EZ Texting", number: addr.trim() } });
               toast("SMS number recorded");
             }
             setConnecting(null); setAddr("");
@@ -24789,7 +26034,17 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
     setSaving(false);
   };
 
+  /* Deactivating is reversible in principle — another admin can flip it
+     back — but deactivating the LAST active admin leaves no one able to
+     do that. The adjacent Remove button already guards against removing
+     your own seat; Deactivate had no equivalent guard at all. */
+  const activeAdmins = users.filter((u) => u.active && u.role === "admin");
+  const [confirmDeactivate, setConfirmDeactivate] = useState(null);
   const toggleActive = async (u) => {
+    if (u.active && u.role === "admin" && activeAdmins.length === 1 && activeAdmins[0].id === u.id) {
+      toast(`Can't deactivate ${u.name} — they're the only active admin. Make someone else an admin first.`);
+      return;
+    }
     const auth = AUTH();
     const next = { ...u, active: !u.active };
     try {
@@ -24907,7 +26162,10 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
             </div>
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => open(u)}><Pencil size={13} /> Edit</Btn>
-              <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => toggleActive(u)}>
+              <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => {
+                if (u.active && u.id === currentUser.id) { setConfirmDeactivate(u); return; }
+                toggleActive(u);
+              }}>
                 {u.active ? "Deactivate" : "Reactivate"}
               </Btn>
               {u.id !== currentUser.id && (
@@ -25012,6 +26270,21 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
           Seat active (can sign in)
         </label>
       </Sheet>
+
+      <Sheet open={!!confirmDeactivate} onClose={() => setConfirmDeactivate(null)} title="Deactivate your own seat?"
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setConfirmDeactivate(null)}>Cancel</Btn>
+            <Btn kind="danger" style={{ flex: 1 }}
+              onClick={() => { const u = confirmDeactivate; setConfirmDeactivate(null); toggleActive(u); }}>
+              Deactivate my seat
+            </Btn>
+          </div>
+        }>
+        <Callout label="This signs you out immediately" tone="red">
+          You'll be logged out right away and won't be able to sign back in until another admin reactivates you.
+        </Callout>
+      </Sheet>
     </div>
   );
 }
@@ -25045,17 +26318,17 @@ const SETUP_ITEMS = [
     note: "Never add this with a VITE_ prefix, and never put it in Vercel. VITE_ variables are compiled into the browser bundle and would be public. The key belongs only in the Edge Function, which is why the assistant calls a server function instead of the API directly.",
   },
   {
-    id: "twilio", label: "Texting (Twilio)", secret: true,
+    id: "eztexting", label: "Texting (EZ Texting)", secret: true,
     unlocks: "Outbound texts, stage-change notifications, appointment reminders.",
     where: "Supabase → Edge Functions → Secrets",
-    keyName: "TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_FROM_NUMBER",
+    keyName: "EZTEXTING_API_KEY",
     steps: [
-      "Twilio console → rotate the auth token (the old one was pasted in chat).",
-      "Supabase → Edge Functions → Secrets → add all three values.",
-      "Deploy the send-sms function.",
-      "Check toll-free verification status for the sending number.",
+      "Log into app.eztexting.com → Settings → Integrations / Developer API → generate an API key.",
+      "Supabase → Edge Functions → Secrets → add EZTEXTING_API_KEY with that value.",
+      "Deploy the send-sms function: supabase functions deploy send-sms",
+      "Send a real test text before relying on this — the exact request shape in send-sms/index.ts was built from third-party integration guides, not a confirmed read of EZ Texting's own docs (see the comment at the top of that file), because this environment's network policy blocked developers.eztexting.com directly.",
     ],
-    config: [["twilioFrom", "Sending number", "+1 855 600 0482"]],
+    config: [["smsFrom", "Sending number", "+1 855 600 0482"]],
   },
   {
     id: "gmail", label: "Email (Gmail OAuth)", secret: true,
@@ -26109,7 +27382,6 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["insurance:ask", MessageCircle, "Roofing assistant", "Code, manufacturers, NRCA, claims — cited answers"],
       ["insurance", Shield, "Insurance & claims", "Clients, claims, supplements & depreciation"],
       ["insurance:codes", ScrollText, "Code lookup", "Adopted code & building department by zip"],
-      ["insurance:coverage", MapPin, "Coverage by state", "Confirm the contract law for every state you work"],
       ["insurance:resources", BookOpen, "Roofing resources", "Manufacturer specs, policy provisions, letters, playbook"],
     ]],
     ["Customers & documents", [
@@ -26859,7 +28131,7 @@ export default function SupremeCRM() {
      terms & conditions, and scope of work. Each kind is a list of
      { id, name, body }; a picker on each editor inserts one. */
   const [docTemplates, setDocTemplates] = useState({ notes: [], terms: [], scope: [] });
-  const [activity, setActivity] = useState([]);
+  const [activity, setActivity] = useState(() => (liveDb() ? [] : buildSeedActivity()));
   const [chatMsgs, setChatMsgs] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [calls, setCalls] = useState([]);
@@ -26888,7 +28160,7 @@ export default function SupremeCRM() {
   const [changePwOpen, setChangePwOpen] = useState(false);
   const [apptTypes, setApptTypes] = useState([
     "Inspection", "Adjuster meeting", "Estimate presentation", "Production start",
-    "Final walkthrough", "Service issue", "Material delivery", "Trailer / dump run",
+    "Punch list", "Material selection", "Final walkthrough", "Service issue", "Material delivery", "Trailer / dump run",
   ]);
   const [integrations, setIntegrations] = useState({
     /* Gmail is per-user: each rep connects their own mailbox so email
@@ -26986,12 +28258,10 @@ export default function SupremeCRM() {
      ZIP. Kept in company settings so one person's phone call becomes
      everyone's. */
   const [jurisContacts, setJurisContacts] = useState({});
-  /* Per-state contract law the office has confirmed, keyed by state and
-     then by field: { OH: { rescission: { value, note, at, by } } }. Same
-     reasoning as jurisContacts one level up — one person reading the
-     statute becomes every rep's contract. This is what promotes a
-     seeded pointer to a `verified` fact, and nothing else does. */
-  const [stateFacts, setStateFacts] = useState({});
+  /* "My dashboard" widget layout, lifted here (not local to Performance)
+     so it survives navigating away and back in demo mode — same as
+     users/integrations/features. */
+  const [dashLayout, setDashLayout] = useState(DEFAULT_DASHBOARD_LAYOUT);
   /* ZIPs looked up on demand. The jurisdiction table grows with use
      rather than needing every ZIP shipped up front. */
   const [learnedJuris, setLearnedJuris] = useState({});
@@ -27016,11 +28286,11 @@ export default function SupremeCRM() {
   };
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, stateFacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
     announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates,
     priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate,
-    features, security, jurisContacts, stateFacts, learnedJuris, version: 1,
+    features, security, jurisContacts, learnedJuris, version: 1,
   });
   const unpackOrg = (d) => {
     if (d.announcements) setAnnouncements(d.announcements);
@@ -27044,7 +28314,6 @@ export default function SupremeCRM() {
     if (d.ccAutoCreate !== undefined) setCcAutoCreate(d.ccAutoCreate);
     if (d.features) setFeatures(d.features);
     if (d.jurisContacts) { setJurisContacts(d.jurisContacts); setJurisOverrides(d.jurisContacts); }
-    if (d.stateFacts) { setStateFacts(d.stateFacts); setLegalOverrides(d.stateFacts); }
     if (d.learnedJuris) { setLearnedJuris(d.learnedJuris); setLearnedJurisdictions(d.learnedJuris); }
     if (d.security) setSecurity(d.security);
   };
@@ -27232,7 +28501,14 @@ export default function SupremeCRM() {
          Stamped once and never overwritten for exactly that reason;
          the certificate screen can correct it. */
       if (stageId === "s10" && !next.completedAt) next.completedAt = todayIso();
-      if (j.portal?.notifyStage && stage) {
+      /* Both have to allow it: the per-job portal preference, and the
+         per-stage policy set in the Workflow editor's "Queue a portal
+         update to the homeowner on arrival" checkbox. That checkbox wrote
+         to `rule.notify` and was never read here — every stage notified
+         the customer as long as the job-level toggle was on, so unchecking
+         it for one specific stage (e.g. a stage that shouldn't ping the
+         homeowner) did nothing at all. */
+      if (j.portal?.notifyStage && rule.notify && stage) {
         const channel = j.consent?.sms?.granted ? "sms" : j.consent?.email?.granted ? "email" : null;
         if (channel) {
           const first = (j.name || "").split(" ")[0];
@@ -27281,10 +28557,24 @@ export default function SupremeCRM() {
     const jb = jobs.find((j) => j.id === jobId);
     const msg = jb && (jb.messages || []).find((m) => m.id === msgId);
     if (!jb || !msg) return;
-    const out = await deliverToCustomer(
-      jb, { prefer: msg.kind || "sms", subject: msg.subject || "", body: msg.body },
-      integrations, liveUser,
-    );
+    /* Audience-aware. A Crew or Accounting message was already addressed
+       when it was queued — `msg.to` is the crew's email or the office's
+       accounting inbox, neither of which is the customer's own phone or
+       email. Routing every queued message through deliverToCustomer sent
+       an internal sub-pay notice (crew payout, PO number, payment method)
+       to the CUSTOMER whenever they had SMS/email consent on file, and
+       silently never reached accounting when they didn't — consent is a
+       customer-protection mechanic, and neither crews nor the office's own
+       inbox are subject to it. Only a Customer-audience message (or one
+       from before this field existed) resolves the address from the job. */
+    const out = (msg.audience && msg.audience !== "Customer")
+      ? (msg.to
+          ? await deliverMessage({ to: msg.to, kind: msg.kind || "email", subject: msg.subject || "", body: msg.body, jobId }, integrations, liveUser)
+          : { kind: msg.kind || "email", to: "", status: `Not sent — no address on file for ${msg.audience}`, delivered: false })
+      : await deliverToCustomer(
+          jb, { prefer: msg.kind || "sms", subject: msg.subject || "", body: msg.body },
+          integrations, liveUser,
+        );
     setJobs((prev) => prev.map((j) => j.id !== jobId ? j : {
       ...j,
       messages: (j.messages || []).map((m) => m.id !== msgId ? m
@@ -27511,9 +28801,32 @@ export default function SupremeCRM() {
   return (
     <div className="rl-shell" style={{ fontFamily: "'Inter','SF Pro Text',system-ui,-apple-system,sans-serif", background: S.bg }}>
       {/* Everything above the nav scrolls in here rather than in the document.
-          See .rl-shell in index.html for why. Sheets, toasts and the banners
-          stay position:fixed — overflow doesn't create a containing block for
-          them, so they still cover the whole viewport including the nav. */}
+          See .rl-shell in index.html for why. Sheets and toasts stay
+          position:fixed — overflow doesn't create a containing block for
+          them, so they still cover the whole viewport including the nav.
+          The banners below are deliberately NOT position:fixed: they used
+          to float over the top of every screen with no compensating
+          padding on .rl-scroll, which silently ate real taps on every
+          SubHeader back button and header action underneath them. As
+          in-flow flex children of .rl-shell, .rl-scroll's flex:1 shrinks
+          around them automatically — nothing to keep in sync. */}
+      {!liveDb() && (
+        <div style={{
+          flexShrink: 0,
+          background: "#7A1D12", color: "#fff", fontSize: 12.5, lineHeight: 1.45,
+          padding: "9px 14px", textAlign: "center",
+        }}>
+          Demo mode — not connected to the database. Nothing saves, no emails send.
+          Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to this Vercel project, then redeploy.
+        </div>
+      )}
+      {(syncErr || brandErr) && (
+        <div style={{
+          flexShrink: 0,
+          background: "#7A1D12", color: "#fff", fontSize: 12.5, lineHeight: 1.45,
+          padding: "9px 14px", textAlign: "center",
+        }}>{brandErr || syncErr}</div>
+      )}
       <div className="rl-scroll" ref={scrollPane}>
       {openJob ? (
         <JobDetail job={openJob} stages={stages} brand={brand} onBack={backToBoard}
@@ -27541,7 +28854,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             setAppointments={setAppointments} setApptTypes={setApptTypes} toast={toast}
             onQueueMessage={(jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))}
             onLog={logAct} users={users} mutJob={mutJob}
-            stageRules={stageRules} currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
+            stageRules={stageRules} currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin} activity={activity}
             onToggleTask={(jobId, taskId) => mutJob(jobId, (j) => ({ ...j, tasks: j.tasks.map((x) => x.id === taskId ? { ...x, done: !x.done, doneAt: !x.done ? new Date().toISOString().slice(0, 16).replace("T", " ") : null } : x) }))}
             chatMsgs={chatMsgs}
             onSendChat={(text) => {
@@ -27559,7 +28872,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onQuickAction={(jobId) => setQuickJobId(jobId)}
           focusStage={boardStage} onClearFocus={() => setBoardStage(null)}
           view={boardView} setView={setBoardView}
-          stageRules={stageRules} onBulkMoveStage={bulkMoveStage}
+          stageRules={stageRules} onBulkMoveStage={bulkMoveStage} appointments={appointments} users={users}
           onBulkUpdate={(ids, patch) => setJobs((prev) => prev.map((j) => ids.includes(j.id) ? { ...j, ...patch } : j))} />
       ) : nav === "inbox" ? (
         <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)}
@@ -27582,7 +28895,6 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           if (id === "insurance:ask") { setCodeSeed({ tab: "ask" }); return setNav("insurance"); }
           if (id === "insurance:codes") { setCodeSeed({ tab: "codes" }); return setNav("insurance"); }
           if (id === "insurance:resources") { setCodeSeed({ tab: "resources" }); return setNav("insurance"); }
-          if (id === "insurance:coverage") { setCodeSeed({ tab: "coverage" }); return setNav("insurance"); }
           return setNav(id);
         }} onLogout={async () => { const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } } setCurrentUser(null); }} currentUser={liveUser} theme={theme} setTheme={setTheme} />
       ) : nav === "insurance" ? (
@@ -27603,31 +28915,15 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
               ? "Saved — add the permit office when you have it"
               : "Saved with its building department");
           }}
-          stateFacts={stateFacts}
-          onConfirmLegal={(st, key, rec) => {
-            const next = { ...stateFacts, [st]: { ...(stateFacts[st] || {}), [key]: { ...rec, at: todayIso(), by: userName } } };
-            setStateFacts(next);
-            setLegalOverrides(next);
-            logAct({ type: "code", text: `Confirmed ${key} for ${st}` });
-            toast("Confirmed for the whole company");
-          }}
-          onClearLegal={(st, key) => {
-            const rest = { ...(stateFacts[st] || {}) };
-            delete rest[key];
-            const next = { ...stateFacts, [st]: rest };
-            setStateFacts(next);
-            setLegalOverrides(next);
-            logAct({ type: "code", text: `Withdrew the confirmation of ${key} for ${st}` });
-            toast("Withdrawn — contracts in that state are blocked again");
-          }}
           seed={codeSeed} onConsumeSeed={() => setCodeSeed(null)} />
       ) : nav === "performance" ? (
         <Performance jobs={jobs} stages={stages} users={users} onBack={() => setNav("more")}
-          isAdmin={isAdmin} currentUser={liveUser} toast={toast} crews={crews} />
+          isAdmin={isAdmin} currentUser={liveUser} toast={toast} crews={crews} setUsers={setUsers}
+          dashLayout={dashLayout} setDashLayout={setDashLayout} />
       ) : nav === "calendar" ? (
         <CalendarView jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}
           appointments={appointments} setAppointments={setAppointments}
-          apptTypes={apptTypes} setApptTypes={setApptTypes} toast={toast} onLog={logAct} users={users}
+          apptTypes={apptTypes} setApptTypes={setApptTypes} toast={toast} onLog={logAct} users={users} crews={crews}
           onQueueMessage={(jobId, msg) => mutJob(jobId, (j) => ({ ...j, messages: [...j.messages, { ...msg, id: uid("m") }] }))} />
       ) : nav === "contacts" ? (
         <Contacts jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}
@@ -27699,27 +28995,9 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "help" ? (
         <HelpDesk onBack={() => setNav("more")} brand={brand} />
       ) : nav === "branding" ? (
-        <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} brandErr={brandErr} />
+        <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} brandErr={brandErr} currentUser={liveUser} />
       ) : null}
       </div>
-
-      {!liveDb() && (
-        <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, zIndex: 95,
-          background: "#7A1D12", color: "#fff", fontSize: 12.5, lineHeight: 1.45,
-          padding: "9px 14px", textAlign: "center",
-        }}>
-          Demo mode — not connected to the database. Nothing saves, no emails send.
-          Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to this Vercel project, then redeploy.
-        </div>
-      )}
-      {(syncErr || brandErr) && (
-        <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, zIndex: 90,
-          background: "#7A1D12", color: "#fff", fontSize: 12.5, lineHeight: 1.45,
-          padding: "9px 14px", textAlign: "center",
-        }}>{brandErr || syncErr}</div>
-      )}
 
       {/* Bottom navigation — five equal, flat tab buttons, all the same
          height with no elevation. Earlier this had "New lead" as a
@@ -27795,7 +29073,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <Field label="Task"><input style={inputStyle} value={qt.label} onChange={(e) => setQt({ ...qt, label: e.target.value })} placeholder="Call adjuster back, order materials…" /></Field>
         <Field label="Deadline (optional)" hint="Tasks with deadlines show on the calendar.">
           <div style={{ display: "flex", gap: 8 }}>
-            <input style={{ ...inputStyle, flex: 1 }} type="date" value={qt.due} onChange={(e) => setQt({ ...qt, due: e.target.value })} />
+            <input style={{ ...dateInputStyle, flex: 1 }} type="date" value={qt.due} onChange={(e) => setQt({ ...qt, due: e.target.value })} />
             <input style={{ ...inputStyle, width: 110 }} type="time" value={qt.time || ""} onChange={(e) => setQt({ ...qt, time: e.target.value })} />
           </div>
         </Field>
@@ -27806,7 +29084,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           ...jobs.map((j) => j.assignee)].filter(Boolean))].sort()}
         leadSources={leadSources} />
       <WorkflowEditor open={workflowOpen} onClose={() => setWorkflowOpen(false)} stages={stages}
-        setStages={applyRemovedStages} stageRules={stageRules} setStageRules={setStageRules} />
+        setStages={applyRemovedStages} stageRules={stageRules} setStageRules={setStageRules} currentUser={liveUser} />
       <StageGateSheet prompt={gatePrompt} isAdmin={isAdmin} currentUser={liveUser}
         onClose={() => setGatePrompt(null)}
         onConfirm={({ patch, override }) => {

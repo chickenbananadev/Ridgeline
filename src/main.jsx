@@ -141,7 +141,11 @@ if (url && anon) {
     },
     /* ---- Per-rep Gmail sending ---- */
     /* Redirect the browser to Google's consent screen. Comes back to the app
-       root with ?state=gmail&code=..., which the app hands to gmailExchange. */
+       root with ?state=gmail&code=..., which the app hands to gmailExchange.
+       Scope now also covers Calendar — a rep who connected before this
+       shipped is still gmail.send-only until they reconnect, which
+       calendar-push surfaces as its own distinct error rather than a bare
+       failure, so Integrations can tell them what to do about it. */
     gmailConnect() {
       const clientId = window.__GOOGLE_CLIENT_ID__;
       if (!clientId) throw new Error("Gmail sending isn't configured (VITE_GOOGLE_CLIENT_ID missing).");
@@ -150,7 +154,7 @@ if (url && anon) {
         client_id: clientId,
         redirect_uri: redirectUri,
         response_type: "code",
-        scope: "https://www.googleapis.com/auth/gmail.send",
+        scope: "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/calendar.events",
         access_type: "offline",
         prompt: "consent",
         state: "gmail",
@@ -188,6 +192,41 @@ if (url && anon) {
       }
       if (data && data.error) throw new Error(data.error);
       return data;
+    },
+    /* One-way outbound sync: push a newly booked appointment to the rep's
+       own Google Calendar. The app calendar stays the system of record —
+       this never reads anything back. Never throws: a rep who hasn't
+       connected Google, or connected before Calendar access was part of
+       the scope, should never see a booking fail because a nice-to-have
+       sync couldn't fire. Callers get null on any failure and can choose
+       to ignore it, same as askAssistant's degrade-silently contract. */
+    async pushToCalendar({ summary, description, location, start, end, timeZone }) {
+      try {
+        const { data, error } = await supabase.functions.invoke("calendar-push", {
+          body: { summary, description, location, start, end, timeZone },
+        });
+        if (error || !data || data.error) return null;
+        return data;
+      } catch {
+        return null;
+      }
+    },
+    /* AI damage detection on a single photo. Sends exactly one image's
+       bytes and gets back what's visibly documented in it — nothing else
+       about the job or tenant reaches the model. Same degrade-silently
+       contract as pushToCalendar/askAssistant: a rep on a phone with no
+       backend, or a key that isn't deployed, should just not see results,
+       not see a broken feature. */
+    async detectPhotoDamage({ imageBase64, mimeType }) {
+      try {
+        const { data, error } = await supabase.functions.invoke("photo-damage-detect", {
+          body: { imageBase64, mimeType },
+        });
+        if (error || !data || !data.ok || !Array.isArray(data.findings)) return null;
+        return data.findings;
+      } catch {
+        return null;
+      }
     },
     /* Knowledge assistant. Retrieval happens in the app — it already holds
        the whole reference library — so only the matched records travel. The
@@ -241,7 +280,7 @@ if (url && anon) {
     async sendSms({ to, body, jobId }) {
       const { data, error } = await supabase.functions.invoke("send-sms", { body: { to, body, jobId } });
       if (error) {
-        /* Surface Twilio's own wording where we can get at it. */
+        /* Surface the provider's own wording where we can get at it. */
         let detail = error.message || "Could not send";
         try {
           const ctx = await error.context?.json?.();
