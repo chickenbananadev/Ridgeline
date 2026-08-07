@@ -8,6 +8,14 @@ import App from "../ridgeline.jsx";
    preview sandboxes that don't evaluate it as an ES module. */
 window.__GEOAPIFY_KEY__ = import.meta.env.VITE_GEOAPIFY_KEY || "";
 window.__PROPERTY_KEY__ = import.meta.env.VITE_PROPERTY_KEY || "";
+/* Canvassing map tiles. Optional: without it the map falls back to
+   Geoapify on VITE_GEOAPIFY_KEY, which works out of the box but spends
+   the SAME daily quota address lookup depends on — and a rep panning a
+   map asks for tiles far faster than anyone types an address, so a busy
+   canvassing day can starve the address autocomplete for the whole
+   company. Point this at a dedicated tile key (or a satellite style) to
+   separate the two. {z}/{x}/{y} are substituted per tile. */
+window.__MAP_TILE_URL__ = import.meta.env.VITE_MAP_TILE_URL || "";
 /* Google OAuth client ID for per-rep Gmail sending. The matching client
    SECRET lives only in the gmail-oauth / gmail-send Edge Functions. */
 window.__GOOGLE_CLIENT_ID__ = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
