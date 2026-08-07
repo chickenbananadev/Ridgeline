@@ -28754,7 +28754,124 @@ function useCanvassPins({ tenantId, ready }) {
   return { pins, list: Object.values(pins), loadBounds, savePin, removePin, err, setErr, loading };
 }
 
-function CanvassScreen({ onBack, currentUser, jobs, canvassStatuses, toast }) {
+/* The pin's own record. Split out of CanvassScreen because it is a
+   different job: the map is about the street, this is about one door.
+
+   The knock history is rendered newest-first and is READ ONLY. It is
+   the part of a canvassing record that has to be trustworthy — "she
+   said come back after six" is worth more than the current status,
+   and a rep who could quietly edit an earlier visit could rewrite what
+   a teammate reported. */
+function CanvassPinSheet({ pin, statuses, users, onClose, onSave, onConvert, onOpenJob, toast }) {
+  const [p, setP] = useState({});
+  const [notes, setNotes] = useState("");
+  const [converting, setConverting] = useState(false);
+  useEffect(() => {
+    if (!pin) return;
+    setP(pin.prospect || {});
+    setNotes(pin.notes || "");
+  }, [pin && pin.id]); // eslint-disable-line
+  if (!pin) return null;
+  const st = canvassStatus(statuses, pin.status);
+  const hist = [...(pin.history || [])].reverse();
+  const nameOf = (id) => {
+    const u = (users || []).find((x) => x.id === id);
+    return u ? u.name : "";
+  };
+  const save = () => { onSave({ prospect: p, notes }); toast && toast("Saved"); };
+  const set = (k) => (v) => setP((prev) => ({ ...prev, [k]: v }));
+
+  return (
+    <Sheet open={!!pin} onClose={onClose} title={pin.address || "Dropped pin"} tall
+      footer={
+        <div style={{ display: "flex", gap: 10 }}>
+          <Btn kind="ghost" style={{ flex: 1 }} onClick={onClose}>Close</Btn>
+          <Btn style={{ flex: 1 }} data-testid="save-pin" onClick={() => { save(); onClose(); }}>Save</Btn>
+        </div>
+      }>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+        <span style={{ width: 12, height: 12, borderRadius: "50%", background: st.color, border: "2px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,.2)" }} />
+        <span style={{ fontSize: 13.5, fontWeight: 700 }}>{st.name}</span>
+        {pin.job_id && <Chip tone="green">Became a job</Chip>}
+      </div>
+
+      <Field label="Who lives here" hint="Whatever they gave you. A first name and a phone is plenty to work with.">
+        <input style={inputStyle} placeholder="Name" value={p.name || ""} onChange={(e) => set("name")(e.target.value)} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+          <input style={inputStyle} placeholder="Phone" inputMode="tel" value={p.phone || ""}
+            onChange={(e) => set("phone")(formatPhone(e.target.value))} />
+          <input style={inputStyle} type="email" placeholder="Email" value={p.email || ""}
+            onChange={(e) => set("email")(e.target.value)} />
+        </div>
+        <input style={{ ...inputStyle, marginTop: 8 }} placeholder="Best time to come back"
+          value={p.bestTime || ""} onChange={(e) => set("bestTime")(e.target.value)} />
+      </Field>
+
+      <Field label="Notes" hint="What was actually said. This is what the next person at this door reads.">
+        <textarea style={{ ...inputStyle, minHeight: 84, resize: "vertical" }} value={notes}
+          onChange={(e) => setNotes(e.target.value)} />
+      </Field>
+
+      {/* Storm history for THIS address — the whole reason a rep is on
+          this street. Reuses the same engine the claim tab uses, so a
+          hail size quoted on a doorstep is the same figure that will
+          back the claim later. */}
+      <Field label="Storm history at this address"
+        hint="What NOAA has on record here. This is the pitch: name the date and the hail size.">
+        <StormLookup job={{ lat: pin.lat, lng: pin.lng, address: pin.address, zip: "" }}
+          dol={p.stormDate || ""} onPick={(d) => set("stormDate")(d)} toast={toast} />
+      </Field>
+
+      {onConvert && !pin.job_id && (
+        <Field label="Turn this into a job"
+          hint="Creates a lead at your first pipeline stage with this address and contact, and links it back to this pin. You stay on the map.">
+          <Btn style={{ width: "100%" }} disabled={converting} data-testid="convert-pin"
+            onClick={async () => {
+              setConverting(true);
+              /* Save first: the conversion reads name/phone/email off
+                 the pin, and a rep who typed them in this sheet and
+                 tapped straight through would otherwise create a lead
+                 with none of it. */
+              await onSave({ prospect: p, notes });
+              await onConvert();
+              setConverting(false);
+              onClose();
+            }}>
+            {converting ? "Creating…" : "Create a lead from this door"}
+          </Btn>
+        </Field>
+      )}
+      {pin.job_id && onOpenJob && (
+        <Btn kind="ghost" style={{ width: "100%" }} onClick={() => { onClose(); onOpenJob(pin.job_id); }}>
+          Open the job this became
+        </Btn>
+      )}
+
+      <Field label={`Knock history (${hist.length})`}
+        hint="Every visit, in order. Nothing here is editable — it is the record of what people were actually told.">
+        {hist.length === 0 ? (
+          <div style={{ fontSize: 13, color: S.sub }}>Nobody has knocked this door yet.</div>
+        ) : hist.map((h, i) => {
+          const hs = canvassStatus(statuses, h.status);
+          return (
+            <div key={i} style={{ display: "flex", gap: 10, padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: hs.color, marginTop: 4, flexShrink: 0 }} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{hs.name}</div>
+                <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>
+                  {String(h.at || "").slice(0, 16).replace("T", " ")}
+                  {(h.by || nameOf(h.byId)) ? ` · ${h.by || nameOf(h.byId)}` : ""}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </Field>
+    </Sheet>
+  );
+}
+
+function CanvassScreen({ onBack, currentUser, jobs, users, canvassStatuses, toast, onCreateLeadFromPin, onOpenJob }) {
   const [center, setCenter] = useState(() => {
     /* Open where the company works. A rep who has to pan across the
        Atlantic before the first knock will not open this twice. */
@@ -28763,6 +28880,7 @@ function CanvassScreen({ onBack, currentUser, jobs, canvassStatuses, toast }) {
   });
   const [zoom, setZoom] = useState(17);
   const [selectedId, setSelectedId] = useState(null);
+  const [detail, setDetail] = useState(null);
   const [me, setMe] = useState(null);
   const [addr, setAddr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -28774,6 +28892,7 @@ function CanvassScreen({ onBack, currentUser, jobs, canvassStatuses, toast }) {
     useCanvassPins({ tenantId, ready: !!currentUser });
   const statuses = canvassStatusList(canvassStatuses);
   const selected = list.find((p) => p.id === selectedId) || null;
+  const detailPin = list.find((p) => p.id === detail) || null;
 
   /* Ask for pins after the pan settles, not on every frame. */
   const onMove = ({ center: c, zoom: zm }) => {
@@ -28908,7 +29027,16 @@ function CanvassScreen({ onBack, currentUser, jobs, canvassStatuses, toast }) {
               last by {(selected.history || [])[selected.history.length - 1].by || "someone"}
             </div>
           )}
+          {selected.job_id && (
+            <div style={{ marginTop: 10 }}>
+              <Chip tone="green">Became a job</Chip>
+              {onOpenJob && (
+                <Btn kind="ghost" small style={{ marginLeft: 8 }} onClick={() => onOpenJob(selected.job_id)}>Open job</Btn>
+              )}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <Btn small style={{ flex: 1 }} data-testid="open-pin-details" onClick={() => setDetail(selected.id)}>Details</Btn>
             <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => setSelectedId(null)}>Done</Btn>
             <Btn kind="ghost" small aria-label="Remove pin" style={{ color: "#B42318", flex: "0 0 auto" }}
               onClick={() => { removePin(selected.id); setSelectedId(null); }}>
@@ -28917,6 +29045,19 @@ function CanvassScreen({ onBack, currentUser, jobs, canvassStatuses, toast }) {
           </div>
         </Card>
       )}
+
+      {/* The door itself: who lives here, what was said, what the
+          weather did to this roof, and the one tap that turns a good
+          conversation into a job. */}
+      <CanvassPinSheet
+        pin={detailPin} statuses={canvassStatuses} users={users}
+        onClose={() => setDetail(null)}
+        onSave={(patch) => savePin({ ...detailPin, ...patch })}
+        onConvert={onCreateLeadFromPin ? async () => {
+          const job = await onCreateLeadFromPin(detailPin);
+          if (job) await savePin({ ...detailPin, job_id: job.id });
+        } : null}
+        onOpenJob={onOpenJob} toast={toast} />
 
       <Card style={{ marginTop: 12 }} pad={13}>
         <CardTitle>Legend</CardTitle>
@@ -30348,6 +30489,48 @@ export default function SupremeCRM() {
      (payments[].to, fin.labor[].by), never by id, so what they were
      paid stays on the books. Blocked upstream when an invoice is still
      unpaid; see unpaidSubInvoiceJobs. */
+  /* A knock becomes a job. Reuses createLead rather than assembling a
+     job object here, so a canvassed lead is structurally identical to
+     one typed into the intake form — same intake defaults, same
+     commission rate off the seat, same first task. Everything the pin
+     already knows is carried across; anything the door didn't give up
+     (carrier, deductible) stays blank for the rep to fill in later,
+     exactly as it would on a phone lead.
+
+     Returns the job so the caller can point the pin at it. */
+  const createLeadFromCanvassPin = (pin) => new Promise((resolve) => {
+    const p = pin.prospect || {};
+    const parts = String(p.name || "").trim().split(/\s+/).filter(Boolean);
+    /* The address is one formatted string from the reverse geocoder;
+       split off the street so the job's own street/city/state fields
+       are populated rather than dumping the whole line into street. */
+    const bits = String(pin.address || "").split(",").map((s) => s.trim());
+    const stateZip = (bits[2] || "").split(/\s+/);
+    createLead({
+      contactMode: "new", existingContactId: "", existingPropertyId: "",
+      first: parts[0] || "", last: parts.slice(1).join(" ") || "",
+      phone: p.phone || "", email: p.email || "",
+      street: bits[0] || pin.address || "", city: bits[1] || "",
+      stateSel: stateZip[0] || "", zip: stateZip[1] || "",
+      lat: pin.lat, lng: pin.lng,
+      leadSource: "Door knock",
+      assignee: (currentUser && currentUser.name) || "",
+      claimType: "Insurance",
+      roofTypes: [], roofAge: "", layers: "", workRequested: [], reasonForCalling: "",
+      propertyUse: "Primary residence", decisionTimeline: "",
+      carrier: "", policy: "", claim: "", adjusterName: "", adjusterPhone: "",
+      deductible: "", coverage: "", oLaw: false,
+      rps: false, cosmetic: false, windHailDed: false, acvRoof: false, matching: false,
+      /* Consent is NOT assumed from a doorstep conversation. A rep
+         standing on a porch has not collected a timestamped opt-in to
+         text or email, and recording one that never happened is the
+         kind of thing that matters when a TCPA complaint arrives. */
+      smsConsent: false, emailConsent: false,
+      notes: [pin.notes, p.bestTime ? `Best time: ${p.bestTime}` : "",
+        p.stormDate ? `Storm date discussed: ${p.stormDate}` : ""].filter(Boolean).join("\n"),
+    }, { stayPut: true, toast: "Lead created from the door", onCreated: resolve });
+  });
+
   const deleteCrew = (id) => {
     const crew = crews.find((c) => c.id === id);
     const affected = jobs.filter((j) => j.crewId === id);
@@ -30692,7 +30875,12 @@ export default function SupremeCRM() {
     setStages(nextStages);
   };
 
-  const createLead = (f) => {
+  /* opts is optional and NewLeadSheet never passes it, so the form path
+     is unchanged. Canvassing needs the two things a form doesn't: to
+     stay where it is (a rep converting a door wants to keep knocking,
+     not be thrown onto the job screen mid-street) and to learn which
+     job was created, so the pin can point at it. */
+  const createLead = (f, opts = {}) => {
     const id = uid("j");
     const contactId = f.existingContactId || uid("ct");
     const propertyId = f.existingPropertyId || uid("pr");
@@ -30762,10 +30950,11 @@ export default function SupremeCRM() {
     };
     setJobs((prev) => [job, ...prev]);
     logAct({ kind: "lead", jobId: job.id, jobName: job.name, text: `created new lead ${job.name} (${job.leadSource})` });
-    toast("Lead created");
+    toast(opts.toast || "Lead created");
     setNewLeadOpen(false);
     setLeadSeed(null);
-    setOpenJobId(id); setNav("jobs");
+    if (!opts.stayPut) { setOpenJobId(id); setNav("jobs"); }
+    if (opts.onCreated) opts.onCreated(job);
 
     /* Auto-create the matching CompanyCam project when the seat is
        connected and the company has the setting on. Best-effort and
@@ -31152,8 +31341,9 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <CrewManager crews={crews} setCrews={setCrews} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} onDeleteCrew={deleteCrew} />
       ) : nav === "canvass" ? (
-        <CanvassScreen onBack={() => setNav("more")} currentUser={liveUser} jobs={jobs}
-          canvassStatuses={canvassStatuses} toast={toast} />
+        <CanvassScreen onBack={() => setNav("more")} currentUser={liveUser} jobs={jobs} users={users}
+          canvassStatuses={canvassStatuses} toast={toast}
+          onCreateLeadFromPin={createLeadFromCanvassPin} onOpenJob={openJobScreen} />
       ) : nav === "claims" ? (
         <ClaimsDashboard jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
       ) : nav === "crewpay" ? (

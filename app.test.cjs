@@ -30062,13 +30062,164 @@ function useCanvassPins({ tenantId, ready }) {
   }, [ready, tenantId]);
   return { pins, list: Object.values(pins), loadBounds, savePin, removePin, err, setErr, loading };
 }
-function CanvassScreen({ onBack, currentUser, jobs, canvassStatuses, toast }) {
+function CanvassPinSheet({ pin, statuses, users, onClose, onSave, onConvert, onOpenJob, toast }) {
+  const [p, setP] = (0, import_react.useState)({});
+  const [notes, setNotes] = (0, import_react.useState)("");
+  const [converting, setConverting] = (0, import_react.useState)(false);
+  (0, import_react.useEffect)(() => {
+    if (!pin) return;
+    setP(pin.prospect || {});
+    setNotes(pin.notes || "");
+  }, [pin && pin.id]);
+  if (!pin) return null;
+  const st = canvassStatus(statuses, pin.status);
+  const hist = [...pin.history || []].reverse();
+  const nameOf = (id) => {
+    const u = (users || []).find((x) => x.id === id);
+    return u ? u.name : "";
+  };
+  const save = () => {
+    onSave({ prospect: p, notes });
+    toast && toast("Saved");
+  };
+  const set = (k) => (v) => setP((prev) => ({ ...prev, [k]: v }));
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+    Sheet,
+    {
+      open: !!pin,
+      onClose,
+      title: pin.address || "Dropped pin",
+      tall: true,
+      footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: onClose, children: "Close" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 1 }, "data-testid": "save-pin", onClick: () => {
+          save();
+          onClose();
+        }, children: "Save" })
+      ] }),
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 12, height: 12, borderRadius: "50%", background: st.color, border: "2px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,.2)" } }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700 }, children: st.name }),
+          pin.job_id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Became a job" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Who lives here", hint: "Whatever they gave you. A first name and a phone is plenty to work with.", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, placeholder: "Name", value: p.name || "", onChange: (e) => set("name")(e.target.value) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: inputStyle,
+                placeholder: "Phone",
+                inputMode: "tel",
+                value: p.phone || "",
+                onChange: (e) => set("phone")(formatPhone(e.target.value))
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: inputStyle,
+                type: "email",
+                placeholder: "Email",
+                value: p.email || "",
+                onChange: (e) => set("email")(e.target.value)
+              }
+            )
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: { ...inputStyle, marginTop: 8 },
+              placeholder: "Best time to come back",
+              value: p.bestTime || "",
+              onChange: (e) => set("bestTime")(e.target.value)
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Notes", hint: "What was actually said. This is what the next person at this door reads.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "textarea",
+          {
+            style: { ...inputStyle, minHeight: 84, resize: "vertical" },
+            value: notes,
+            onChange: (e) => setNotes(e.target.value)
+          }
+        ) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Field,
+          {
+            label: "Storm history at this address",
+            hint: "What NOAA has on record here. This is the pitch: name the date and the hail size.",
+            children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              StormLookup,
+              {
+                job: { lat: pin.lat, lng: pin.lng, address: pin.address, zip: "" },
+                dol: p.stormDate || "",
+                onPick: (d) => set("stormDate")(d),
+                toast
+              }
+            )
+          }
+        ),
+        onConvert && !pin.job_id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Field,
+          {
+            label: "Turn this into a job",
+            hint: "Creates a lead at your first pipeline stage with this address and contact, and links it back to this pin. You stay on the map.",
+            children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              Btn,
+              {
+                style: { width: "100%" },
+                disabled: converting,
+                "data-testid": "convert-pin",
+                onClick: async () => {
+                  setConverting(true);
+                  await onSave({ prospect: p, notes });
+                  await onConvert();
+                  setConverting(false);
+                  onClose();
+                },
+                children: converting ? "Creating\u2026" : "Create a lead from this door"
+              }
+            )
+          }
+        ),
+        pin.job_id && onOpenJob && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%" }, onClick: () => {
+          onClose();
+          onOpenJob(pin.job_id);
+        }, children: "Open the job this became" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Field,
+          {
+            label: `Knock history (${hist.length})`,
+            hint: "Every visit, in order. Nothing here is editable \u2014 it is the record of what people were actually told.",
+            children: hist.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "Nobody has knocked this door yet." }) : hist.map((h, i) => {
+              const hs = canvassStatus(statuses, h.status);
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 10, height: 10, borderRadius: "50%", background: hs.color, marginTop: 4, flexShrink: 0 } }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 600 }, children: hs.name }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 2 }, children: [
+                    String(h.at || "").slice(0, 16).replace("T", " "),
+                    h.by || nameOf(h.byId) ? ` \xB7 ${h.by || nameOf(h.byId)}` : ""
+                  ] })
+                ] })
+              ] }, i);
+            })
+          }
+        )
+      ]
+    }
+  );
+}
+function CanvassScreen({ onBack, currentUser, jobs, users, canvassStatuses, toast, onCreateLeadFromPin, onOpenJob }) {
   const [center, setCenter] = (0, import_react.useState)(() => {
     const withGeo = (jobs || []).find((j) => j.lat != null && j.lng != null);
     return withGeo ? { lat: withGeo.lat, lng: withGeo.lng } : { lat: 41.78, lng: -88.15 };
   });
   const [zoom, setZoom] = (0, import_react.useState)(17);
   const [selectedId, setSelectedId] = (0, import_react.useState)(null);
+  const [detail, setDetail] = (0, import_react.useState)(null);
   const [me, setMe] = (0, import_react.useState)(null);
   const [addr, setAddr] = (0, import_react.useState)("");
   const [busy, setBusy] = (0, import_react.useState)(false);
@@ -30078,6 +30229,7 @@ function CanvassScreen({ onBack, currentUser, jobs, canvassStatuses, toast }) {
   const { list, loadBounds, savePin, removePin, err, setErr, loading } = useCanvassPins({ tenantId, ready: !!currentUser });
   const statuses = canvassStatusList(canvassStatuses);
   const selected = list.find((p) => p.id === selectedId) || null;
+  const detailPin = list.find((p) => p.id === detail) || null;
   const onMove = ({ center: c, zoom: zm }) => {
     setCenter(c);
     setZoom(zm);
@@ -30248,7 +30400,12 @@ function CanvassScreen({ onBack, currentUser, jobs, canvassStatuses, toast }) {
         " \xB7 last by ",
         (selected.history || [])[selected.history.length - 1].by || "someone"
       ] }),
+      selected.job_id && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Became a job" }),
+        onOpenJob && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { marginLeft: 8 }, onClick: () => onOpenJob(selected.job_id), children: "Open job" })
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, style: { flex: 1 }, "data-testid": "open-pin-details", onClick: () => setDetail(selected.id), children: "Details" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => setSelectedId(null), children: "Done" }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           Btn,
@@ -30266,6 +30423,22 @@ function CanvassScreen({ onBack, currentUser, jobs, canvassStatuses, toast }) {
         )
       ] })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      CanvassPinSheet,
+      {
+        pin: detailPin,
+        statuses: canvassStatuses,
+        users,
+        onClose: () => setDetail(null),
+        onSave: (patch) => savePin({ ...detailPin, ...patch }),
+        onConvert: onCreateLeadFromPin ? async () => {
+          const job = await onCreateLeadFromPin(detailPin);
+          if (job) await savePin({ ...detailPin, job_id: job.id });
+        } : null,
+        onOpenJob,
+        toast
+      }
+    ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, pad: 13, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Legend" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 12, flexWrap: "wrap" }, children: statuses.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.sub }, children: [
@@ -31614,6 +31787,61 @@ function SupremeCRM() {
     logAct({ type: "delete", text: `Deleted ${ids.length === 1 ? "job" : ids.length + " jobs"}: ${label}` });
     toast(ids.length === 1 ? "Job deleted" : ids.length + " jobs deleted");
   };
+  const createLeadFromCanvassPin = (pin) => new Promise((resolve) => {
+    const p = pin.prospect || {};
+    const parts = String(p.name || "").trim().split(/\s+/).filter(Boolean);
+    const bits = String(pin.address || "").split(",").map((s) => s.trim());
+    const stateZip = (bits[2] || "").split(/\s+/);
+    createLead({
+      contactMode: "new",
+      existingContactId: "",
+      existingPropertyId: "",
+      first: parts[0] || "",
+      last: parts.slice(1).join(" ") || "",
+      phone: p.phone || "",
+      email: p.email || "",
+      street: bits[0] || pin.address || "",
+      city: bits[1] || "",
+      stateSel: stateZip[0] || "",
+      zip: stateZip[1] || "",
+      lat: pin.lat,
+      lng: pin.lng,
+      leadSource: "Door knock",
+      assignee: currentUser && currentUser.name || "",
+      claimType: "Insurance",
+      roofTypes: [],
+      roofAge: "",
+      layers: "",
+      workRequested: [],
+      reasonForCalling: "",
+      propertyUse: "Primary residence",
+      decisionTimeline: "",
+      carrier: "",
+      policy: "",
+      claim: "",
+      adjusterName: "",
+      adjusterPhone: "",
+      deductible: "",
+      coverage: "",
+      oLaw: false,
+      rps: false,
+      cosmetic: false,
+      windHailDed: false,
+      acvRoof: false,
+      matching: false,
+      /* Consent is NOT assumed from a doorstep conversation. A rep
+         standing on a porch has not collected a timestamped opt-in to
+         text or email, and recording one that never happened is the
+         kind of thing that matters when a TCPA complaint arrives. */
+      smsConsent: false,
+      emailConsent: false,
+      notes: [
+        pin.notes,
+        p.bestTime ? `Best time: ${p.bestTime}` : "",
+        p.stormDate ? `Storm date discussed: ${p.stormDate}` : ""
+      ].filter(Boolean).join("\n")
+    }, { stayPut: true, toast: "Lead created from the door", onCreated: resolve });
+  });
   const deleteCrew = (id) => {
     const crew = crews.find((c) => c.id === id);
     const affected = jobs.filter((j) => j.crewId === id);
@@ -31887,7 +32115,7 @@ function SupremeCRM() {
     setJobs((prev) => prev.map((j) => ids.has(j.stageId) ? j : { ...j, stageId: nextStages[0].id }));
     setStages(nextStages);
   };
-  const createLead = (f) => {
+  const createLead = (f, opts = {}) => {
     const id = uid("j");
     const contactId = f.existingContactId || uid("ct");
     const propertyId = f.existingPropertyId || uid("pr");
@@ -31985,11 +32213,14 @@ function SupremeCRM() {
     };
     setJobs((prev) => [job, ...prev]);
     logAct({ kind: "lead", jobId: job.id, jobName: job.name, text: `created new lead ${job.name} (${job.leadSource})` });
-    toast("Lead created");
+    toast(opts.toast || "Lead created");
     setNewLeadOpen(false);
     setLeadSeed(null);
-    setOpenJobId(id);
-    setNav("jobs");
+    if (!opts.stayPut) {
+      setOpenJobId(id);
+      setNav("jobs");
+    }
+    if (opts.onCreated) opts.onCreated(job);
     if (ccToken && ccAutoCreate) {
       const twin = existingPropertyJob && existingPropertyJob.companyCam;
       if (twin) {
@@ -32596,8 +32827,11 @@ function SupremeCRM() {
         onBack: () => setNav("more"),
         currentUser: liveUser,
         jobs,
+        users,
         canvassStatuses,
-        toast
+        toast,
+        onCreateLeadFromPin: createLeadFromCanvassPin,
+        onOpenJob: openJobScreen
       }
     ) : nav === "claims" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimsDashboard, { jobs, onBack: () => setNav("more"), onOpenJob: openJobScreen }) : nav === "crewpay" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       CrewPayouts,
