@@ -1604,6 +1604,11 @@ var ROLES = [
   { id: "rep", label: "Sales rep", blurb: "Own jobs and payout figures. Cannot see company splits or structure controls." },
   { id: "crew", label: "Crew / field", blurb: "Work orders, photos, and tasks only. No pricing, no financials." }
 ];
+var CAPABILITIES = [
+  ["editStructure", "Edit commission structure"],
+  ["manageSeats", "Manage seats"],
+  ["manageFeatures", "Manage feature toggles"]
+];
 var SEED_USERS = [
   { id: "u1", name: "Jacob Henderson", email: "jacob@supremebuildinggroup.com", phone: "(847) 757-9890", role: "admin", title: "Owner / Admin", active: true, commissionRate: 60, addedAt: "2026-01-04" },
   { id: "u2", name: "Drew Klass", email: "drew@supremebuildinggroup.com", phone: "", role: "rep", title: "Sales Rep", active: true, commissionRate: 60, addedAt: "2026-02-11" },
@@ -1643,8 +1648,10 @@ function repContactFor(users, job) {
   };
 }
 var canSeeMoney = (u) => u && !["crew", "secretary"].includes(u.role);
-var canEditStructure = (u) => u && u.role === "admin";
-var canManageSeats = (u) => u && u.role === "admin";
+var hasCapability = (u, cap) => !!u && (u.role === "admin" || !!(u.permissionOverrides && u.permissionOverrides[cap]));
+var canEditStructure = (u) => hasCapability(u, "editStructure");
+var canManageSeats = (u) => hasCapability(u, "manageSeats");
+var canManageFeatures = (u) => hasCapability(u, "manageFeatures");
 var canManageCompanyConfig = (u) => u && ["admin", "secretary", "manager", "sales_manager"].includes(u.role);
 var canSeeCompanyPerformance = (u) => u && ["admin", "manager", "sales_manager"].includes(u.role);
 var LEAD_SOURCES = ["Door knocking", "Customer referral", "Google", "Website", "Yard sign", "Facebook", "Call in", "Repeat customer", "Real-estate referral", "Billboard / print"];
@@ -3802,7 +3809,8 @@ var fromProfile = (row) => ({
   active: row.active,
   commissionRate: row.commission_rate != null ? Number(row.commission_rate) : 60,
   addedAt: row.added_at || "",
-  tenantId: row.tenant_id || null
+  tenantId: row.tenant_id || null,
+  permissionOverrides: row.permission_overrides || {}
 });
 var toProfile = (u) => ({
   name: u.name,
@@ -3811,7 +3819,8 @@ var toProfile = (u) => ({
   role: u.role,
   title: u.title || null,
   commission_rate: u.commissionRate ?? 60,
-  active: u.active
+  active: u.active,
+  permission_overrides: u.permissionOverrides || {}
 });
 var S = { ink: "var(--rl-ink)", sub: "var(--rl-sub)", line: "var(--rl-line)", bg: "var(--rl-bg)", soft: "var(--rl-soft)", card: "var(--rl-card)" };
 var T = { primary: "#20242A", accent: "#0A9E98", accentSoft: "#E3F5F4" };
@@ -27352,7 +27361,7 @@ function JobImport({ jobs, setJobs, stages, users, onBack, toast, currentUser })
 function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand }) {
   const [editing, setEditing] = (0, import_react.useState)(null);
   const isAdmin = canManageSeats(currentUser);
-  const blank = { name: "", email: "", phone: "", role: "rep", title: "Sales Rep", commissionRate: 60, active: true };
+  const blank = { name: "", email: "", phone: "", role: "rep", title: "Sales Rep", commissionRate: 60, active: true, permissionOverrides: {} };
   const [f, setF] = (0, import_react.useState)(blank);
   const open = (u) => {
     setEditing(u || "new");
@@ -27619,6 +27628,17 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
             setF((p) => ({ ...p, role: r.id, title: r.label }));
           }, children: ROLES.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: r.id, children: r.label }, r.id)) }) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: T.accentSoft, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.primary, marginBottom: 14, lineHeight: 1.5 }, children: (ROLES.find((r) => r.id === f.role) || {}).blurb }),
+          isAdmin && f.role !== "admin" && editing !== "new" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Delegated authority", hint: "Give this person one or more admin-only capabilities without making them a full admin.", children: CAPABILITIES.map(([key, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: S.ink, padding: "5px 0" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                type: "checkbox",
+                checked: !!(f.permissionOverrides && f.permissionOverrides[key]),
+                onChange: (e) => setF((p) => ({ ...p, permissionOverrides: { ...p.permissionOverrides || {}, [key]: e.target.checked } }))
+              }
+            ),
+            label
+          ] }, key)) }),
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Job title (shown in the app)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: f.title, onChange: set("title") }) }),
           (brand.locations || []).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Location", hint: "Documents and messages for this rep's jobs show this office's phone and address.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: f.locationId || "", onChange: (e) => setF((p2) => ({ ...p2, locationId: e.target.value || null })), children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Head office" }),
@@ -28070,13 +28090,13 @@ function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
   ] });
 }
 function AdminControls({ features, setFeatures, activity, users, currentUser, onBack, toast, security, setSecurity }) {
-  const admin = !!(currentUser && currentUser.role === "admin");
+  const admin = canManageFeatures(currentUser);
   const [tab, setTab] = (0, import_react.useState)("features");
   const [q, setQ] = (0, import_react.useState)("");
   if (!admin) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Admin controls", onBack }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 16 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub }, children: "This screen is restricted to admins." }) })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 16 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub }, children: "This screen is restricted to admins, or someone given that authority." }) })
     ] });
   }
   const feats = { ...DEFAULT_FEATURES, ...features || {} };
@@ -28856,7 +28876,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["workflow", import_lucide_react.ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
       ["integrations", import_lucide_react.Share2, "Integrations", "Gmail, texting, CompanyCam, Google reviews"],
       ["import", import_lucide_react.Upload, "Import jobs", "Bring a pipeline in from CSV"],
-      admin && ["admin", import_lucide_react.Shield, "Admin controls", "Feature switches, security and the audit log"],
+      canManageFeatures(currentUser) && ["admin", import_lucide_react.Shield, "Admin controls", "Feature switches, security and the audit log"],
       admin && ["setupkeys", import_lucide_react.Lock, "Setup & keys", "API keys and services still to connect"],
       ["syscheck", import_lucide_react.AlertTriangle, "System check", "Test the database connection and setup"],
       ["help", import_lucide_react.BookOpen, "Help & guides", "How every part of the app works"],

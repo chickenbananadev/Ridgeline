@@ -1236,6 +1236,14 @@ const ROLES = [
   { id: "rep", label: "Sales rep", blurb: "Own jobs and payout figures. Cannot see company splits or structure controls." },
   { id: "crew", label: "Crew / field", blurb: "Work orders, photos, and tasks only. No pricing, no financials." },
 ];
+/* The 3 capabilities an admin can delegate to a specific non-admin
+   person (see hasCapability() below) — one admin-only checkbox group
+   per seat in TeamManager, independent of role. */
+const CAPABILITIES = [
+  ["editStructure", "Edit commission structure"],
+  ["manageSeats", "Manage seats"],
+  ["manageFeatures", "Manage feature toggles"],
+];
 const SEED_USERS = [
   { id: "u1", name: "Jacob Henderson", email: "jacob@supremebuildinggroup.com", phone: "(847) 757-9890", role: "admin", title: "Owner / Admin", active: true, commissionRate: 60, addedAt: "2026-01-04" },
   { id: "u2", name: "Drew Klass", email: "drew@supremebuildinggroup.com", phone: "", role: "rep", title: "Sales Rep", active: true, commissionRate: 60, addedAt: "2026-02-11" },
@@ -1293,8 +1301,15 @@ function repContactFor(users, job) {
   };
 }
 const canSeeMoney = (u) => u && !["crew", "secretary"].includes(u.role);
-const canEditStructure = (u) => u && u.role === "admin";
-const canManageSeats = (u) => u && u.role === "admin";
+/* Delegated authority: an admin can grant one of these named
+   capabilities to a specific non-admin person (profiles.
+   permission_overrides, a flat { capabilityKey: true } map) — the
+   admin still has everything by definition, a grant only matters for
+   someone who isn't one. */
+const hasCapability = (u, cap) => !!u && (u.role === "admin" || !!(u.permissionOverrides && u.permissionOverrides[cap]));
+const canEditStructure = (u) => hasCapability(u, "editStructure");
+const canManageSeats = (u) => hasCapability(u, "manageSeats");
+const canManageFeatures = (u) => hasCapability(u, "manageFeatures");
 /* Back-office/company-config screens (branding, docs, templates, price
    list, vendors, announcements, workflow, crew manager) — every role
    above individual-contributor level, not just admin+production
@@ -3166,10 +3181,12 @@ const fromProfile = (row) => ({
   role: row.role, title: row.title || "", active: row.active,
   commissionRate: row.commission_rate != null ? Number(row.commission_rate) : 60,
   addedAt: row.added_at || "", tenantId: row.tenant_id || null,
+  permissionOverrides: row.permission_overrides || {},
 });
 const toProfile = (u) => ({
   name: u.name, email: u.email, phone: u.phone || null, role: u.role,
   title: u.title || null, commission_rate: u.commissionRate ?? 60, active: u.active,
+  permission_overrides: u.permissionOverrides || {},
 });
 
 /* ================================================================
@@ -25947,7 +25964,7 @@ function JobImport({ jobs, setJobs, stages, users, onBack, toast, currentUser })
 function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand }) {
   const [editing, setEditing] = useState(null); // user object or "new"
   const isAdmin = canManageSeats(currentUser);
-  const blank = { name: "", email: "", phone: "", role: "rep", title: "Sales Rep", commissionRate: 60, active: true };
+  const blank = { name: "", email: "", phone: "", role: "rep", title: "Sales Rep", commissionRate: 60, active: true, permissionOverrides: {} };
   const [f, setF] = useState(blank);
   const open = (u) => { setEditing(u || "new"); setF(u ? { ...u } : blank); };
   const set = (k) => (e) => {
@@ -26220,6 +26237,17 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
         <div style={{ background: T.accentSoft, borderRadius: 10, padding: "11px 13px", fontSize: 13, color: T.primary, marginBottom: 14, lineHeight: 1.5 }}>
           {(ROLES.find((r) => r.id === f.role) || {}).blurb}
         </div>
+        {isAdmin && f.role !== "admin" && editing !== "new" && (
+          <Field label="Delegated authority" hint="Give this person one or more admin-only capabilities without making them a full admin.">
+            {CAPABILITIES.map(([key, label]) => (
+              <label key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: S.ink, padding: "5px 0" }}>
+                <input type="checkbox" checked={!!(f.permissionOverrides && f.permissionOverrides[key])}
+                  onChange={(e) => setF((p) => ({ ...p, permissionOverrides: { ...(p.permissionOverrides || {}), [key]: e.target.checked } }))} />
+                {label}
+              </label>
+            ))}
+          </Field>
+        )}
         <Field label="Job title (shown in the app)"><input style={inputStyle} value={f.title} onChange={set("title")} /></Field>
         {(brand.locations || []).length > 0 && (
           <Field label="Location" hint="Documents and messages for this rep's jobs show this office's phone and address.">
@@ -26682,7 +26710,7 @@ function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
 }
 
 function AdminControls({ features, setFeatures, activity, users, currentUser, onBack, toast, security, setSecurity }) {
-  const admin = !!(currentUser && currentUser.role === "admin");
+  const admin = canManageFeatures(currentUser);
   const [tab, setTab] = useState("features");
   const [q, setQ] = useState("");
   if (!admin) {
@@ -26690,7 +26718,7 @@ function AdminControls({ features, setFeatures, activity, users, currentUser, on
       <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
         <SubHeader title="Admin controls" onBack={onBack} />
         <Card style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 14, color: S.sub }}>This screen is restricted to admins.</div>
+          <div style={{ fontSize: 14, color: S.sub }}>This screen is restricted to admins, or someone given that authority.</div>
         </Card>
       </div>
     );
@@ -27405,7 +27433,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["workflow", ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
       ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam, Google reviews"],
       ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
-      admin && ["admin", Shield, "Admin controls", "Feature switches, security and the audit log"],
+      canManageFeatures(currentUser) && ["admin", Shield, "Admin controls", "Feature switches, security and the audit log"],
       admin && ["setupkeys", Lock, "Setup & keys", "API keys and services still to connect"],
       ["syscheck", AlertTriangle, "System check", "Test the database connection and setup"],
       ["help", BookOpen, "Help & guides", "How every part of the app works"],
