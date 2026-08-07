@@ -18812,6 +18812,40 @@ async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, in
   return deliverMessage({ to, kind, subject, body, jobId: job.id }, integrations, currentUser);
 }
 
+/* Resolves the company's designated billing contact — the one person
+   who's automatically notified when a sub payout or a job's cap-out is
+   ready to pay. Falls back to any active admin so a company that never
+   set brand.billingContactUserId still gets notified by someone,
+   instead of the notification silently going nowhere. */
+function billingContactFor(brand, users) {
+  const list = users || [];
+  const id = brand && brand.billingContactUserId;
+  const chosen = id && list.find((u) => u.id === id && u.active !== false);
+  if (chosen) return chosen;
+  return list.find((u) => u.active !== false && u.role === "admin") || null;
+}
+/* Auto-sends a payment-ready notice to the billing contact — email and
+   SMS, whichever it has on file — via deliverMessage. Unlike every
+   other message in this app, this does NOT append to job.messages as
+   "Queued"; it sends immediately, no human queue step, per an explicit
+   product decision (the whole point is nobody has to remember to
+   check). currentUser is the person who triggered the ready-event
+   (confirmed the sub invoice, logged the final payment) — their own
+   connected Gmail sends the email, same as every other send in the
+   app; the billing contact is only ever the recipient. */
+async function deliverToBillingContact(job, { subject, body }, integrations, users, brand, currentUser) {
+  const contact = billingContactFor(brand, users);
+  if (!contact) return { contact: null, sent: [] };
+  const sent = [];
+  if (contact.email) {
+    sent.push(await deliverMessage({ to: contact.email, kind: "email", subject, body, jobId: job.id }, integrations, currentUser));
+  }
+  if (contact.phone) {
+    sent.push(await deliverMessage({ to: contact.phone, kind: "sms", subject, body, jobId: job.id }, integrations, currentUser));
+  }
+  return { contact, sent };
+}
+
 /* ================================================================
    MESSAGES — send email or SMS to the customer or crew from the job,
    with the thread kept on the job record.
