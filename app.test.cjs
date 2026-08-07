@@ -5613,8 +5613,6 @@ function Dashboard({
   users = [],
   mutJob,
   onToggleTask,
-  chatMsgs = [],
-  onSendChat,
   stageRules = {},
   currentUser = null,
   showMoney = true,
@@ -12552,9 +12550,16 @@ function PortalRequestCenter({ token, jobId, role, customerName, accent, allowQu
   const [category, setCategory] = (0, import_react.useState)("Gutters");
   const [details, setDetails] = (0, import_react.useState)("");
   const [busy, setBusy] = (0, import_react.useState)(false);
+  const [submitErr, setSubmitErr] = (0, import_react.useState)("");
   const db = DB();
   const load = () => {
     if (!db || !token) return;
+    if (role === "customer") {
+      db.rpc("portal_get_requests", { p_token: token }).then(({ data }) => {
+        if (data) setRequests(data);
+      });
+      return;
+    }
     db.from("crm_portal_requests").select("*").eq("token", token).order("created_at", { ascending: false }).then(({ data }) => {
       if (data) setRequests(data);
     });
@@ -12571,6 +12576,7 @@ function PortalRequestCenter({ token, jobId, role, customerName, accent, allowQu
     const body = details.trim();
     if (!db || !body) return;
     setBusy(true);
+    setSubmitErr("");
     const row = {
       id: uid("prq"),
       token,
@@ -12585,6 +12591,8 @@ function PortalRequestCenter({ token, jobId, role, customerName, accent, allowQu
     if (!error) {
       setRequests((prev) => [{ ...row, created_at: (/* @__PURE__ */ new Date()).toISOString() }, ...prev]);
       setDetails("");
+    } else {
+      setSubmitErr("That didn't send. Please try again, or call us instead.");
     }
     setBusy(false);
   };
@@ -12631,7 +12639,8 @@ function PortalRequestCenter({ token, jobId, role, customerName, accent, allowQu
           placeholder: kind === "add_on" ? "Describe the project, timing, and any measurements or concerns\u2026" : "Describe the option, material, color, or scope change you want reviewed\u2026"
         }
       ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { "data-testid": "portal-submit-request", style: { width: "100%" }, disabled: busy || !details.trim(), onClick: submit, children: "Send request" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { "data-testid": "portal-submit-request", style: { width: "100%" }, disabled: busy || !details.trim(), onClick: submit, children: "Send request" }),
+      submitErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: "#B42318", marginTop: 8 }, children: submitErr })
     ] }),
     requests.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "No quote requests yet." }),
     requests.map((request) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: `1px solid ${S.line}`, padding: "11px 0" }, children: [
@@ -13335,9 +13344,10 @@ function PortalContactCard({ token, jobId, customer, accent }) {
     const db = DB();
     if (!db || !token) return;
     let alive = true;
-    db.from("crm_portal_requests").select("*").eq("token", token).eq("request_type", "contact_update").order("created_at", { ascending: false }).limit(1).then(({ data }) => {
-      if (!alive || !data || !data.length) return;
-      if (data[0].status === "New" || data[0].status === "Reviewing") setPending(data[0]);
+    db.rpc("portal_get_requests", { p_token: token }).then(({ data }) => {
+      if (!alive || !data) return;
+      const latest = data.find((r) => r.request_type === "contact_update");
+      if (latest && (latest.status === "New" || latest.status === "Reviewing")) setPending(latest);
     });
     return () => {
       alive = false;
@@ -29659,7 +29669,7 @@ function useDbSync(st) {
     unpackOrg
   } = st;
   const [hydrated, setHydrated] = (0, import_react.useState)(!liveDb());
-  const [syncErr, setSyncErr2] = (0, import_react.useState)("");
+  const [syncErr, setSyncErr] = (0, import_react.useState)("");
   const jobRefs = (0, import_react.useRef)(/* @__PURE__ */ new Map());
   const apptRefs = (0, import_react.useRef)(/* @__PURE__ */ new Map());
   const persistedActivity = (0, import_react.useRef)(/* @__PURE__ */ new Set());
@@ -29771,9 +29781,9 @@ function useDbSync(st) {
           msgs.forEach((m) => persistedChat.current.add(m.id));
           setChatMsgs(msgs);
         }
-        setSyncErr2("");
+        setSyncErr("");
       } catch (e) {
-        if (alive) setSyncErr2("Couldn't load saved data \u2014 check that the persistence migration has been run. " + (e && e.message ? e.message : ""));
+        if (alive) setSyncErr("Couldn't load saved data \u2014 check that the persistence migration has been run. " + (e && e.message ? e.message : ""));
       }
       if (alive) setHydrated(true);
     })();
@@ -29803,6 +29813,38 @@ function useDbSync(st) {
     }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "crm_chat", filter: `tenant_id=eq.${tenantId}` }, (payload) => {
       const r = payload.new;
       setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev.map((m) => m.id === r.id ? upsertFromRow(r) : m) : prev);
+    }).on("postgres_changes", { event: "DELETE", schema: "public", table: "crm_chat" }, (payload) => {
+      const id = payload.old && payload.old.id;
+      if (!id) return;
+      persistedChat.current.delete(id);
+      setChatMsgs((prev) => prev.some((m) => m.id === id) ? prev.filter((m) => m.id !== id) : prev);
+    }).on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_chat_conversations", filter: `tenant_id=eq.${tenantId}` }, (payload) => {
+      const r = payload.new;
+      if (r.archived_at) return;
+      setConversations((prev) => prev.some((c) => c.id === r.id) ? prev : [...prev, {
+        id: r.id,
+        kind: r.kind,
+        name: r.name,
+        topic: r.topic,
+        isPrivate: !!r.is_private,
+        createdBy: r.created_by,
+        createdAt: r.created_at
+      }]);
+    }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "crm_chat_conversations", filter: `tenant_id=eq.${tenantId}` }, (payload) => {
+      const r = payload.new;
+      if (r.archived_at) {
+        setConversations((prev) => prev.filter((c) => c.id !== r.id));
+        return;
+      }
+      setConversations((prev) => prev.map((c) => c.id === r.id ? { ...c, name: r.name, topic: r.topic, isPrivate: !!r.is_private } : c));
+    }).on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_chat_members" }, (payload) => {
+      const r = payload.new;
+      if (!r || !r.conversation_id) return;
+      setConversationMembers((prev) => prev.some((m) => m.conversationId === r.conversation_id && m.userId === r.user_id) ? prev : [...prev, { conversationId: r.conversation_id, userId: r.user_id }]);
+    }).on("postgres_changes", { event: "DELETE", schema: "public", table: "crm_chat_members" }, (payload) => {
+      const r = payload.old;
+      if (!r || !r.conversation_id) return;
+      setConversationMembers((prev) => prev.filter((m) => !(m.conversationId === r.conversation_id && m.userId === r.user_id)));
     }).on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_activity" }, (payload) => {
       const r = payload.new;
       if (persistedActivity.current.has(r.id)) return;
@@ -29847,9 +29889,9 @@ function useDbSync(st) {
           await db.from("crm_jobs").delete().in("id", removed);
           removed.forEach((id) => jobRefs.current.delete(id));
         }
-        setSyncErr2("");
+        setSyncErr("");
       } catch (e) {
-        setSyncErr2("Save failed \u2014 changes are on this device only. " + (e && e.message ? e.message : ""));
+        setSyncErr("Save failed \u2014 changes are on this device only. " + (e && e.message ? e.message : ""));
       }
     }, 1100);
     return () => {
@@ -29885,7 +29927,7 @@ function useDbSync(st) {
           removed.forEach((id) => apptRefs.current.delete(id));
         }
       } catch (e) {
-        setSyncErr2("Couldn't save an appointment \u2014 it exists on this device only. " + (e && e.message || ""));
+        setSyncErr("Couldn't save an appointment \u2014 it exists on this device only. " + (e && e.message || ""));
       }
     }, 800);
     return () => clearTimeout(t);
@@ -29922,7 +29964,10 @@ function useDbSync(st) {
       reactions: m.reactions || {},
       conversation_id: m.conversationId || null
     }))).then(({ error }) => {
-      if (error) fresh.forEach((m) => persistedChat.current.delete(m.id));
+      if (error) {
+        fresh.forEach((m) => persistedChat.current.delete(m.id));
+        setSyncErr("A chat message couldn't be sent \u2014 it shows on this device only. " + (error.message || ""));
+      }
     });
   }, [chatMsgs, ready, hydrated]);
   const reactionSig = (0, import_react.useRef)({});
@@ -29937,9 +29982,14 @@ function useDbSync(st) {
       }
       if (reactionSig.current[m.id] === sig) return;
       reactionSig.current[m.id] = sig;
-      db.from("crm_chat").update({ reactions: m.reactions || {} }).eq("id", m.id).then(() => {
-      }, () => {
-      });
+      db.from("crm_chat").update({ reactions: m.reactions || {} }).eq("id", m.id).then(
+        ({ error }) => {
+          if (error) setSyncErr("A reaction couldn't be saved \u2014 it shows on this device only.");
+        },
+        () => {
+          setSyncErr("A reaction couldn't be saved \u2014 it shows on this device only.");
+        }
+      );
     });
   }, [chatMsgs, ready, hydrated]);
   const editSig = (0, import_react.useRef)({});
@@ -29954,9 +30004,14 @@ function useDbSync(st) {
       }
       if (editSig.current[m.id] === sig) return;
       editSig.current[m.id] = sig;
-      db.from("crm_chat").update({ body: m.text, edited_at: m.editedAt || null }).eq("id", m.id).then(() => {
-      }, () => {
-      });
+      db.from("crm_chat").update({ body: m.text, edited_at: m.editedAt || null }).eq("id", m.id).then(
+        ({ error }) => {
+          if (error) setSyncErr("A message edit couldn't be saved \u2014 it shows on this device only.");
+        },
+        () => {
+          setSyncErr("A message edit couldn't be saved \u2014 it shows on this device only.");
+        }
+      );
     });
   }, [chatMsgs, ready, hydrated]);
   const packStr = JSON.stringify(st.orgDeps);
@@ -29970,14 +30025,14 @@ function useDbSync(st) {
         { onConflict: "tenant_id" }
       );
       write.then(({ error }) => {
-        if (error) setSyncErr2("Settings save failed. " + error.message);
+        if (error) setSyncErr("Settings save failed. " + error.message);
       });
     }, 1400);
     return () => {
       if (orgTimer.current) clearTimeout(orgTimer.current);
     };
   }, [packStr, ready, hydrated, tenantId]);
-  return { hydrated, syncErr };
+  return { hydrated, syncErr, setSyncErr };
 }
 function NavBtn({ id, icon: Icon, label, badge = 0, active, onPress }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onPress(id), style: {
@@ -30306,7 +30361,7 @@ function SupremeCRM() {
   };
   const syncUserName = currentUser ? currentUser.name : "Demo";
   const brandErr = useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true, currentUser && currentUser.tenantId);
-  const { hydrated, syncErr } = useDbSync({
+  const { hydrated, syncErr, setSyncErr } = useDbSync({
     ready: liveAuth() ? !!currentUser : true,
     isMoneyBlocked: !!(currentUser && !canSeeMoney(currentUser)),
     userName: syncUserName,
@@ -30335,9 +30390,13 @@ function SupremeCRM() {
     db.from("crm_chat_members").upsert(
       { conversation_id: conversationId, user_id: currentUser.id, last_read_at: (/* @__PURE__ */ new Date()).toISOString() },
       { onConflict: "conversation_id,user_id" }
-    ).then(() => {
-    }, () => {
-    });
+    ).then(
+      ({ error }) => {
+        if (error) setSyncErr("Couldn't mark that conversation read \u2014 its unread count may reappear. " + (error.message || ""));
+      },
+      () => {
+      }
+    );
     setUnreadCounts((prev) => ({ ...prev, [conversationId]: { unread: 0, mentions: 0 } }));
   };
   const selectConversation = (id) => {
@@ -31074,20 +31133,7 @@ function SupremeCRM() {
           showMoney,
           isAdmin,
           activity,
-          onToggleTask: (jobId, taskId) => mutJob(jobId, (j) => ({ ...j, tasks: j.tasks.map((x) => x.id === taskId ? { ...x, done: !x.done, doneAt: !x.done ? (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ") : null } : x) })),
-          chatMsgs,
-          onSendChat: (text) => {
-            const mentions = (users || []).filter((u) => u && u.name && text.includes(`@${u.name}`)).map((u) => u.name);
-            setChatMsgs((prev) => [...prev || [], {
-              id: uid("cm"),
-              by: userName,
-              at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " "),
-              text,
-              mentions,
-              jobId: null,
-              reactions: {}
-            }]);
-          }
+          onToggleTask: (jobId, taskId) => mutJob(jobId, (j) => ({ ...j, tasks: j.tasks.map((x) => x.id === taskId ? { ...x, done: !x.done, doneAt: !x.done ? (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " ") : null } : x) }))
         }
       )
     ] }) : nav === "jobs" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -31128,9 +31174,14 @@ function SupremeCRM() {
         unreadChat: totalUnread,
         onDeleteMsg: (id) => {
           const db = DB();
-          if (db) db.from("crm_chat").delete().eq("id", id).then(() => {
-          }, () => {
-          });
+          if (db) db.from("crm_chat").delete().eq("id", id).then(
+            ({ error }) => {
+              if (error) setSyncErr("Couldn't delete that chat message \u2014 it will reappear on reload. " + (error.message || ""));
+            },
+            () => {
+              setSyncErr("Couldn't delete that chat message \u2014 it will reappear on reload.");
+            }
+          );
         },
         integrations,
         onSendQueued: sendQueuedMessage,
