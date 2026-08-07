@@ -48,10 +48,10 @@ const beEnd = src.indexOf("\nfunction ", beStart + 10);
 const beSrc = src.slice(beStart, beEnd > 0 ? beEnd : beStart + 8000);
 ok(/function BrandingEditor\(\{ brand, setBrand, onBack, toast, brandErr = "", currentUser = null \}\)/.test(beSrc),
   "BrandingEditor now accepts a currentUser prop");
-ok(/const canEdit = !currentUser \|\| currentUser\.role === "admin" \|\| currentUser\.role === "manager";/.test(beSrc),
-  "BrandingEditor computes canEdit the same way VendorManager already does");
-ok(/if \(!canEdit\) \{/.test(beSrc) && /Branding is admin\/manager-only/.test(beSrc),
-  "a non-admin/manager sees a real explanation instead of the editable form");
+ok(/const canEdit = !currentUser \|\| canManageCompanyConfig\(currentUser\);/.test(beSrc),
+  "BrandingEditor computes canEdit via the shared canManageCompanyConfig helper (build 101 centralized this)");
+ok(/if \(!canEdit\) \{/.test(beSrc) && /Branding is management-only/.test(beSrc),
+  "a non-management role sees a real explanation instead of the editable form");
 ok(/<BrandingEditor brand=\{brand\} setBrand=\{setBrand\} onBack=\{\(\) => setNav\("more"\)\} toast=\{toast\} brandErr=\{brandErr\} currentUser=\{liveUser\} \/>/.test(src),
   "the call site now passes the signed-in user down");
 
@@ -61,17 +61,19 @@ const weEnd = src.indexOf("\nfunction ", weStart + 10);
 const weSrc = src.slice(weStart, weEnd > 0 ? weEnd : weStart + 8000);
 ok(/function WorkflowEditor\(\{ open, onClose, stages, setStages, stageRules = \{\}, setStageRules = \(\) => \{\}, currentUser = null \}\)/.test(weSrc),
   "WorkflowEditor now accepts a currentUser prop");
-ok(/const canEdit = !currentUser \|\| currentUser\.role === "admin" \|\| currentUser\.role === "manager";/.test(weSrc),
-  "WorkflowEditor computes canEdit the same way");
+ok(/const canEdit = !currentUser \|\| canManageCompanyConfig\(currentUser\);/.test(weSrc),
+  "WorkflowEditor computes canEdit via the shared canManageCompanyConfig helper (build 101 centralized this)");
 ok(/footer=\{canEdit \? \(/.test(weSrc), "the Save/Cancel footer only appears for someone who can actually save");
-ok(/Pipeline stages are admin\/manager-only/.test(weSrc), "a non-admin/manager sees a real explanation instead of the stage editor");
+ok(/Pipeline stages are management-only/.test(weSrc), "a non-management role sees a real explanation instead of the stage editor");
 ok(/<WorkflowEditor open=\{workflowOpen\} onClose=\{\(\) => setWorkflowOpen\(false\)\} stages=\{stages\}\s*setStages=\{applyRemovedStages\} stageRules=\{stageRules\} setStageRules=\{setStageRules\} currentUser=\{liveUser\} \/>/.test(src),
   "the call site now passes the signed-in user down");
 
 /* Sanity check: VendorManager's existing pattern (the convention both
-   fixes above now match) is unchanged. */
-ok(/const canEdit = currentUser\.role === "admin" \|\| currentUser\.role === "manager";/.test(src),
-  "sanity check: VendorManager's own canEdit check is still present, unaffected");
+   fixes above matched at the time) was itself later centralized too —
+   build 101 replaced this exact duplicated check, along with 9 other
+   identical copies elsewhere in the file, with one shared helper. */
+ok((src.match(/const canEdit = canManageCompanyConfig\(currentUser\);/g) || []).length >= 6,
+  "sanity check: VendorManager and its siblings now route through the same shared canManageCompanyConfig helper, not a re-duplicated inline check");
 
 if (fails) { console.log("\nbuild 86: " + fails + " FAILED"); process.exit(1); }
 console.log("build 86 tests passed");

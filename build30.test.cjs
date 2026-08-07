@@ -12,7 +12,7 @@ const migration017 = fs.readFileSync(path.join(__dirname, "supabase/migrations/0
 check("migration 017 adds a unique constraint on tenant_id", /unique \(tenant_id\)/.test(migration017));
 check("migration 017 is idempotent", /if not exists[\s\S]*pg_constraint/.test(migration017));
 
-check("useDbSync destructures tenantId", /ready, isCrew, userName, tenantId,/.test(src));
+check("useDbSync destructures tenantId", /ready, isMoneyBlocked, userName, tenantId,/.test(src));
 check("org hydrate read is scoped by tenant_id, not a hardcoded id",
   /db\.from\("crm_org"\)\.select\("data"\)\.eq\("tenant_id", tenantId\)/.test(src));
 check("org hydrate falls back to legacy id=1 when tenantId is unavailable, rather than hard-blocking forever (fixed after a production hang)",

@@ -1230,7 +1230,9 @@ const TEAM = ["Jacob Henderson", "Drew Klass", "Stephen Klein", "Steven Tatgenho
    admin can change how commission is calculated. */
 const ROLES = [
   { id: "admin", label: "Admin", blurb: "Full access: commission structures, company splits, seats, branding." },
+  { id: "secretary", label: "Secretary", blurb: "Scheduling, customers, and documents. No financials, no structure or seat changes." },
   { id: "manager", label: "Production manager", blurb: "All jobs and financials, but cannot change commission structures or seats." },
+  { id: "sales_manager", label: "Sales manager", blurb: "Every rep's jobs, commissions, and the leaderboard, plus their own. Cannot change commission structures or seats." },
   { id: "rep", label: "Sales rep", blurb: "Own jobs and payout figures. Cannot see company splits or structure controls." },
   { id: "crew", label: "Crew / field", blurb: "Work orders, photos, and tasks only. No pricing, no financials." },
 ];
@@ -1290,9 +1292,26 @@ function repContactFor(users, job) {
     overridden: ["name", "title", "phone", "email"].some((k) => String(o[k] || "").trim() && o[k] !== base[k]),
   };
 }
-const canSeeMoney = (u) => u && u.role !== "crew";
+const canSeeMoney = (u) => u && !["crew", "secretary"].includes(u.role);
 const canEditStructure = (u) => u && u.role === "admin";
 const canManageSeats = (u) => u && u.role === "admin";
+/* Back-office/company-config screens (branding, docs, templates, price
+   list, vendors, announcements, workflow, crew manager) — every role
+   above individual-contributor level, not just admin+production
+   manager as before Secretary/Sales manager existed. One simplifying
+   rule replacing ~10 previously copy-pasted "admin or manager" inline
+   checks; narrow any specific screen further if it turns out to need
+   its own tighter rule. */
+const canManageCompanyConfig = (u) => u && ["admin", "secretary", "manager", "sales_manager"].includes(u.role);
+/* Company-wide visibility into Performance (every rep's jobs,
+   commissions, the leaderboard) — the ROLES blurbs for Production
+   manager and Sales manager both promise this, but Performance's own
+   "isAdmin" prop was wired to canEditStructure (admin-only) before
+   Sales manager existed, so Production manager never actually got it
+   either. Scoped to just the Performance call site, not the general
+   isAdmin prop other components use for stricter things (seats,
+   commission structure, change-order signing). */
+const canSeeCompanyPerformance = (u) => u && ["admin", "manager", "sales_manager"].includes(u.role);
 const LEAD_SOURCES = ["Door knocking", "Customer referral", "Google", "Website", "Yard sign", "Facebook", "Call in", "Repeat customer", "Real-estate referral", "Billboard / print"];
 
 const DEFAULT_STAGES = [
@@ -7852,7 +7871,7 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
      pipeline every job and every rep depends on, app-wide, the moment
      Save is clicked. This took no role prop and performed no check at
      all — any signed-in rep who opened it could do this. */
-  const canEdit = !currentUser || currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = !currentUser || canManageCompanyConfig(currentUser);
   const [local, setLocal] = useState(stages);
   const [rules, setRules] = useState(stageRules);
   const [openRule, setOpenRule] = useState(null);
@@ -7914,7 +7933,7 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
             <Lock size={18} color={S.sub} style={{ flexShrink: 0, marginTop: 2 }} />
             <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
-              Pipeline stages are admin/manager-only — every job and every rep depends on this
+              Pipeline stages are management-only — every job and every rep depends on this
               structure. Ask the office to make a change.
             </div>
           </div>
@@ -9385,7 +9404,7 @@ function AnnouncementBar({ announcements = [] }) {
 }
 
 function AnnouncementManager({ announcements, setAnnouncements, currentUser, onBack, toast }) {
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
   const [draft, setDraft] = useState("");
   const add = () => {
     const t = draft.trim();
@@ -23280,7 +23299,7 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
    BRANDING EDITOR + MORE MENU + INBOX
    ================================================================ */
 function ActivityFeed({ activity, currentUser, onOpenJob, onBack }) {
-  const isMgr = currentUser.role === "admin" || currentUser.role === "manager";
+  const isMgr = canManageCompanyConfig(currentUser);
   const [kind, setKind] = useState("All");
   const mine = isMgr ? activity : activity.filter((a) => a.by === currentUser.name);
   const KINDS = ["All", "lead", "stage", "task", "note", "message", "appointment"];
@@ -23756,7 +23775,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
 }
 
 function VendorManager({ vendors, setVendors, currentUser, onBack, toast }) {
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
   const blank = { name: "", contact: "", phone: "", email: "", account: "", notes: "", active: true };
   const [editing, setEditing] = useState(null);
   const [f, setF] = useState(blank);
@@ -24003,7 +24022,7 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", current
      managers already restrict their own writes to admin/manager; this
      screen took no role prop at all and performed no check, so any
      signed-in rep who found the nav entry could repaint the company. */
-  const canEdit = !currentUser || currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = !currentUser || canManageCompanyConfig(currentUser);
   if (!canEdit) {
     return (
       <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
@@ -24012,7 +24031,7 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", current
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
             <Lock size={18} color={S.sub} style={{ flexShrink: 0, marginTop: 2 }} />
             <div style={{ fontSize: 14, color: S.sub, lineHeight: 1.55 }}>
-              Branding is admin/manager-only — it controls the logo, colors, and company name on every
+              Branding is management-only — it controls the logo, colors, and company name on every
               document and the login screen. Ask the office to make a change.
             </div>
           </div>
@@ -24143,7 +24162,7 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   const [err, setErr] = useState("");
   const fileRef = useRef(null);
   const pendingFile = useRef(null);
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
 
   const today = todayIso();
   const soon = isoLocal(new Date(Date.now() + 60 * 864e5));
@@ -24331,7 +24350,7 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
   const [q, setQ] = useState("");
   const [importing, setImporting] = useState(null);
   const fileRef = useRef(null);
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
 
   const parseCsv = (text) => {
     const lines = text.split(/\r?\n/).filter((l) => l.trim());
@@ -24554,7 +24573,7 @@ function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, 
   const [f, setF] = useState({ kind: "email", audience: "Customer", name: "", subject: "", body: "" });
   const fileRef = useRef(null);
   const bodyRef = useRef(null);
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
 
   const list = templates.filter((t) => t.kind === kind && (aud === "All" || t.audience === aud));
   const open = (t) => { setEditing(t || "new"); setF(t ? { ...t } : { kind, audience: aud === "All" ? "Customer" : aud, name: "", subject: "", body: "" }); };
@@ -24701,7 +24720,7 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const [editing, setEditing] = useState(null);
   const blank = { name: "", contact: "", phone: "", email: "", trades: [], active: true };
   const [f, setF] = useState(blank);
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
   const TRADES = ["Roofing", "Siding", "Gutters", "Metal", "Flashing", "Windows", "Carpentry"];
   const [customTrade, setCustomTrade] = useState("");
   const [range, setRange] = useState("all");
@@ -27357,7 +27376,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["warranties", Shield, "Warranties", "Every roof's labor and manufacturer terms"],
     ]],
     ["Sales & marketing", [
-      ["activity", ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
+      ["activity", ClipboardList, "Activity feed", currentUser && canManageCompanyConfig(currentUser) ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", Phone, "Calls & attribution", "Log calls, see which sources make money"],
       ["contacts", Users, "Contacts", "Every client, with consent status"],
       ["leadsources", Filter, "Lead sources", "Add, remove and reorder the options"],
@@ -27704,7 +27723,7 @@ function useBrandSync(brand, setBrand, hasSession, tenantId) {
 
 function useDbSync(st) {
   const {
-    ready, isCrew, userName, tenantId,
+    ready, isMoneyBlocked, userName, tenantId,
     jobs, setJobs, appointments, setAppointments,
     activity, setActivity, chatMsgs, setChatMsgs,
     orgPack, unpackOrg,
@@ -27754,7 +27773,7 @@ function useDbSync(st) {
         const { data: jobRows, error: jErr } = await db.from("crm_jobs").select("id, data");
         if (jErr) throw jErr;
         let finMap = {};
-        if (!isCrew) {
+        if (!isMoneyBlocked) {
           const { data: finRows } = await db.from("crm_financials").select("job_id, data");
           (finRows || []).forEach((r) => { finMap[r.job_id] = r.data || {}; });
         }
@@ -27856,7 +27875,7 @@ function useDbSync(st) {
             }));
             await db.from("crm_portal").upsert(snaps);
           }
-          if (!isCrew) {
+          if (!isMoneyBlocked) {
             const finRows = changed.map((j) => ({ job_id: j.id, data: { financials: j.fin, payments: j.payments }, updated_at: new Date().toISOString() }));
             await db.from("crm_financials").upsert(finRows);
           }
@@ -28312,7 +28331,7 @@ export default function SupremeCRM() {
   const brandErr = useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true, currentUser && currentUser.tenantId);
   const { hydrated, syncErr } = useDbSync({
     ready: liveAuth() ? !!currentUser : true,
-    isCrew: !!(currentUser && currentUser.role === "crew"),
+    isMoneyBlocked: !!(currentUser && !canSeeMoney(currentUser)),
     userName: syncUserName, tenantId: currentUser && currentUser.tenantId,
     jobs, setJobs, appointments, setAppointments,
     activity, setActivity, chatMsgs, setChatMsgs,
@@ -28908,7 +28927,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           seed={codeSeed} onConsumeSeed={() => setCodeSeed(null)} />
       ) : nav === "performance" ? (
         <Performance jobs={jobs} stages={stages} users={users} onBack={() => setNav("more")}
-          isAdmin={isAdmin} currentUser={liveUser} toast={toast} crews={crews} setUsers={setUsers}
+          isAdmin={canSeeCompanyPerformance(liveUser)} currentUser={liveUser} toast={toast} crews={crews} setUsers={setUsers}
           dashLayout={dashLayout} setDashLayout={setDashLayout} />
       ) : nav === "calendar" ? (
         <CalendarView jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen}

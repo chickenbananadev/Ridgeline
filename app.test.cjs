@@ -1598,7 +1598,9 @@ var RESOURCE_SECTIONS = [
 var TEAM = ["Jacob Henderson", "Drew Klass", "Stephen Klein", "Steven Tatgenhorst"];
 var ROLES = [
   { id: "admin", label: "Admin", blurb: "Full access: commission structures, company splits, seats, branding." },
+  { id: "secretary", label: "Secretary", blurb: "Scheduling, customers, and documents. No financials, no structure or seat changes." },
   { id: "manager", label: "Production manager", blurb: "All jobs and financials, but cannot change commission structures or seats." },
+  { id: "sales_manager", label: "Sales manager", blurb: "Every rep's jobs, commissions, and the leaderboard, plus their own. Cannot change commission structures or seats." },
   { id: "rep", label: "Sales rep", blurb: "Own jobs and payout figures. Cannot see company splits or structure controls." },
   { id: "crew", label: "Crew / field", blurb: "Work orders, photos, and tasks only. No pricing, no financials." }
 ];
@@ -1640,9 +1642,11 @@ function repContactFor(users, job) {
     overridden: ["name", "title", "phone", "email"].some((k) => String(o[k] || "").trim() && o[k] !== base[k])
   };
 }
-var canSeeMoney = (u) => u && u.role !== "crew";
+var canSeeMoney = (u) => u && !["crew", "secretary"].includes(u.role);
 var canEditStructure = (u) => u && u.role === "admin";
 var canManageSeats = (u) => u && u.role === "admin";
+var canManageCompanyConfig = (u) => u && ["admin", "secretary", "manager", "sales_manager"].includes(u.role);
+var canSeeCompanyPerformance = (u) => u && ["admin", "manager", "sales_manager"].includes(u.role);
 var LEAD_SOURCES = ["Door knocking", "Customer referral", "Google", "Website", "Yard sign", "Facebook", "Call in", "Repeat customer", "Real-estate referral", "Billboard / print"];
 var DEFAULT_STAGES = [
   { id: "s1", name: "New lead", cat: "Incoming" },
@@ -8650,7 +8654,7 @@ function FiltersSheet({ open, onClose, stages, filters, setFilters, assignees = 
 var linkBtn = { border: "none", background: "none", color: T.accent, fontWeight: 700, fontSize: 13, cursor: "pointer", padding: 0 };
 function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, setStageRules = () => {
 }, currentUser = null }) {
-  const canEdit = !currentUser || currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = !currentUser || canManageCompanyConfig(currentUser);
   const [local, setLocal] = (0, import_react.useState)(stages);
   const [rules, setRules] = (0, import_react.useState)(stageRules);
   const [openRule, setOpenRule] = (0, import_react.useState)(null);
@@ -8718,7 +8722,7 @@ function WorkflowEditor({ open, onClose, stages, setStages, stageRules = {}, set
       ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%" }, onClick: onClose, children: "Close" }),
       children: !canEdit ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Lock, { size: 18, color: S.sub, style: { flexShrink: 0, marginTop: 2 } }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: "Pipeline stages are admin/manager-only \u2014 every job and every rep depends on this structure. Ask the office to make a change." })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: "Pipeline stages are management-only \u2014 every job and every rep depends on this structure. Ask the office to make a change." })
       ] }) }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 14, color: S.sub, marginBottom: 14, lineHeight: 1.5 }, children: [
           "Rename, reorder, add, or remove pipeline stages. Open ",
@@ -10622,7 +10626,7 @@ function AnnouncementBar({ announcements = [] }) {
   ] });
 }
 function AnnouncementManager({ announcements, setAnnouncements, currentUser, onBack, toast }) {
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
   const [draft, setDraft] = (0, import_react.useState)("");
   const add = () => {
     const t = draft.trim();
@@ -24318,7 +24322,7 @@ function ReviewSettings({ settings, setSettings, jobs, onBack, brand, setBrandFr
   ] });
 }
 function ActivityFeed({ activity, currentUser, onOpenJob, onBack }) {
-  const isMgr = currentUser.role === "admin" || currentUser.role === "manager";
+  const isMgr = canManageCompanyConfig(currentUser);
   const [kind, setKind] = (0, import_react.useState)("All");
   const mine = isMgr ? activity : activity.filter((a) => a.by === currentUser.name);
   const KINDS = ["All", "lead", "stage", "task", "note", "message", "appointment"];
@@ -24923,7 +24927,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
   ] });
 }
 function VendorManager({ vendors, setVendors, currentUser, onBack, toast }) {
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
   const blank = { name: "", contact: "", phone: "", email: "", account: "", notes: "", active: true };
   const [editing, setEditing] = (0, import_react.useState)(null);
   const [f, setF] = (0, import_react.useState)(blank);
@@ -25249,13 +25253,13 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", current
   };
   const addLoc = () => setBrand({ ...brand, locations: [...locations, { id: uid("loc"), label: "", phone: "", address: "" }] });
   const rmLoc = (i) => setBrand({ ...brand, locations: locations.filter((_, x) => x !== i) });
-  const canEdit = !currentUser || currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = !currentUser || canManageCompanyConfig(currentUser);
   if (!canEdit) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Company branding", onBack }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start" }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Lock, { size: 18, color: S.sub, style: { flexShrink: 0, marginTop: 2 } }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: "Branding is admin/manager-only \u2014 it controls the logo, colors, and company name on every document and the login screen. Ask the office to make a change." })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, lineHeight: 1.55 }, children: "Branding is management-only \u2014 it controls the logo, colors, and company name on every document and the login screen. Ask the office to make a change." })
       ] }) })
     ] });
   }
@@ -25375,7 +25379,7 @@ function CompanyDocs({ docs, setDocs, currentUser, onBack, toast }) {
   const [err, setErr] = (0, import_react.useState)("");
   const fileRef = (0, import_react.useRef)(null);
   const pendingFile = (0, import_react.useRef)(null);
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
   const today = todayIso();
   const soon = isoLocal(new Date(Date.now() + 60 * 864e5));
   const expiring = docs.filter((d) => d.expires && d.expires <= soon);
@@ -25582,7 +25586,7 @@ function PriceListManager({ list, setList, currentUser, onBack, toast }) {
   const [q, setQ] = (0, import_react.useState)("");
   const [importing, setImporting] = (0, import_react.useState)(null);
   const fileRef = (0, import_react.useRef)(null);
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
   const parseCsv = (text) => {
     const lines = text.split(/\r?\n/).filter((l) => l.trim());
     if (!lines.length) return { rows: [], error: "File is empty." };
@@ -25834,7 +25838,7 @@ function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, 
   const [f, setF] = (0, import_react.useState)({ kind: "email", audience: "Customer", name: "", subject: "", body: "" });
   const fileRef = (0, import_react.useRef)(null);
   const bodyRef = (0, import_react.useRef)(null);
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
   const list = templates.filter((t) => t.kind === kind && (aud === "All" || t.audience === aud));
   const open = (t) => {
     setEditing(t || "new");
@@ -25996,7 +26000,7 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const [editing, setEditing] = (0, import_react.useState)(null);
   const blank = { name: "", contact: "", phone: "", email: "", trades: [], active: true };
   const [f, setF] = (0, import_react.useState)(blank);
-  const canEdit = currentUser.role === "admin" || currentUser.role === "manager";
+  const canEdit = canManageCompanyConfig(currentUser);
   const TRADES = ["Roofing", "Siding", "Gutters", "Metal", "Flashing", "Windows", "Carpentry"];
   const [customTrade, setCustomTrade] = (0, import_react.useState)("");
   const [range, setRange] = (0, import_react.useState)("all");
@@ -28823,7 +28827,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["warranties", import_lucide_react.Shield, "Warranties", "Every roof's labor and manufacturer terms"]
     ]],
     ["Sales & marketing", [
-      ["activity", import_lucide_react.ClipboardList, "Activity feed", currentUser && (currentUser.role === "admin" || currentUser.role === "manager") ? "Everything the whole team has done" : "Everything you've done"],
+      ["activity", import_lucide_react.ClipboardList, "Activity feed", currentUser && canManageCompanyConfig(currentUser) ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", import_lucide_react.Phone, "Calls & attribution", "Log calls, see which sources make money"],
       ["contacts", import_lucide_react.Users, "Contacts", "Every client, with consent status"],
       ["leadsources", import_lucide_react.Filter, "Lead sources", "Add, remove and reorder the options"],
@@ -29154,7 +29158,7 @@ function useBrandSync(brand, setBrand, hasSession, tenantId) {
 function useDbSync(st) {
   const {
     ready,
-    isCrew,
+    isMoneyBlocked,
     userName,
     tenantId,
     jobs,
@@ -29198,7 +29202,7 @@ function useDbSync(st) {
         const { data: jobRows, error: jErr } = await db.from("crm_jobs").select("id, data");
         if (jErr) throw jErr;
         let finMap = {};
-        if (!isCrew) {
+        if (!isMoneyBlocked) {
           const { data: finRows } = await db.from("crm_financials").select("job_id, data");
           (finRows || []).forEach((r) => {
             finMap[r.job_id] = r.data || {};
@@ -29298,7 +29302,7 @@ function useDbSync(st) {
             }));
             await db.from("crm_portal").upsert(snaps);
           }
-          if (!isCrew) {
+          if (!isMoneyBlocked) {
             const finRows = changed.map((j) => ({ job_id: j.id, data: { financials: j.fin, payments: j.payments }, updated_at: (/* @__PURE__ */ new Date()).toISOString() }));
             await db.from("crm_financials").upsert(finRows);
           }
@@ -29758,7 +29762,7 @@ function SupremeCRM() {
   const brandErr = useBrandSync(brand, setBrand, liveAuth() ? !!currentUser : true, currentUser && currentUser.tenantId);
   const { hydrated, syncErr } = useDbSync({
     ready: liveAuth() ? !!currentUser : true,
-    isCrew: !!(currentUser && currentUser.role === "crew"),
+    isMoneyBlocked: !!(currentUser && !canSeeMoney(currentUser)),
     userName: syncUserName,
     tenantId: currentUser && currentUser.tenantId,
     jobs,
@@ -30442,7 +30446,7 @@ function SupremeCRM() {
         stages,
         users,
         onBack: () => setNav("more"),
-        isAdmin,
+        isAdmin: canSeeCompanyPerformance(liveUser),
         currentUser: liveUser,
         toast,
         crews,

@@ -61,8 +61,8 @@ ok(/const progress = goal > 0 \? Math\.min\(100, \(r\.revenue \/ goal\) \* 100\)
   "progress is computed against r.revenue — a number the leaderboard already computes, not a new metric");
 ok(/function Performance\(\{ jobs, stages, users, onBack, isAdmin, currentUser, toast, crews = \[\], setUsers/.test(src),
   "Performance actually accepts setUsers rather than silently no-oping");
-ok(/<Performance jobs=\{jobs\} stages=\{stages\} users=\{users\} onBack=\{\(\) => setNav\("more"\)\}\s*\n\s*isAdmin=\{isAdmin\} currentUser=\{liveUser\} toast=\{toast\} crews=\{crews\} setUsers=\{setUsers\}/.test(src),
-  "setUsers is actually threaded through at the call site, not just accepted and unused");
+ok(/<Performance jobs=\{jobs\} stages=\{stages\} users=\{users\} onBack=\{\(\) => setNav\("more"\)\}\s*\n\s*isAdmin=\{canSeeCompanyPerformance\(liveUser\)\} currentUser=\{liveUser\} toast=\{toast\} crews=\{crews\} setUsers=\{setUsers\}/.test(src),
+  "setUsers is actually threaded through at the call site, not just accepted and unused (build 101 changed the isAdmin prop's source from the root isAdmin to canSeeCompanyPerformance, extending Performance's company-wide view to Sales manager too — the setUsers wiring itself is unaffected)");
 ok(/\{setUsers && \(\s*\n\s*<MoneyInput style=\{\{ \.\.\.inputStyle, width: "100%" \}\} placeholder="Set a revenue goal"/.test(src),
   "the goal input only renders when there's actually a way to persist it");
 
