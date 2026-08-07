@@ -12887,10 +12887,12 @@ function PasswordSetScreen({ brand, mode, onDone, toast }) {
       fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif" }}>
       <div style={{ width: "100%", maxWidth: 380 }}>
         <div style={{ textAlign: "center", marginBottom: 22 }}>
-          {brand.logo
-            ? <img src={brand.logo} alt="" style={{ height: 60, maxWidth: 200, objectFit: "contain", margin: "0 auto 12px", display: "block" }} />
-            : <div style={{ width: 58, height: 58, margin: "0 auto 12px", borderRadius: 15, background: brand.primary,
-                color: "#fff", display: "grid", placeItems: "center", fontWeight: 800 }}>{brand.short}</div>}
+          {/* Always RoofStride's own mark, never a tenant's logo — this
+              screen is reached before/outside the signed-in app
+              (invite-acceptance, password recovery, password change). */}
+          <img src="/icon-512.png" alt="RoofStride" style={{
+            width: 58, height: 58, borderRadius: 15, objectFit: "contain", margin: "0 auto 12px", display: "block",
+          }} />
           <div style={{ fontSize: 20, fontWeight: 800, color: S.ink }}>
             {mode === "invite" ? "Welcome — set your password"
               : mode === "recovery" ? "Choose a new password" : "Change your password"}
@@ -28714,13 +28716,13 @@ export default function SupremeCRM() {
     return (
       <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: S.card }}>
         <div style={{ textAlign: "center" }}>
-          {brand.logo ? (
-            <img src={brand.logo} alt={brand.company} style={{ height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" }} />
-          ) : (
-            <img src="/icon-512.png" alt="RoofStride" style={{
-              width: 73, height: 73, borderRadius: 16, objectFit: "contain", margin: "0 auto 14px", display: "block",
-            }} />
-          )}
+          {/* Always RoofStride's own mark here, never a tenant's logo —
+              this is a pre-hydration loading gate, not the signed-in
+              app itself; a tenant's own branding shows normally once
+              the app actually renders. */}
+          <img src="/icon-512.png" alt="RoofStride" style={{
+            width: 73, height: 73, borderRadius: 16, objectFit: "contain", margin: "0 auto 14px", display: "block",
+          }} />
           <div style={{ fontSize: 14, color: S.sub }}>Loading…</div>
         </div>
       </div>

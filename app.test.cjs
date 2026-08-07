@@ -13820,17 +13820,14 @@ function PasswordSetScreen({ brand, mode, onDone, toast }) {
     fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif"
   }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { width: "100%", maxWidth: 380 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center", marginBottom: 22 }, children: [
-      brand.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand.logo, alt: "", style: { height: 60, maxWidth: 200, objectFit: "contain", margin: "0 auto 12px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: "/icon-512.png", alt: "RoofStride", style: {
         width: 58,
         height: 58,
-        margin: "0 auto 12px",
         borderRadius: 15,
-        background: brand.primary,
-        color: "#fff",
-        display: "grid",
-        placeItems: "center",
-        fontWeight: 800
-      }, children: brand.short }),
+        objectFit: "contain",
+        margin: "0 auto 12px",
+        display: "block"
+      } }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 20, fontWeight: 800, color: S.ink }, children: mode === "invite" ? "Welcome \u2014 set your password" : mode === "recovery" ? "Choose a new password" : "Change your password" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, marginTop: 5, lineHeight: 1.5 }, children: mode === "invite" ? `You've been added to the ${brand.company} team. Choose a password to finish setting up your account.` : mode === "recovery" ? "You followed a reset link. Pick a new password to finish signing in." : "Enter a new password for your account." })
     ] }),
@@ -30140,7 +30137,7 @@ function SupremeCRM() {
   }
   if (booting || liveAuth() && currentUser && !hydrated) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", background: S.card }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center" }, children: [
-      brand.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: brand.logo, alt: brand.company, style: { height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: "/icon-512.png", alt: "RoofStride", style: {
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: "/icon-512.png", alt: "RoofStride", style: {
         width: 73,
         height: 73,
         borderRadius: 16,

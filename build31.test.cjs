@@ -79,7 +79,7 @@ act(() => { root.render(React.createElement(App)); });
 
 check("marketing page is the first thing shown", /One Stride Ahead/.test(document.body.textContent));
 check("marketing page never shows a tenant name", !/Supreme Building Group/.test(document.body.textContent));
-check("pricing shown on the marketing page", /49\.99/.test(document.body.textContent));
+check("pricing shown on the marketing page (build 99)", /119\.99/.test(document.body.textContent));
 check("STRIDE section rendered", /The STRIDE standard/.test(document.body.textContent));
 
 check("Start free trial routes into signup mode", clickText("Start your free trial"));

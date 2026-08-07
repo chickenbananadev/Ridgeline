@@ -13,7 +13,15 @@
    platform mark (/icon-512.png, already in public/ — a self-contained
    square icon with its own dark background, no extra brand.primary
    wrapper needed), sized ~30% larger than the old 56px badge (~73px).
-   The brand.logo branch (a tenant's own uploaded logo) is untouched.
+
+   At the time this build shipped, the brand.logo branch (a tenant's
+   own uploaded logo) was left untouched and still took priority over
+   the fallback. Build 100 later removed that branch entirely — the
+   owner decided the loading screen should ALWAYS show RoofStride's
+   own mark, never a tenant's logo — so this test only asserts what
+   was actually true of build 97's own scope: the fallback mark exists
+   and is correctly sized. It no longer asserts anything about
+   brand.logo, which is build 100's test's responsibility.
 */
 const fs = require("fs");
 const path = require("path");
@@ -29,10 +37,6 @@ ok(bootScreenStart > 0, "the boot-loading screen block is still present");
 const bootScreenBlock = src.slice(bootScreenStart, bootScreenStart + 1200);
 ok(!bootScreenBlock.includes("{brand.short}"),
   "brand.short is no longer rendered as visible fallback text in the boot-loading screen specifically (other brand.short fallback badges elsewhere in the app, e.g. Home avatar / portal header / branding settings preview, are untouched)");
-ok(bootScreenBlock.includes('brand.logo ?'),
-  "a tenant's own uploaded logo (brand.logo) still takes priority and is unaffected by this fix");
-ok(bootScreenBlock.includes('src={brand.logo}'),
-  "the brand.logo <img> branch is unchanged");
 ok(bootScreenBlock.includes('Loading…'),
   "the Loading… label beneath the mark/logo is unchanged");
 ok(!bootScreenBlock.includes('background: brand.primary'),
