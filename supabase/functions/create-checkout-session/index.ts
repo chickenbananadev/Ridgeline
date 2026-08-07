@@ -6,15 +6,17 @@
 // Deploy:  supabase functions deploy create-checkout-session
 // Secrets required (supabase secrets set):
 //   STRIPE_SECRET_KEY        — from the Stripe dashboard, Developers > API keys
-//   STRIPE_PRICE_PER_SEAT    — Price ID for the one plan: $119.99/mo,
-//                              10 seats included. The optional 10-seat
-//                              add-on ($59.99/mo, STRIPE_PRICE_SEAT_ADDON)
-//                              is not offered at signup — it's added
-//                              afterward through the Stripe Billing
-//                              Portal (see stripe-webhook's comment for
-//                              how that syncs back to seats_paid).
+//   STRIPE_PRICE_PER_SEAT    — Price ID for the base plan: $119.99/mo,
+//                              up to 10 seats.
+//   STRIPE_PRICE_UNLIMITED   — Price ID for the Unlimited plan:
+//                              $199.99/mo, no seat cap.
 //   APP_URL                  — e.g. https://roofstride.com (no trailing
 //                              slash) — where Stripe redirects back to
+//
+// The client sends { plan: "per_seat" | "unlimited", company } — see
+// the two pricing-card buttons on the Marketing page. An unrecognized
+// or missing plan value falls back to "per_seat" rather than rejecting
+// the request outright.
 //
 // Runs server-side with the service-role key so it can look up the
 // caller's identity; the Stripe secret key never reaches the browser.
@@ -51,8 +53,10 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Not signed in" }), { status: 401, headers: cors });
     }
 
-    const { company } = await req.json();
-    const priceId = Deno.env.get("STRIPE_PRICE_PER_SEAT");
+    const { company, plan } = await req.json();
+    const selectedPlan = plan === "unlimited" ? "unlimited" : "per_seat";
+    const priceEnvVar = selectedPlan === "unlimited" ? "STRIPE_PRICE_UNLIMITED" : "STRIPE_PRICE_PER_SEAT";
+    const priceId = Deno.env.get(priceEnvVar);
     if (!priceId) {
       return new Response(JSON.stringify({ error: "Stripe pricing is not configured yet. Contact support." }),
         { status: 500, headers: cors });
@@ -67,7 +71,7 @@ Deno.serve(async (req) => {
       payment_method_collection: "always", // card required even during the trial
       success_url: `${appUrl}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/?checkout=cancelled`,
-      metadata: { supabase_user_id: user.id, company: company || "", plan: "per_seat" },
+      metadata: { supabase_user_id: user.id, company: company || "", plan: selectedPlan },
     });
 
     return new Response(JSON.stringify({ url: session.url }), { headers: { ...cors, "Content-Type": "application/json" } });

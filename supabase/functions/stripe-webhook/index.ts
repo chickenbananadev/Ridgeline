@@ -5,12 +5,12 @@
 // database level) actually track reality, not just what was true at
 // the moment someone signed up.
 //
-// customer.subscription.updated also syncs tenants.seats_paid: the
-// 10-seat add-on isn't offered at signup (see create-checkout-session),
-// it's purchased afterward through the Stripe Billing Portal by adding
-// STRIPE_PRICE_SEAT_ADDON as a second line item on the subscription.
-// Without this sync, buying the add-on through the Portal would charge
-// the card but never actually raise the app's own seat cap.
+// customer.subscription.updated also syncs tenants.plan: a customer
+// can switch between the base and Unlimited plans self-service through
+// the Stripe Billing Portal (configure the two prices as a swappable
+// group under Settings > Billing > Customer portal). Without this
+// sync, upgrading to Unlimited there would charge the card but never
+// actually lift the app's own 10-seat cap.
 //
 // Deploy:  supabase functions deploy stripe-webhook --no-verify-jwt
 //   (--no-verify-jwt is required: Stripe calls this directly, with no
@@ -62,13 +62,16 @@ Deno.serve(async (req) => {
           : sub.status === "past_due" ? "past_due"
           : sub.status === "canceled" || sub.status === "unpaid" ? "canceled"
           : sub.status;
-        const addonPriceId = Deno.env.get("STRIPE_PRICE_SEAT_ADDON");
-        const hasAddon = !!addonPriceId && sub.items.data.some((li) => li.price?.id === addonPriceId);
+        const unlimitedPriceId = Deno.env.get("STRIPE_PRICE_UNLIMITED");
+        const perSeatPriceId = Deno.env.get("STRIPE_PRICE_PER_SEAT");
         const update: Record<string, unknown> = { status };
-        // Only touch seats_paid once the add-on price is actually
-        // configured — without it, every tenant would get silently
-        // reset to 0 on every subscription update.
-        if (addonPriceId) update.seats_paid = hasAddon ? 10 : 0;
+        // Only touch plan once we can actually tell the two prices
+        // apart — without both env vars set, leave it alone rather
+        // than guessing.
+        if (unlimitedPriceId && perSeatPriceId) {
+          const onUnlimited = sub.items.data.some((li) => li.price?.id === unlimitedPriceId);
+          update.plan = onUnlimited ? "unlimited" : "per_seat";
+        }
         await admin.from("tenants").update(update).eq("stripe_subscription_id", sub.id);
         break;
       }

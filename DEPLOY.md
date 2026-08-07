@@ -373,24 +373,32 @@ supabase functions deploy stripe-webhook            # keeps status/seats in sync
 supabase db push                                    # apply any pending migrations
 ```
 
-One plan, one optional add-on — create both as real Stripe Prices before
-setting the secrets below:
-- **Base plan**: recurring, $119.99/mo, no metering — this is what
-  every new signup's Checkout session uses (`STRIPE_PRICE_PER_SEAT`,
-  the name is a holdover from an earlier per-seat model).
-- **Seat add-on**: recurring, $59.99/mo, quantity 1 — NOT offered at
-  signup. Add it as a second selectable product in the Stripe
-  dashboard's **Billing Portal configuration** (Settings → Billing →
-  Customer portal → Products) so an existing customer can add/remove it
-  themselves from "Manage billing" in the app. `stripe-webhook` watches
-  for this exact price ID on `customer.subscription.updated` and syncs
-  `tenants.seats_paid` (0 or 10) accordingly — the app's own seat cap
-  will never reflect a Portal-purchased add-on without this secret set.
+Two plans — create both as real Stripe Prices before setting the
+secrets below:
+- **Base plan**: recurring, $119.99/mo, no metering, capped at 10 seats
+  by the app (`STRIPE_PRICE_PER_SEAT`, the name is a holdover from an
+  earlier per-seat model). This is what a signup uses when they click
+  the base-plan card on the pricing section.
+- **Unlimited plan**: recurring, $199.99/mo, no metering, no seat cap
+  (`STRIPE_PRICE_UNLIMITED`). Used when a signup clicks the
+  Unlimited card instead.
+
+Both are offered at signup — `create-checkout-session` reads
+`{ plan: "per_seat" | "unlimited" }` from the client and picks the
+matching Price ID. To let an existing customer switch plans later
+without contacting support, add both Prices to the Stripe dashboard's
+**Billing Portal configuration** (Settings → Billing → Customer portal
+→ Products) as a swappable group — `stripe-webhook` watches
+`customer.subscription.updated` for whichever price is actually on the
+subscription and syncs `tenants.plan` accordingly. Without both secrets
+below set, the webhook leaves `plan` untouched rather than guessing, so
+a self-service upgrade would charge the card but never actually lift
+the app's own 10-seat cap.
 
 ```bash
 supabase secrets set STRIPE_SECRET_KEY=sk_live_...          # Stripe → Developers → API keys
 supabase secrets set STRIPE_PRICE_PER_SEAT=price_...         # Stripe → Products → base plan ($119.99/mo, 10 seats)
-supabase secrets set STRIPE_PRICE_SEAT_ADDON=price_...       # Stripe → Products → seat add-on ($59.99/mo, +10 seats)
+supabase secrets set STRIPE_PRICE_UNLIMITED=price_...        # Stripe → Products → Unlimited plan ($199.99/mo, no cap)
 supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...          # set after creating the webhook endpoint below
 supabase secrets set APP_URL=https://roofstride.com          # your domain, no trailing slash
 ```
