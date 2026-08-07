@@ -33,7 +33,10 @@ ok(/text: t, mentions, jobId: tagged \|\| null, reactions: \{\}, conversationId,
   "every outgoing message is stamped with the conversation it was sent in");
 
 /* ---------- static: ConversationList exists with create-channel + start-DM flows ---------- */
-ok(/function ConversationList\(\{ conversations, conversationMembers, activeConversationId, onSelect, users, currentUser, onCreateChannel, onStartDm \}\)/.test(src),
+/* Build 119 added an unreadCounts prop for the per-pill unread
+   indicator — match on the still-true prefix rather than the now-
+   stale full signature. */
+ok(/function ConversationList\(\{ conversations, conversationMembers, activeConversationId, onSelect, users, currentUser, onCreateChannel, onStartDm/.test(src),
   "ConversationList exists with the expected props");
 ok(/const channels = \(conversations \|\| \[\]\)\.filter\(\(c\) => c\.kind === "channel"\)/.test(src),
   "ConversationList separates channels from DMs by kind");

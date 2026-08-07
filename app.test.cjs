@@ -29158,7 +29158,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%", marginTop: 8 }, onClick: onLogout, children: "Sign out" })
   ] });
 }
-function ConversationList({ conversations, conversationMembers, activeConversationId, onSelect, users, currentUser, onCreateChannel, onStartDm }) {
+function ConversationList({ conversations, conversationMembers, activeConversationId, onSelect, users, currentUser, onCreateChannel, onStartDm, unreadCounts = {} }) {
   const [creating, setCreating] = (0, import_react.useState)(null);
   const [name, setName] = (0, import_react.useState)("");
   const [topic, setTopic] = (0, import_react.useState)("");
@@ -29227,12 +29227,22 @@ function ConversationList({ conversations, conversationMembers, activeConversati
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }, children: [
-      channels.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onSelect(c.id), style: pillStyle(c.id === activeConversationId), children: [
-        "# ",
-        c.name,
-        c.isPrivate ? " \u{1F512}" : ""
-      ] }, c.id)),
-      dms.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onSelect(c.id), style: pillStyle(c.id === activeConversationId), children: dmLabel(c) }, c.id))
+      channels.map((c) => {
+        const unread = (unreadCounts[c.id] || {}).unread || 0;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onSelect(c.id), style: pillStyle(c.id === activeConversationId), children: [
+          "# ",
+          c.name,
+          c.isPrivate ? " \u{1F512}" : "",
+          unread > 0 && c.id !== activeConversationId ? ` \xB7 ${unread}` : ""
+        ] }, c.id);
+      }),
+      dms.map((c) => {
+        const unread = (unreadCounts[c.id] || {}).unread || 0;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onSelect(c.id), style: pillStyle(c.id === activeConversationId), children: [
+          dmLabel(c),
+          unread > 0 && c.id !== activeConversationId ? ` \xB7 ${unread}` : ""
+        ] }, c.id);
+      })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
       Sheet,
@@ -29285,7 +29295,6 @@ function Inbox({
   users,
   currentUser,
   unreadChat = 0,
-  onSeenChat,
   onDeleteMsg,
   onSendQueued,
   integrations = {},
@@ -29297,14 +29306,12 @@ function Inbox({
   onCreateChannel = () => {
   },
   onStartDm = () => {
-  }
+  },
+  unreadCounts = {}
 }) {
   const [pane, setPane] = (0, import_react.useState)("team");
   const [filter, setFilter] = (0, import_react.useState)("All");
   const [sendingId, setSendingId] = (0, import_react.useState)(null);
-  (0, import_react.useEffect)(() => {
-    if (pane === "team" && onSeenChat) onSeenChat();
-  }, [pane, chatMsgs && chatMsgs.length]);
   const all = jobs.flatMap((j) => (j.messages || []).map((msg) => ({ job: j, msg }))).sort((x, y2) => (y2.msg.at || "").localeCompare(x.msg.at || ""));
   const list = all.filter(({ msg }) => {
     if (filter === "All") return true;
@@ -29350,7 +29357,8 @@ function Inbox({
           users,
           currentUser,
           onCreateChannel,
-          onStartDm
+          onStartDm,
+          unreadCounts
         }
       ),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
@@ -29987,22 +29995,7 @@ function SupremeCRM() {
   const [conversationMembers, setConversationMembers] = (0, import_react.useState)([]);
   const [announcements, setAnnouncements] = (0, import_react.useState)([]);
   const [calls, setCalls] = (0, import_react.useState)([]);
-  const [chatSeenCount, setChatSeenCountRaw] = (0, import_react.useState)(0);
-  (0, import_react.useEffect)(() => {
-    if (!currentUser || !currentUser.id) return;
-    try {
-      const saved = window.localStorage.getItem(`ridgeline.chatSeen.${currentUser.id}`);
-      if (saved != null) setChatSeenCountRaw(Math.max(0, parseInt(saved, 10) || 0));
-    } catch {
-    }
-  }, [currentUser && currentUser.id]);
-  const setChatSeenCount = (n) => {
-    setChatSeenCountRaw(n);
-    try {
-      if (currentUser && currentUser.id) window.localStorage.setItem(`ridgeline.chatSeen.${currentUser.id}`, String(n));
-    } catch {
-    }
-  };
+  const [unreadCounts, setUnreadCounts] = (0, import_react.useState)({});
   const [pwDone, setPwDone] = (0, import_react.useState)(false);
   const [changePwOpen, setChangePwOpen] = (0, import_react.useState)(false);
   const [apptTypes, setApptTypes] = (0, import_react.useState)([
@@ -30223,12 +30216,46 @@ function SupremeCRM() {
     stagesRef: stages,
     usersRef: users
   });
+  const markConversationRead = (conversationId) => {
+    const db = DB();
+    if (!db || !currentUser || !conversationId) return;
+    db.from("crm_chat_members").upsert(
+      { conversation_id: conversationId, user_id: currentUser.id, last_read_at: (/* @__PURE__ */ new Date()).toISOString() },
+      { onConflict: "conversation_id,user_id" }
+    ).then(() => {
+    }, () => {
+    });
+    setUnreadCounts((prev) => ({ ...prev, [conversationId]: { unread: 0, mentions: 0 } }));
+  };
+  const selectConversation = (id) => {
+    setActiveConversationId(id);
+    markConversationRead(id);
+  };
   (0, import_react.useEffect)(() => {
     if (activeConversationId || !conversations.length) return;
     const tenantId = currentUser && currentUser.tenantId;
     const general = tenantId && conversations.find((c) => c.id === `general-${tenantId}`);
-    setActiveConversationId((general || conversations[0]).id);
+    selectConversation((general || conversations[0]).id);
   }, [conversations, activeConversationId]);
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db || !hydrated || !currentUser || !currentUser.tenantId) return;
+    let alive = true;
+    db.rpc("chat_unread_counts").then(({ data }) => {
+      if (!alive || !data) return;
+      const next = {};
+      data.forEach((r) => {
+        next[r.conversation_id] = { unread: Number(r.unread_count) || 0, mentions: Number(r.mention_count) || 0 };
+      });
+      setUnreadCounts(next);
+    }, () => {
+    });
+    return () => {
+      alive = false;
+    };
+  }, [hydrated, currentUser && currentUser.tenantId, chatMsgs.length]);
+  const totalUnread = Object.values(unreadCounts).reduce((s, c) => s + (c.unread || 0), 0);
+  const totalMentions = Object.values(unreadCounts).reduce((s, c) => s + (c.mentions || 0), 0);
   T.primary = brand.primary || "#28373E";
   T.accent = brand.accent || "#0A9E98";
   T.accentSoft = brand.accentSoft && brand.accentSoftCustom ? brand.accentSoft : softOf(T.accent);
@@ -30274,7 +30301,6 @@ function SupremeCRM() {
     });
   }, [currentUser && currentUser.role]);
   const meName = currentUser ? currentUser.name : "";
-  const unreadMentions = chatMsgs.slice(chatSeenCount).filter((m2) => Array.isArray(m2.mentions) && m2.mentions.includes(meName)).length;
   const prevChatLen = (0, import_react.useRef)(0);
   (0, import_react.useEffect)(() => {
     const fresh = chatMsgs.slice(prevChatLen.current);
@@ -30950,8 +30976,7 @@ function SupremeCRM() {
         setChatMsgs,
         users,
         currentUser: liveUser,
-        unreadChat: Math.max(0, chatMsgs.length - chatSeenCount),
-        onSeenChat: () => setChatSeenCount(chatMsgs.length),
+        unreadChat: totalUnread,
         onDeleteMsg: (id) => {
           const db = DB();
           if (db) db.from("crm_chat").delete().eq("id", id).then(() => {
@@ -30963,9 +30988,10 @@ function SupremeCRM() {
         conversations,
         conversationMembers,
         activeConversationId,
-        onSelectConversation: setActiveConversationId,
+        onSelectConversation: selectConversation,
         onCreateChannel: createChannel,
-        onStartDm: startDm
+        onStartDm: startDm,
+        unreadCounts
       }
     ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand, onNav: (id) => {
       if (id === "password") return setChangePwOpen(true);
@@ -31307,7 +31333,7 @@ function SupremeCRM() {
           id: "inbox",
           icon: import_lucide_react.MessageCircle,
           label: "Inbox",
-          badge: Math.max(0, chatMsgs.length - chatSeenCount),
+          badge: totalUnread,
           active: nav === "inbox" && !openJob,
           onPress: (id) => {
             setNav(id);
@@ -31321,7 +31347,7 @@ function SupremeCRM() {
           id: "more",
           icon: import_lucide_react.Menu,
           label: "More",
-          badge: unreadMentions,
+          badge: totalMentions,
           active: nav === "more" && !openJob,
           onPress: (id) => {
             setNav(id);

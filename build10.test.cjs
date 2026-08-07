@@ -43,7 +43,10 @@ ok(src.includes("setEmojiOpen"), "composer has an emoji tray");
 /* --- chat consolidated into the Inbox --- */
 ok(src.includes('[["team", "Team chat"], ["customers", "Customers"]]'), "inbox has team and customer panes");
 ok(src.includes("unreadChat"), "inbox tracks unread team messages");
-ok(src.includes('label="Inbox" badge={Math.max(0, chatMsgs.length - chatSeenCount)}'), "nav badge counts unread chat");
+/* Build 119 replaced the chatMsgs.length-minus-chatSeenCount index
+   math with a real per-conversation totalUnread sum (chatSeenCount
+   itself is gone) — match on the still-true substring. */
+ok(src.includes('label="Inbox" badge={totalUnread}'), "nav badge counts unread chat");
 ok(src.includes('"Schedule", "Appointments'), "More menu leads with a Schedule entry (calendar lives here)");
 /* Build 117 renamed TeamChat to ChatThread and added a conversationId
    prop after onDeleteMsg, so match on the still-true substring rather

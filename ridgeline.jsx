@@ -27781,7 +27781,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
    plus "+ Channel" and "+ Direct message" actions. DMs resolve their
    display name from conversationMembers + users rather than storing
    one, since a DM's "name" is just whoever else is in it. */
-function ConversationList({ conversations, conversationMembers, activeConversationId, onSelect, users, currentUser, onCreateChannel, onStartDm }) {
+function ConversationList({ conversations, conversationMembers, activeConversationId, onSelect, users, currentUser, onCreateChannel, onStartDm, unreadCounts = {} }) {
   const [creating, setCreating] = useState(null); // null | "channel" | "dm"
   const [name, setName] = useState("");
   const [topic, setTopic] = useState("");
@@ -27827,16 +27827,22 @@ function ConversationList({ conversations, conversationMembers, activeConversati
         <Btn kind="ghost" small onClick={() => setCreating("dm")}><Plus size={13} /> Direct message</Btn>
       </div>
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
-        {channels.map((c) => (
-          <button key={c.id} onClick={() => onSelect(c.id)} style={pillStyle(c.id === activeConversationId)}>
-            # {c.name}{c.isPrivate ? " 🔒" : ""}
-          </button>
-        ))}
-        {dms.map((c) => (
-          <button key={c.id} onClick={() => onSelect(c.id)} style={pillStyle(c.id === activeConversationId)}>
-            {dmLabel(c)}
-          </button>
-        ))}
+        {channels.map((c) => {
+          const unread = (unreadCounts[c.id] || {}).unread || 0;
+          return (
+            <button key={c.id} onClick={() => onSelect(c.id)} style={pillStyle(c.id === activeConversationId)}>
+              # {c.name}{c.isPrivate ? " 🔒" : ""}{unread > 0 && c.id !== activeConversationId ? ` · ${unread}` : ""}
+            </button>
+          );
+        })}
+        {dms.map((c) => {
+          const unread = (unreadCounts[c.id] || {}).unread || 0;
+          return (
+            <button key={c.id} onClick={() => onSelect(c.id)} style={pillStyle(c.id === activeConversationId)}>
+              {dmLabel(c)}{unread > 0 && c.id !== activeConversationId ? ` · ${unread}` : ""}
+            </button>
+          );
+        })}
       </div>
 
       <Sheet open={creating === "channel"} onClose={closeCreate} title="Create a channel"
@@ -27863,15 +27869,18 @@ function ConversationList({ conversations, conversationMembers, activeConversati
   );
 }
 
-function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat, onDeleteMsg, onSendQueued, integrations = {},
-  conversations = [], conversationMembers = [], activeConversationId = null, onSelectConversation = () => {}, onCreateChannel = () => {}, onStartDm = () => {} }) {
+function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onDeleteMsg, onSendQueued, integrations = {},
+  conversations = [], conversationMembers = [], activeConversationId = null, onSelectConversation = () => {}, onCreateChannel = () => {}, onStartDm = () => {}, unreadCounts = {} }) {
   /* Team chat and customer messages are both messages, so they live
      under one Inbox rather than two destinations. Team opens first —
-     it is the one with unread counts attached to the nav badge. */
+     it is the one with unread counts attached to the nav badge.
+     Marking a conversation "seen" is now per-conversation (real
+     last_read_at on the server, via onSelectConversation), not a
+     blanket "the whole flat chat feed is read" the instant this pane
+     is open — see build 119. */
   const [pane, setPane] = useState("team");
   const [filter, setFilter] = useState("All");
   const [sendingId, setSendingId] = useState(null);
-  useEffect(() => { if (pane === "team" && onSeenChat) onSeenChat(); }, [pane, chatMsgs && chatMsgs.length]); // eslint-disable-line
   const all = jobs.flatMap((j) => (j.messages || []).map((msg) => ({ job: j, msg })))
     .sort((x, y2) => (y2.msg.at || "").localeCompare(x.msg.at || ""));
   const list = all.filter(({ msg }) => {
@@ -27908,7 +27917,7 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
           <ConversationList conversations={conversations} conversationMembers={conversationMembers}
             activeConversationId={activeConversationId} onSelect={onSelectConversation}
             users={users} currentUser={currentUser}
-            onCreateChannel={onCreateChannel} onStartDm={onStartDm} />
+            onCreateChannel={onCreateChannel} onStartDm={onStartDm} unreadCounts={unreadCounts} />
           <ChatThread
             msgs={(chatMsgs || []).filter((m) => m.conversationId === activeConversationId)}
             setMsgs={(updater) => setChatMsgs((all) => {
@@ -28644,27 +28653,16 @@ export default function SupremeCRM() {
   const [conversationMembers, setConversationMembers] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [calls, setCalls] = useState([]);
-  /* How many of `chatMsgs` this seat has already seen — drives both the
-     Inbox badge and the @mention badge under More. This used to live in
-     plain useState(0), which meant it forgot everything on every reload:
-     a phone backgrounding Safari, a PWA relaunch, even just refreshing
-     the tab put it back to zero and every message you'd already read
-     counted as unread again. Persisted per-user in localStorage so it
-     survives a reload; still resets to 0 for a genuinely new seat. */
-  const [chatSeenCount, setChatSeenCountRaw] = useState(0);
-  useEffect(() => {
-    if (!currentUser || !currentUser.id) return;
-    try {
-      const saved = window.localStorage.getItem(`ridgeline.chatSeen.${currentUser.id}`);
-      if (saved != null) setChatSeenCountRaw(Math.max(0, parseInt(saved, 10) || 0));
-    } catch { /* private browsing blocks storage; falls back to in-memory only */ }
-  }, [currentUser && currentUser.id]); // eslint-disable-line
-  const setChatSeenCount = (n) => {
-    setChatSeenCountRaw(n);
-    try {
-      if (currentUser && currentUser.id) window.localStorage.setItem(`ridgeline.chatSeen.${currentUser.id}`, String(n));
-    } catch { /* private browsing; not fatal */ }
-  };
+  /* Real per-conversation unread/mention counts from chat_unread_counts()
+     — { [conversationId]: { unread, mentions } }. Replaces the old
+     chatSeenCount scheme (a single numeric index into one flat array,
+     persisted per-user in localStorage): that scheme had no notion of
+     "N conversations, each with its own read state" and couldn't
+     survive this feature at all. Source of truth is now the server
+     (crm_chat_members.last_read_at), which as a side effect also
+     follows a seat across devices — the old localStorage-only scheme
+     never did. */
+  const [unreadCounts, setUnreadCounts] = useState({});
   const [pwDone, setPwDone] = useState(false);
   const [changePwOpen, setChangePwOpen] = useState(false);
   const [apptTypes, setApptTypes] = useState([
@@ -28852,6 +28850,22 @@ export default function SupremeCRM() {
     brandRef: brand, stagesRef: stages, usersRef: users,
   });
 
+  /* Marks one conversation read — upserts this seat's own
+     crm_chat_members row (creating it for an open channel they've
+     never explicitly "joined" before, updating it for one they're
+     already in) and optimistically zeroes the badge locally so it
+     doesn't wait on a round trip. */
+  const markConversationRead = (conversationId) => {
+    const db = DB();
+    if (!db || !currentUser || !conversationId) return;
+    db.from("crm_chat_members").upsert(
+      { conversation_id: conversationId, user_id: currentUser.id, last_read_at: new Date().toISOString() },
+      { onConflict: "conversation_id,user_id" }
+    ).then(() => {}, () => {});
+    setUnreadCounts((prev) => ({ ...prev, [conversationId]: { unread: 0, mentions: 0 } }));
+  };
+  const selectConversation = (id) => { setActiveConversationId(id); markConversationRead(id); };
+
   /* Land on #general (or whatever conversation loaded first) the
      moment the conversation list is known, so Team chat never opens
      to an empty picker with nothing selected. */
@@ -28859,8 +28873,28 @@ export default function SupremeCRM() {
     if (activeConversationId || !conversations.length) return;
     const tenantId = currentUser && currentUser.tenantId;
     const general = tenantId && conversations.find((c) => c.id === `general-${tenantId}`);
-    setActiveConversationId((general || conversations[0]).id);
+    selectConversation((general || conversations[0]).id);
   }, [conversations, activeConversationId]); // eslint-disable-line
+
+  /* Real unread/mention counts, per conversation, from the server —
+     refetched whenever the chat feed changes (a new message anywhere
+     changes some conversation's count) or once conversations are
+     first known. */
+  useEffect(() => {
+    const db = DB();
+    if (!db || !hydrated || !currentUser || !currentUser.tenantId) return;
+    let alive = true;
+    db.rpc("chat_unread_counts").then(({ data }) => {
+      if (!alive || !data) return;
+      const next = {};
+      data.forEach((r) => { next[r.conversation_id] = { unread: Number(r.unread_count) || 0, mentions: Number(r.mention_count) || 0 }; });
+      setUnreadCounts(next);
+    }, () => {});
+    return () => { alive = false; };
+  }, [hydrated, currentUser && currentUser.tenantId, chatMsgs.length]); // eslint-disable-line
+
+  const totalUnread = Object.values(unreadCounts).reduce((s, c) => s + (c.unread || 0), 0);
+  const totalMentions = Object.values(unreadCounts).reduce((s, c) => s + (c.mentions || 0), 0);
 
   /* Copy brand colors into the live theme before anything renders. */
   T.primary = brand.primary || "#28373E";
@@ -28923,9 +28957,6 @@ export default function SupremeCRM() {
      down — reaching forward to it threw a temporal-dead-zone error the
      instant the chat list was non-empty, blanking the screen on send. */
   const meName = currentUser ? currentUser.name : "";
-  const unreadMentions = chatMsgs
-    .slice(chatSeenCount)
-    .filter((m2) => Array.isArray(m2.mentions) && m2.mentions.includes(meName)).length;
   const prevChatLen = useRef(0);
   useEffect(() => {
     const fresh = chatMsgs.slice(prevChatLen.current);
@@ -29540,8 +29571,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "inbox" ? (
         <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)}
           chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} users={users} currentUser={liveUser}
-          unreadChat={Math.max(0, chatMsgs.length - chatSeenCount)}
-          onSeenChat={() => setChatSeenCount(chatMsgs.length)}
+          unreadChat={totalUnread}
           onDeleteMsg={(id) => {
             /* Remove the row for real. Failure is non-fatal: the message
                is already gone locally and will not come back unless a
@@ -29552,8 +29582,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           integrations={integrations}
           onSendQueued={sendQueuedMessage}
           conversations={conversations} conversationMembers={conversationMembers}
-          activeConversationId={activeConversationId} onSelectConversation={setActiveConversationId}
-          onCreateChannel={createChannel} onStartDm={startDm} />
+          activeConversationId={activeConversationId} onSelectConversation={selectConversation}
+          onCreateChannel={createChannel} onStartDm={startDm} unreadCounts={unreadCounts} />
       ) : nav === "more" ? (
         <MoreMenu brand={brand} onNav={(id) => {
           if (id === "password") return setChangePwOpen(true);
@@ -29697,9 +29727,9 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           }}><Plus size={16} /></span>
           <span style={{ fontSize: 10.5, fontWeight: 700, color: T.accent }}>Add</span>
         </button>
-        <NavBtn id="inbox" icon={MessageCircle} label="Inbox" badge={Math.max(0, chatMsgs.length - chatSeenCount)}
+        <NavBtn id="inbox" icon={MessageCircle} label="Inbox" badge={totalUnread}
           active={nav === "inbox" && !openJob} onPress={(id) => { setNav(id); setOpenJobId(null); }} />
-        <NavBtn id="more" icon={Menu} label="More" badge={unreadMentions}
+        <NavBtn id="more" icon={Menu} label="More" badge={totalMentions}
           active={nav === "more" && !openJob} onPress={(id) => { setNav(id); setOpenJobId(null); }} />
       </div>
 
