@@ -26,7 +26,10 @@ let fails = 0;
 const ok = (c, l) => { if (!c) { fails++; console.log("FAIL: " + l); } };
 
 /* ---------- static: ChatThread (renamed from TeamChat) stamps conversationId ---------- */
-ok(/function ChatThread\(\{ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg, conversationId = null \}\)/.test(src),
+/* Build 121 appended conversation/conversationMembers/
+   onArchiveConversation/onLeaveConversation to the signature — match
+   on the still-true prefix rather than the now-stale exact tail. */
+ok(/function ChatThread\(\{ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg, conversationId = null,/.test(src),
   "TeamChat is renamed ChatThread and accepts a conversationId prop");
 ok(!/function TeamChat\(/.test(src), "the old TeamChat name is gone, not left as a dead duplicate");
 ok(/text: t, mentions, jobId: tagged \|\| null, reactions: \{\}, conversationId,/.test(src),
