@@ -24521,6 +24521,49 @@ function EmojiPicker({ onPick, onClose }) {
     }, children: e2 }, e2)) })
   ] });
 }
+var AV_COLORS = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
+var avatarColorOf = (n) => AV_COLORS[Math.abs(String(n || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV_COLORS.length];
+var avatarInitials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
+function PersonPicker({ open, onClose, title = "Choose people", users, excludeName, multi = false, selectedIds = [], onPick, footer = null }) {
+  const colorOf = avatarColorOf, initials = avatarInitials;
+  const list = (users || []).filter((u) => u && u.name && u.active !== false && u.name !== excludeName);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open, onClose, title, children: [
+    list.map((u, i2) => {
+      const picked = multi && selectedIds.includes(u.id);
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onPick(u), style: {
+        width: "100%",
+        textAlign: "left",
+        border: "none",
+        background: "none",
+        cursor: "pointer",
+        padding: "12px 4px",
+        borderTop: i2 ? `1px solid ${S.line}` : "none",
+        display: "flex",
+        gap: 10,
+        alignItems: "center"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+          width: 30,
+          height: 30,
+          borderRadius: 8,
+          background: colorOf(u.name),
+          color: "#fff",
+          display: "grid",
+          placeItems: "center",
+          fontSize: 11,
+          fontWeight: 800
+        }, children: initials(u.name) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 14.5, fontWeight: 700, color: S.ink }, children: u.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub }, children: u.title })
+        ] }),
+        multi && (picked ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 19, color: T.accent }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Circle, { size: 19, color: S.line }))
+      ] }, u.id);
+    }),
+    list.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "16px 4px", fontSize: 13.5, color: S.sub }, children: "No one else to choose from." }),
+    footer
+  ] });
+}
 function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg }) {
   const [txt, setTxt] = (0, import_react.useState)("");
   const [mentionOpen, setMentionOpen] = (0, import_react.useState)(false);
@@ -24599,9 +24642,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
   };
   const renderText = (t) => String(t || "").split(/(@[A-Za-z][\w'-]*(?: [A-Za-z][\w'-]*)?)/g).map((part, i2) => part && part.startsWith("@") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { style: { color: T.accent, background: T.accentSoft, borderRadius: 4, padding: "0 3px" }, children: part }, i2) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: part }, i2));
   const jobOf = (id) => (jobs || []).find((j) => j.id === id);
-  const initials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
-  const AV_COLORS = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
-  const colorOf = (n) => AV_COLORS[Math.abs(String(n || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV_COLORS.length];
+  const initials = avatarInitials, colorOf = avatarColorOf;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: embedded ? { paddingBottom: 170 } : { padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }, children: [
     !embedded && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Team chat", onBack }),
     msgs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "28px 8px", textAlign: "center" }, children: [
@@ -24964,37 +25005,20 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
         ] })
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: mentionOpen, onClose: () => setMentionOpen(false), title: "Mention someone", children: (users || []).filter((u) => u && u.name && u.active !== false && u.name !== me).map((u, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
-      insert(`@${u.name}`);
-      setMentionOpen(false);
-    }, style: {
-      width: "100%",
-      textAlign: "left",
-      border: "none",
-      background: "none",
-      cursor: "pointer",
-      padding: "12px 4px",
-      borderTop: i2 ? `1px solid ${S.line}` : "none",
-      display: "flex",
-      gap: 10,
-      alignItems: "center"
-    }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
-        width: 30,
-        height: 30,
-        borderRadius: 8,
-        background: colorOf(u.name),
-        color: "#fff",
-        display: "grid",
-        placeItems: "center",
-        fontSize: 11,
-        fontWeight: 800
-      }, children: initials(u.name) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 14.5, fontWeight: 700, color: S.ink }, children: u.name }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub }, children: u.title })
-      ] })
-    ] }, u.id)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      PersonPicker,
+      {
+        open: mentionOpen,
+        onClose: () => setMentionOpen(false),
+        title: "Mention someone",
+        users,
+        excludeName: me,
+        onPick: (u) => {
+          insert(`@${u.name}`);
+          setMentionOpen(false);
+        }
+      }
+    ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: tagOpen, onClose: () => setTagOpen(false), title: "Tag a job", children: jobs.filter((j) => !DEAD_STAGES.includes(j.stageId)).map((j, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
       setTagged(j.id);
       setTagOpen(false);

@@ -23543,6 +23543,53 @@ function EmojiPicker({ onPick, onClose }) {
   );
 }
 
+/* Shared avatar color/initials helpers — used by PersonPicker and
+   TeamChat's own message-author avatars, so the palette literal lives
+   in exactly one place instead of being copy-pasted per component. */
+const AV_COLORS = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
+const avatarColorOf = (n) => AV_COLORS[Math.abs(String(n || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV_COLORS.length];
+const avatarInitials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
+
+/* Reusable "pick a person" surface, extracted from what was previously
+   TeamChat's inline @mention Sheet. Single-select mode (multi=false,
+   the default) calls onPick once and expects the caller to close the
+   sheet — exactly how the mention flow always worked. Multi-select
+   mode (multi=true) toggles a checkmark per row via onPick and leaves
+   closing/confirming to the caller's own footer, so a "Start a DM"
+   flow can show a running "Start (N)" button without this component
+   needing to know anything about conversations. */
+function PersonPicker({ open, onClose, title = "Choose people", users, excludeName, multi = false, selectedIds = [], onPick, footer = null }) {
+  const colorOf = avatarColorOf, initials = avatarInitials;
+  const list = (users || []).filter((u) => u && u.name && u.active !== false && u.name !== excludeName);
+  return (
+    <Sheet open={open} onClose={onClose} title={title}>
+      {list.map((u, i2) => {
+        const picked = multi && selectedIds.includes(u.id);
+        return (
+          <button key={u.id} onClick={() => onPick(u)} style={{
+            width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer",
+            padding: "12px 4px", borderTop: i2 ? `1px solid ${S.line}` : "none", display: "flex", gap: 10, alignItems: "center",
+          }}>
+            <span style={{
+              width: 30, height: 30, borderRadius: 8, background: colorOf(u.name), color: "#fff",
+              display: "grid", placeItems: "center", fontSize: 11, fontWeight: 800,
+            }}>{initials(u.name)}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 14.5, fontWeight: 700, color: S.ink }}>{u.name}</span>
+              <span style={{ fontSize: 12, color: S.sub }}>{u.title}</span>
+            </span>
+            {multi && (picked
+              ? <CheckCircle2 size={19} color={T.accent} />
+              : <Circle size={19} color={S.line} />)}
+          </button>
+        );
+      })}
+      {list.length === 0 && <div style={{ padding: "16px 4px", fontSize: 13.5, color: S.sub }}>No one else to choose from.</div>}
+      {footer}
+    </Sheet>
+  );
+}
+
 function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg }) {
   const [txt, setTxt] = useState("");
   const [mentionOpen, setMentionOpen] = useState(false);
@@ -23625,9 +23672,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
       : <span key={i2}>{part}</span>);
 
   const jobOf = (id) => (jobs || []).find((j) => j.id === id);
-  const initials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
-  const AV_COLORS = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
-  const colorOf = (n) => AV_COLORS[Math.abs(String(n || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV_COLORS.length];
+  const initials = avatarInitials, colorOf = avatarColorOf;
 
   return (
     <div style={embedded ? { paddingBottom: 170 } : { padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }}>
@@ -23872,23 +23917,9 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
         )}
       </Sheet>
 
-      <Sheet open={mentionOpen} onClose={() => setMentionOpen(false)} title="Mention someone">
-        {(users || []).filter((u) => u && u.name && u.active !== false && u.name !== me).map((u, i2) => (
-          <button key={u.id} onClick={() => { insert(`@${u.name}`); setMentionOpen(false); }} style={{
-            width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer",
-            padding: "12px 4px", borderTop: i2 ? `1px solid ${S.line}` : "none", display: "flex", gap: 10, alignItems: "center",
-          }}>
-            <span style={{
-              width: 30, height: 30, borderRadius: 8, background: colorOf(u.name), color: "#fff",
-              display: "grid", placeItems: "center", fontSize: 11, fontWeight: 800,
-            }}>{initials(u.name)}</span>
-            <span>
-              <span style={{ display: "block", fontSize: 14.5, fontWeight: 700, color: S.ink }}>{u.name}</span>
-              <span style={{ fontSize: 12, color: S.sub }}>{u.title}</span>
-            </span>
-          </button>
-        ))}
-      </Sheet>
+      <PersonPicker open={mentionOpen} onClose={() => setMentionOpen(false)} title="Mention someone"
+        users={users} excludeName={me}
+        onPick={(u) => { insert(`@${u.name}`); setMentionOpen(false); }} />
 
       <Sheet open={tagOpen} onClose={() => setTagOpen(false)} title="Tag a job">
         {jobs.filter((j) => !DEAD_STAGES.includes(j.stageId)).map((j, i2) => (
