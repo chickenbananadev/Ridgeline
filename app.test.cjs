@@ -5696,6 +5696,9 @@ function Dashboard({
   });
   const subsReview = jobs.filter((j) => j.subInvoice && j.subInvoice.status === "needs_review").length;
   const subsPay = jobs.filter((j) => j.subInvoice && ["confirmed", "submitted"].includes(j.subInvoice.status)).length;
+  const readyToPay = jobs.filter(
+    (j) => j.subInvoice && j.subInvoice.status === "confirmed" || j.capOutNotifiedAt && j.stageId !== "s10"
+  ).length;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
@@ -6275,6 +6278,16 @@ function Dashboard({
           " to pay"
         ] })
       ] })
+    ] }),
+    isAdmin && readyToPay > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Ready to pay" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 6 }, children: "The billing contact has already been notified on these \u2014 nothing to chase, just close them out." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: readyToPay }),
+        " job",
+        readyToPay === 1 ? "" : "s",
+        " with a confirmed sub payout or a fully paid cap-out"
+      ] }) })
     ] })
   ] });
 }
@@ -30476,6 +30489,9 @@ function SupremeCRM() {
   const userName = liveUser.name;
   const isAdmin = canEditStructure(liveUser);
   const showMoney = canSeeMoney(liveUser);
+  const readyToPayCount = jobs.filter(
+    (j) => j.subInvoice && j.subInvoice.status === "confirmed" || j.capOutNotifiedAt && j.stageId !== "s10"
+  ).length;
   const openJob = openJobId ? jobs.find((j) => j.id === openJobId) : null;
   const quickJob = quickJobId ? jobs.find((j) => j.id === quickJobId) : null;
   const openJobScreen = (id, tab = null) => {
@@ -30929,6 +30945,7 @@ function SupremeCRM() {
           id: "home",
           icon: import_lucide_react.Home,
           label: "Home",
+          badge: isAdmin ? readyToPayCount : 0,
           active: nav === "home" && !openJob,
           onPress: (id) => {
             setNav(id);

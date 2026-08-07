@@ -5004,6 +5004,13 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
   });
   const subsReview = jobs.filter((j) => j.subInvoice && j.subInvoice.status === "needs_review").length;
   const subsPay = jobs.filter((j) => j.subInvoice && ["confirmed", "submitted"].includes(j.subInvoice.status)).length;
+  /* Same live-queue count that drives the Home nav badge — a sub
+     invoice confirmed and awaiting payment, or a cap-out notified but
+     the job hasn't left the Payments/Invoicing/Cap out stage yet. */
+  const readyToPay = jobs.filter((j) =>
+    (j.subInvoice && j.subInvoice.status === "confirmed") ||
+    (j.capOutNotifiedAt && j.stageId !== "s10")
+  ).length;
 
   return (
     <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
@@ -5552,6 +5559,20 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {subsReview > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}><Chip tone="amber">{subsReview}</Chip> invoice{subsReview === 1 ? "" : "s"} to review</span>}
             {subsPay > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}><Chip tone="blue">{subsPay}</Chip> to pay</span>}
+          </div>
+        </Card>
+      )}
+
+      {isAdmin && readyToPay > 0 && (
+        <Card style={{ marginTop: 14 }}>
+          <CardTitle>Ready to pay</CardTitle>
+          <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 6 }}>
+            The billing contact has already been notified on these — nothing to chase, just close them out.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}>
+              <Chip tone="blue">{readyToPay}</Chip> job{readyToPay === 1 ? "" : "s"} with a confirmed sub payout or a fully paid cap-out
+            </span>
           </div>
         </Card>
       )}
@@ -29144,6 +29165,16 @@ export default function SupremeCRM() {
   const userName = liveUser.name;
   const isAdmin = canEditStructure(liveUser);
   const showMoney = canSeeMoney(liveUser);
+  /* Live queue depth for the billing contact's "ready to pay" work —
+     a sub invoice confirmed and awaiting payment, or a job whose
+     cap-out was notified but hasn't left the Payments/Invoicing/Cap
+     out stage yet. Mirrors the existing Subcontractors card's counts
+     (a live count, not a "seen" tracker — there's no persisted
+     paid/processed status to track against). */
+  const readyToPayCount = jobs.filter((j) =>
+    (j.subInvoice && j.subInvoice.status === "confirmed") ||
+    (j.capOutNotifiedAt && j.stageId !== "s10")
+  ).length;
 
   const openJob = openJobId ? jobs.find((j) => j.id === openJobId) : null;
   const quickJob = quickJobId ? jobs.find((j) => j.id === quickJobId) : null;
@@ -29377,7 +29408,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         background: S.card, borderTop: `1px solid ${S.line}`,
         display: "flex", alignItems: "stretch", paddingBottom: "env(safe-area-inset-bottom)",
       }}>
-        <NavBtn id="home" icon={Home} label="Home" active={nav === "home" && !openJob}
+        <NavBtn id="home" icon={Home} label="Home" badge={isAdmin ? readyToPayCount : 0} active={nav === "home" && !openJob}
           onPress={(id) => { setNav(id); setOpenJobId(null); }} />
         <NavBtn id="jobs" icon={Briefcase} label="Jobs" active={nav === "jobs" && !openJob}
           onPress={(id) => { setNav(id); setOpenJobId(null); }} />
