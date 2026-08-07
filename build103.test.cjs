@@ -22,12 +22,16 @@ let fails = 0;
 const ok = (c, l) => { if (!c) { fails++; console.log("FAIL: " + l); } };
 
 /* ---------- static: visible fallback pricing is current ---------- */
+/* Build 106 reintroduced a real Unlimited tier ($199.99/mo, no seat
+   cap) alongside the base plan, replacing the $59.99/20-seat add-on
+   this file originally asserted. The specific figures below are
+   re-verified by build106.test.cjs; these checks only confirm the old,
+   now-wrong numbers didn't survive that change. */
 ok(html.includes("$119.99/mo including 10 seats"), "the crawlable fallback's visible pricing paragraph shows the real base price/seat count");
-ok(html.includes("$59.99/mo (20 seats max)"), "the crawlable fallback mentions the real add-on price and the real 20-seat cap");
 ok(!html.includes("$49.99"), "the old $49.99 base price is gone from index.html entirely");
 ok(!html.includes("$169.99"), "the old $169.99 unlimited price is gone from index.html entirely");
 ok(!html.includes("Team plan $49.99"), "the old 'Team plan' copy is gone");
-ok(!/Unlimited plan \$/.test(html), "no 'Unlimited plan $...' copy remains — that tier was removed in build 99");
+ok(!html.includes("(20 seats max)"), "the old 20-seat hard cap is gone — Unlimited has no seat cap at all now");
 
 /* ---------- static: JSON-LD structured data matches ---------- */
 const ldMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
@@ -35,11 +39,8 @@ ok(!!ldMatch, "the JSON-LD structured-data script block is still present");
 const ld = ldMatch ? JSON.parse(ldMatch[1]) : null;
 const app = ld && ld["@graph"] && ld["@graph"].find((n) => n["@type"] === "SoftwareApplication");
 ok(!!app, "the SoftwareApplication node exists in the structured data");
-ok(app && Array.isArray(app.offers) && app.offers.length === 1,
-  "exactly one offer is listed now — the removed unlimited tier is gone from structured data too, not just the visible copy");
-ok(app && app.offers[0].price === "119.99", "the structured-data offer price is the real $119.99 base price");
-ok(app && /59\.99/.test(app.offers[0].description) && /10 seats/.test(app.offers[0].description),
-  "the offer description mentions the real add-on price and seat counts");
+ok(app && Array.isArray(app.offers) && app.offers.some((o) => o.price === "119.99"),
+  "the structured-data offers still include the real $119.99 base price");
 
 /* ---------- static: branded splash, SEO content unchanged otherwise ---------- */
 ok(/<img src="\/icon-512\.png" alt="RoofStride" width="56" height="56"/.test(html),

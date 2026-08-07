@@ -45,8 +45,18 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
     const { data: profile } = await admin
-      .from("profiles").select("tenant_id").eq("id", user.id).single();
+      .from("profiles").select("tenant_id, role, active, permission_overrides").eq("id", user.id).single();
     if (!profile?.tenant_id) return json({ error: "No company on file for this account." }, 400);
+
+    // The client only shows "Manage billing" to an admin (or someone
+    // delegated seat/billing management, see migration 029) — this had
+    // no equivalent check server-side at all, so any active seat could
+    // call this function directly and reach the Stripe Billing Portal:
+    // change the plan, remove other seats, or cancel the subscription
+    // outright. Mirrors the same admin-or-delegated shape invite-user
+    // already enforces for who can manage seats.
+    const canManageBilling = profile.active && (profile.role === "admin" || !!profile.permission_overrides?.manageSeats);
+    if (!canManageBilling) return json({ error: "Only an admin can manage billing." }, 403);
 
     const { data: tenant } = await admin
       .from("tenants").select("stripe_customer_id").eq("id", profile.tenant_id).single();

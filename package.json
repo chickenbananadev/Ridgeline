@@ -104,13 +104,16 @@
     "test:build96": "node build96.test.cjs",
     "test:build97": "node build97.test.cjs",
     "test:build98": "node build98.test.cjs",
-    "test:build99": "node build99.test.cjs",
     "test:build100": "node build100.test.cjs",
     "test:build101": "node build101.test.cjs",
     "test:build102": "node build102.test.cjs",
     "test:build103": "node build103.test.cjs",
     "test:build104": "node build104.test.cjs",
-    "test:build105": "node build105.test.cjs"
+    "test:build105": "node build105.test.cjs",
+    "test:build106": "node build106.test.cjs",
+    "test:build107": "node build107.test.cjs",
+    "test:build108": "node build108.test.cjs",
+    "test:build109": "node build109.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

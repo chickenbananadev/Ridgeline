@@ -28,13 +28,18 @@ check("signup copy says a card IS required, not 'no card required'",
   /Card required to start/.test(src) && !/No card required\. After the trial/.test(src));
 
 /* ---- plan selection threaded from pricing card through to checkout ----
-   Build 99 removed the unlimited tier — one plan, one optional add-on
-   purchased later via Manage billing, not chosen at signup — so the
-   single remaining pricing card's button no longer needs to pass a
-   plan argument; it defaults to "per_seat" the same way every other
-   "Start trial" button on the marketing page already does. */
-check("no pricing-card button passes an explicit plan argument anymore", !/onStartTrial\("per_seat"\)|onStartTrial\("unlimited"\)/.test(src));
-check("plain onClick={onStartTrial} buttons (incl. the pricing card) still exist", (src.match(/onClick=\{onStartTrial\}/g) || []).length >= 4);
+   Build 99 removed the unlimited tier and, with it, any reason for a
+   pricing-card button to pass a plan argument. Build 106 restored a
+   real Unlimited tier at $199.99/mo, so the two pricing cards choose
+   between "per_seat" and "unlimited" again — and every OTHER
+   "Start trial" button (nav, hero, final CTA, footer) now passes
+   "per_seat" explicitly too, rather than the bare onStartTrial
+   reference that used to leak the click's own SyntheticEvent through
+   as the plan value (harmless with one plan; a real bug with two). */
+check("the two pricing-card buttons pass explicit, distinct plan arguments",
+  /onStartTrial\("per_seat"\)/.test(src) && /onStartTrial\("unlimited"\)/.test(src));
+check("no button passes onStartTrial as a bare, unwrapped event handler anymore",
+  !/onClick=\{onStartTrial\}/.test(src));
 check("selectedPlan state threaded into Login", /selectedPlan=\{selectedPlan\}/.test(src));
 
 /* ---- checkout return handling ---- */
