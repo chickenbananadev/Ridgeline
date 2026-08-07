@@ -15129,15 +15129,27 @@ async function fetchStormReports(lat, lng, start, end) {
   if (LSR_CACHE.has(key)) return LSR_CACHE.get(key);
   try {
     const ets = new Date(Date.parse(end + "T00:00Z") + 2 * 864e5).toISOString().slice(0, 10);
-    const url = `https://mesonet.agron.iastate.edu/geojson/lsr.geojson?sts=${start}T00:00Z&ets=${ets}T00:00Z&west=${(lng - LSR_RADIUS_DEG).toFixed(3)}&east=${(lng + LSR_RADIUS_DEG).toFixed(3)}&south=${(lat - LSR_RADIUS_DEG).toFixed(3)}&north=${(lat + LSR_RADIUS_DEG).toFixed(3)}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("lsr");
-    const gj = await res.json();
+    const base = `https://mesonet.agron.iastate.edu/geojson/lsr.geojson?sts=${start}T00:00Z&ets=${ets}T00:00Z`;
+    const bbox = `&west=${(lng - LSR_RADIUS_DEG).toFixed(3)}&east=${(lng + LSR_RADIUS_DEG).toFixed(3)}&south=${(lat - LSR_RADIUS_DEG).toFixed(3)}&north=${(lat + LSR_RADIUS_DEG).toFixed(3)}`;
+    let gj = null;
+    for (const url of [base + bbox, base]) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        gj = await res.json();
+        if (gj && Array.isArray(gj.features)) break;
+        gj = null;
+      } catch (e) {
+      }
+    }
+    if (!gj) throw new Error("lsr");
     const byDate = {};
     for (const f of gj.features || []) {
       const c = f.geometry && f.geometry.coordinates;
       if (!c) continue;
       const [flng, flat] = c;
+      const miles = haversineMiles(lat, lng, flat, flng);
+      if (miles > LSR_RADIUS_DEG * 69) continue;
       const p = f.properties || {};
       const date = localDateAt(p.valid, lng);
       if (!date || date < start || date > end) continue;
@@ -15162,7 +15174,7 @@ async function fetchStormReports(lat, lng, start, end) {
         qualifier: p.qualifier || "",
         source: p.source || "",
         remark: p.remark || "",
-        miles: haversineMiles(lat, lng, flat, flng)
+        miles
       });
     }
     Object.values(byDate).forEach((r) => r.reports.sort((a, b) => a.miles - b.miles));
@@ -29749,6 +29761,8 @@ function CanvassMap({ center, zoom, onMove, pins, statuses, selectedId, onTapPin
   const drag = (0, import_react.useRef)(null);
   const pointers = (0, import_react.useRef)(/* @__PURE__ */ new Map());
   const pinch = (0, import_react.useRef)(null);
+  const [tileFails, setTileFails] = (0, import_react.useState)(0);
+  const tilesDown = tileFails >= 3;
   (0, import_react.useEffect)(() => {
     const el = boxRef.current;
     if (!el) return;
@@ -29880,10 +29894,30 @@ function CanvassMap({ center, zoom, onMove, pins, statuses, selectedId, onTapPin
             draggable: false,
             width: TILE_SIZE,
             height: TILE_SIZE,
+            onLoad: () => setTileFails(0),
+            onError: (e) => {
+              e.currentTarget.style.visibility = "hidden";
+              setTileFails((n) => n + 1);
+            },
             style: { position: "absolute", left: t.x * TILE_SIZE, top: t.y * TILE_SIZE, width: TILE_SIZE, height: TILE_SIZE }
           },
           t.key
         )) }),
+        tilesDown && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-testid": "tiles-down", style: {
+          position: "absolute",
+          left: 12,
+          right: 12,
+          top: 12,
+          background: "rgba(255,255,255,.96)",
+          border: `1px solid ${S.line}`,
+          borderRadius: 11,
+          padding: "11px 13px",
+          zIndex: 4,
+          pointerEvents: "none"
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: "Map images aren't loading" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 4, lineHeight: 1.5 }, children: "The tile service didn't answer \u2014 usually a map key that isn't set or has hit its daily limit. Everything else still works: you can drop pins, mark doors and see them in the list." })
+        ] }),
         me && w > 0 && (() => {
           const p = toScreen(me.lat, me.lng);
           return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {

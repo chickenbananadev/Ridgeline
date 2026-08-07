@@ -509,9 +509,35 @@ then redeploy:
 | `VITE_GEOAPIFY_KEY` | address autocomplete (optional but recommended) |
 | `VITE_PROPERTY_KEY` | property-record auto-fill (optional) |
 | `VITE_GOOGLE_CLIENT_ID` | per-rep Gmail sending (optional; pairs with the `GOOGLE_*` secrets) |
+| `VITE_MAP_TILE_URL` | canvassing map imagery (optional — see below) |
 
 The app runs in demo mode (no backend) when the Supabase pair is absent, so a
 missing key never white-screens the site.
+
+### Canvassing map tiles
+
+Without `VITE_MAP_TILE_URL` the canvassing map draws Geoapify street tiles on
+`VITE_GEOAPIFY_KEY`. That works with nothing extra to set up, but it spends the
+**same daily quota address autocomplete depends on** — and a rep panning a map
+requests tiles far faster than anyone types an address, so a heavy canvassing
+day can starve address lookup for the whole company.
+
+Set `VITE_MAP_TILE_URL` to a dedicated tile endpoint to separate the two. The
+`{z}`, `{x}` and `{y}` placeholders are substituted per tile:
+
+```
+VITE_MAP_TILE_URL=https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=SEPARATE_KEY
+```
+
+This is also how you switch to **satellite imagery**, which reps generally
+prefer for roofs — point it at a provider whose plan includes aerial tiles
+(Geoapify paid, Mapbox, Google). Whatever you use must permit the attribution
+shown in the map's corner, which is currently OpenStreetMap + Geoapify; change
+it in `CanvassMap` if you move providers.
+
+If tiles fail to load for any reason — key missing, quota hit, provider down —
+the map says so plainly and keeps working: pins, dispositions, the list and the
+scoreboard are all unaffected.
 
 ---
 

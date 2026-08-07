@@ -14379,18 +14379,37 @@ async function fetchStormReports(lat, lng, start, end) {
     /* +1 day on the end so a late-evening local storm on the last day,
        which lands on the following UTC date, is still inside the window. */
     const ets = new Date(Date.parse(end + "T00:00Z") + 2 * 864e5).toISOString().slice(0, 10);
-    const url = `https://mesonet.agron.iastate.edu/geojson/lsr.geojson` +
-      `?sts=${start}T00:00Z&ets=${ets}T00:00Z` +
-      `&west=${(lng - LSR_RADIUS_DEG).toFixed(3)}&east=${(lng + LSR_RADIUS_DEG).toFixed(3)}` +
-      `&south=${(lat - LSR_RADIUS_DEG).toFixed(3)}&north=${(lat + LSR_RADIUS_DEG).toFixed(3)}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("lsr");
-    const gj = await res.json();
+    const base = `https://mesonet.agron.iastate.edu/geojson/lsr.geojson?sts=${start}T00:00Z&ets=${ets}T00:00Z`;
+    const bbox = `&west=${(lng - LSR_RADIUS_DEG).toFixed(3)}&east=${(lng + LSR_RADIUS_DEG).toFixed(3)}`
+      + `&south=${(lat - LSR_RADIUS_DEG).toFixed(3)}&north=${(lat + LSR_RADIUS_DEG).toFixed(3)}`;
+    /* The bounding box is what makes a multi-year window one cheap
+       request. But hail silently disappearing is the exact bug this
+       whole path exists to fix, so it must not depend on the service
+       accepting that parameter set: if the bounded call fails, fall
+       back to the unbounded query and filter here. Slower and heavier,
+       and still an answer. */
+    let gj = null;
+    for (const url of [base + bbox, base]) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        gj = await res.json();
+        if (gj && Array.isArray(gj.features)) break;
+        gj = null;
+      } catch (e) { /* try the next shape */ }
+    }
+    if (!gj) throw new Error("lsr");
     const byDate = {};
     for (const f of gj.features || []) {
       const c = f.geometry && f.geometry.coordinates;
       if (!c) continue;
       const [flng, flat] = c;
+      /* Enforced here, not only by the bounding box, because the
+         fallback query above is national — and because "near this
+         house" is the claim being made either way. A report from three
+         states over must never land on this address's record. */
+      const miles = haversineMiles(lat, lng, flat, flng);
+      if (miles > LSR_RADIUS_DEG * 69) continue;
       const p = f.properties || {};
       const date = localDateAt(p.valid, lng);
       if (!date || date < start || date > end) continue;
@@ -14408,7 +14427,7 @@ async function fetchStormReports(lat, lng, start, end) {
         kind, mag: isFinite(mag) ? mag : null, unit: p.unit || "",
         at: p.valid || "", city: p.city || "", county: p.county || "", state: p.state || "",
         qualifier: p.qualifier || "", source: p.source || "", remark: p.remark || "",
-        miles: haversineMiles(lat, lng, flat, flng),
+        miles,
       });
     }
     /* Nearest report first — "3 mi away" and "26 mi away" are very
@@ -28472,6 +28491,16 @@ function CanvassMap({ center, zoom, onMove, pins, statuses, selectedId, onTapPin
   const drag = useRef(null);
   const pointers = useRef(new Map());
   const pinch = useRef(null);
+  /* Tile imagery is the one part of this screen that depends on an
+     outside service, and when it fails the browser draws a broken-image
+     icon on a grey rectangle — which reads as "the whole feature is
+     dead" even though dropping pins, dispositions and everything else
+     still work perfectly. Count failures and say what is actually
+     wrong, rather than letting a map key problem look like a broken
+     app. Reset on any successful tile so a passing cloud of 404s at
+     the edge of the world doesn't stick. */
+  const [tileFails, setTileFails] = useState(0);
+  const tilesDown = tileFails >= 3;
 
   /* Measure rather than assume: the map fills whatever the screen
      gives it, and every projection below is relative to that box. */
@@ -28599,9 +28628,26 @@ function CanvassMap({ center, zoom, onMove, pins, statuses, selectedId, onTapPin
       }}>
         {tiles.map((t) => (
           <img key={t.key} src={t.src} alt="" draggable={false} width={TILE_SIZE} height={TILE_SIZE}
+            onLoad={() => setTileFails(0)}
+            /* A broken tile renders as a torn-page icon by default,
+               which looks like the app is broken. Hide it and count it. */
+            onError={(e) => { e.currentTarget.style.visibility = "hidden"; setTileFails((n) => n + 1); }}
             style={{ position: "absolute", left: t.x * TILE_SIZE, top: t.y * TILE_SIZE, width: TILE_SIZE, height: TILE_SIZE }} />
         ))}
       </div>
+
+      {tilesDown && (
+        <div data-testid="tiles-down" style={{
+          position: "absolute", left: 12, right: 12, top: 12, background: "rgba(255,255,255,.96)",
+          border: `1px solid ${S.line}`, borderRadius: 11, padding: "11px 13px", zIndex: 4, pointerEvents: "none",
+        }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>Map images aren't loading</div>
+          <div style={{ fontSize: 12, color: S.sub, marginTop: 4, lineHeight: 1.5 }}>
+            The tile service didn't answer — usually a map key that isn't set or has hit its daily limit.
+            Everything else still works: you can drop pins, mark doors and see them in the list.
+          </div>
+        </div>
+      )}
 
       {/* the rep's own position */}
       {me && w > 0 && (() => {
