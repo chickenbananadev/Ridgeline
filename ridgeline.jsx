@@ -23590,7 +23590,93 @@ function PersonPicker({ open, onClose, title = "Choose people", users, excludeNa
   );
 }
 
-function ChatThread({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg, conversationId = null }) {
+/* A channel or DM's info sheet — the one place to see who's in it and
+   get rid of it. Two different actions for two different things:
+   "Archive" removes a channel for EVERYONE (creator or admin only,
+   matches conv_archive's RLS exactly) — the closest Postgres-side
+   equivalent to Slack's archive. "Leave" only removes YOUR OWN
+   membership row (matches how closing a DM works in real Slack — it
+   disappears from your list, nobody else is affected). Leave is only
+   offered for DMs/private channels: an open channel's membership row
+   is just read-tracking, not visibility — everyone always sees an
+   open channel regardless of membership, so "leaving" one wouldn't
+   actually remove it from anyone's list. #general can never be
+   archived — it's the one channel every session lands on by default. */
+function ConversationHeader({ conversation, conversationMembers, users, currentUser, onArchive, onLeave }) {
+  const [open, setOpen] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const me = currentUser && currentUser.id;
+  const isAdmin = !!(currentUser && currentUser.role === "admin");
+  const isDm = conversation.kind === "dm";
+  const isGeneral = conversation.kind === "channel" && conversation.name === "general";
+  const canArchive = !isDm && !isGeneral && (conversation.createdBy === me || isAdmin);
+  const canLeave = isDm || conversation.isPrivate;
+  const memberNames = (conversationMembers || [])
+    .filter((m) => m.conversationId === conversation.id)
+    .map((m) => { const u = (users || []).find((x) => x.id === m.userId); return u ? u.name : "Someone"; });
+  const title = isDm
+    ? (memberNames.filter((n) => n !== (currentUser && currentUser.name)).join(", ") || "Direct message")
+    : `# ${conversation.name}`;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "2px 2px 12px", borderBottom: `1px solid ${S.line}`, marginBottom: 10 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: S.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {title}{conversation.isPrivate ? " 🔒" : ""}
+        </div>
+        {conversation.topic && !isDm && <div style={{ fontSize: 12, color: S.sub, marginTop: 1 }}>{conversation.topic}</div>}
+      </div>
+      <button aria-label="Conversation info" onClick={() => setOpen(true)} style={{ border: "none", background: "none", cursor: "pointer", padding: 6, color: S.sub }}>
+        <Settings size={17} />
+      </button>
+
+      <Sheet open={open} onClose={() => setOpen(false)} title={isDm ? "Direct message" : `# ${conversation.name}`}>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 14 }}>
+          {isDm
+            ? `Only visible to ${memberNames.length ? memberNames.join(", ") : "you"}.`
+            : conversation.isPrivate
+              ? `Private channel — only ${memberNames.length ? memberNames.join(", ") : "invited members"} can see it.`
+              : "Open channel — every active team member can read and post here."}
+        </div>
+        {(isDm || conversation.isPrivate) && memberNames.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, marginBottom: 6 }}>Members</div>
+            {memberNames.map((n, i2) => <div key={i2} style={{ fontSize: 13.5, color: S.ink, padding: "4px 0" }}>{n}</div>)}
+          </div>
+        )}
+        {canArchive && (
+          <Btn kind="ghost" small style={{ color: "#B3261E", width: "100%", justifyContent: "center", marginBottom: 8 }}
+            onClick={() => setConfirmArchive(true)}>
+            <Trash2 size={13} /> Archive channel
+          </Btn>
+        )}
+        {canLeave && (
+          <Btn kind="ghost" small style={{ color: "#B3261E", width: "100%", justifyContent: "center" }}
+            onClick={() => { onLeave(conversation.id); setOpen(false); }}>
+            <LogOut size={13} /> Leave conversation
+          </Btn>
+        )}
+        {!canArchive && !canLeave && (
+          <div style={{ fontSize: 12.5, color: S.sub }}>This is the company's default channel and can't be removed.</div>
+        )}
+      </Sheet>
+
+      <Sheet open={confirmArchive} onClose={() => setConfirmArchive(false)} title="Archive channel"
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} onClick={() => setConfirmArchive(false)}>Cancel</Btn>
+            <Btn style={{ flex: 1, background: "#B3261E", borderColor: "#B3261E" }}
+              onClick={() => { onArchive(conversation.id); setConfirmArchive(false); setOpen(false); }}>Archive</Btn>
+          </div>
+        }>
+        <div style={{ fontSize: 13.5, color: S.ink, lineHeight: 1.5 }}>
+          This removes <b># {conversation.name}</b> for everyone in the company, not just you. Its message history is not deleted, but no one will be able to open it again.
+        </div>
+      </Sheet>
+    </div>
+  );
+}
+
+function ChatThread({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg, conversationId = null, conversation = null, conversationMembers = [], onArchiveConversation = null, onLeaveConversation = null }) {
   const [txt, setTxt] = useState("");
   const [mentionOpen, setMentionOpen] = useState(false);
   const [tagOpen, setTagOpen] = useState(false);
@@ -23678,12 +23764,22 @@ function ChatThread({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack
     <div style={embedded ? { paddingBottom: 170 } : { padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }}>
       {!embedded && <SubHeader title="Team chat" onBack={onBack} />}
 
+      {embedded && conversation && (
+        <ConversationHeader conversation={conversation} conversationMembers={conversationMembers} users={users}
+          currentUser={currentUser} onArchive={onArchiveConversation} onLeave={onLeaveConversation} />
+      )}
+
       {msgs.length === 0 && (
         <div style={{ padding: "28px 8px", textAlign: "center" }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>This is the beginning of the channel</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>
+            {conversation && conversation.kind === "dm" ? "This is the beginning of your conversation" : "This is the beginning of the channel"}
+          </div>
           <div style={{ fontSize: 13, color: S.sub, marginTop: 5, lineHeight: 1.5 }}>
-            One channel for the whole company. @ someone when a customer calls
-            in for them, and tag the job so the thread is one tap away.
+            {conversation && conversation.kind === "dm"
+              ? "Only visible to the people in this conversation."
+              : conversation && conversation.topic
+                ? conversation.topic
+                : "@ someone when a customer calls in for them, and tag the job so the thread is one tap away."}
           </div>
         </div>
       )}
@@ -27871,7 +27967,8 @@ function ConversationList({ conversations, conversationMembers, activeConversati
 }
 
 function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onDeleteMsg, onSendQueued, integrations = {},
-  conversations = [], conversationMembers = [], activeConversationId = null, onSelectConversation = () => {}, onCreateChannel = () => {}, onStartDm = () => {}, unreadCounts = {} }) {
+  conversations = [], conversationMembers = [], activeConversationId = null, onSelectConversation = () => {}, onCreateChannel = () => {}, onStartDm = () => {}, unreadCounts = {},
+  onArchiveConversation = () => {}, onLeaveConversation = () => {} }) {
   /* Team chat and customer messages are both messages, so they live
      under one Inbox rather than two destinations. Team opens first —
      it is the one with unread counts attached to the nav badge.
@@ -27928,7 +28025,10 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
               return [...others, ...next].sort((a, b) => (a.at || "").localeCompare(b.at || ""));
             })}
             users={users} jobs={jobs} currentUser={currentUser} onOpenJob={onOpenJob}
-            embedded onDeleteMsg={onDeleteMsg} conversationId={activeConversationId} />
+            embedded onDeleteMsg={onDeleteMsg} conversationId={activeConversationId}
+            conversation={(conversations || []).find((c) => c.id === activeConversationId) || null}
+            conversationMembers={conversationMembers}
+            onArchiveConversation={onArchiveConversation} onLeaveConversation={onLeaveConversation} />
         </>
       ) : (
       <>
@@ -29011,6 +29111,48 @@ export default function SupremeCRM() {
     if (id) setActiveConversationId(id);
   };
 
+  /* Moves off whatever conversation just became inaccessible (archived
+     or left) onto #general, the same conversation a fresh session
+     lands on — reuses selectConversation so the fallback is marked
+     read too, instead of landing on it with a stale unread badge. */
+  const landSomewhereAfterLeaving = (removedId, remaining) => {
+    if (activeConversationId !== removedId) return;
+    const tenantId = currentUser && currentUser.tenantId;
+    const generalId = tenantId ? `general-${tenantId}` : null;
+    const fallback = remaining.find((c) => c.id === generalId) || remaining[0];
+    if (fallback) selectConversation(fallback.id); else setActiveConversationId(null);
+  };
+  /* Archives a channel for EVERYONE — creator or admin only, matches
+     conv_archive's RLS exactly (migration 031). Messages are not
+     deleted, just no longer reachable through the conversation list. */
+  const archiveConversation = async (id) => {
+    const db = DB();
+    if (!db) return;
+    const { error } = await db.from("crm_chat_conversations").update({ archived_at: new Date().toISOString() }).eq("id", id);
+    if (error) { toast("Couldn't archive — " + error.message); return; }
+    const remaining = conversations.filter((c) => c.id !== id);
+    setConversations(remaining);
+    setConversationMembers((prev) => prev.filter((m) => m.conversationId !== id));
+    landSomewhereAfterLeaving(id, remaining);
+    toast("Channel archived");
+  };
+  /* Leaves a DM or private channel — removes only the caller's own
+     membership row (migration 032's members_leave policy), the same
+     "closing a DM hides it from your own sidebar" behavior Slack has.
+     Meaningless for an open channel, where membership never gates
+     visibility — the UI only offers this for DMs/private channels. */
+  const leaveConversation = async (id) => {
+    const db = DB();
+    if (!db || !currentUser) return;
+    const { error } = await db.from("crm_chat_members").delete().eq("conversation_id", id).eq("user_id", currentUser.id);
+    if (error) { toast("Couldn't leave — " + error.message); return; }
+    const remaining = conversations.filter((c) => c.id !== id);
+    setConversations(remaining);
+    setConversationMembers((prev) => prev.filter((m) => !(m.conversationId === id && m.userId === currentUser.id)));
+    landSomewhereAfterLeaving(id, remaining);
+    toast("Left conversation");
+  };
+
   /* Finish the Gmail OAuth handshake when Google redirects back with
      ?state=gmail&code=... — exchange the code, mark the seat connected, and
      clean the URL. Runs once when a code is present.
@@ -29584,7 +29726,8 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onSendQueued={sendQueuedMessage}
           conversations={conversations} conversationMembers={conversationMembers}
           activeConversationId={activeConversationId} onSelectConversation={selectConversation}
-          onCreateChannel={createChannel} onStartDm={startDm} unreadCounts={unreadCounts} />
+          onCreateChannel={createChannel} onStartDm={startDm} unreadCounts={unreadCounts}
+          onArchiveConversation={archiveConversation} onLeaveConversation={leaveConversation} />
       ) : nav === "more" ? (
         <MoreMenu brand={brand} onNav={(id) => {
           if (id === "password") return setChangePwOpen(true);

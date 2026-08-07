@@ -24564,7 +24564,100 @@ function PersonPicker({ open, onClose, title = "Choose people", users, excludeNa
     footer
   ] });
 }
-function ChatThread({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg, conversationId = null }) {
+function ConversationHeader({ conversation, conversationMembers, users, currentUser, onArchive, onLeave }) {
+  const [open, setOpen] = (0, import_react.useState)(false);
+  const [confirmArchive, setConfirmArchive] = (0, import_react.useState)(false);
+  const me = currentUser && currentUser.id;
+  const isAdmin = !!(currentUser && currentUser.role === "admin");
+  const isDm = conversation.kind === "dm";
+  const isGeneral = conversation.kind === "channel" && conversation.name === "general";
+  const canArchive = !isDm && !isGeneral && (conversation.createdBy === me || isAdmin);
+  const canLeave = isDm || conversation.isPrivate;
+  const memberNames = (conversationMembers || []).filter((m) => m.conversationId === conversation.id).map((m) => {
+    const u = (users || []).find((x) => x.id === m.userId);
+    return u ? u.name : "Someone";
+  });
+  const title = isDm ? memberNames.filter((n) => n !== (currentUser && currentUser.name)).join(", ") || "Direct message" : `# ${conversation.name}`;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "2px 2px 12px", borderBottom: `1px solid ${S.line}`, marginBottom: 10 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 15, fontWeight: 800, color: S.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
+        title,
+        conversation.isPrivate ? " \u{1F512}" : ""
+      ] }),
+      conversation.topic && !isDm && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 1 }, children: conversation.topic })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "aria-label": "Conversation info", onClick: () => setOpen(true), style: { border: "none", background: "none", cursor: "pointer", padding: 6, color: S.sub }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Settings, { size: 17 }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open, onClose: () => setOpen(false), title: isDm ? "Direct message" : `# ${conversation.name}`, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginBottom: 14 }, children: isDm ? `Only visible to ${memberNames.length ? memberNames.join(", ") : "you"}.` : conversation.isPrivate ? `Private channel \u2014 only ${memberNames.length ? memberNames.join(", ") : "invited members"} can see it.` : "Open channel \u2014 every active team member can read and post here." }),
+      (isDm || conversation.isPrivate) && memberNames.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 16 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: S.sub, marginBottom: 6 }, children: "Members" }),
+        memberNames.map((n, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.ink, padding: "4px 0" }, children: n }, i2))
+      ] }),
+      canArchive && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+        Btn,
+        {
+          kind: "ghost",
+          small: true,
+          style: { color: "#B3261E", width: "100%", justifyContent: "center", marginBottom: 8 },
+          onClick: () => setConfirmArchive(true),
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 13 }),
+            " Archive channel"
+          ]
+        }
+      ),
+      canLeave && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+        Btn,
+        {
+          kind: "ghost",
+          small: true,
+          style: { color: "#B3261E", width: "100%", justifyContent: "center" },
+          onClick: () => {
+            onLeave(conversation.id);
+            setOpen(false);
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.LogOut, { size: 13 }),
+            " Leave conversation"
+          ]
+        }
+      ),
+      !canArchive && !canLeave && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub }, children: "This is the company's default channel and can't be removed." })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      Sheet,
+      {
+        open: confirmArchive,
+        onClose: () => setConfirmArchive(false),
+        title: "Archive channel",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: () => setConfirmArchive(false), children: "Cancel" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            Btn,
+            {
+              style: { flex: 1, background: "#B3261E", borderColor: "#B3261E" },
+              onClick: () => {
+                onArchive(conversation.id);
+                setConfirmArchive(false);
+                setOpen(false);
+              },
+              children: "Archive"
+            }
+          )
+        ] }),
+        children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13.5, color: S.ink, lineHeight: 1.5 }, children: [
+          "This removes ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("b", { children: [
+            "# ",
+            conversation.name
+          ] }),
+          " for everyone in the company, not just you. Its message history is not deleted, but no one will be able to open it again."
+        ] })
+      }
+    )
+  ] });
+}
+function ChatThread({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg, conversationId = null, conversation = null, conversationMembers = [], onArchiveConversation = null, onLeaveConversation = null }) {
   const [txt, setTxt] = (0, import_react.useState)("");
   const [mentionOpen, setMentionOpen] = (0, import_react.useState)(false);
   const [tagOpen, setTagOpen] = (0, import_react.useState)(false);
@@ -24646,9 +24739,20 @@ function ChatThread({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack
   const initials = avatarInitials, colorOf = avatarColorOf;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: embedded ? { paddingBottom: 170 } : { padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }, children: [
     !embedded && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Team chat", onBack }),
+    embedded && conversation && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      ConversationHeader,
+      {
+        conversation,
+        conversationMembers,
+        users,
+        currentUser,
+        onArchive: onArchiveConversation,
+        onLeave: onLeaveConversation
+      }
+    ),
     msgs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "28px 8px", textAlign: "center" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700, color: S.ink }, children: "This is the beginning of the channel" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 5, lineHeight: 1.5 }, children: "One channel for the whole company. @ someone when a customer calls in for them, and tag the job so the thread is one tap away." })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700, color: S.ink }, children: conversation && conversation.kind === "dm" ? "This is the beginning of your conversation" : "This is the beginning of the channel" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, marginTop: 5, lineHeight: 1.5 }, children: conversation && conversation.kind === "dm" ? "Only visible to the people in this conversation." : conversation && conversation.topic ? conversation.topic : "@ someone when a customer calls in for them, and tag the job so the thread is one tap away." })
     ] }),
     (msgs || []).map((m, mi) => {
       const j = m.jobId ? jobOf(m.jobId) : null;
@@ -29308,7 +29412,11 @@ function Inbox({
   },
   onStartDm = () => {
   },
-  unreadCounts = {}
+  unreadCounts = {},
+  onArchiveConversation = () => {
+  },
+  onLeaveConversation = () => {
+  }
 }) {
   const [pane, setPane] = (0, import_react.useState)("team");
   const [filter, setFilter] = (0, import_react.useState)("All");
@@ -29378,7 +29486,11 @@ function Inbox({
           onOpenJob,
           embedded: true,
           onDeleteMsg,
-          conversationId: activeConversationId
+          conversationId: activeConversationId,
+          conversation: (conversations || []).find((c) => c.id === activeConversationId) || null,
+          conversationMembers,
+          onArchiveConversation,
+          onLeaveConversation
         }
       )
     ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -30361,6 +30473,42 @@ function SupremeCRM() {
     const id = await startConversation("dm", null, null, true, memberIds);
     if (id) setActiveConversationId(id);
   };
+  const landSomewhereAfterLeaving = (removedId, remaining) => {
+    if (activeConversationId !== removedId) return;
+    const tenantId = currentUser && currentUser.tenantId;
+    const generalId = tenantId ? `general-${tenantId}` : null;
+    const fallback = remaining.find((c) => c.id === generalId) || remaining[0];
+    if (fallback) selectConversation(fallback.id);
+    else setActiveConversationId(null);
+  };
+  const archiveConversation = async (id) => {
+    const db = DB();
+    if (!db) return;
+    const { error } = await db.from("crm_chat_conversations").update({ archived_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", id);
+    if (error) {
+      toast("Couldn't archive \u2014 " + error.message);
+      return;
+    }
+    const remaining = conversations.filter((c) => c.id !== id);
+    setConversations(remaining);
+    setConversationMembers((prev) => prev.filter((m) => m.conversationId !== id));
+    landSomewhereAfterLeaving(id, remaining);
+    toast("Channel archived");
+  };
+  const leaveConversation = async (id) => {
+    const db = DB();
+    if (!db || !currentUser) return;
+    const { error } = await db.from("crm_chat_members").delete().eq("conversation_id", id).eq("user_id", currentUser.id);
+    if (error) {
+      toast("Couldn't leave \u2014 " + error.message);
+      return;
+    }
+    const remaining = conversations.filter((c) => c.id !== id);
+    setConversations(remaining);
+    setConversationMembers((prev) => prev.filter((m) => !(m.conversationId === id && m.userId === currentUser.id)));
+    landSomewhereAfterLeaving(id, remaining);
+    toast("Left conversation");
+  };
   const gmailCbDone = (0, import_react.useRef)(false);
   (0, import_react.useEffect)(() => {
     if (gmailCbDone.current || typeof window === "undefined") return;
@@ -30992,7 +31140,9 @@ function SupremeCRM() {
         onSelectConversation: selectConversation,
         onCreateChannel: createChannel,
         onStartDm: startDm,
-        unreadCounts
+        unreadCounts,
+        onArchiveConversation: archiveConversation,
+        onLeaveConversation: leaveConversation
       }
     ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand, onNav: (id) => {
       if (id === "password") return setChangePwOpen(true);
