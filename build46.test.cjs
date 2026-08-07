@@ -44,7 +44,7 @@ ok(/--external:pdf-lib/.test(pkg), "pdf-lib externalized in the test bundle");
 /* P4 — SEO */
 ok(has("./public/robots.txt") && has("./public/sitemap.xml"), "robots.txt + sitemap.xml");
 ok(/rel="canonical"/.test(html) && /name="robots"/.test(html), "canonical + robots meta");
-ok(/"@type": "SoftwareApplication"/.test(html) && /"price": "169.99"/.test(html), "JSON-LD with pricing offers");
+ok(/"@type": "SoftwareApplication"/.test(html) && /"price": "119\.99"/.test(html), "JSON-LD with pricing offers (build 103 updated the price to the real $119.99 base plan)");
 ok(/roofing CRM built for the field/.test(html), "crawlable marketing fallback in #root");
 
 /* P5 — seats + billing */
