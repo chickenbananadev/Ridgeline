@@ -46,14 +46,18 @@ ok(/toggleActive\(u\);\s*\}\}>\s*\{u\.active \? "Deactivate" : "Reactivate"\}/.t
 const beStart = src.indexOf("function BrandingEditor(");
 const beEnd = src.indexOf("\nfunction ", beStart + 10);
 const beSrc = src.slice(beStart, beEnd > 0 ? beEnd : beStart + 8000);
-ok(/function BrandingEditor\(\{ brand, setBrand, onBack, toast, brandErr = "", currentUser = null \}\)/.test(beSrc),
-  "BrandingEditor now accepts a currentUser prop");
+/* Build 110 added a `users = []` prop (to populate a new billing-contact
+   picker) to this same signature and call site — match on the
+   currentUser piece specifically rather than the now-stale full
+   signature/call-site strings. */
+ok(/function BrandingEditor\(\{ brand, setBrand, onBack, toast, brandErr = "", currentUser = null/.test(beSrc),
+  "BrandingEditor still accepts a currentUser prop");
 ok(/const canEdit = !currentUser \|\| canManageCompanyConfig\(currentUser\);/.test(beSrc),
   "BrandingEditor computes canEdit via the shared canManageCompanyConfig helper (build 101 centralized this)");
 ok(/if \(!canEdit\) \{/.test(beSrc) && /Branding is management-only/.test(beSrc),
   "a non-management role sees a real explanation instead of the editable form");
-ok(/<BrandingEditor brand=\{brand\} setBrand=\{setBrand\} onBack=\{\(\) => setNav\("more"\)\} toast=\{toast\} brandErr=\{brandErr\} currentUser=\{liveUser\} \/>/.test(src),
-  "the call site now passes the signed-in user down");
+ok(/<BrandingEditor brand=\{brand\} setBrand=\{setBrand\} onBack=\{\(\) => setNav\("more"\)\} toast=\{toast\} brandErr=\{brandErr\} currentUser=\{liveUser\}/.test(src),
+  "the call site still passes the signed-in user down");
 
 /* ---------- 2b. WorkflowEditor role gate ---------- */
 const weStart = src.indexOf("function WorkflowEditor(");

@@ -59,7 +59,8 @@ var DEFAULT_BRAND = {
   primary: "#20242A",
   accent: "#0A9E98",
   accentSoft: "#E3F5F4",
-  googleReviewLink: ""
+  googleReviewLink: "",
+  billingContactUserId: ""
 };
 var SOURCES = {
   RCO: { name: "Residential Code of Ohio (OAC 4101:8)", url: "https://codes.ohio.gov/ohio-administrative-code/4101:8", publisher: "Ohio Legislative Service Commission \u2014 official text" },
@@ -5695,6 +5696,9 @@ function Dashboard({
   });
   const subsReview = jobs.filter((j) => j.subInvoice && j.subInvoice.status === "needs_review").length;
   const subsPay = jobs.filter((j) => j.subInvoice && ["confirmed", "submitted"].includes(j.subInvoice.status)).length;
+  const readyToPay = jobs.filter(
+    (j) => j.subInvoice && j.subInvoice.status === "confirmed" || j.capOutNotifiedAt && j.stageId !== "s10"
+  ).length;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
@@ -6274,6 +6278,16 @@ function Dashboard({
           " to pay"
         ] })
       ] })
+    ] }),
+    isAdmin && readyToPay > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Ready to pay" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 6 }, children: "The billing contact has already been notified on these \u2014 nothing to chase, just close them out." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: readyToPay }),
+        " job",
+        readyToPay === 1 ? "" : "s",
+        " with a confirmed sub payout or a fully paid cap-out"
+      ] }) })
     ] })
   ] });
 }
@@ -10012,7 +10026,7 @@ function JobDetail({
             case "photos":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPhotos, { job, mut, toast, ccToken });
             case "financials":
-              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancialsCombined, { job, mut, toast, isAdmin, currentUser, brand, integrations, onLog });
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancialsCombined, { job, mut, toast, isAdmin, currentUser, brand, integrations, onLog, users });
             case "workorder":
               return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
                 TabWorkOrder,
@@ -10024,7 +10038,8 @@ function JobDetail({
                   crews,
                   templates,
                   currentUser,
-                  users
+                  users,
+                  integrations
                 }
               );
             case "tasks":
@@ -19851,6 +19866,25 @@ async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, in
   const to = kind === "sms" ? job.phone : job.email;
   return deliverMessage({ to, kind, subject, body, jobId: job.id }, integrations, currentUser);
 }
+function billingContactFor(brand, users) {
+  const list = users || [];
+  const id = brand && brand.billingContactUserId;
+  const chosen = id && list.find((u) => u.id === id && u.active !== false);
+  if (chosen) return chosen;
+  return list.find((u) => u.active !== false && u.role === "admin") || null;
+}
+async function deliverToBillingContact(job, { subject, body }, integrations, users, brand, currentUser) {
+  const contact = billingContactFor(brand, users);
+  if (!contact) return { contact: null, sent: [] };
+  const sent = [];
+  if (contact.email) {
+    sent.push(await deliverMessage({ to: contact.email, kind: "email", subject, body, jobId: job.id }, integrations, currentUser));
+  }
+  if (contact.phone) {
+    sent.push(await deliverMessage({ to: contact.phone, kind: "sms", subject, body, jobId: job.id }, integrations, currentUser));
+  }
+  return { contact, sent };
+}
 function TabMessages({ job, mut, toast, brand, templates, crews, integrations, currentUser, users }) {
   const [compose, setCompose] = (0, import_react.useState)(null);
   const [to, setTo] = (0, import_react.useState)("Customer");
@@ -20601,7 +20635,7 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
   ] });
 }
 function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, integrations = {}, onLog = () => {
-} }) {
+}, users }) {
   const [sub, setSub] = (0, import_react.useState)("costs");
   const SUBS = [["costs", "Costs & profit"], ["payments", "Payments"], ["invoice", "Invoice"]];
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
@@ -20618,7 +20652,7 @@ function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, i
       fontFamily: "inherit"
     }, children: label }, id)) }),
     sub === "costs" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabFinancials, { job, mut, toast, isAdmin, currentUser, brand }),
-    sub === "payments" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPayments, { job, mut, toast, onLog }),
+    sub === "payments" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabPayments, { job, mut, toast, onLog, currentUser, brand, integrations, users }),
     sub === "invoice" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TabInvoice, { job, brand, mut, toast, currentUser, integrations })
   ] });
 }
@@ -20947,7 +20981,7 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
   ] });
 }
 function TabPayments({ job, mut, toast, onLog = () => {
-} }) {
+}, currentUser, brand, integrations, users }) {
   const [editPay, setEditPay] = (0, import_react.useState)(null);
   const [ef2, setEf2] = (0, import_react.useState)(null);
   const checkRef = (0, import_react.useRef)(null);
@@ -20955,9 +20989,22 @@ function TabPayments({ job, mut, toast, onLog = () => {
     setEditPay(p2.id);
     setEf2({ ...p2 });
   };
-  const savePayEdit = () => {
+  const notifyCapOutIfReady = async (nextPayments) => {
+    const ready = paymentsSummary({ ...job, payments: nextPayments }).balance <= 0.01;
+    if (ready && !job.capOutNotifiedAt) {
+      const cap = computeCapOut(job);
+      const subject = `Cap-out ready \u2014 ${job.name}`;
+      const body = `${job.name} (${job.address}) is fully paid and ready to cap out. Commission ${money(cap.commission)}, payout ${money(cap.payout)}.`;
+      const out = await deliverToBillingContact(job, { subject, body }, integrations, users, brand, currentUser);
+      if (out.contact) mut((j) => ({ ...j, capOutNotifiedAt: (/* @__PURE__ */ new Date()).toISOString() }));
+    } else if (!ready && job.capOutNotifiedAt) {
+      mut((j) => ({ ...j, capOutNotifiedAt: null }));
+    }
+  };
+  const savePayEdit = async () => {
     const before = (job.payments || []).find((x) => x.id === editPay);
-    mut((j) => ({ ...j, payments: j.payments.map((x) => x.id === editPay ? { ...x, ...ef2, amt: num(ef2.amt) } : x) }));
+    const nextPayments = job.payments.map((x) => x.id === editPay ? { ...x, ...ef2, amt: num(ef2.amt) } : x);
+    mut((j) => ({ ...j, payments: nextPayments }));
     if (before) {
       const changes = [];
       if (num(before.amt) !== num(ef2.amt)) changes.push(`amount ${money(num(before.amt))} \u2192 ${money(num(ef2.amt))}`);
@@ -20973,10 +21020,12 @@ function TabPayments({ job, mut, toast, onLog = () => {
     }
     setEditPay(null);
     toast("Payment updated");
+    await notifyCapOutIfReady(nextPayments);
   };
-  const deletePay = () => {
+  const deletePay = async () => {
     const before = (job.payments || []).find((x) => x.id === editPay);
-    mut((j) => ({ ...j, payments: j.payments.filter((x) => x.id !== editPay) }));
+    const nextPayments = job.payments.filter((x) => x.id !== editPay);
+    mut((j) => ({ ...j, payments: nextPayments }));
     if (before) {
       onLog({
         kind: "payment",
@@ -20987,6 +21036,7 @@ function TabPayments({ job, mut, toast, onLog = () => {
     }
     setEditPay(null);
     toast("Payment removed");
+    await notifyCapOutIfReady(nextPayments);
   };
   const attachCheck = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -21036,10 +21086,12 @@ function TabPayments({ job, mut, toast, onLog = () => {
           onChange: (v) => setForm({ ...form, amt: v })
         }
       ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%" }, disabled: !form.label.trim() || !num(form.amt), onClick: () => {
-        mut((j) => ({ ...j, payments: [...j.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp(), dateIso: todayIso() }] }));
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%" }, disabled: !form.label.trim() || !num(form.amt), onClick: async () => {
+        const nextPayments = [...job.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp(), dateIso: todayIso() }];
+        mut((j) => ({ ...j, payments: nextPayments }));
         setForm({ type: "Received", label: "", amt: "" });
         toast("Payment logged");
+        await notifyCapOutIfReady(nextPayments);
       }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 15 }),
         " Log payment"
@@ -21331,7 +21383,7 @@ function TabInvoice({ job, brand, mut, toast, currentUser = null, integrations =
     ] })
   ] });
 }
-function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
+function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand, integrations, users }) {
   const [menuOpen, setMenuOpen] = (0, import_react.useState)(false);
   const [menuQ, setMenuQ] = (0, import_react.useState)("");
   const inv = job.subInvoice || null;
@@ -21356,9 +21408,17 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
     mut((j) => ({ ...j, fin: { ...j.fin || {}, labor: [...(j.fin || {}).labor || [], { id: uid("l"), label: `Sub labor \u2014 ${crew.name} (invoice)`, amt: Math.round(subInvoiceTotal(j.subInvoice) * 100) / 100, by: crew.name }] } }));
     toast("Posted to job costs");
   };
-  const confirmInv = () => {
-    setInv({ status: "confirmed", confirmedBy: (currentUser || {}).name || "", confirmedAt: todayIso(), dueDate: dueFromTerms(inv.terms) });
+  const confirmInv = async () => {
+    const dueDate = dueFromTerms(inv.terms);
+    setInv({ status: "confirmed", confirmedBy: (currentUser || {}).name || "", confirmedAt: todayIso(), dueDate });
     toast(docAlerts.length ? `Confirmed \u2014 heads up: ${crew.name} has ${docAlerts.length} expired/expiring doc(s)` : "Sub invoice confirmed");
+    if (!inv.notifiedAt) {
+      const amt = subInvoiceTotal(inv);
+      const subject = `Sub payout ready \u2014 ${crew.name} \u2014 ${job.name}`;
+      const body = `${crew.name}'s sub invoice for ${job.name} (${job.address}) is confirmed and ready to pay \u2014 ${money(amt)}. Terms ${inv.terms || "\u2014"}, due ${dueDate || "\u2014"}.`;
+      const out = await deliverToBillingContact(job, { subject, body }, integrations, users, brand, currentUser);
+      if (out.contact) setInv({ notifiedAt: (/* @__PURE__ */ new Date()).toISOString() });
+    }
   };
   const submitInv = () => {
     const acct = brand && brand.accountingEmail || "";
@@ -21545,7 +21605,7 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
     ] })
   ] });
 }
-function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, users }) {
+function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, users, integrations }) {
   const [picking, setPicking] = (0, import_react.useState)(false);
   const [sending, setSending] = (0, import_react.useState)(false);
   const [notes, setNotes] = (0, import_react.useState)(job.workOrder ? job.workOrder.notes : "");
@@ -21638,7 +21698,7 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
         ] })
       ] })
     ] }),
-    crew && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubInvoiceCard, { job, crew, mut, toast, currentUser, brand }),
+    crew && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubInvoiceCard, { job, crew, mut, toast, currentUser, brand, integrations, users }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "No pricing" }), children: [
         "Work order \u2014 ",
@@ -24461,7 +24521,50 @@ function EmojiPicker({ onPick, onClose }) {
     }, children: e2 }, e2)) })
   ] });
 }
-function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg }) {
+var AV_COLORS = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
+var avatarColorOf = (n) => AV_COLORS[Math.abs(String(n || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV_COLORS.length];
+var avatarInitials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
+function PersonPicker({ open, onClose, title = "Choose people", users, excludeName, multi = false, selectedIds = [], onPick, footer = null }) {
+  const colorOf = avatarColorOf, initials = avatarInitials;
+  const list = (users || []).filter((u) => u && u.name && u.active !== false && u.name !== excludeName);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Sheet, { open, onClose, title, children: [
+    list.map((u, i2) => {
+      const picked = multi && selectedIds.includes(u.id);
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onPick(u), style: {
+        width: "100%",
+        textAlign: "left",
+        border: "none",
+        background: "none",
+        cursor: "pointer",
+        padding: "12px 4px",
+        borderTop: i2 ? `1px solid ${S.line}` : "none",
+        display: "flex",
+        gap: 10,
+        alignItems: "center"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+          width: 30,
+          height: 30,
+          borderRadius: 8,
+          background: colorOf(u.name),
+          color: "#fff",
+          display: "grid",
+          placeItems: "center",
+          fontSize: 11,
+          fontWeight: 800
+        }, children: initials(u.name) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 14.5, fontWeight: 700, color: S.ink }, children: u.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub }, children: u.title })
+        ] }),
+        multi && (picked ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 19, color: T.accent }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Circle, { size: 19, color: S.line }))
+      ] }, u.id);
+    }),
+    list.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { padding: "16px 4px", fontSize: 13.5, color: S.sub }, children: "No one else to choose from." }),
+    footer
+  ] });
+}
+function ChatThread({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg, conversationId = null }) {
   const [txt, setTxt] = (0, import_react.useState)("");
   const [mentionOpen, setMentionOpen] = (0, import_react.useState)(false);
   const [tagOpen, setTagOpen] = (0, import_react.useState)(false);
@@ -24491,7 +24594,8 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
       text: t,
       mentions,
       jobId: tagged || null,
-      reactions: {}
+      reactions: {},
+      conversationId
     }]);
     setTxt("");
     setTagged(null);
@@ -24539,9 +24643,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
   };
   const renderText = (t) => String(t || "").split(/(@[A-Za-z][\w'-]*(?: [A-Za-z][\w'-]*)?)/g).map((part, i2) => part && part.startsWith("@") ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { style: { color: T.accent, background: T.accentSoft, borderRadius: 4, padding: "0 3px" }, children: part }, i2) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: part }, i2));
   const jobOf = (id) => (jobs || []).find((j) => j.id === id);
-  const initials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
-  const AV_COLORS = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
-  const colorOf = (n) => AV_COLORS[Math.abs(String(n || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV_COLORS.length];
+  const initials = avatarInitials, colorOf = avatarColorOf;
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: embedded ? { paddingBottom: 170 } : { padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }, children: [
     !embedded && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Team chat", onBack }),
     msgs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "28px 8px", textAlign: "center" }, children: [
@@ -24904,37 +25006,20 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
         ] })
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: mentionOpen, onClose: () => setMentionOpen(false), title: "Mention someone", children: (users || []).filter((u) => u && u.name && u.active !== false && u.name !== me).map((u, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
-      insert(`@${u.name}`);
-      setMentionOpen(false);
-    }, style: {
-      width: "100%",
-      textAlign: "left",
-      border: "none",
-      background: "none",
-      cursor: "pointer",
-      padding: "12px 4px",
-      borderTop: i2 ? `1px solid ${S.line}` : "none",
-      display: "flex",
-      gap: 10,
-      alignItems: "center"
-    }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
-        width: 30,
-        height: 30,
-        borderRadius: 8,
-        background: colorOf(u.name),
-        color: "#fff",
-        display: "grid",
-        placeItems: "center",
-        fontSize: 11,
-        fontWeight: 800
-      }, children: initials(u.name) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 14.5, fontWeight: 700, color: S.ink }, children: u.name }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub }, children: u.title })
-      ] })
-    ] }, u.id)) }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      PersonPicker,
+      {
+        open: mentionOpen,
+        onClose: () => setMentionOpen(false),
+        title: "Mention someone",
+        users,
+        excludeName: me,
+        onPick: (u) => {
+          insert(`@${u.name}`);
+          setMentionOpen(false);
+        }
+      }
+    ),
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sheet, { open: tagOpen, onClose: () => setTagOpen(false), title: "Tag a job", children: jobs.filter((j) => !DEAD_STAGES.includes(j.stageId)).map((j, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => {
       setTagged(j.id);
       setTagOpen(false);
@@ -25230,7 +25315,7 @@ function AgreementBranding({ brand, setBrand, toast }) {
     ] })
   ] });
 }
-function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", currentUser = null }) {
+function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", currentUser = null, users = [] }) {
   const set = (k) => (e) => setBrand({ ...brand, [k]: e.target.value });
   const logoRef = (0, import_react.useRef)(null);
   const onLogo = (e) => {
@@ -25321,6 +25406,13 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", current
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Main phone", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.phone, onChange: set("phone") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Email", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: brand.email, onChange: set("email") }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Accounting email", hint: "Where sub-invoice payment notices are sent when a sub invoice is submitted.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, type: "email", value: brand.accountingEmail || "", onChange: set("accountingEmail"), placeholder: "accounting@yourcompany.com" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Billing contact", hint: "Notified automatically \u2014 email and text \u2014 the moment a sub payout is confirmed or a job's cap-out is fully paid. Defaults to any admin if left unset.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: inputStyle, value: brand.billingContactUserId || "", onChange: set("billingContactUserId"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "No one selected \u2014 falls back to an admin" }),
+        users.filter((u) => u.active !== false).map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: u.id, children: [
+          u.name,
+          u.role ? ` \u2014 ${ROLES.find((r) => r.id === u.role)?.label || u.role}` : ""
+        ] }, u.id))
+      ] }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Head office address", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         AddressAutocomplete,
         {
@@ -26136,9 +26228,10 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   };
   const paidFor = (crewId) => {
     const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 864e5;
+    const crewName = (crews.find((c) => c.id === crewId) || {}).name || "";
     return jobs.filter((j) => j.crewId === crewId).reduce((sum, j) => {
-      const lines = j.financials && j.financials.costLines || [];
-      return sum + lines.filter((l) => /labor|crew|install|sub/i.test(l.label || "")).filter((l) => !l.at || new Date(l.at).getTime() >= cutoff).reduce((t, l) => t + num(l.amt), 0);
+      const payouts = (j.payments || []).filter((p) => p.type !== "Received" && String(p.to || "").toLowerCase().includes(crewName.toLowerCase()));
+      return sum + payouts.filter((p) => !p.at || new Date(p.at).getTime() >= cutoff).reduce((t, p) => t + num(p.amt), 0);
     }, 0);
   };
   const open = (c) => {
@@ -26174,7 +26267,7 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "365", children: "Last 12 months" })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 7, lineHeight: 1.5 }, children: "Totals come from labor and subcontractor lines on each crew's jobs in the Financials tab." })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 7, lineHeight: 1.5 }, children: "Totals come from payments logged against each crew's jobs \u2014 sub invoices marked paid, or any manual payout naming the crew." })
     ] }),
     crews.map((c) => {
       const assigned = jobs.filter((j) => j.crewId === c.id).length;
@@ -28106,7 +28199,7 @@ function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
     payQueue.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: payQueue.some((r) => r.overdue) ? "red" : "amber", children: money(payTotal) }), children: "Subs to pay" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginBottom: 6, lineHeight: 1.5 }, children: "Confirmed sub invoices awaiting payment. Mark paid on the job's work order." }),
-      payQueue.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob && onOpenJob(r.job.id), style: {
+      payQueue.map((r) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onOpenJob && onOpenJob(r.job.id, "workorder"), style: {
         display: "flex",
         alignItems: "center",
         gap: 10,
@@ -29066,13 +29159,160 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%", marginTop: 8 }, onClick: onLogout, children: "Sign out" })
   ] });
 }
-function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat, onDeleteMsg, onSendQueued, integrations = {} }) {
+function ConversationList({ conversations, conversationMembers, activeConversationId, onSelect, users, currentUser, onCreateChannel, onStartDm, unreadCounts = {} }) {
+  const [creating, setCreating] = (0, import_react.useState)(null);
+  const [name, setName] = (0, import_react.useState)("");
+  const [topic, setTopic] = (0, import_react.useState)("");
+  const [makePrivate, setMakePrivate] = (0, import_react.useState)(false);
+  const [dmPicked, setDmPicked] = (0, import_react.useState)([]);
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const me = currentUser && currentUser.id;
+  const channels = (conversations || []).filter((c) => c.kind === "channel").sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const dms = (conversations || []).filter((c) => c.kind === "dm");
+  const dmLabel = (c) => {
+    const otherIds = (conversationMembers || []).filter((m) => m.conversationId === c.id && m.userId !== me).map((m) => m.userId);
+    const names = otherIds.map((id) => {
+      const u = (users || []).find((x) => x.id === id);
+      return u ? u.name : "Someone";
+    });
+    return names.length ? names.join(", ") : "Direct message";
+  };
+  const closeCreate = () => {
+    setCreating(null);
+    setName("");
+    setTopic("");
+    setMakePrivate(false);
+    setDmPicked([]);
+  };
+  const submitChannel = async () => {
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    try {
+      await onCreateChannel(name.trim(), topic.trim(), makePrivate);
+      closeCreate();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const submitDm = async () => {
+    if (!dmPicked.length || busy) return;
+    setBusy(true);
+    try {
+      await onStartDm(dmPicked.map((u) => u.id));
+      closeCreate();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const pillStyle = (active) => ({
+    flexShrink: 0,
+    border: `1.5px solid ${active ? T.accent : S.line}`,
+    background: active ? T.accentSoft : "#fff",
+    color: active ? T.accent : S.ink,
+    borderRadius: 999,
+    padding: "8px 13px",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer",
+    whiteSpace: "nowrap"
+  });
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginBottom: 12 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginBottom: 10 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => setCreating("channel"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+        " Channel"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => setCreating("dm"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 13 }),
+        " Direct message"
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }, children: [
+      channels.map((c) => {
+        const unread = (unreadCounts[c.id] || {}).unread || 0;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onSelect(c.id), style: pillStyle(c.id === activeConversationId), children: [
+          "# ",
+          c.name,
+          c.isPrivate ? " \u{1F512}" : "",
+          unread > 0 && c.id !== activeConversationId ? ` \xB7 ${unread}` : ""
+        ] }, c.id);
+      }),
+      dms.map((c) => {
+        const unread = (unreadCounts[c.id] || {}).unread || 0;
+        return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => onSelect(c.id), style: pillStyle(c.id === activeConversationId), children: [
+          dmLabel(c),
+          unread > 0 && c.id !== activeConversationId ? ` \xB7 ${unread}` : ""
+        ] }, c.id);
+      })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+      Sheet,
+      {
+        open: creating === "channel",
+        onClose: closeCreate,
+        title: "Create a channel",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%" }, disabled: !name.trim() || busy, onClick: submitChannel, children: busy ? "Creating\u2026" : "Create channel" }),
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Name", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: name, onChange: (e) => setName(e.target.value), placeholder: "dispatch" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Topic (optional)", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, value: topic, onChange: (e) => setTopic(e.target.value), placeholder: "What's this channel for?" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14 }, children: "Make private \u2014 only people you add can see it" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setMakePrivate(!makePrivate), style: {
+              width: 46,
+              height: 27,
+              borderRadius: 99,
+              border: "none",
+              cursor: "pointer",
+              background: makePrivate ? T.accent : "#D6D9DE",
+              position: "relative",
+              flexShrink: 0
+            }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { position: "absolute", top: 3, left: makePrivate ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" } }) })
+          ] })
+        ]
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      PersonPicker,
+      {
+        open: creating === "dm",
+        onClose: closeCreate,
+        title: "Start a direct message",
+        users,
+        excludeName: currentUser && currentUser.name,
+        multi: true,
+        selectedIds: dmPicked.map((u) => u.id),
+        onPick: (u) => setDmPicked((prev) => prev.some((x) => x.id === u.id) ? prev.filter((x) => x.id !== u.id) : [...prev, u]),
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%", marginTop: 8 }, disabled: !dmPicked.length || busy, onClick: submitDm, children: busy ? "Starting\u2026" : `Start (${dmPicked.length})` })
+      }
+    )
+  ] });
+}
+function Inbox({
+  jobs,
+  onOpenJob,
+  onCompose,
+  chatMsgs,
+  setChatMsgs,
+  users,
+  currentUser,
+  unreadChat = 0,
+  onDeleteMsg,
+  onSendQueued,
+  integrations = {},
+  conversations = [],
+  conversationMembers = [],
+  activeConversationId = null,
+  onSelectConversation = () => {
+  },
+  onCreateChannel = () => {
+  },
+  onStartDm = () => {
+  },
+  unreadCounts = {}
+}) {
   const [pane, setPane] = (0, import_react.useState)("team");
   const [filter, setFilter] = (0, import_react.useState)("All");
   const [sendingId, setSendingId] = (0, import_react.useState)(null);
-  (0, import_react.useEffect)(() => {
-    if (pane === "team" && onSeenChat) onSeenChat();
-  }, [pane, chatMsgs && chatMsgs.length]);
   const all = jobs.flatMap((j) => (j.messages || []).map((msg) => ({ job: j, msg }))).sort((x, y2) => (y2.msg.at || "").localeCompare(x.msg.at || ""));
   const list = all.filter(({ msg }) => {
     if (filter === "All") return true;
@@ -29107,19 +29347,41 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
       label,
       id === "team" && unreadChat > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { background: "#B3261E", color: "#fff", borderRadius: 99, fontSize: 10.5, fontWeight: 800, padding: "1px 6px" }, children: unreadChat })
     ] }, id)) }),
-    pane === "team" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-      TeamChat,
-      {
-        msgs: chatMsgs,
-        setMsgs: setChatMsgs,
-        users,
-        jobs,
-        currentUser,
-        onOpenJob,
-        embedded: true,
-        onDeleteMsg
-      }
-    ) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    pane === "team" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        ConversationList,
+        {
+          conversations,
+          conversationMembers,
+          activeConversationId,
+          onSelect: onSelectConversation,
+          users,
+          currentUser,
+          onCreateChannel,
+          onStartDm,
+          unreadCounts
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        ChatThread,
+        {
+          msgs: (chatMsgs || []).filter((m) => m.conversationId === activeConversationId),
+          setMsgs: (updater) => setChatMsgs((all2) => {
+            const mine = (all2 || []).filter((m) => m.conversationId === activeConversationId);
+            const others = (all2 || []).filter((m) => m.conversationId !== activeConversationId);
+            const next = typeof updater === "function" ? updater(mine) : updater;
+            return [...others, ...next].sort((a, b) => (a.at || "").localeCompare(b.at || ""));
+          }),
+          users,
+          jobs,
+          currentUser,
+          onOpenJob,
+          embedded: true,
+          onDeleteMsg,
+          conversationId: activeConversationId
+        }
+      )
+    ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginBottom: 12 }, children: ["All", "Sent", "Queued", "Viewed"].map((fl) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setFilter(fl), style: {
         border: `1.5px solid ${filter === fl ? T.accent : S.line}`,
         background: filter === fl ? T.accentSoft : "#fff",
@@ -29278,6 +29540,9 @@ function useDbSync(st) {
     setActivity,
     chatMsgs,
     setChatMsgs,
+    conversations,
+    setConversations,
+    setConversationMembers,
     orgPack,
     unpackOrg
   } = st;
@@ -29348,9 +29613,49 @@ function useDbSync(st) {
           acts.forEach((a) => persistedActivity.current.add(a.id));
           setActivity(acts);
         }
-        const { data: chatRows } = await db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
+        let visibleConvIds = null;
+        if (tenantId) {
+          let { data: convRows } = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
+          if (alive && (!convRows || !convRows.length)) {
+            const generalId = `general-${tenantId}`;
+            const { error: genErr } = await db.from("crm_chat_conversations").insert({
+              id: generalId,
+              tenant_id: tenantId,
+              kind: "channel",
+              name: "general",
+              topic: "Everyone at the company",
+              is_private: false,
+              created_by: null
+            });
+            if (!genErr) {
+              const again = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
+              convRows = again.data;
+            }
+          }
+          if (alive && convRows) {
+            setConversations(convRows.map((r) => ({
+              id: r.id,
+              kind: r.kind,
+              name: r.name,
+              topic: r.topic,
+              isPrivate: !!r.is_private,
+              createdBy: r.created_by,
+              createdAt: r.created_at
+            })));
+            visibleConvIds = convRows.map((r) => r.id);
+            const privateIds = convRows.filter((r) => r.is_private).map((r) => r.id);
+            if (privateIds.length) {
+              const { data: memRows } = await db.from("crm_chat_members").select("*").in("conversation_id", privateIds);
+              if (alive && memRows) {
+                setConversationMembers(memRows.map((r) => ({ conversationId: r.conversation_id, userId: r.user_id })));
+              }
+            }
+          }
+        }
+        const chatQuery = visibleConvIds ? db.from("crm_chat").select("*").in("conversation_id", visibleConvIds).order("at", { ascending: true }).limit(1e3) : db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
+        const { data: chatRows } = await chatQuery;
         if (alive && chatRows) {
-          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null }));
+          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, conversationId: r.conversation_id || null }));
           msgs.forEach((m) => persistedChat.current.add(m.id));
           setChatMsgs(msgs);
         }
@@ -29366,12 +29671,26 @@ function useDbSync(st) {
   }, [ready, tenantId]);
   (0, import_react.useEffect)(() => {
     const db = DB();
-    if (!db || !ready) return;
-    const ch = db.channel("crm-stream").on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_chat" }, (payload) => {
+    if (!db || !ready || !tenantId) return;
+    const upsertFromRow = (r) => ({
+      id: r.id,
+      at: String(r.at).slice(0, 16).replace("T", " "),
+      by: r.by_name,
+      text: r.body,
+      mentions: r.mentions || [],
+      jobId: r.job_id,
+      reactions: r.reactions || {},
+      editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null,
+      conversationId: r.conversation_id || null
+    });
+    const ch = db.channel("crm-stream").on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_chat", filter: `tenant_id=eq.${tenantId}` }, (payload) => {
       const r = payload.new;
       if (persistedChat.current.has(r.id)) return;
       persistedChat.current.add(r.id);
-      setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev : [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null }]);
+      setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev : [...prev, upsertFromRow(r)]);
+    }).on("postgres_changes", { event: "UPDATE", schema: "public", table: "crm_chat", filter: `tenant_id=eq.${tenantId}` }, (payload) => {
+      const r = payload.new;
+      setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev.map((m) => m.id === r.id ? upsertFromRow(r) : m) : prev);
     }).on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_activity" }, (payload) => {
       const r = payload.new;
       if (persistedActivity.current.has(r.id)) return;
@@ -29381,7 +29700,7 @@ function useDbSync(st) {
     return () => {
       db.removeChannel(ch);
     };
-  }, [ready]);
+  }, [ready, tenantId]);
   (0, import_react.useEffect)(() => {
     const db = DB();
     if (!db || !ready || !hydrated) return;
@@ -29488,7 +29807,8 @@ function useDbSync(st) {
       body: m.text,
       mentions: m.mentions || [],
       job_id: m.jobId || null,
-      reactions: m.reactions || {}
+      reactions: m.reactions || {},
+      conversation_id: m.conversationId || null
     }))).then(({ error }) => {
       if (error) fresh.forEach((m) => persistedChat.current.delete(m.id));
     });
@@ -29671,24 +29991,12 @@ function SupremeCRM() {
   const [docTemplates, setDocTemplates] = (0, import_react.useState)({ notes: [], terms: [], scope: [] });
   const [activity, setActivity] = (0, import_react.useState)(() => liveDb() ? [] : buildSeedActivity());
   const [chatMsgs, setChatMsgs] = (0, import_react.useState)([]);
+  const [conversations, setConversations] = (0, import_react.useState)([]);
+  const [activeConversationId, setActiveConversationId] = (0, import_react.useState)(null);
+  const [conversationMembers, setConversationMembers] = (0, import_react.useState)([]);
   const [announcements, setAnnouncements] = (0, import_react.useState)([]);
   const [calls, setCalls] = (0, import_react.useState)([]);
-  const [chatSeenCount, setChatSeenCountRaw] = (0, import_react.useState)(0);
-  (0, import_react.useEffect)(() => {
-    if (!currentUser || !currentUser.id) return;
-    try {
-      const saved = window.localStorage.getItem(`ridgeline.chatSeen.${currentUser.id}`);
-      if (saved != null) setChatSeenCountRaw(Math.max(0, parseInt(saved, 10) || 0));
-    } catch {
-    }
-  }, [currentUser && currentUser.id]);
-  const setChatSeenCount = (n) => {
-    setChatSeenCountRaw(n);
-    try {
-      if (currentUser && currentUser.id) window.localStorage.setItem(`ridgeline.chatSeen.${currentUser.id}`, String(n));
-    } catch {
-    }
-  };
+  const [unreadCounts, setUnreadCounts] = (0, import_react.useState)({});
   const [pwDone, setPwDone] = (0, import_react.useState)(false);
   const [changePwOpen, setChangePwOpen] = (0, import_react.useState)(false);
   const [apptTypes, setApptTypes] = (0, import_react.useState)([
@@ -29899,6 +30207,9 @@ function SupremeCRM() {
     setActivity,
     chatMsgs,
     setChatMsgs,
+    conversations,
+    setConversations,
+    setConversationMembers,
     orgPack,
     unpackOrg,
     orgDeps,
@@ -29906,6 +30217,46 @@ function SupremeCRM() {
     stagesRef: stages,
     usersRef: users
   });
+  const markConversationRead = (conversationId) => {
+    const db = DB();
+    if (!db || !currentUser || !conversationId) return;
+    db.from("crm_chat_members").upsert(
+      { conversation_id: conversationId, user_id: currentUser.id, last_read_at: (/* @__PURE__ */ new Date()).toISOString() },
+      { onConflict: "conversation_id,user_id" }
+    ).then(() => {
+    }, () => {
+    });
+    setUnreadCounts((prev) => ({ ...prev, [conversationId]: { unread: 0, mentions: 0 } }));
+  };
+  const selectConversation = (id) => {
+    setActiveConversationId(id);
+    markConversationRead(id);
+  };
+  (0, import_react.useEffect)(() => {
+    if (activeConversationId || !conversations.length) return;
+    const tenantId = currentUser && currentUser.tenantId;
+    const general = tenantId && conversations.find((c) => c.id === `general-${tenantId}`);
+    selectConversation((general || conversations[0]).id);
+  }, [conversations, activeConversationId]);
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db || !hydrated || !currentUser || !currentUser.tenantId) return;
+    let alive = true;
+    db.rpc("chat_unread_counts").then(({ data }) => {
+      if (!alive || !data) return;
+      const next = {};
+      data.forEach((r) => {
+        next[r.conversation_id] = { unread: Number(r.unread_count) || 0, mentions: Number(r.mention_count) || 0 };
+      });
+      setUnreadCounts(next);
+    }, () => {
+    });
+    return () => {
+      alive = false;
+    };
+  }, [hydrated, currentUser && currentUser.tenantId, chatMsgs.length]);
+  const totalUnread = Object.values(unreadCounts).reduce((s, c) => s + (c.unread || 0), 0);
+  const totalMentions = Object.values(unreadCounts).reduce((s, c) => s + (c.mentions || 0), 0);
   T.primary = brand.primary || "#28373E";
   T.accent = brand.accent || "#0A9E98";
   T.accentSoft = brand.accentSoft && brand.accentSoftCustom ? brand.accentSoft : softOf(T.accent);
@@ -29951,7 +30302,6 @@ function SupremeCRM() {
     });
   }, [currentUser && currentUser.role]);
   const meName = currentUser ? currentUser.name : "";
-  const unreadMentions = chatMsgs.slice(chatSeenCount).filter((m2) => Array.isArray(m2.mentions) && m2.mentions.includes(meName)).length;
   const prevChatLen = (0, import_react.useRef)(0);
   (0, import_react.useEffect)(() => {
     const fresh = chatMsgs.slice(prevChatLen.current);
@@ -29962,6 +30312,54 @@ function SupremeCRM() {
   const toast = (msg) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(""), 2200);
+  };
+  const startConversation = async (kind, name, topic, isPrivate, memberIds) => {
+    const db = DB();
+    if (!db || !currentUser) return null;
+    if (!isPrivate) {
+      const id2 = uid("conv");
+      const { error: error2 } = await db.from("crm_chat_conversations").insert({
+        id: id2,
+        tenant_id: currentUser.tenantId,
+        kind,
+        name: name || null,
+        topic: topic || null,
+        is_private: false,
+        created_by: currentUser.id
+      });
+      if (error2) {
+        toast("Couldn't create channel \u2014 " + error2.message);
+        return null;
+      }
+      setConversations((prev) => [...prev, { id: id2, kind, name: name || null, topic: topic || null, isPrivate: false, createdBy: currentUser.id, createdAt: (/* @__PURE__ */ new Date()).toISOString() }]);
+      return id2;
+    }
+    const { data: id, error } = await db.rpc("start_conversation", {
+      p_kind: kind,
+      p_name: name || null,
+      p_topic: topic || null,
+      p_is_private: true,
+      p_member_ids: memberIds || []
+    });
+    if (error) {
+      toast("Couldn't start \u2014 " + error.message);
+      return null;
+    }
+    setConversations((prev) => prev.some((c) => c.id === id) ? prev : [...prev, { id, kind, name: name || null, topic: topic || null, isPrivate: true, createdBy: currentUser.id, createdAt: (/* @__PURE__ */ new Date()).toISOString() }]);
+    setConversationMembers((prev) => {
+      const mine = [currentUser.id, ...memberIds || []];
+      const additions = mine.filter((uid2) => !prev.some((m) => m.conversationId === id && m.userId === uid2)).map((uid2) => ({ conversationId: id, userId: uid2 }));
+      return [...prev, ...additions];
+    });
+    return id;
+  };
+  const createChannel = async (name, topic, isPrivate) => {
+    const id = await startConversation("channel", name, topic, isPrivate, []);
+    if (id) setActiveConversationId(id);
+  };
+  const startDm = async (memberIds) => {
+    const id = await startConversation("dm", null, null, true, memberIds);
+    if (id) setActiveConversationId(id);
   };
   const gmailCbDone = (0, import_react.useRef)(false);
   (0, import_react.useEffect)(() => {
@@ -30422,6 +30820,9 @@ function SupremeCRM() {
   const userName = liveUser.name;
   const isAdmin = canEditStructure(liveUser);
   const showMoney = canSeeMoney(liveUser);
+  const readyToPayCount = jobs.filter(
+    (j) => j.subInvoice && j.subInvoice.status === "confirmed" || j.capOutNotifiedAt && j.stageId !== "s10"
+  ).length;
   const openJob = openJobId ? jobs.find((j) => j.id === openJobId) : null;
   const quickJob = quickJobId ? jobs.find((j) => j.id === quickJobId) : null;
   const openJobScreen = (id, tab = null) => {
@@ -30576,8 +30977,7 @@ function SupremeCRM() {
         setChatMsgs,
         users,
         currentUser: liveUser,
-        unreadChat: Math.max(0, chatMsgs.length - chatSeenCount),
-        onSeenChat: () => setChatSeenCount(chatMsgs.length),
+        unreadChat: totalUnread,
         onDeleteMsg: (id) => {
           const db = DB();
           if (db) db.from("crm_chat").delete().eq("id", id).then(() => {
@@ -30585,7 +30985,14 @@ function SupremeCRM() {
           });
         },
         integrations,
-        onSendQueued: sendQueuedMessage
+        onSendQueued: sendQueuedMessage,
+        conversations,
+        conversationMembers,
+        activeConversationId,
+        onSelectConversation: selectConversation,
+        onCreateChannel: createChannel,
+        onStartDm: startDm,
+        unreadCounts
       }
     ) : nav === "more" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(MoreMenu, { brand, onNav: (id) => {
       if (id === "password") return setChangePwOpen(true);
@@ -30859,7 +31266,7 @@ function SupremeCRM() {
         toast,
         brand
       }
-    ) : nav === "billing" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BillingSettings, { currentUser: liveUser, onBack: () => setNav("more"), toast }) : nav === "help" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelpDesk, { onBack: () => setNav("more"), brand }) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand, setBrand, onBack: () => setNav("more"), toast, brandErr, currentUser: liveUser }) : null }),
+    ) : nav === "billing" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BillingSettings, { currentUser: liveUser, onBack: () => setNav("more"), toast }) : nav === "help" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HelpDesk, { onBack: () => setNav("more"), brand }) : nav === "branding" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(BrandingEditor, { brand, setBrand, onBack: () => setNav("more"), toast, brandErr, currentUser: liveUser, users }) : null }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
       flexShrink: 0,
       zIndex: 50,
@@ -30875,6 +31282,7 @@ function SupremeCRM() {
           id: "home",
           icon: import_lucide_react.Home,
           label: "Home",
+          badge: isAdmin ? readyToPayCount : 0,
           active: nav === "home" && !openJob,
           onPress: (id) => {
             setNav(id);
@@ -30926,7 +31334,7 @@ function SupremeCRM() {
           id: "inbox",
           icon: import_lucide_react.MessageCircle,
           label: "Inbox",
-          badge: Math.max(0, chatMsgs.length - chatSeenCount),
+          badge: totalUnread,
           active: nav === "inbox" && !openJob,
           onPress: (id) => {
             setNav(id);
@@ -30940,7 +31348,7 @@ function SupremeCRM() {
           id: "more",
           icon: import_lucide_react.Menu,
           label: "More",
-          badge: unreadMentions,
+          badge: totalMentions,
           active: nav === "more" && !openJob,
           onPress: (id) => {
             setNav(id);

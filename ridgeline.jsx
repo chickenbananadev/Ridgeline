@@ -56,6 +56,7 @@ const DEFAULT_BRAND = {
   accent: "#0A9E98",
   accentSoft: "#E3F5F4",
   googleReviewLink: "",
+  billingContactUserId: "",
 };
 
 /* ================================================================
@@ -5003,6 +5004,13 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
   });
   const subsReview = jobs.filter((j) => j.subInvoice && j.subInvoice.status === "needs_review").length;
   const subsPay = jobs.filter((j) => j.subInvoice && ["confirmed", "submitted"].includes(j.subInvoice.status)).length;
+  /* Same live-queue count that drives the Home nav badge — a sub
+     invoice confirmed and awaiting payment, or a cap-out notified but
+     the job hasn't left the Payments/Invoicing/Cap out stage yet. */
+  const readyToPay = jobs.filter((j) =>
+    (j.subInvoice && j.subInvoice.status === "confirmed") ||
+    (j.capOutNotifiedAt && j.stageId !== "s10")
+  ).length;
 
   return (
     <div style={{ padding: "20px 16px 28px", background: S.bg, minHeight: "100%" }}>
@@ -5551,6 +5559,20 @@ function Dashboard({ jobs: allJobs, stages, onOpenJob, userName, go, onNewLead, 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {subsReview > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}><Chip tone="amber">{subsReview}</Chip> invoice{subsReview === 1 ? "" : "s"} to review</span>}
             {subsPay > 0 && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}><Chip tone="blue">{subsPay}</Chip> to pay</span>}
+          </div>
+        </Card>
+      )}
+
+      {isAdmin && readyToPay > 0 && (
+        <Card style={{ marginTop: 14 }}>
+          <CardTitle>Ready to pay</CardTitle>
+          <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 6 }}>
+            The billing contact has already been notified on these — nothing to chase, just close them out.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.ink }}>
+              <Chip tone="blue">{readyToPay}</Chip> job{readyToPay === 1 ? "" : "s"} with a confirmed sub payout or a fully paid cap-out
+            </span>
           </div>
         </Card>
       )}
@@ -8842,9 +8864,9 @@ function JobDetail({ job, stages, brand, onBack, onMoveStage, mut, toast, review
               case "messages": return <TabMessages job={job} mut={mut} toast={toast} brand={brand}
                 templates={templates} crews={crews} integrations={integrations} currentUser={currentUser} users={users} />;
               case "photos": return <TabPhotos job={job} mut={mut} toast={toast} ccToken={ccToken} />;
-              case "financials": return <TabFinancialsCombined job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} integrations={integrations} onLog={onLog} />;
+              case "financials": return <TabFinancialsCombined job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} integrations={integrations} onLog={onLog} users={users} />;
               case "workorder": return <TabWorkOrder job={job} mut={mut} toast={toast} brand={brand}
-                crews={crews} templates={templates} currentUser={currentUser} users={users} />;
+                crews={crews} templates={templates} currentUser={currentUser} users={users} integrations={integrations} />;
               case "tasks": return <TabTasks job={job} mut={mut} toast={toast} />;
               case "punchlist": return <TabPunchList job={job} mut={mut} toast={toast} currentUser={currentUser} />;
               case "files": return <TabFiles job={job} mut={mut} toast={toast} />;
@@ -18811,6 +18833,40 @@ async function deliverToCustomer(job, { prefer = "sms", subject = "", body }, in
   return deliverMessage({ to, kind, subject, body, jobId: job.id }, integrations, currentUser);
 }
 
+/* Resolves the company's designated billing contact — the one person
+   who's automatically notified when a sub payout or a job's cap-out is
+   ready to pay. Falls back to any active admin so a company that never
+   set brand.billingContactUserId still gets notified by someone,
+   instead of the notification silently going nowhere. */
+function billingContactFor(brand, users) {
+  const list = users || [];
+  const id = brand && brand.billingContactUserId;
+  const chosen = id && list.find((u) => u.id === id && u.active !== false);
+  if (chosen) return chosen;
+  return list.find((u) => u.active !== false && u.role === "admin") || null;
+}
+/* Auto-sends a payment-ready notice to the billing contact — email and
+   SMS, whichever it has on file — via deliverMessage. Unlike every
+   other message in this app, this does NOT append to job.messages as
+   "Queued"; it sends immediately, no human queue step, per an explicit
+   product decision (the whole point is nobody has to remember to
+   check). currentUser is the person who triggered the ready-event
+   (confirmed the sub invoice, logged the final payment) — their own
+   connected Gmail sends the email, same as every other send in the
+   app; the billing contact is only ever the recipient. */
+async function deliverToBillingContact(job, { subject, body }, integrations, users, brand, currentUser) {
+  const contact = billingContactFor(brand, users);
+  if (!contact) return { contact: null, sent: [] };
+  const sent = [];
+  if (contact.email) {
+    sent.push(await deliverMessage({ to: contact.email, kind: "email", subject, body, jobId: job.id }, integrations, currentUser));
+  }
+  if (contact.phone) {
+    sent.push(await deliverMessage({ to: contact.phone, kind: "sms", subject, body, jobId: job.id }, integrations, currentUser));
+  }
+  return { contact, sent };
+}
+
 /* ================================================================
    MESSAGES — send email or SMS to the customer or crew from the job,
    with the thread kept on the job record.
@@ -19485,7 +19541,7 @@ function FinBucket({ title, lines, total, onEdit, onDelete, onAdd }) {
    each sub-tab is still the exact same component as before (nothing
    about TabFinancials/TabPayments/TabInvoice changed), just reached
    through one door instead of three. */
-function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, integrations = {}, onLog = () => {} }) {
+function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, integrations = {}, onLog = () => {}, users }) {
   const [sub, setSub] = useState("costs");
   const SUBS = [["costs", "Costs & profit"], ["payments", "Payments"], ["invoice", "Invoice"]];
   return (
@@ -19501,7 +19557,7 @@ function TabFinancialsCombined({ job, mut, toast, isAdmin, currentUser, brand, i
         ))}
       </div>
       {sub === "costs" && <TabFinancials job={job} mut={mut} toast={toast} isAdmin={isAdmin} currentUser={currentUser} brand={brand} />}
-      {sub === "payments" && <TabPayments job={job} mut={mut} toast={toast} onLog={onLog} />}
+      {sub === "payments" && <TabPayments job={job} mut={mut} toast={toast} onLog={onLog} currentUser={currentUser} brand={brand} integrations={integrations} users={users} />}
       {sub === "invoice" && <TabInvoice job={job} brand={brand} mut={mut} toast={toast} currentUser={currentUser} integrations={integrations} />}
     </>
   );
@@ -19798,18 +19854,37 @@ function TabFinancials({ job, mut, toast, isAdmin, currentUser, brand = DEFAULT_
 }
 
 /* ---------- Payments ---------- */
-function TabPayments({ job, mut, toast, onLog = () => {} }) {
+function TabPayments({ job, mut, toast, onLog = () => {}, currentUser, brand, integrations, users }) {
   const [editPay, setEditPay] = useState(null);
   const [ef2, setEf2] = useState(null);
   const checkRef = useRef(null);
   const openPayEdit = (p2) => { setEditPay(p2.id); setEf2({ ...p2 }); };
+  /* Auto-notifies the billing contact the instant a job's balance
+     crosses fully paid — no queue, immediate send, mirroring the
+     sub-payout trigger in SubInvoiceCard.confirmInv(). capOutNotifiedAt
+     guards against re-firing on every payment edit once already
+     notified; if a later edit/refund pushes the balance back above
+     zero, it's cleared so a genuine re-completion notifies again. */
+  const notifyCapOutIfReady = async (nextPayments) => {
+    const ready = paymentsSummary({ ...job, payments: nextPayments }).balance <= 0.01;
+    if (ready && !job.capOutNotifiedAt) {
+      const cap = computeCapOut(job);
+      const subject = `Cap-out ready — ${job.name}`;
+      const body = `${job.name} (${job.address}) is fully paid and ready to cap out. Commission ${money(cap.commission)}, payout ${money(cap.payout)}.`;
+      const out = await deliverToBillingContact(job, { subject, body }, integrations, users, brand, currentUser);
+      if (out.contact) mut((j) => ({ ...j, capOutNotifiedAt: new Date().toISOString() }));
+    } else if (!ready && job.capOutNotifiedAt) {
+      mut((j) => ({ ...j, capOutNotifiedAt: null }));
+    }
+  };
   /* The edit sheet tells the user "every edit is written to the activity
      feed with the old values, so the record stays honest". It wasn't — both
      of these only mutated and toasted, so a logged deposit could be silently
      zeroed. Now the claim is true. */
-  const savePayEdit = () => {
+  const savePayEdit = async () => {
     const before = (job.payments || []).find((x) => x.id === editPay);
-    mut((j) => ({ ...j, payments: j.payments.map((x) => (x.id === editPay ? { ...x, ...ef2, amt: num(ef2.amt) } : x)) }));
+    const nextPayments = job.payments.map((x) => (x.id === editPay ? { ...x, ...ef2, amt: num(ef2.amt) } : x));
+    mut((j) => ({ ...j, payments: nextPayments }));
     if (before) {
       const changes = [];
       if (num(before.amt) !== num(ef2.amt)) changes.push(`amount ${money(num(before.amt))} → ${money(num(ef2.amt))}`);
@@ -19820,15 +19895,18 @@ function TabPayments({ job, mut, toast, onLog = () => {} }) {
         text: changes.length ? `edited a payment — ${changes.join("; ")}` : "edited a payment (no values changed)" });
     }
     setEditPay(null); toast("Payment updated");
+    await notifyCapOutIfReady(nextPayments);
   };
-  const deletePay = () => {
+  const deletePay = async () => {
     const before = (job.payments || []).find((x) => x.id === editPay);
-    mut((j) => ({ ...j, payments: j.payments.filter((x) => x.id !== editPay) }));
+    const nextPayments = job.payments.filter((x) => x.id !== editPay);
+    mut((j) => ({ ...j, payments: nextPayments }));
     if (before) {
       onLog({ kind: "payment", jobId: job.id, jobName: job.name,
         text: `removed a ${money(num(before.amt))} payment${before.date ? ` dated ${before.date}` : ""}${before.method ? ` (${before.method})` : ""}` });
     }
     setEditPay(null); toast("Payment removed");
+    await notifyCapOutIfReady(nextPayments);
   };
   const attachCheck = (e) => {
     const file = e.target.files && e.target.files[0];
@@ -19865,10 +19943,12 @@ function TabPayments({ job, mut, toast, onLog = () => {} }) {
           onChange={(e) => setForm({ ...form, label: e.target.value })} /></Field>
         <Field label="Amount"><MoneyInput style={inputStyle} value={form.amt}
           onChange={(v) => setForm({ ...form, amt: v })} /></Field>
-        <Btn style={{ width: "100%" }} disabled={!form.label.trim() || !num(form.amt)} onClick={() => {
-          mut((j) => ({ ...j, payments: [...j.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp(), dateIso: todayIso() }] }));
+        <Btn style={{ width: "100%" }} disabled={!form.label.trim() || !num(form.amt)} onClick={async () => {
+          const nextPayments = [...job.payments, { id: uid("pay"), type: form.type, label: form.label, amt: num(form.amt), date: nowStamp(), dateIso: todayIso() }];
+          mut((j) => ({ ...j, payments: nextPayments }));
           setForm({ type: "Received", label: "", amt: "" });
           toast("Payment logged");
+          await notifyCapOutIfReady(nextPayments);
         }}><Plus size={15} /> Log payment</Btn>
       </Card>
       <Card style={{ marginTop: 12 }}>
@@ -20166,7 +20246,7 @@ function TabInvoice({ job, brand, mut, toast, currentUser = null, integrations =
 /* Editable subcontractor invoice for a job. Seeds computable lines, lets the
    office add the rest from the sub's priced menu, capture reimbursables at
    actual cost, and post the total to job costs. Office-only. */
-function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
+function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand, integrations, users }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuQ, setMenuQ] = useState("");
   const inv = job.subInvoice || null;
@@ -20184,9 +20264,21 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
     mut((j) => ({ ...j, fin: { ...(j.fin || {}), labor: [...(((j.fin || {}).labor) || []), { id: uid("l"), label: `Sub labor — ${crew.name} (invoice)`, amt: Math.round(subInvoiceTotal(j.subInvoice) * 100) / 100, by: crew.name }] } }));
     toast("Posted to job costs");
   };
-  const confirmInv = () => {
-    setInv({ status: "confirmed", confirmedBy: (currentUser || {}).name || "", confirmedAt: todayIso(), dueDate: dueFromTerms(inv.terms) });
+  const confirmInv = async () => {
+    const dueDate = dueFromTerms(inv.terms);
+    setInv({ status: "confirmed", confirmedBy: (currentUser || {}).name || "", confirmedAt: todayIso(), dueDate });
     toast(docAlerts.length ? `Confirmed — heads up: ${crew.name} has ${docAlerts.length} expired/expiring doc(s)` : "Sub invoice confirmed");
+    /* Auto-notify the billing contact the moment a sub payout is ready
+       — no queue, immediate send, per an explicit product decision (the
+       whole point is nobody has to remember to check). notifiedAt
+       guards against firing twice for the same invoice. */
+    if (!inv.notifiedAt) {
+      const amt = subInvoiceTotal(inv);
+      const subject = `Sub payout ready — ${crew.name} — ${job.name}`;
+      const body = `${crew.name}'s sub invoice for ${job.name} (${job.address}) is confirmed and ready to pay — ${money(amt)}. Terms ${inv.terms || "—"}, due ${dueDate || "—"}.`;
+      const out = await deliverToBillingContact(job, { subject, body }, integrations, users, brand, currentUser);
+      if (out.contact) setInv({ notifiedAt: new Date().toISOString() });
+    }
   };
   const submitInv = () => {
     const acct = (brand && brand.accountingEmail) || "";
@@ -20327,7 +20419,7 @@ function SubInvoiceCard({ job, crew, mut, toast, currentUser, brand }) {
   );
 }
 
-function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, users }) {
+function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, users, integrations }) {
   const [picking, setPicking] = useState(false);
   const [sending, setSending] = useState(false);
   const [notes, setNotes] = useState(job.workOrder ? job.workOrder.notes : "");
@@ -20415,7 +20507,7 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
           card and this job's installed squares + conditions. Never shown on
           the crew-facing document below. */}
       {crew && canSeeMoney(currentUser) && (
-        <SubInvoiceCard job={job} crew={crew} mut={mut} toast={toast} currentUser={currentUser} brand={brand} />
+        <SubInvoiceCard job={job} crew={crew} mut={mut} toast={toast} currentUser={currentUser} brand={brand} integrations={integrations} users={users} />
       )}
 
       <Card style={{ marginTop: 12 }}>
@@ -23451,7 +23543,54 @@ function EmojiPicker({ onPick, onClose }) {
   );
 }
 
-function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg }) {
+/* Shared avatar color/initials helpers — used by PersonPicker and
+   TeamChat's own message-author avatars, so the palette literal lives
+   in exactly one place instead of being copy-pasted per component. */
+const AV_COLORS = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
+const avatarColorOf = (n) => AV_COLORS[Math.abs(String(n || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV_COLORS.length];
+const avatarInitials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
+
+/* Reusable "pick a person" surface, extracted from what was previously
+   TeamChat's inline @mention Sheet. Single-select mode (multi=false,
+   the default) calls onPick once and expects the caller to close the
+   sheet — exactly how the mention flow always worked. Multi-select
+   mode (multi=true) toggles a checkmark per row via onPick and leaves
+   closing/confirming to the caller's own footer, so a "Start a DM"
+   flow can show a running "Start (N)" button without this component
+   needing to know anything about conversations. */
+function PersonPicker({ open, onClose, title = "Choose people", users, excludeName, multi = false, selectedIds = [], onPick, footer = null }) {
+  const colorOf = avatarColorOf, initials = avatarInitials;
+  const list = (users || []).filter((u) => u && u.name && u.active !== false && u.name !== excludeName);
+  return (
+    <Sheet open={open} onClose={onClose} title={title}>
+      {list.map((u, i2) => {
+        const picked = multi && selectedIds.includes(u.id);
+        return (
+          <button key={u.id} onClick={() => onPick(u)} style={{
+            width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer",
+            padding: "12px 4px", borderTop: i2 ? `1px solid ${S.line}` : "none", display: "flex", gap: 10, alignItems: "center",
+          }}>
+            <span style={{
+              width: 30, height: 30, borderRadius: 8, background: colorOf(u.name), color: "#fff",
+              display: "grid", placeItems: "center", fontSize: 11, fontWeight: 800,
+            }}>{initials(u.name)}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 14.5, fontWeight: 700, color: S.ink }}>{u.name}</span>
+              <span style={{ fontSize: 12, color: S.sub }}>{u.title}</span>
+            </span>
+            {multi && (picked
+              ? <CheckCircle2 size={19} color={T.accent} />
+              : <Circle size={19} color={S.line} />)}
+          </button>
+        );
+      })}
+      {list.length === 0 && <div style={{ padding: "16px 4px", fontSize: 13.5, color: S.sub }}>No one else to choose from.</div>}
+      {footer}
+    </Sheet>
+  );
+}
+
+function ChatThread({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, embedded = false, onDeleteMsg, conversationId = null }) {
   const [txt, setTxt] = useState("");
   const [mentionOpen, setMentionOpen] = useState(false);
   const [tagOpen, setTagOpen] = useState(false);
@@ -23479,7 +23618,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
     const mentions = (users || []).filter((u) => u && u.name && t.includes(`@${u.name}`)).map((u) => u.name);
     setMsgs([...(msgs || []), {
       id: uid("cm"), by: me, at: new Date().toISOString().slice(0, 16).replace("T", " "),
-      text: t, mentions, jobId: tagged || null, reactions: {},
+      text: t, mentions, jobId: tagged || null, reactions: {}, conversationId,
     }]);
     setTxt(""); setTagged(null); setMentionOpen(false); setEmojiOpen(false);
   };
@@ -23533,9 +23672,7 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
       : <span key={i2}>{part}</span>);
 
   const jobOf = (id) => (jobs || []).find((j) => j.id === id);
-  const initials = (n) => String(n || "?").trim().split(/\s+/).map((x) => x[0] || "").join("").slice(0, 2).toUpperCase() || "?";
-  const AV_COLORS = ["#1B6DE0", "#177245", "#92600A", "#7C3AED", "#B42318", "#0E7490"];
-  const colorOf = (n) => AV_COLORS[Math.abs(String(n || "").split("").reduce((a2, ch) => a2 + ch.charCodeAt(0), 0)) % AV_COLORS.length];
+  const initials = avatarInitials, colorOf = avatarColorOf;
 
   return (
     <div style={embedded ? { paddingBottom: 170 } : { padding: "16px 16px 190px", background: S.bg, minHeight: "100vh" }}>
@@ -23780,23 +23917,9 @@ function TeamChat({ msgs, setMsgs, users, jobs, currentUser, onOpenJob, onBack, 
         )}
       </Sheet>
 
-      <Sheet open={mentionOpen} onClose={() => setMentionOpen(false)} title="Mention someone">
-        {(users || []).filter((u) => u && u.name && u.active !== false && u.name !== me).map((u, i2) => (
-          <button key={u.id} onClick={() => { insert(`@${u.name}`); setMentionOpen(false); }} style={{
-            width: "100%", textAlign: "left", border: "none", background: "none", cursor: "pointer",
-            padding: "12px 4px", borderTop: i2 ? `1px solid ${S.line}` : "none", display: "flex", gap: 10, alignItems: "center",
-          }}>
-            <span style={{
-              width: 30, height: 30, borderRadius: 8, background: colorOf(u.name), color: "#fff",
-              display: "grid", placeItems: "center", fontSize: 11, fontWeight: 800,
-            }}>{initials(u.name)}</span>
-            <span>
-              <span style={{ display: "block", fontSize: 14.5, fontWeight: 700, color: S.ink }}>{u.name}</span>
-              <span style={{ fontSize: 12, color: S.sub }}>{u.title}</span>
-            </span>
-          </button>
-        ))}
-      </Sheet>
+      <PersonPicker open={mentionOpen} onClose={() => setMentionOpen(false)} title="Mention someone"
+        users={users} excludeName={me}
+        onPick={(u) => { insert(`@${u.name}`); setMentionOpen(false); }} />
 
       <Sheet open={tagOpen} onClose={() => setTagOpen(false)} title="Tag a job">
         {jobs.filter((j) => !DEAD_STAGES.includes(j.stageId)).map((j, i2) => (
@@ -24008,7 +24131,7 @@ function AgreementBranding({ brand, setBrand, toast }) {
   );
 }
 
-function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", currentUser = null }) {
+function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", currentUser = null, users = [] }) {
   const set = (k) => (e) => setBrand({ ...brand, [k]: e.target.value });
   const logoRef = useRef(null);
   const onLogo = (e) => {
@@ -24114,6 +24237,14 @@ function BrandingEditor({ brand, setBrand, onBack, toast, brandErr = "", current
         <Field label="Email"><input style={inputStyle} value={brand.email} onChange={set("email")} /></Field>
         <Field label="Accounting email" hint="Where sub-invoice payment notices are sent when a sub invoice is submitted.">
           <input style={inputStyle} type="email" value={brand.accountingEmail || ""} onChange={set("accountingEmail")} placeholder="accounting@yourcompany.com" />
+        </Field>
+        <Field label="Billing contact" hint="Notified automatically — email and text — the moment a sub payout is confirmed or a job's cap-out is fully paid. Defaults to any admin if left unset.">
+          <select style={inputStyle} value={brand.billingContactUserId || ""} onChange={set("billingContactUserId")}>
+            <option value="">No one selected — falls back to an admin</option>
+            {users.filter((u) => u.active !== false).map((u) => (
+              <option key={u.id} value={u.id}>{u.name}{u.role ? ` — ${ROLES.find((r) => r.id === u.role)?.label || u.role}` : ""}</option>
+            ))}
+          </select>
         </Field>
         <Field label="Head office address">
           <AddressAutocomplete value={brand.address} placeholder="Start typing the address…"
@@ -24859,12 +24990,13 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   };
   const paidFor = (crewId) => {
     const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 86400000;
+    const crewName = (crews.find((c) => c.id === crewId) || {}).name || "";
     return jobs.filter((j) => j.crewId === crewId).reduce((sum, j) => {
-      const lines = (j.financials && j.financials.costLines) || [];
-      return sum + lines
-        .filter((l) => /labor|crew|install|sub/i.test(l.label || ""))
-        .filter((l) => !l.at || new Date(l.at).getTime() >= cutoff)
-        .reduce((t, l) => t + num(l.amt), 0);
+      const payouts = (j.payments || [])
+        .filter((p) => p.type !== "Received" && String(p.to || "").toLowerCase().includes(crewName.toLowerCase()));
+      return sum + payouts
+        .filter((p) => !p.at || new Date(p.at).getTime() >= cutoff)
+        .reduce((t, p) => t + num(p.amt), 0);
     }, 0);
   };
   /* A new crew gets its real id immediately, not at save — a document
@@ -24893,7 +25025,7 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
             </select>
           </div>
           <div style={{ fontSize: 12, color: S.sub, marginTop: 7, lineHeight: 1.5 }}>
-            Totals come from labor and subcontractor lines on each crew's jobs in the Financials tab.
+            Totals come from payments logged against each crew's jobs — sub invoices marked paid, or any manual payout naming the crew.
           </div>
         </Card>
       )}
@@ -26761,7 +26893,7 @@ function CrewPayouts({ jobs, crews, onBack, onOpenJob, isAdmin }) {
             Confirmed sub invoices awaiting payment. Mark paid on the job's work order.
           </div>
           {payQueue.map((r) => (
-            <button key={r.job.id} onClick={() => onOpenJob && onOpenJob(r.job.id)} style={{
+            <button key={r.job.id} onClick={() => onOpenJob && onOpenJob(r.job.id, "workorder")} style={{
               display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left",
               border: "none", borderTop: `1px solid ${S.line}`, background: "none", cursor: "pointer", padding: "11px 2px", fontFamily: "inherit",
             }}>
@@ -27645,14 +27777,111 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
   );
 }
 
-function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onSeenChat, onDeleteMsg, onSendQueued, integrations = {} }) {
+/* The channel/DM switcher above ChatThread — a horizontal strip of
+   pills (channels first, then DMs by the other participant's name),
+   plus "+ Channel" and "+ Direct message" actions. DMs resolve their
+   display name from conversationMembers + users rather than storing
+   one, since a DM's "name" is just whoever else is in it. */
+function ConversationList({ conversations, conversationMembers, activeConversationId, onSelect, users, currentUser, onCreateChannel, onStartDm, unreadCounts = {} }) {
+  const [creating, setCreating] = useState(null); // null | "channel" | "dm"
+  const [name, setName] = useState("");
+  const [topic, setTopic] = useState("");
+  const [makePrivate, setMakePrivate] = useState(false);
+  const [dmPicked, setDmPicked] = useState([]);
+  const [busy, setBusy] = useState(false);
+
+  const me = currentUser && currentUser.id;
+  const channels = (conversations || []).filter((c) => c.kind === "channel").sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  const dms = (conversations || []).filter((c) => c.kind === "dm");
+
+  const dmLabel = (c) => {
+    const otherIds = (conversationMembers || []).filter((m) => m.conversationId === c.id && m.userId !== me).map((m) => m.userId);
+    const names = otherIds.map((id) => { const u = (users || []).find((x) => x.id === id); return u ? u.name : "Someone"; });
+    return names.length ? names.join(", ") : "Direct message";
+  };
+
+  const closeCreate = () => { setCreating(null); setName(""); setTopic(""); setMakePrivate(false); setDmPicked([]); };
+
+  const submitChannel = async () => {
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    try { await onCreateChannel(name.trim(), topic.trim(), makePrivate); closeCreate(); }
+    finally { setBusy(false); }
+  };
+  const submitDm = async () => {
+    if (!dmPicked.length || busy) return;
+    setBusy(true);
+    try { await onStartDm(dmPicked.map((u) => u.id)); closeCreate(); }
+    finally { setBusy(false); }
+  };
+
+  const pillStyle = (active) => ({
+    flexShrink: 0, border: `1.5px solid ${active ? T.accent : S.line}`,
+    background: active ? T.accentSoft : "#fff", color: active ? T.accent : S.ink,
+    borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap",
+  });
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <Btn kind="ghost" small onClick={() => setCreating("channel")}><Plus size={13} /> Channel</Btn>
+        <Btn kind="ghost" small onClick={() => setCreating("dm")}><Plus size={13} /> Direct message</Btn>
+      </div>
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+        {channels.map((c) => {
+          const unread = (unreadCounts[c.id] || {}).unread || 0;
+          return (
+            <button key={c.id} onClick={() => onSelect(c.id)} style={pillStyle(c.id === activeConversationId)}>
+              # {c.name}{c.isPrivate ? " 🔒" : ""}{unread > 0 && c.id !== activeConversationId ? ` · ${unread}` : ""}
+            </button>
+          );
+        })}
+        {dms.map((c) => {
+          const unread = (unreadCounts[c.id] || {}).unread || 0;
+          return (
+            <button key={c.id} onClick={() => onSelect(c.id)} style={pillStyle(c.id === activeConversationId)}>
+              {dmLabel(c)}{unread > 0 && c.id !== activeConversationId ? ` · ${unread}` : ""}
+            </button>
+          );
+        })}
+      </div>
+
+      <Sheet open={creating === "channel"} onClose={closeCreate} title="Create a channel"
+        footer={<Btn style={{ width: "100%" }} disabled={!name.trim() || busy} onClick={submitChannel}>{busy ? "Creating…" : "Create channel"}</Btn>}>
+        <Field label="Name"><input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder="dispatch" /></Field>
+        <Field label="Topic (optional)"><input style={inputStyle} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="What's this channel for?" /></Field>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0" }}>
+          <span style={{ fontSize: 14 }}>Make private — only people you add can see it</span>
+          <button onClick={() => setMakePrivate(!makePrivate)} style={{
+            width: 46, height: 27, borderRadius: 99, border: "none", cursor: "pointer",
+            background: makePrivate ? T.accent : "#D6D9DE", position: "relative", flexShrink: 0,
+          }}>
+            <span style={{ position: "absolute", top: 3, left: makePrivate ? 22 : 3, width: 21, height: 21, borderRadius: 99, background: "#fff", transition: "left .15s" }} />
+          </button>
+        </div>
+      </Sheet>
+
+      <PersonPicker open={creating === "dm"} onClose={closeCreate} title="Start a direct message"
+        users={users} excludeName={currentUser && currentUser.name} multi
+        selectedIds={dmPicked.map((u) => u.id)}
+        onPick={(u) => setDmPicked((prev) => (prev.some((x) => x.id === u.id) ? prev.filter((x) => x.id !== u.id) : [...prev, u]))}
+        footer={<Btn style={{ width: "100%", marginTop: 8 }} disabled={!dmPicked.length || busy} onClick={submitDm}>{busy ? "Starting…" : `Start (${dmPicked.length})`}</Btn>} />
+    </div>
+  );
+}
+
+function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, currentUser, unreadChat = 0, onDeleteMsg, onSendQueued, integrations = {},
+  conversations = [], conversationMembers = [], activeConversationId = null, onSelectConversation = () => {}, onCreateChannel = () => {}, onStartDm = () => {}, unreadCounts = {} }) {
   /* Team chat and customer messages are both messages, so they live
      under one Inbox rather than two destinations. Team opens first —
-     it is the one with unread counts attached to the nav badge. */
+     it is the one with unread counts attached to the nav badge.
+     Marking a conversation "seen" is now per-conversation (real
+     last_read_at on the server, via onSelectConversation), not a
+     blanket "the whole flat chat feed is read" the instant this pane
+     is open — see build 119. */
   const [pane, setPane] = useState("team");
   const [filter, setFilter] = useState("All");
   const [sendingId, setSendingId] = useState(null);
-  useEffect(() => { if (pane === "team" && onSeenChat) onSeenChat(); }, [pane, chatMsgs && chatMsgs.length]); // eslint-disable-line
   const all = jobs.flatMap((j) => (j.messages || []).map((msg) => ({ job: j, msg })))
     .sort((x, y2) => (y2.msg.at || "").localeCompare(x.msg.at || ""));
   const list = all.filter(({ msg }) => {
@@ -27685,8 +27914,22 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
       </div>
 
       {pane === "team" ? (
-        <TeamChat msgs={chatMsgs} setMsgs={setChatMsgs} users={users} jobs={jobs}
-          currentUser={currentUser} onOpenJob={onOpenJob} embedded onDeleteMsg={onDeleteMsg} />
+        <>
+          <ConversationList conversations={conversations} conversationMembers={conversationMembers}
+            activeConversationId={activeConversationId} onSelect={onSelectConversation}
+            users={users} currentUser={currentUser}
+            onCreateChannel={onCreateChannel} onStartDm={onStartDm} unreadCounts={unreadCounts} />
+          <ChatThread
+            msgs={(chatMsgs || []).filter((m) => m.conversationId === activeConversationId)}
+            setMsgs={(updater) => setChatMsgs((all) => {
+              const mine = (all || []).filter((m) => m.conversationId === activeConversationId);
+              const others = (all || []).filter((m) => m.conversationId !== activeConversationId);
+              const next = typeof updater === "function" ? updater(mine) : updater;
+              return [...others, ...next].sort((a, b) => (a.at || "").localeCompare(b.at || ""));
+            })}
+            users={users} jobs={jobs} currentUser={currentUser} onOpenJob={onOpenJob}
+            embedded onDeleteMsg={onDeleteMsg} conversationId={activeConversationId} />
+        </>
       ) : (
       <>
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
@@ -27870,6 +28113,7 @@ function useDbSync(st) {
     ready, isMoneyBlocked, userName, tenantId,
     jobs, setJobs, appointments, setAppointments,
     activity, setActivity, chatMsgs, setChatMsgs,
+    conversations, setConversations, setConversationMembers,
     orgPack, unpackOrg,
   } = st;
   const [hydrated, setHydrated] = useState(!liveDb());
@@ -27968,9 +28212,63 @@ function useDbSync(st) {
           setActivity(acts);
         }
 
-        const { data: chatRows } = await db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
+        /* Conversations (channels + DMs) this seat can see — RLS on
+           crm_chat_conversations already limits this to open channels
+           plus any private channel/DM the seat is a member of. A
+           brand-new tenant with no migrated history has zero rows
+           here (migration 031's backfill only ran for tenants that
+           already had crm_chat rows), so bootstrap #general the same
+           way the migration itself does — same id convention
+           (general-<tenantId>) — so both paths converge on one
+           channel instead of a tenant ever ending up with none. */
+        /* Which conversation ids this seat can actually see — carried
+           out of the tenant block below so the chat fetch can scope to
+           it. Left null (meaning "no scoping available yet") for a
+           tenant-less session rather than an empty array, so that rare
+           path still falls back to the old unscoped fetch below instead
+           of silently loading zero messages. */
+        let visibleConvIds = null;
+        if (tenantId) {
+          let { data: convRows } = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
+          if (alive && (!convRows || !convRows.length)) {
+            const generalId = `general-${tenantId}`;
+            const { error: genErr } = await db.from("crm_chat_conversations").insert({
+              id: generalId, tenant_id: tenantId, kind: "channel", name: "general",
+              topic: "Everyone at the company", is_private: false, created_by: null,
+            });
+            if (!genErr) {
+              const again = await db.from("crm_chat_conversations").select("*").is("archived_at", null);
+              convRows = again.data;
+            }
+          }
+          if (alive && convRows) {
+            setConversations(convRows.map((r) => ({
+              id: r.id, kind: r.kind, name: r.name, topic: r.topic,
+              isPrivate: !!r.is_private, createdBy: r.created_by, createdAt: r.created_at,
+            })));
+            visibleConvIds = convRows.map((r) => r.id);
+            const privateIds = convRows.filter((r) => r.is_private).map((r) => r.id);
+            if (privateIds.length) {
+              const { data: memRows } = await db.from("crm_chat_members").select("*").in("conversation_id", privateIds);
+              if (alive && memRows) {
+                setConversationMembers(memRows.map((r) => ({ conversationId: r.conversation_id, userId: r.user_id })));
+              }
+            }
+          }
+        }
+
+        /* Scoped to the conversations this seat can actually see,
+           instead of the last 300 rows company-wide regardless of
+           channel — a busy #general no longer risks crowding a
+           quieter DM's history out of the cap. Falls back to the old
+           unscoped fetch only for the rare tenant-less session, where
+           there's no conversation list to scope by yet. */
+        const chatQuery = visibleConvIds
+          ? db.from("crm_chat").select("*").in("conversation_id", visibleConvIds).order("at", { ascending: true }).limit(1000)
+          : db.from("crm_chat").select("*").order("at", { ascending: true }).limit(300);
+        const { data: chatRows } = await chatQuery;
         if (alive && chatRows) {
-          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null }));
+          const msgs = chatRows.map((r) => ({ id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null, conversationId: r.conversation_id || null }));
           msgs.forEach((m) => persistedChat.current.add(m.id));
           setChatMsgs(msgs);
         }
@@ -27984,17 +28282,35 @@ function useDbSync(st) {
     return () => { alive = false; };
   }, [ready, tenantId]);
 
-  /* ---------- realtime: chat + activity from other devices ---------- */
+  /* ---------- realtime: chat + activity from other devices ----------
+     The crm_chat leg is scoped to this tenant (filter below) instead
+     of subscribing to every tenant's INSERTs unfiltered — the actual
+     privacy boundary is still chat_read's RLS (Supabase filters
+     postgres_changes payloads by the subscriber's own SELECT policy,
+     the same mechanism that already made the old unfiltered channel
+     safe), so this is bandwidth hygiene, not a new security fix. It
+     now also subscribes UPDATE, which the old channel never did — a
+     teammate's reaction, edit, or delete on a message already loaded
+     used to never appear live; only a full reload picked it up. */
   useEffect(() => {
     const db = DB();
-    if (!db || !ready) return;
+    if (!db || !ready || !tenantId) return;
+    const upsertFromRow = (r) => ({
+      id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body,
+      mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {},
+      editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null,
+      conversationId: r.conversation_id || null,
+    });
     const ch = db.channel("crm-stream")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_chat" }, (payload) => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_chat", filter: `tenant_id=eq.${tenantId}` }, (payload) => {
         const r = payload.new;
         if (persistedChat.current.has(r.id)) return;
         persistedChat.current.add(r.id);
-        setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev :
-          [...prev, { id: r.id, at: String(r.at).slice(0, 16).replace("T", " "), by: r.by_name, text: r.body, mentions: r.mentions || [], jobId: r.job_id, reactions: r.reactions || {}, editedAt: r.edited_at ? String(r.edited_at).slice(0, 16).replace("T", " ") : null }]);
+        setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev : [...prev, upsertFromRow(r)]);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "crm_chat", filter: `tenant_id=eq.${tenantId}` }, (payload) => {
+        const r = payload.new;
+        setChatMsgs((prev) => prev.some((m) => m.id === r.id) ? prev.map((m) => (m.id === r.id ? upsertFromRow(r) : m)) : prev);
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_activity" }, (payload) => {
         const r = payload.new;
@@ -28005,7 +28321,7 @@ function useDbSync(st) {
       })
       .subscribe();
     return () => { db.removeChannel(ch); };
-  }, [ready]);
+  }, [ready, tenantId]);
 
   /* ---------- jobs: diff-watch, debounced batch upsert ---------- */
   useEffect(() => {
@@ -28107,7 +28423,7 @@ function useDbSync(st) {
     fresh.forEach((m) => persistedChat.current.add(m.id));
     db.from("crm_chat").insert(fresh.map((m) => ({
       id: m.id, by_name: m.by, body: m.text, mentions: m.mentions || [], job_id: m.jobId || null,
-      reactions: m.reactions || {},
+      reactions: m.reactions || {}, conversation_id: m.conversationId || null,
     }))).then(({ error }) => { if (error) fresh.forEach((m) => persistedChat.current.delete(m.id)); });
   }, [chatMsgs, ready, hydrated]);
 
@@ -28323,29 +28639,31 @@ export default function SupremeCRM() {
   const [docTemplates, setDocTemplates] = useState({ notes: [], terms: [], scope: [] });
   const [activity, setActivity] = useState(() => (liveDb() ? [] : buildSeedActivity()));
   const [chatMsgs, setChatMsgs] = useState([]);
+  /* Every channel/DM the signed-in seat can see — open channels
+     company-wide, plus any private channel/DM they're a member of
+     (crm_chat_conversations RLS already does that filtering). Starts
+     empty and is populated by useDbSync's hydrate; activeConversationId
+     defaults to the tenant's #general once conversations load. */
+  const [conversations, setConversations] = useState([]);
+  const [activeConversationId, setActiveConversationId] = useState(null);
+  /* Membership rows for this seat's PRIVATE conversations only (DMs and
+     any locked-down channel) — just enough to resolve "who's on this
+     DM" into real names for ConversationList. Open channels need no
+     membership row to read/post, so there's nothing useful to fetch
+     for them here. */
+  const [conversationMembers, setConversationMembers] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [calls, setCalls] = useState([]);
-  /* How many of `chatMsgs` this seat has already seen — drives both the
-     Inbox badge and the @mention badge under More. This used to live in
-     plain useState(0), which meant it forgot everything on every reload:
-     a phone backgrounding Safari, a PWA relaunch, even just refreshing
-     the tab put it back to zero and every message you'd already read
-     counted as unread again. Persisted per-user in localStorage so it
-     survives a reload; still resets to 0 for a genuinely new seat. */
-  const [chatSeenCount, setChatSeenCountRaw] = useState(0);
-  useEffect(() => {
-    if (!currentUser || !currentUser.id) return;
-    try {
-      const saved = window.localStorage.getItem(`ridgeline.chatSeen.${currentUser.id}`);
-      if (saved != null) setChatSeenCountRaw(Math.max(0, parseInt(saved, 10) || 0));
-    } catch { /* private browsing blocks storage; falls back to in-memory only */ }
-  }, [currentUser && currentUser.id]); // eslint-disable-line
-  const setChatSeenCount = (n) => {
-    setChatSeenCountRaw(n);
-    try {
-      if (currentUser && currentUser.id) window.localStorage.setItem(`ridgeline.chatSeen.${currentUser.id}`, String(n));
-    } catch { /* private browsing; not fatal */ }
-  };
+  /* Real per-conversation unread/mention counts from chat_unread_counts()
+     — { [conversationId]: { unread, mentions } }. Replaces the old
+     chatSeenCount scheme (a single numeric index into one flat array,
+     persisted per-user in localStorage): that scheme had no notion of
+     "N conversations, each with its own read state" and couldn't
+     survive this feature at all. Source of truth is now the server
+     (crm_chat_members.last_read_at), which as a side effect also
+     follows a seat across devices — the old localStorage-only scheme
+     never did. */
+  const [unreadCounts, setUnreadCounts] = useState({});
   const [pwDone, setPwDone] = useState(false);
   const [changePwOpen, setChangePwOpen] = useState(false);
   const [apptTypes, setApptTypes] = useState([
@@ -28528,9 +28846,56 @@ export default function SupremeCRM() {
     userName: syncUserName, tenantId: currentUser && currentUser.tenantId,
     jobs, setJobs, appointments, setAppointments,
     activity, setActivity, chatMsgs, setChatMsgs,
+    conversations, setConversations, setConversationMembers,
     orgPack, unpackOrg, orgDeps,
     brandRef: brand, stagesRef: stages, usersRef: users,
   });
+
+  /* Marks one conversation read — upserts this seat's own
+     crm_chat_members row (creating it for an open channel they've
+     never explicitly "joined" before, updating it for one they're
+     already in) and optimistically zeroes the badge locally so it
+     doesn't wait on a round trip. */
+  const markConversationRead = (conversationId) => {
+    const db = DB();
+    if (!db || !currentUser || !conversationId) return;
+    db.from("crm_chat_members").upsert(
+      { conversation_id: conversationId, user_id: currentUser.id, last_read_at: new Date().toISOString() },
+      { onConflict: "conversation_id,user_id" }
+    ).then(() => {}, () => {});
+    setUnreadCounts((prev) => ({ ...prev, [conversationId]: { unread: 0, mentions: 0 } }));
+  };
+  const selectConversation = (id) => { setActiveConversationId(id); markConversationRead(id); };
+
+  /* Land on #general (or whatever conversation loaded first) the
+     moment the conversation list is known, so Team chat never opens
+     to an empty picker with nothing selected. */
+  useEffect(() => {
+    if (activeConversationId || !conversations.length) return;
+    const tenantId = currentUser && currentUser.tenantId;
+    const general = tenantId && conversations.find((c) => c.id === `general-${tenantId}`);
+    selectConversation((general || conversations[0]).id);
+  }, [conversations, activeConversationId]); // eslint-disable-line
+
+  /* Real unread/mention counts, per conversation, from the server —
+     refetched whenever the chat feed changes (a new message anywhere
+     changes some conversation's count) or once conversations are
+     first known. */
+  useEffect(() => {
+    const db = DB();
+    if (!db || !hydrated || !currentUser || !currentUser.tenantId) return;
+    let alive = true;
+    db.rpc("chat_unread_counts").then(({ data }) => {
+      if (!alive || !data) return;
+      const next = {};
+      data.forEach((r) => { next[r.conversation_id] = { unread: Number(r.unread_count) || 0, mentions: Number(r.mention_count) || 0 }; });
+      setUnreadCounts(next);
+    }, () => {});
+    return () => { alive = false; };
+  }, [hydrated, currentUser && currentUser.tenantId, chatMsgs.length]); // eslint-disable-line
+
+  const totalUnread = Object.values(unreadCounts).reduce((s, c) => s + (c.unread || 0), 0);
+  const totalMentions = Object.values(unreadCounts).reduce((s, c) => s + (c.mentions || 0), 0);
 
   /* Copy brand colors into the live theme before anything renders. */
   T.primary = brand.primary || "#28373E";
@@ -28593,9 +28958,6 @@ export default function SupremeCRM() {
      down — reaching forward to it threw a temporal-dead-zone error the
      instant the chat list was non-empty, blanking the screen on send. */
   const meName = currentUser ? currentUser.name : "";
-  const unreadMentions = chatMsgs
-    .slice(chatSeenCount)
-    .filter((m2) => Array.isArray(m2.mentions) && m2.mentions.includes(meName)).length;
   const prevChatLen = useRef(0);
   useEffect(() => {
     const fresh = chatMsgs.slice(prevChatLen.current);
@@ -28606,6 +28968,48 @@ export default function SupremeCRM() {
   }, [chatMsgs]);
 
   const toast = (msg) => { setToastMsg(msg); setTimeout(() => setToastMsg(""), 2200); };
+
+  /* Creates a channel or DM and returns its new id, or null on failure.
+     Open channels (the default) are a plain insert — conv_insert's RLS
+     already restricts that path to non-private rows. Private channels
+     and every DM must go through start_conversation() instead, since
+     writing OTHER people's membership rows can't be done through a
+     per-row insert policy (see migration 031). */
+  const startConversation = async (kind, name, topic, isPrivate, memberIds) => {
+    const db = DB();
+    if (!db || !currentUser) return null;
+    if (!isPrivate) {
+      const id = uid("conv");
+      const { error } = await db.from("crm_chat_conversations").insert({
+        id, tenant_id: currentUser.tenantId, kind, name: name || null, topic: topic || null,
+        is_private: false, created_by: currentUser.id,
+      });
+      if (error) { toast("Couldn't create channel — " + error.message); return null; }
+      setConversations((prev) => [...prev, { id, kind, name: name || null, topic: topic || null, isPrivate: false, createdBy: currentUser.id, createdAt: new Date().toISOString() }]);
+      return id;
+    }
+    const { data: id, error } = await db.rpc("start_conversation", {
+      p_kind: kind, p_name: name || null, p_topic: topic || null, p_is_private: true, p_member_ids: memberIds || [],
+    });
+    if (error) { toast("Couldn't start — " + error.message); return null; }
+    setConversations((prev) => (prev.some((c) => c.id === id) ? prev : [...prev, { id, kind, name: name || null, topic: topic || null, isPrivate: true, createdBy: currentUser.id, createdAt: new Date().toISOString() }]));
+    setConversationMembers((prev) => {
+      const mine = [currentUser.id, ...(memberIds || [])];
+      const additions = mine
+        .filter((uid2) => !prev.some((m) => m.conversationId === id && m.userId === uid2))
+        .map((uid2) => ({ conversationId: id, userId: uid2 }));
+      return [...prev, ...additions];
+    });
+    return id;
+  };
+  const createChannel = async (name, topic, isPrivate) => {
+    const id = await startConversation("channel", name, topic, isPrivate, []);
+    if (id) setActiveConversationId(id);
+  };
+  const startDm = async (memberIds) => {
+    const id = await startConversation("dm", null, null, true, memberIds);
+    if (id) setActiveConversationId(id);
+  };
 
   /* Finish the Gmail OAuth handshake when Google redirects back with
      ?state=gmail&code=... — exchange the code, mark the seat connected, and
@@ -29065,6 +29469,16 @@ export default function SupremeCRM() {
   const userName = liveUser.name;
   const isAdmin = canEditStructure(liveUser);
   const showMoney = canSeeMoney(liveUser);
+  /* Live queue depth for the billing contact's "ready to pay" work —
+     a sub invoice confirmed and awaiting payment, or a job whose
+     cap-out was notified but hasn't left the Payments/Invoicing/Cap
+     out stage yet. Mirrors the existing Subcontractors card's counts
+     (a live count, not a "seen" tracker — there's no persisted
+     paid/processed status to track against). */
+  const readyToPayCount = jobs.filter((j) =>
+    (j.subInvoice && j.subInvoice.status === "confirmed") ||
+    (j.capOutNotifiedAt && j.stageId !== "s10")
+  ).length;
 
   const openJob = openJobId ? jobs.find((j) => j.id === openJobId) : null;
   const quickJob = quickJobId ? jobs.find((j) => j.id === quickJobId) : null;
@@ -29158,8 +29572,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "inbox" ? (
         <Inbox jobs={jobs} onOpenJob={openJobScreen} onCompose={() => setInboxPick(true)}
           chatMsgs={chatMsgs} setChatMsgs={setChatMsgs} users={users} currentUser={liveUser}
-          unreadChat={Math.max(0, chatMsgs.length - chatSeenCount)}
-          onSeenChat={() => setChatSeenCount(chatMsgs.length)}
+          unreadChat={totalUnread}
           onDeleteMsg={(id) => {
             /* Remove the row for real. Failure is non-fatal: the message
                is already gone locally and will not come back unless a
@@ -29168,7 +29581,10 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
             if (db) db.from("crm_chat").delete().eq("id", id).then(() => {}, () => {});
           }}
           integrations={integrations}
-          onSendQueued={sendQueuedMessage} />
+          onSendQueued={sendQueuedMessage}
+          conversations={conversations} conversationMembers={conversationMembers}
+          activeConversationId={activeConversationId} onSelectConversation={selectConversation}
+          onCreateChannel={createChannel} onStartDm={startDm} unreadCounts={unreadCounts} />
       ) : nav === "more" ? (
         <MoreMenu brand={brand} onNav={(id) => {
           if (id === "password") return setChangePwOpen(true);
@@ -29278,7 +29694,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "help" ? (
         <HelpDesk onBack={() => setNav("more")} brand={brand} />
       ) : nav === "branding" ? (
-        <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} brandErr={brandErr} currentUser={liveUser} />
+        <BrandingEditor brand={brand} setBrand={setBrand} onBack={() => setNav("more")} toast={toast} brandErr={brandErr} currentUser={liveUser} users={users} />
       ) : null}
       </div>
 
@@ -29298,7 +29714,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         background: S.card, borderTop: `1px solid ${S.line}`,
         display: "flex", alignItems: "stretch", paddingBottom: "env(safe-area-inset-bottom)",
       }}>
-        <NavBtn id="home" icon={Home} label="Home" active={nav === "home" && !openJob}
+        <NavBtn id="home" icon={Home} label="Home" badge={isAdmin ? readyToPayCount : 0} active={nav === "home" && !openJob}
           onPress={(id) => { setNav(id); setOpenJobId(null); }} />
         <NavBtn id="jobs" icon={Briefcase} label="Jobs" active={nav === "jobs" && !openJob}
           onPress={(id) => { setNav(id); setOpenJobId(null); }} />
@@ -29312,9 +29728,9 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           }}><Plus size={16} /></span>
           <span style={{ fontSize: 10.5, fontWeight: 700, color: T.accent }}>Add</span>
         </button>
-        <NavBtn id="inbox" icon={MessageCircle} label="Inbox" badge={Math.max(0, chatMsgs.length - chatSeenCount)}
+        <NavBtn id="inbox" icon={MessageCircle} label="Inbox" badge={totalUnread}
           active={nav === "inbox" && !openJob} onPress={(id) => { setNav(id); setOpenJobId(null); }} />
-        <NavBtn id="more" icon={Menu} label="More" badge={unreadMentions}
+        <NavBtn id="more" icon={Menu} label="More" badge={totalMentions}
           active={nav === "more" && !openJob} onPress={(id) => { setNav(id); setOpenJobId(null); }} />
       </div>
 

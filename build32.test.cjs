@@ -48,9 +48,21 @@ function check(name, cond) {
    touching another tenant's data. */
 check("brand read never hard-blocks on tenantId",
   /if \(!tenantId\) \{ finish\(\); return \(\) => \{ alive = false; \}; \}/.test(src));
+/* Build 118 added a per-conversation realtime effect that legitimately
+   skips subscribing when there's no tenant yet (nothing to subscribe
+   to) using this same literal guard text — that's an unrelated,
+   non-hang-risk early return (it only skips setting up a realtime
+   channel, never blocks setHydrated/rendering), not a regression of
+   the org-hydrate bug this test guards against. Scope the check to
+   the actual hydrate-once-per-login effect's own body instead of the
+   whole file, so a legitimate new use of the same guard text
+   elsewhere doesn't false-positive here. */
+const hydrateEffectStart = src.indexOf("/* ---------- hydrate once per login ---------- */");
+const hydrateEffectEnd = src.indexOf("/* ---------- realtime: chat + activity from other devices");
+const hydrateEffectSrc = src.slice(hydrateEffectStart, hydrateEffectEnd);
 check("org hydrate never hard-blocks on tenantId",
-  !/if \(!db \|\| !ready \|\| !tenantId\) return;/.test(src)
-  && /: \{ data: null, error: null \};/.test(src));
+  !/if \(!db \|\| !ready \|\| !tenantId\) return;/.test(hydrateEffectSrc)
+  && /: \{ data: null, error: null \};/.test(hydrateEffectSrc));
 check("no crm_brand read or write targets the shared legacy id=1 row",
   !/db\.from\("crm_brand"\)\.select\("data"\)\.eq\("id", 1\)\.maybeSingle\(\)/.test(src)
   && !/db\.from\("crm_brand"\)\.upsert\(\{ id: 1,/.test(src));
