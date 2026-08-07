@@ -11351,7 +11351,10 @@ function PortalThread({ token, meRole, meName, accent }) {
      rather than relying on RLS to filter an open-ended table read. */
   const load = () => {
     const db = DB(); if (!db || !token) return;
-    if (meRole === "customer") {
+    /* Every non-staff reader (customer OR crew, migration 035) is an
+       anonymous visitor with only a token — they read through the
+       token-argument RPC, never a direct table select. */
+    if (meRole !== "team") {
       db.rpc("portal_get_messages", { p_token: token }).then(({ data }) => { if (data) setMsgs(data); });
       return;
     }
@@ -11363,7 +11366,7 @@ function PortalThread({ token, meRole, meName, accent }) {
      call fails harmlessly and the thread still works. */
   const markRead = () => {
     const db = DB(); if (!db || !token) return;
-    if (meRole === "customer") {
+    if (meRole !== "team") {
       db.rpc("portal_mark_customer_read", { p_token: token }).then(() => {}, () => {});
       return;
     }
@@ -11920,6 +11923,55 @@ function buildPortalSnapshot(job, brand, token, users = []) {
   };
 }
 
+/* Crew (subcontractor) portal snapshot — the same frozen-jsonb pattern
+   as the customer snapshot above, scoped to exactly what the owner
+   decided a sub should see: the work order, the punch list, and the
+   thread. NO financial field of any kind is ever placed in this
+   object — privacy here is by construction (the data simply isn't in
+   the payload), not by hiding. Work orders already carry the "pricing
+   intentionally omitted" convention; this inherits it. */
+function buildCrewPortalSnapshot(job, brand, token, crew) {
+  const m = job.measurements || {};
+  const wo = job.workOrder || {};
+  return {
+    token, job_id: job.id, audience: "crew",
+    data: {
+      audience: "crew",
+      company: brand.company, logo: brand.logo || null, primary: brand.primary,
+      phone: brand.phone, email: brand.email,
+      jobId: job.id, name: job.name, address: job.address,
+      schedDate: job.schedDate || null,
+      crewName: crew ? crew.name : null,
+      workOrder: {
+        number: wo.number || "", po: wo.po || "",
+        notes: wo.notes || "", status: wo.status || "Draft",
+      },
+      measurements: {
+        squares: m.squares || "", pitch: m.pitch || "", layers: m.layers || "",
+        stories: m.stories || "", ridges: m.ridges || "", hips: m.hips || "",
+        valleys: m.valleys || "", eaves: m.eaves || "", rakes: m.rakes || "",
+        penetrations: m.penetrations || "",
+      },
+      materials: (generateRoofingMaterials(m) || []).map((x) => ({ item: x.item, qty: x.qty, unit: x.unit })),
+      punch: (job.punch || []).map((p) => ({
+        id: p.id, label: p.label, note: p.note || "", done: !!p.done,
+        due: p.due || null, doneAt: p.doneAt || null, doneBy: p.doneBy || null,
+        /* Inline (data-URL) punch photos are megabytes — only pass
+           through storage-hosted urls; an inline one just drops. */
+        photo: p.photo && p.photo.url && /^https?:/.test(p.photo.url) ? { url: p.photo.url } : null,
+      })),
+      /* The crew's OWN uploads accumulate here via crew_portal_add_photo
+         (migration 035); the office's photo album is not exposed. Only
+         the latest dozen ride in the snapshot — inline data-URLs are
+         a few hundred KB each and this row re-uploads on every job
+         save. */
+      photos: ((job.photos || []).filter((ph) => ph.source === "crew-portal").slice(-12).map((ph) => ({
+        id: ph.id, label: ph.label || "", at: ph.at || "", url: /^https?:|^data:/.test(ph.url || "") ? ph.url : null,
+      }))),
+      updatedAt: new Date().toISOString(),
+    },
+  };
+}
 
 /* Homeowner-facing contact block. Changes are proposed, never applied:
    the row lands in crm_portal_requests as a contact_update and the
@@ -12683,6 +12735,160 @@ function PortalEnRoute({ er, accent }) {
   );
 }
 
+/* The subcontractor's job page — rendered off the same portal_get_data()
+   read as the customer portal, branched by the snapshot's audience
+   (migration 035). No login: the token IS the identity, one link per
+   job. Everything a sub needs on a roof — work order, measurements,
+   materials, punch list — and both directions of write-parity the
+   owner asked for: check items off, upload photos, message the office.
+   No dollar figure exists anywhere in this snapshot by construction. */
+function PublicCrewPortal({ d, token }) {
+  const prim = d.primary || "#28373E";
+  const [punch, setPunch] = useState(d.punch || []);
+  const [photos, setPhotos] = useState(d.photos || []);
+  const [punchErr, setPunchErr] = useState("");
+  const [photoErr, setPhotoErr] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
+  const wo = d.workOrder || {};
+  const m = d.measurements || {};
+  const open = punch.filter((p) => !p.done);
+  const fixed = punch.filter((p) => p.done);
+
+  const togglePunch = async (p) => {
+    const db = DB(); if (!db) { setPunchErr("No connection — try again in a moment."); return; }
+    const next = !p.done;
+    setPunchErr("");
+    /* Optimistic, with an honest revert — a portal write that fails
+       must never keep looking done (the lesson of 018/033/034). */
+    setPunch((prev) => prev.map((x) => x.id === p.id ? { ...x, done: next, doneBy: next ? (d.crewName || "Crew") : null } : x));
+    const { data: ok, error } = await db.rpc("crew_portal_update_punch", {
+      p_token: token, p_item_id: p.id, p_done: next, p_by: d.crewName || "Crew",
+    });
+    if (error || ok === false) {
+      setPunch((prev) => prev.map((x) => x.id === p.id ? { ...x, done: p.done, doneBy: p.doneBy || null } : x));
+      setPunchErr("That didn't save — check your connection and try again.");
+    }
+  };
+
+  const onPhoto = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    const db = DB(); if (!db) { setPhotoErr("No connection — try again in a moment."); return; }
+    setUploading(true); setPhotoErr("");
+    try {
+      const small = await downscaleImageFile(file, 1280, 0.78);
+      const dataUrl = await readAsDataUrl(small);
+      const { data: id, error } = await db.rpc("crew_portal_add_photo", {
+        p_token: token, p_label: "Job site", p_data_url: dataUrl, p_by: d.crewName || "Crew",
+      });
+      if (error || !id) throw new Error((error && error.message) || "Upload refused");
+      setPhotos((prev) => [...prev, { id, label: "Job site", at: "just now", url: dataUrl }]);
+    } catch (ex) {
+      setPhotoErr((ex && ex.message) || "Couldn't upload that photo.");
+    }
+    setUploading(false);
+  };
+
+  const mRows = [["Squares", m.squares], ["Pitch", m.pitch], ["Layers", m.layers], ["Stories", m.stories],
+    ["Ridges", m.ridges && `${m.ridges} LF`], ["Hips", m.hips && `${m.hips} LF`], ["Valleys", m.valleys && `${m.valleys} LF`],
+    ["Eaves", m.eaves && `${m.eaves} LF`], ["Rakes", m.rakes && `${m.rakes} LF`], ["Penetrations", m.penetrations]]
+    .filter(([, v]) => v);
+
+  return (
+    <div style={{ minHeight: "100vh", background: S.bg, fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif" }}>
+      <input ref={fileRef} type="file" accept="image/*" onChange={onPhoto} style={{ display: "none" }} />
+      <div style={{ background: prim, color: "#fff", padding: "22px 18px 26px" }}>
+        {d.logo
+          ? <img src={d.logo} alt="" style={{ height: 44, objectFit: "contain", marginBottom: 10, display: "block" }} />
+          : <div style={{ fontSize: 13, opacity: 0.8 }}>{d.company}</div>}
+        <div style={{ fontSize: 21, fontWeight: 800, marginTop: 4 }}>Work order{wo.number ? ` ${wo.number}` : ""}</div>
+        <div style={{ fontSize: 13.5, opacity: 0.85, marginTop: 3 }}>{d.address}</div>
+        {d.crewName && <div style={{ fontSize: 12.5, opacity: 0.75, marginTop: 2 }}>For {d.crewName}</div>}
+      </div>
+      <div style={{ padding: "16px 16px 60px" }}>
+        <Card>
+          <CardTitle right={d.schedDate ? <Chip tone="blue">Scheduled {d.schedDate}</Chip> : null}>Job details</CardTitle>
+          {wo.po && <KV k="PO number" v={wo.po} />}
+          {mRows.map(([k, v]) => <KV key={k} k={k} v={String(v)} />)}
+          {wo.notes && (
+            <div style={{ background: S.soft, borderRadius: 9, padding: "10px 12px", marginTop: 10, fontSize: 13.5, lineHeight: 1.55, whiteSpace: "pre-wrap", color: S.ink }}>
+              {wo.notes}
+            </div>
+          )}
+          {(d.materials || []).length > 0 && (
+            <>
+              <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub, marginTop: 14 }}>MATERIALS</div>
+              {(d.materials || []).map((x, i2) => (
+                <div key={i2} style={{ display: "flex", justifyContent: "space-between", gap: 10, borderTop: i2 ? `1px solid ${S.line}` : "none", padding: "7px 0", fontSize: 13.5 }}>
+                  <span style={{ color: S.ink }}>{x.item}</span>
+                  <span style={{ color: S.sub, whiteSpace: "nowrap" }}>{x.qty} {x.unit}</span>
+                </div>
+              ))}
+            </>
+          )}
+        </Card>
+
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={<Chip tone={open.length ? "amber" : "green"}>{open.length ? `${open.length} open` : "Clear"}</Chip>}>Punch list</CardTitle>
+          <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5 }}>
+            Tap an item when it's fixed — the office sees it immediately.
+          </div>
+          {punch.length === 0 && <div style={{ fontSize: 13.5, color: S.sub, padding: "10px 0" }}>Nothing on the list.</div>}
+          {[...open, ...fixed].map((p) => (
+            <button key={p.id} data-testid="crew-punch-item" onClick={() => togglePunch(p)} style={{
+              display: "flex", gap: 10, alignItems: "flex-start", width: "100%", textAlign: "left",
+              border: "none", borderTop: `1px solid ${S.line}`, background: "none", cursor: "pointer", padding: "11px 2px", fontFamily: "inherit",
+            }}>
+              {p.done ? <CheckCircle2 size={19} color="#177245" style={{ flexShrink: 0, marginTop: 1 }} /> : <Circle size={19} color={S.line} style={{ flexShrink: 0, marginTop: 1 }} />}
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 14, fontWeight: 650, color: S.ink, textDecoration: p.done ? "line-through" : "none", opacity: p.done ? 0.6 : 1 }}>{p.label}</span>
+                {p.note && <span style={{ display: "block", fontSize: 12.5, color: S.sub, marginTop: 2 }}>{p.note}</span>}
+                {p.due && !p.done && <span style={{ display: "block", fontSize: 11.5, color: "#9A6B00", marginTop: 2 }}>Needed by {p.due}</span>}
+                {p.done && p.doneBy && <span style={{ display: "block", fontSize: 11.5, color: S.sub, marginTop: 2 }}>Fixed by {p.doneBy}{p.doneAt ? ` · ${p.doneAt}` : ""}</span>}
+              </span>
+              {p.photo && p.photo.url && <img src={p.photo.url} alt="" style={{ width: 44, height: 44, objectFit: "cover", borderRadius: 7, flexShrink: 0 }} />}
+            </button>
+          ))}
+          {punchErr && <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 8 }}>{punchErr}</div>}
+        </Card>
+
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle>Job photos</CardTitle>
+          <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
+            Photos you take here go straight to the office's album for this job.
+          </div>
+          {photos.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+              {photos.map((ph) => ph.url && (
+                <div key={ph.id}>
+                  <img src={ph.url} alt="" style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8 }} />
+                  <div style={{ fontSize: 10.5, color: S.sub, marginTop: 2 }}>{ph.at}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {photoErr && <div style={{ fontSize: 12.5, color: "#B42318", marginBottom: 8 }}>{photoErr}</div>}
+          <Btn style={{ width: "100%" }} disabled={uploading} onClick={() => fileRef.current && fileRef.current.click()}>
+            <Camera size={15} /> {uploading ? "Uploading…" : "Add a photo"}
+          </Btn>
+        </Card>
+
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle>Message the office</CardTitle>
+          <PortalThread token={token} meRole="crew" meName={d.crewName || "Crew"} accent={prim} />
+        </Card>
+
+        <div style={{ textAlign: "center", fontSize: 12.5, color: S.sub, marginTop: 18, lineHeight: 1.6 }}>
+          Questions on scope? Call the office at <b>{d.phone}</b>.
+          <div style={{ marginTop: 2 }}>{d.company}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PublicPortal({ token }) {
   const [state, setState] = useState({ loading: true, data: null, err: "", hint: "" });
   const [estSel, setEstSel] = useState(null);
@@ -12731,6 +12937,10 @@ function PublicPortal({ token }) {
     );
   }
   const d = state.data;
+  /* One ?portal= entry point, two audiences (migration 035): the
+     snapshot itself says who it was built for. A crew token renders
+     the subcontractor surface; everything below stays the homeowner's. */
+  if (d.audience === "crew") return <PublicCrewPortal d={d} token={token} />;
   const prim = d.primary || "#28373E";
   return (
     <div style={{ minHeight: "100vh", background: S.bg, fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif" }}>
@@ -20460,6 +20670,34 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
     setPicking(false);
     toast(`${c.name} assigned`);
   };
+  /* Same publish/copy/revoke shape as TabPortal's customer link —
+     including the demo-mode branch and the tenant-stamping trigger
+     doing its work on the upsert. */
+  const publishCrewPortal = async () => {
+    const db = DB();
+    const tok = job.crewPortalToken || (uid("cw") + Math.random().toString(36).slice(2, 10));
+    const url = `${window.location.origin}/?portal=${tok}`;
+    if (!db) {
+      mut((j) => ({ ...j, crewPortalToken: tok }));
+      const copied = navigator.clipboard ? await navigator.clipboard.writeText(url).then(() => true, () => false) : false;
+      toast(copied ? "Crew link copied — it goes live once the app is connected to the database" : "Crew link created — it goes live once connected");
+      return;
+    }
+    const row = buildCrewPortalSnapshot(job, brand, tok, crew);
+    const { error } = await db.from("crm_portal").upsert({ ...row, revoked: false });
+    if (error) { toast("Couldn't create the crew portal: " + (error.message || "unknown error")); return; }
+    mut((j) => ({ ...j, crewPortalToken: tok }));
+    if (navigator.clipboard) await navigator.clipboard.writeText(url).catch(() => {});
+    toast(`Crew link copied — send it to ${crew.name}`);
+  };
+  const revokeCrewPortal = async () => {
+    const db = DB();
+    try {
+      if (db && job.crewPortalToken) await db.from("crm_portal").update({ revoked: true }).eq("token", job.crewPortalToken);
+      mut((j) => ({ ...j, crewPortalToken: null }));
+      toast("Crew link disabled — it no longer opens");
+    } catch (e) { toast("Couldn't disable that link"); }
+  };
   const openSend = () => {
     const ctx = templateContext(job, brand, crew, users);
     const t = templates.find((x) => x.kind === "email" && x.audience === "Crew");
@@ -20523,6 +20761,34 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
           </>
         )}
       </Card>
+
+      {/* The sub's own live link for this job — work order, punch list,
+          photo uploads and a thread to the office, no login and no seat
+          (migration 035). Same token machinery as the client portal;
+          the snapshot never contains a dollar figure by construction. */}
+      {crew && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={job.crewPortalToken ? <Chip tone="green">Live</Chip> : <Chip tone="gray">Off</Chip>}>Crew portal</CardTitle>
+          <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+            {job.crewPortalToken
+              ? <>One link for {crew.name} on this job: the work order, the punch list (they can check items off), photo uploads straight to this job's album, and a message thread to the office. No prices anywhere on it.</>
+              : <>Give {crew.name} a link to this job — work order, punch list check-off, photo uploads, and a thread to the office. No login, no seat, and never any pricing.</>}
+          </div>
+          {job.crewPortalToken && (
+            <div style={{ background: S.soft, borderRadius: 9, padding: "9px 12px", marginTop: 10, fontSize: 12, color: S.ink, wordBreak: "break-all" }}>
+              {`${window.location.origin}/?portal=${job.crewPortalToken}`}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <Btn small style={{ flex: 2 }} onClick={publishCrewPortal}>
+              <Share2 size={13} /> {job.crewPortalToken ? "Update & copy link" : "Create crew link"}
+            </Btn>
+            {job.crewPortalToken && (
+              <Btn kind="ghost" small style={{ flex: 1 }} onClick={revokeCrewPortal}>Disable</Btn>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Office-only: the sub's pay, figured live from their uploaded rate
           card and this job's installed squares + conditions. Never shown on
@@ -28517,6 +28783,18 @@ function useDbSync(st) {
             }));
             await db.from("crm_portal").upsert(snaps);
           }
+          /* Crew portals re-snapshot the same way (migration 035): a new
+             punch item, a work-order note, or a schedule change written
+             by the office is live on the sub's link at their next load. */
+          const crewPublished = changed.filter((j) => j.crewPortalToken);
+          if (crewPublished.length && st.brandRef) {
+            const crewSnaps = crewPublished.map((j) => ({
+              ...buildCrewPortalSnapshot(j, st.brandRef, j.crewPortalToken,
+                ((st.crewsRef || []).find((c) => c.id === j.crewId) || null)),
+              revoked: false,
+            }));
+            await db.from("crm_portal").upsert(crewSnaps);
+          }
           if (!isMoneyBlocked) {
             const finRows = changed.map((j) => ({ job_id: j.id, data: { financials: j.fin, payments: j.payments }, updated_at: new Date().toISOString() }));
             await db.from("crm_financials").upsert(finRows);
@@ -29030,7 +29308,7 @@ export default function SupremeCRM() {
     activity, setActivity, chatMsgs, setChatMsgs,
     conversations, setConversations, setConversationMembers,
     orgPack, unpackOrg, orgDeps,
-    brandRef: brand, stagesRef: stages, usersRef: users,
+    brandRef: brand, stagesRef: stages, usersRef: users, crewsRef: crews,
   });
 
   /* Marks one conversation read — upserts this seat's own
@@ -29107,7 +29385,11 @@ export default function SupremeCRM() {
        indefinitely after the job was gone, with nothing in the UI able to
        stop it. Revoking is the same call the Revoke link button makes. */
     const db = DB();
-    const tokens = jobs.filter((j) => ids.includes(j.id)).map((j) => j.portalToken).filter(Boolean);
+    /* Both audiences: the customer link AND the crew link (035) die
+       with the job — a sub's link serving a deleted job's snapshot is
+       the same stale-portal leak already closed for homeowners. */
+    const tokens = jobs.filter((j) => ids.includes(j.id))
+      .flatMap((j) => [j.portalToken, j.crewPortalToken]).filter(Boolean);
     if (db && tokens.length) {
       db.from("crm_portal").update({ revoked: true }).in("token", tokens)
         .then(() => {}, () => setSyncErr("Deleted the job but couldn't revoke its customer portal link — revoke it from the job before deleting, or contact support."));

@@ -12271,7 +12271,7 @@ function PortalThread({ token, meRole, meName, accent }) {
   const load = () => {
     const db = DB();
     if (!db || !token) return;
-    if (meRole === "customer") {
+    if (meRole !== "team") {
       db.rpc("portal_get_messages", { p_token: token }).then(({ data }) => {
         if (data) setMsgs(data);
       });
@@ -12284,7 +12284,7 @@ function PortalThread({ token, meRole, meName, accent }) {
   const markRead = () => {
     const db = DB();
     if (!db || !token) return;
-    if (meRole === "customer") {
+    if (meRole !== "team") {
       db.rpc("portal_mark_customer_read", { p_token: token }).then(() => {
       }, () => {
       });
@@ -12846,6 +12846,71 @@ function buildPortalSnapshot(job, brand, token, users = []) {
         submitted: !!(job.review || {}).rating
       } : null,
       schedDate: job.schedDate || null,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    }
+  };
+}
+function buildCrewPortalSnapshot(job, brand, token, crew) {
+  const m = job.measurements || {};
+  const wo = job.workOrder || {};
+  return {
+    token,
+    job_id: job.id,
+    audience: "crew",
+    data: {
+      audience: "crew",
+      company: brand.company,
+      logo: brand.logo || null,
+      primary: brand.primary,
+      phone: brand.phone,
+      email: brand.email,
+      jobId: job.id,
+      name: job.name,
+      address: job.address,
+      schedDate: job.schedDate || null,
+      crewName: crew ? crew.name : null,
+      workOrder: {
+        number: wo.number || "",
+        po: wo.po || "",
+        notes: wo.notes || "",
+        status: wo.status || "Draft"
+      },
+      measurements: {
+        squares: m.squares || "",
+        pitch: m.pitch || "",
+        layers: m.layers || "",
+        stories: m.stories || "",
+        ridges: m.ridges || "",
+        hips: m.hips || "",
+        valleys: m.valleys || "",
+        eaves: m.eaves || "",
+        rakes: m.rakes || "",
+        penetrations: m.penetrations || ""
+      },
+      materials: (generateRoofingMaterials(m) || []).map((x) => ({ item: x.item, qty: x.qty, unit: x.unit })),
+      punch: (job.punch || []).map((p) => ({
+        id: p.id,
+        label: p.label,
+        note: p.note || "",
+        done: !!p.done,
+        due: p.due || null,
+        doneAt: p.doneAt || null,
+        doneBy: p.doneBy || null,
+        /* Inline (data-URL) punch photos are megabytes — only pass
+           through storage-hosted urls; an inline one just drops. */
+        photo: p.photo && p.photo.url && /^https?:/.test(p.photo.url) ? { url: p.photo.url } : null
+      })),
+      /* The crew's OWN uploads accumulate here via crew_portal_add_photo
+         (migration 035); the office's photo album is not exposed. Only
+         the latest dozen ride in the snapshot — inline data-URLs are
+         a few hundred KB each and this row re-uploads on every job
+         save. */
+      photos: (job.photos || []).filter((ph) => ph.source === "crew-portal").slice(-12).map((ph) => ({
+        id: ph.id,
+        label: ph.label || "",
+        at: ph.at || "",
+        url: /^https?:|^data:/.test(ph.url || "") ? ph.url : null
+      })),
       updatedAt: (/* @__PURE__ */ new Date()).toISOString()
     }
   };
@@ -13574,6 +13639,174 @@ function PortalEnRoute({ er, accent }) {
     ] })
   ] });
 }
+function PublicCrewPortal({ d, token }) {
+  const prim = d.primary || "#28373E";
+  const [punch, setPunch] = (0, import_react.useState)(d.punch || []);
+  const [photos, setPhotos] = (0, import_react.useState)(d.photos || []);
+  const [punchErr, setPunchErr] = (0, import_react.useState)("");
+  const [photoErr, setPhotoErr] = (0, import_react.useState)("");
+  const [uploading, setUploading] = (0, import_react.useState)(false);
+  const fileRef = (0, import_react.useRef)(null);
+  const wo = d.workOrder || {};
+  const m = d.measurements || {};
+  const open = punch.filter((p) => !p.done);
+  const fixed = punch.filter((p) => p.done);
+  const togglePunch = async (p) => {
+    const db = DB();
+    if (!db) {
+      setPunchErr("No connection \u2014 try again in a moment.");
+      return;
+    }
+    const next = !p.done;
+    setPunchErr("");
+    setPunch((prev) => prev.map((x) => x.id === p.id ? { ...x, done: next, doneBy: next ? d.crewName || "Crew" : null } : x));
+    const { data: ok, error } = await db.rpc("crew_portal_update_punch", {
+      p_token: token,
+      p_item_id: p.id,
+      p_done: next,
+      p_by: d.crewName || "Crew"
+    });
+    if (error || ok === false) {
+      setPunch((prev) => prev.map((x) => x.id === p.id ? { ...x, done: p.done, doneBy: p.doneBy || null } : x));
+      setPunchErr("That didn't save \u2014 check your connection and try again.");
+    }
+  };
+  const onPhoto = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    const db = DB();
+    if (!db) {
+      setPhotoErr("No connection \u2014 try again in a moment.");
+      return;
+    }
+    setUploading(true);
+    setPhotoErr("");
+    try {
+      const small = await downscaleImageFile(file, 1280, 0.78);
+      const dataUrl = await readAsDataUrl(small);
+      const { data: id, error } = await db.rpc("crew_portal_add_photo", {
+        p_token: token,
+        p_label: "Job site",
+        p_data_url: dataUrl,
+        p_by: d.crewName || "Crew"
+      });
+      if (error || !id) throw new Error(error && error.message || "Upload refused");
+      setPhotos((prev) => [...prev, { id, label: "Job site", at: "just now", url: dataUrl }]);
+    } catch (ex) {
+      setPhotoErr(ex && ex.message || "Couldn't upload that photo.");
+    }
+    setUploading(false);
+  };
+  const mRows = [
+    ["Squares", m.squares],
+    ["Pitch", m.pitch],
+    ["Layers", m.layers],
+    ["Stories", m.stories],
+    ["Ridges", m.ridges && `${m.ridges} LF`],
+    ["Hips", m.hips && `${m.hips} LF`],
+    ["Valleys", m.valleys && `${m.valleys} LF`],
+    ["Eaves", m.eaves && `${m.eaves} LF`],
+    ["Rakes", m.rakes && `${m.rakes} LF`],
+    ["Penetrations", m.penetrations]
+  ].filter(([, v]) => v);
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minHeight: "100vh", background: S.bg, fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { ref: fileRef, type: "file", accept: "image/*", onChange: onPhoto, style: { display: "none" } }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: prim, color: "#fff", padding: "22px 18px 26px" }, children: [
+      d.logo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: d.logo, alt: "", style: { height: 44, objectFit: "contain", marginBottom: 10, display: "block" } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, opacity: 0.8 }, children: d.company }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 21, fontWeight: 800, marginTop: 4 }, children: [
+        "Work order",
+        wo.number ? ` ${wo.number}` : ""
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, opacity: 0.85, marginTop: 3 }, children: d.address }),
+      d.crewName && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, opacity: 0.75, marginTop: 2 }, children: [
+        "For ",
+        d.crewName
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 60px" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: d.schedDate ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
+          "Scheduled ",
+          d.schedDate
+        ] }) : null, children: "Job details" }),
+        wo.po && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "PO number", v: wo.po }),
+        mRows.map(([k, v]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k, v: String(v) }, k)),
+        wo.notes && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: S.soft, borderRadius: 9, padding: "10px 12px", marginTop: 10, fontSize: 13.5, lineHeight: 1.55, whiteSpace: "pre-wrap", color: S.ink }, children: wo.notes }),
+        (d.materials || []).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, fontWeight: 800, letterSpacing: ".06em", color: S.sub, marginTop: 14 }, children: "MATERIALS" }),
+          (d.materials || []).map((x, i2) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, borderTop: i2 ? `1px solid ${S.line}` : "none", padding: "7px 0", fontSize: 13.5 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.ink }, children: x.item }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub, whiteSpace: "nowrap" }, children: [
+              x.qty,
+              " ",
+              x.unit
+            ] })
+          ] }, i2))
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: open.length ? "amber" : "green", children: open.length ? `${open.length} open` : "Clear" }), children: "Punch list" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5 }, children: "Tap an item when it's fixed \u2014 the office sees it immediately." }),
+        punch.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, color: S.sub, padding: "10px 0" }, children: "Nothing on the list." }),
+        [...open, ...fixed].map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { "data-testid": "crew-punch-item", onClick: () => togglePunch(p), style: {
+          display: "flex",
+          gap: 10,
+          alignItems: "flex-start",
+          width: "100%",
+          textAlign: "left",
+          border: "none",
+          borderTop: `1px solid ${S.line}`,
+          background: "none",
+          cursor: "pointer",
+          padding: "11px 2px",
+          fontFamily: "inherit"
+        }, children: [
+          p.done ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 19, color: "#177245", style: { flexShrink: 0, marginTop: 1 } }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Circle, { size: 19, color: S.line, style: { flexShrink: 0, marginTop: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 14, fontWeight: 650, color: S.ink, textDecoration: p.done ? "line-through" : "none", opacity: p.done ? 0.6 : 1 }, children: p.label }),
+            p.note && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 12.5, color: S.sub, marginTop: 2 }, children: p.note }),
+            p.due && !p.done && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "block", fontSize: 11.5, color: "#9A6B00", marginTop: 2 }, children: [
+              "Needed by ",
+              p.due
+            ] }),
+            p.done && p.doneBy && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "block", fontSize: 11.5, color: S.sub, marginTop: 2 }, children: [
+              "Fixed by ",
+              p.doneBy,
+              p.doneAt ? ` \xB7 ${p.doneAt}` : ""
+            ] })
+          ] }),
+          p.photo && p.photo.url && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: p.photo.url, alt: "", style: { width: 44, height: 44, objectFit: "cover", borderRadius: 7, flexShrink: 0 } })
+        ] }, p.id)),
+        punchErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginTop: 8 }, children: punchErr })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Job photos" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Photos you take here go straight to the office's album for this job." }),
+        photos.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }, children: photos.map((ph) => ph.url && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", { src: ph.url, alt: "", style: { width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 8 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, marginTop: 2 }, children: ph.at })
+        ] }, ph.id)) }),
+        photoErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginBottom: 8 }, children: photoErr }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { width: "100%" }, disabled: uploading, onClick: () => fileRef.current && fileRef.current.click(), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Camera, { size: 15 }),
+          " ",
+          uploading ? "Uploading\u2026" : "Add a photo"
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Message the office" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PortalThread, { token, meRole: "crew", meName: d.crewName || "Crew", accent: prim })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { textAlign: "center", fontSize: 12.5, color: S.sub, marginTop: 18, lineHeight: 1.6 }, children: [
+        "Questions on scope? Call the office at ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: d.phone }),
+        ".",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 2 }, children: d.company })
+      ] })
+    ] })
+  ] });
+}
 function PublicPortal({ token }) {
   const [state, setState] = (0, import_react.useState)({ loading: true, data: null, err: "", hint: "" });
   const [estSel, setEstSel] = (0, import_react.useState)(null);
@@ -13616,6 +13849,7 @@ function PublicPortal({ token }) {
     ] }) });
   }
   const d = state.data;
+  if (d.audience === "crew") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PublicCrewPortal, { d, token });
   const prim = d.primary || "#28373E";
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minHeight: "100vh", background: S.bg, fontFamily: "'Inter','SF Pro Text',system-ui,sans-serif" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: prim, color: "#fff", padding: "22px 18px 26px" }, children: [
@@ -21634,6 +21868,37 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
     setPicking(false);
     toast(`${c.name} assigned`);
   };
+  const publishCrewPortal = async () => {
+    const db = DB();
+    const tok = job.crewPortalToken || uid("cw") + Math.random().toString(36).slice(2, 10);
+    const url = `${window.location.origin}/?portal=${tok}`;
+    if (!db) {
+      mut((j) => ({ ...j, crewPortalToken: tok }));
+      const copied = navigator.clipboard ? await navigator.clipboard.writeText(url).then(() => true, () => false) : false;
+      toast(copied ? "Crew link copied \u2014 it goes live once the app is connected to the database" : "Crew link created \u2014 it goes live once connected");
+      return;
+    }
+    const row = buildCrewPortalSnapshot(job, brand, tok, crew);
+    const { error } = await db.from("crm_portal").upsert({ ...row, revoked: false });
+    if (error) {
+      toast("Couldn't create the crew portal: " + (error.message || "unknown error"));
+      return;
+    }
+    mut((j) => ({ ...j, crewPortalToken: tok }));
+    if (navigator.clipboard) await navigator.clipboard.writeText(url).catch(() => {
+    });
+    toast(`Crew link copied \u2014 send it to ${crew.name}`);
+  };
+  const revokeCrewPortal = async () => {
+    const db = DB();
+    try {
+      if (db && job.crewPortalToken) await db.from("crm_portal").update({ revoked: true }).eq("token", job.crewPortalToken);
+      mut((j) => ({ ...j, crewPortalToken: null }));
+      toast("Crew link disabled \u2014 it no longer opens");
+    } catch (e) {
+      toast("Couldn't disable that link");
+    }
+  };
   const openSend = () => {
     const ctx = templateContext(job, brand, crew, users);
     const t = templates.find((x) => x.kind === "email" && x.audience === "Crew");
@@ -21706,6 +21971,27 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.HardHat, { size: 15 }),
           " Select crew"
         ] })
+      ] })
+    ] }),
+    crew && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: job.crewPortalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Live" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Off" }), children: "Crew portal" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: job.crewPortalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        "One link for ",
+        crew.name,
+        " on this job: the work order, the punch list (they can check items off), photo uploads straight to this job's album, and a message thread to the office. No prices anywhere on it."
+      ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        "Give ",
+        crew.name,
+        " a link to this job \u2014 work order, punch list check-off, photo uploads, and a thread to the office. No login, no seat, and never any pricing."
+      ] }) }),
+      job.crewPortalToken && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: S.soft, borderRadius: 9, padding: "9px 12px", marginTop: 10, fontSize: 12, color: S.ink, wordBreak: "break-all" }, children: `${window.location.origin}/?portal=${job.crewPortalToken}` }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, style: { flex: 2 }, onClick: publishCrewPortal, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Share2, { size: 13 }),
+          " ",
+          job.crewPortalToken ? "Update & copy link" : "Create crew link"
+        ] }),
+        job.crewPortalToken && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: revokeCrewPortal, children: "Disable" })
       ] })
     ] }),
     crew && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubInvoiceCard, { job, crew, mut, toast, currentUser, brand, integrations, users }),
@@ -29879,6 +30165,19 @@ function useDbSync(st) {
             }));
             await db.from("crm_portal").upsert(snaps);
           }
+          const crewPublished = changed.filter((j) => j.crewPortalToken);
+          if (crewPublished.length && st.brandRef) {
+            const crewSnaps = crewPublished.map((j) => ({
+              ...buildCrewPortalSnapshot(
+                j,
+                st.brandRef,
+                j.crewPortalToken,
+                (st.crewsRef || []).find((c) => c.id === j.crewId) || null
+              ),
+              revoked: false
+            }));
+            await db.from("crm_portal").upsert(crewSnaps);
+          }
           if (!isMoneyBlocked) {
             const finRows = changed.map((j) => ({ job_id: j.id, data: { financials: j.fin, payments: j.payments }, updated_at: (/* @__PURE__ */ new Date()).toISOString() }));
             await db.from("crm_financials").upsert(finRows);
@@ -30382,7 +30681,8 @@ function SupremeCRM() {
     orgDeps,
     brandRef: brand,
     stagesRef: stages,
-    usersRef: users
+    usersRef: users,
+    crewsRef: crews
   });
   const markConversationRead = (conversationId) => {
     const db = DB();
@@ -30446,7 +30746,7 @@ function SupremeCRM() {
   }, [currentUser && currentUser.id]);
   const deleteJobs = (ids, label) => {
     const db = DB();
-    const tokens = jobs.filter((j) => ids.includes(j.id)).map((j) => j.portalToken).filter(Boolean);
+    const tokens = jobs.filter((j) => ids.includes(j.id)).flatMap((j) => [j.portalToken, j.crewPortalToken]).filter(Boolean);
     if (db && tokens.length) {
       db.from("crm_portal").update({ revoked: true }).in("token", tokens).then(() => {
       }, () => setSyncErr("Deleted the job but couldn't revoke its customer portal link \u2014 revoke it from the job before deleting, or contact support."));
