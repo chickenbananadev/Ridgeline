@@ -1395,6 +1395,55 @@ function nextStepAfter(job, completedLabel) {
 const WON_STAGES = ["s5", "s6", "s7", "s8", "s9", "s10"];
 const DEAD_STAGES = ["s11", "s12"];
 
+/* ================================================================
+   CANVASSING DISPOSITIONS
+
+   What a rep marks at a door. Shipped as a working default rather
+   than a blank list, because a canvassing tool that asks you to
+   invent your own vocabulary before the first knock does not get
+   used — but stored in the org blob like pipeline stages, so a
+   company can rename, recolor and reorder them.
+
+   Two flags carry real behaviour rather than decoration:
+
+     contact    — someone actually answered. This is the denominator
+                  a canvassing scoreboard is built on: doors knocked
+                  versus doors ANSWERED are different numbers, and
+                  conflating them makes a rep look bad on a street
+                  where nobody was home.
+     terminal   — stop coming back. "Do not knock" is a promise the
+                  company made to a homeowner; anything that treats
+                  it as just another color will eventually send
+                  someone back up that driveway.
+
+   `open` marks the states that still want a follow-up, which is what
+   a rep's "who do I revisit tonight" list reads.
+   ================================================================ */
+const CANVASS_STATUSES = [
+  { id: "new", name: "Not knocked", color: "#9CA3AF", contact: false, open: true, terminal: false },
+  { id: "not_home", name: "Not home", color: "#6B7280", contact: false, open: true, terminal: false },
+  { id: "callback", name: "Come back", color: "#B45309", contact: true, open: true, terminal: false },
+  { id: "not_interested", name: "Not interested", color: "#B42318", contact: true, open: false, terminal: false },
+  { id: "appointment", name: "Appointment set", color: "#1D4ED8", contact: true, open: true, terminal: false },
+  { id: "inspected", name: "Inspected", color: "#7C3AED", contact: true, open: true, terminal: false },
+  { id: "sold", name: "Sold", color: "#047857", contact: true, open: false, terminal: false },
+  { id: "dnk", name: "Do not knock", color: "#111827", contact: false, open: false, terminal: true },
+];
+/* A company's saved list wins, but only for the statuses it actually
+   defines. An id that was dropped from the list still has pins
+   pointing at it, and those pins must keep a name and a color rather
+   than rendering as an unlabelled grey dot — so the shipped
+   definition stays available as a fallback. */
+function canvassStatusList(saved) {
+  const list = Array.isArray(saved) && saved.length ? saved : CANVASS_STATUSES;
+  return list.map((s) => ({ ...CANVASS_STATUSES.find((d) => d.id === s.id), ...s }));
+}
+function canvassStatus(saved, id) {
+  const list = canvassStatusList(saved);
+  return list.find((s) => s.id === id)
+    || CANVASS_STATUSES.find((s) => s.id === id)
+    || { id: id || "new", name: id || "Not knocked", color: "#9CA3AF", contact: false, open: true, terminal: false };
+}
 
 /* ================================================================
    CREWS — work orders are sent to a crew, not an individual.
@@ -2490,6 +2539,45 @@ async function geoAutocomplete(text, signal) {
   } catch { return []; }
 }
 
+/* ------------------------------------------------------------------
+   SLIPPY-MAP PROJECTION
+
+   Web Mercator, the same scheme every raster tile server uses: the
+   world is one 256px tile at zoom 0 and doubles each level, so a
+   lat/lng maps to an absolute pixel on that grid and back again.
+
+   These are pure functions on purpose — the map component's panning,
+   pin placement and tap-to-drop all reduce to project/unproject, and
+   pure math is the part worth testing directly rather than through a
+   rendered map.
+------------------------------------------------------------------- */
+const TILE_SIZE = 256;
+const MAX_LAT = 85.05112878;   // where Mercator goes infinite
+function lngToWorldX(lng, z) {
+  return ((lng + 180) / 360) * TILE_SIZE * Math.pow(2, z);
+}
+function latToWorldY(lat, z) {
+  const clamped = Math.max(-MAX_LAT, Math.min(MAX_LAT, lat));
+  const s = Math.sin((clamped * Math.PI) / 180);
+  return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * TILE_SIZE * Math.pow(2, z);
+}
+function worldXToLng(x, z) {
+  return (x / (TILE_SIZE * Math.pow(2, z))) * 360 - 180;
+}
+function worldYToLat(y, z) {
+  const n = Math.PI - (2 * Math.PI * y) / (TILE_SIZE * Math.pow(2, z));
+  return (180 / Math.PI) * Math.atan(Math.sinh(n));
+}
+/* Great-circle distance in METRES. Canvassing works at street scale —
+   "is this tap the same house as that pin" is a 15 m question, and
+   miles are the wrong unit to ask it in. */
+function metresBetween(lat1, lng1, lat2, lng2) {
+  const R = 6371000, rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
 /* Property records (year built, square footage) — a keyed provider (e.g.
    RentCast's free tier) auto-fills the fields; without a key the free
    county-records deep-link still works nationwide. Mirrors GEO_PROVIDER. */
@@ -2526,9 +2614,19 @@ async function fetchPropertyRecord(address) {
 }
 
 /* Coordinates -> street address. Used to stamp photos with a real address
-   alongside the GPS fix. */
+   alongside the GPS fix, and to name a canvassing pin the moment it is
+   dropped ("412 Oak St" is what a rep needs on screen, not a lat/lng).
+
+   Cached because canvassing changed the call pattern: photo stamping
+   asks once per photo, but a rep working a street drops pins minute
+   after minute, and re-asking the provider for a house already looked
+   up spends quota on an answer we hold. Keyed to ~1 m so the same door
+   tapped twice is one lookup. */
+const REVERSE_CACHE = new Map();
 async function geoReverse(lat, lng) {
   if (!geoReady() || lat == null || lng == null) return null;
+  const key = `${Math.round(lat * 1e5)},${Math.round(lng * 1e5)}`;
+  if (REVERSE_CACHE.has(key)) return REVERSE_CACHE.get(key);
   const url = `${GEO_PROVIDER.base}/reverse?lat=${lat}&lon=${lng}&format=json&apiKey=${GEO_PROVIDER.apiKey}`;
   try {
     const res = await fetch(url);
@@ -2536,13 +2634,15 @@ async function geoReverse(lat, lng) {
     const data = await res.json();
     const r = (data.results || [])[0];
     if (!r) return null;
-    return {
+    const out = {
       formatted: r.formatted || "",
       street: [r.housenumber, r.street].filter(Boolean).join(" ") || r.address_line1 || "",
       city: r.city || r.town || r.village || "",
       state: r.state_code || "",
       zip: r.postcode || "",
     };
+    REVERSE_CACHE.set(key, out);
+    return out;
   } catch { return null; }
 }
 
@@ -3391,9 +3491,13 @@ const dateInputStyle = {
   minHeight: 44, boxSizing: "border-box", width: "100%", minWidth: 0,
 };
 
-function Card({ children, style, pad = 18, onClick }) {
+/* testId is forwarded because Card otherwise silently swallows every
+   prop it doesn't name — a data-testid written on a Card looked right
+   in the source and never reached the DOM, which is exactly the kind
+   of thing that makes a passing test meaningless. */
+function Card({ children, style, pad = 18, onClick, testId }) {
   return (
-    <div onClick={onClick} style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }}>
+    <div onClick={onClick} data-testid={testId} style={{ background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }}>
       {children}
     </div>
   );
@@ -14211,40 +14315,125 @@ async function fetchStormHistory(lat, lng, start, end) {
     return days;
   } catch (e) { return null; }
 }
-/* Best-effort official corroboration: the Iowa Environmental Mesonet mirrors
-   NOAA Local Storm Reports as CORS-open GeoJSON. For a single day we pull the
-   national LSR set and keep the HAIL / wind reports within ~35 mi of the
-   point, returning the largest hail size (inches) and peak measured/estimated
-   wind (mph). Fails quiet — the code-based flags still stand on their own. */
+/* ------------------------------------------------------------------
+   NOAA Local Storm Reports — the official hail record.
+
+   The Iowa Environmental Mesonet mirrors NWS Local Storm Reports as
+   CORS-open GeoJSON, and this is what actually answers "did it hail on
+   this house". ERA5 cannot: reanalysis has no hail observation, only a
+   derived weather code, and codes 96/99 practically never appear in
+   it — so a lookup leaning on ERA5 for hail reports no hail, always.
+
+   Three things this gets right that the previous per-day version did
+   not:
+
+   1. It matches on `typetext` ("HAIL", "TSTM WND GST"). The feature
+      property named `type` is TYPECODE — a ONE-CHARACTER id ("H",
+      "G", "D", "T"). Testing `type.includes("HAIL")` can never be
+      true, so hail size and NOAA wind came back null on every report
+      that ever existed, and the "Hail — n″ (NOAA)" chip could not
+      render. That was the whole bug.
+   2. It passes a bounding box (west/east/south/north — the service
+      requires all four together) instead of downloading the national
+      report set and filtering client-side. That makes the WHOLE
+      window one small request rather than one national pull per day,
+      which is what made a multi-year hail history impractical before.
+   3. It reads `unit`, because gust magnitudes come through in knots
+      as well as mph and a raw number is wrong roughly half the time.
+
+   Reports are bucketed by LOCAL date, not the UTC date in `valid`. An
+   evening hailstorm lands after midnight UTC, so bucketing raw would
+   file it under the following day and set the date of loss one day
+   off — the kind of error a carrier notices.
+------------------------------------------------------------------- */
 const LSR_CACHE = new Map();
-async function enrichStormDay(lat, lng, iso) {
-  const key = `${weatherKey(lat, lng)}:${iso}`;
+const LSR_RADIUS_DEG = 0.45;    // ~30 mi; storm reports are sparse, a tight box finds nothing
+function lsrKind(p) {
+  /* typetext is the real classifier; the one-char type code is the
+     fallback so a missing typetext degrades instead of misreporting. */
+  const t = String(p.typetext || "").toUpperCase();
+  const code = String(p.type || "").toUpperCase();
+  if (t.includes("HAIL") || code === "H") return "hail";
+  if (t.includes("TORNADO") || code === "T") return "tornado";
+  if (/WND GST|WIND|DOWNBURST/.test(t) || code === "G") return "wind";
+  if (/DMG|DAMAGE/.test(t) || code === "D") return "damage";
+  return "other";
+}
+function lsrWindMph(mag, unit) {
+  if (!isFinite(mag)) return null;
+  return /KT|KNOT/i.test(String(unit || "")) ? mag * 1.15078 : mag;
+}
+/* Approximate local calendar date for a UTC instant at a longitude.
+   15° of longitude is an hour; for the continental US this picks the
+   right DAY even when it is an hour off on the clock, which is all the
+   bucketing needs. */
+function localDateAt(utcIso, lng) {
+  const t = Date.parse(utcIso);
+  if (!isFinite(t)) return null;
+  return new Date(t + Math.round(lng / 15) * 3600000).toISOString().slice(0, 10);
+}
+async function fetchStormReports(lat, lng, start, end) {
+  const key = `${weatherKey(lat, lng)}:${start}:${end}`;
   if (LSR_CACHE.has(key)) return LSR_CACHE.get(key);
   try {
-    const sts = `${iso}T00:00Z`;
-    const nextIso = new Date(new Date(iso + "T00:00Z").getTime() + 864e5).toISOString().slice(0, 10);
-    const ets = `${nextIso}T00:00Z`;
-    const url = `https://mesonet.agron.iastate.edu/geojson/lsr.geojson?sts=${sts}&ets=${ets}`;
+    /* +1 day on the end so a late-evening local storm on the last day,
+       which lands on the following UTC date, is still inside the window. */
+    const ets = new Date(Date.parse(end + "T00:00Z") + 2 * 864e5).toISOString().slice(0, 10);
+    const url = `https://mesonet.agron.iastate.edu/geojson/lsr.geojson` +
+      `?sts=${start}T00:00Z&ets=${ets}T00:00Z` +
+      `&west=${(lng - LSR_RADIUS_DEG).toFixed(3)}&east=${(lng + LSR_RADIUS_DEG).toFixed(3)}` +
+      `&south=${(lat - LSR_RADIUS_DEG).toFixed(3)}&north=${(lat + LSR_RADIUS_DEG).toFixed(3)}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error("lsr");
     const gj = await res.json();
-    let hailIn = null, windMph = null, count = 0;
+    const byDate = {};
     for (const f of gj.features || []) {
       const c = f.geometry && f.geometry.coordinates;
       if (!c) continue;
       const [flng, flat] = c;
-      if (Math.abs(flat - lat) > 0.5 || Math.abs(flng - lng) > 0.6) continue;
       const p = f.properties || {};
-      const type = String(p.type || "").toUpperCase();
+      const date = localDateAt(p.valid, lng);
+      if (!date || date < start || date > end) continue;
+      const kind = lsrKind(p);
+      if (kind === "other") continue;
       const mag = parseFloat(p.magnitude);
-      if (type.includes("HAIL") && !isNaN(mag)) { hailIn = Math.max(hailIn ?? 0, mag); count++; }
-      else if (type.includes("WND") && !isNaN(mag)) { windMph = Math.max(windMph ?? 0, mag); count++; }
-      else if (type.includes("TORNADO")) count++;
+      const row = byDate[date] || (byDate[date] = { hailIn: null, reportWind: null, count: 0, reports: [] });
+      row.count++;
+      if (kind === "hail" && isFinite(mag)) row.hailIn = Math.max(row.hailIn ?? 0, mag);
+      if (kind === "wind") {
+        const mph = lsrWindMph(mag, p.unit);
+        if (mph != null) row.reportWind = Math.max(row.reportWind ?? 0, mph);
+      }
+      row.reports.push({
+        kind, mag: isFinite(mag) ? mag : null, unit: p.unit || "",
+        at: p.valid || "", city: p.city || "", county: p.county || "", state: p.state || "",
+        qualifier: p.qualifier || "", source: p.source || "", remark: p.remark || "",
+        miles: haversineMiles(lat, lng, flat, flng),
+      });
     }
-    const out = { hailIn, reportWind: windMph, count };
-    LSR_CACHE.set(key, out);
-    return out;
+    /* Nearest report first — "3 mi away" and "26 mi away" are very
+       different conversations on a doorstep. */
+    Object.values(byDate).forEach((r) => r.reports.sort((a, b) => a.miles - b.miles));
+    LSR_CACHE.set(key, byDate);
+    return byDate;
   } catch (e) { return null; }
+}
+function haversineMiles(lat1, lng1, lat2, lng2) {
+  const R = 3958.8, rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+/* Hail size in the vocabulary adjusters and homeowners actually use.
+   1" is the NWS severe threshold and the size most carriers treat as
+   the start of a functional-damage conversation. */
+const HAIL_SIZES = [[4.5, "softball"], [4, "grapefruit"], [3, "teacup"], [2.75, "baseball"],
+  [2.5, "tennis ball"], [2, "hen egg"], [1.75, "golf ball"], [1.5, "ping pong ball"],
+  [1.25, "half dollar"], [1, "quarter"], [0.88, "nickel"], [0.75, "penny"], [0.5, "marble"]];
+function hailSizeLabel(inches) {
+  if (inches == null) return "";
+  const hit = HAIL_SIZES.find(([n]) => inches >= n);
+  return hit ? hit[1] : "pea";
 }
 /* NOAA SPC storm-report page for a given ISO date (official corroboration). */
 function spcReportLink(iso) {
@@ -14254,6 +14443,33 @@ function spcReportLink(iso) {
 function stormSeverity(r) {
   return (r.hailIn ? 4000 + r.hailIn * 500 : r.hail ? 3000 : 0)
     + (r.reportWind || r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
+}
+/* Merge the ERA5 day rows with the NOAA storm reports into one list.
+
+   The order matters. Reports LEAD and reanalysis decorates, not the
+   other way round: a confirmed 1.75" hail report is the finding, and
+   whatever gust ERA5 modelled that day is context. The old flow ranked
+   ERA5 days by a severity score that could not see hail, kept the top
+   handful, and only then asked NOAA about those — so a genuine hail day
+   that happened to be calm in the reanalysis was never asked about at
+   all and could not appear however hard you looked for it.
+
+   Every day carrying a storm report is therefore included
+   unconditionally; ERA5-only days still come along when they were
+   notable on their own (high wind, thunderstorm, heavy rain), because
+   a wind claim does not need a spotter to have called it in. */
+function mergeStormDays(days, reportsByDate) {
+  const byDate = new Map();
+  (days || []).forEach((d) => byDate.set(d.date, { ...d }));
+  Object.entries(reportsByDate || {}).forEach(([date, rep]) => {
+    const base = byDate.get(date) || { date, gust: null, precip: null, code: null,
+      hail: false, highWind: false, damagingWind: false, storm: false };
+    byDate.set(date, { ...base, hailIn: rep.hailIn, reportWind: rep.reportWind,
+      reports: rep.count, reportList: rep.reports });
+  });
+  return [...byDate.values()]
+    .filter((r) => r.reports || r.hail || r.highWind || r.storm || (r.precip != null && r.precip >= 0.75))
+    .sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1));
 }
 
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded = false }) {
@@ -15941,74 +16157,143 @@ function StormScout({ toast }) {
    the weather record, then corroborate against the official NOAA SPC report. */
 function StormLookup({ job, dol, onPick, toast }) {
   const iso = (d) => d.toISOString().slice(0, 10);
-  const [start, setStart] = useState(() => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return iso(d); });
+  /* Two years, not one. Hail is not an annual event in most markets —
+     a one-year default routinely returns nothing and reads as "no hail
+     here" when the answer is "not in the last twelve months". */
+  const [start, setStart] = useState(() => { const d = new Date(); d.setFullYear(d.getFullYear() - 2); return iso(d); });
+  const [open, setOpen] = useState(null);
   const [end, setEnd] = useState(() => iso(new Date()));
   const [rows, setRows] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
+  const [reportsFailed, setReportsFailed] = useState(false);
   const run = async () => {
-    setLoading(true); setErr(""); setRows(null);
+    setLoading(true); setErr(""); setRows(null); setReportsFailed(false);
     let lat = job.lat ?? job.property?.lat, lng = job.lng ?? job.property?.lng;
     if (lat == null || lng == null) { const g = await geocodeZip(job.zip); if (g) { lat = g.lat; lng = g.lng; } }
     if (lat == null || lng == null) { setErr("No coordinates for this address yet — add a ZIP or pick the address from the map suggestions."); setLoading(false); return; }
-    const days = await fetchStormHistory(lat, lng, start, end);
-    if (!days) { setErr("Couldn't reach the weather archive. Check the connection and try again."); setLoading(false); return; }
-    const notable = days
-      .filter((r) => r.hail || r.highWind || r.storm || (r.precip != null && r.precip >= 0.75))
-      .sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1))
-      .slice(0, 24);
-    setRows(notable); setLoading(false);
-    if (!notable.length) { toast && toast("No notable storm days in that window"); return; }
-    /* Enrich the strongest candidates with official NOAA/IEM storm reports so
-       real hail size and measured wind show where they exist. Best-effort and
-       progressive — each day updates its row as its report comes back. */
-    notable.slice(0, 8).forEach(async (r) => {
-      const info = await enrichStormDay(lat, lng, r.date);
-      if (!info) return;
-      setRows((prev) => prev && prev.map((x) => x.date === r.date
-        ? { ...x, hailIn: info.hailIn, reportWind: info.reportWind, reports: info.count } : x));
-    });
+    /* Both sources at once. The storm reports are the hail record and
+       the reanalysis is the wind/rain context; neither one waits on the
+       other, and a failure in either still leaves a usable answer. */
+    const [days, reports] = await Promise.all([
+      fetchStormHistory(lat, lng, start, end),
+      fetchStormReports(lat, lng, start, end),
+    ]);
+    setLoading(false);
+    if (!days && !reports) { setErr("Couldn't reach the weather archive or the NOAA report service. Check the connection and try again."); return; }
+    /* Say so when the hail record specifically is the thing that didn't
+       load — "no hail found" and "couldn't check for hail" are very
+       different answers to give a rep standing at a door. */
+    setReportsFailed(!reports);
+    const merged = mergeStormDays(days || [], reports || {}).slice(0, 40);
+    setRows(merged);
+    if (!merged.length) toast && toast("No storm reports or notable weather in that window");
+  };
+  const setWindow = (years) => {
+    const d = new Date(); d.setFullYear(d.getFullYear() - years);
+    setStart(iso(d)); setEnd(iso(new Date()));
   };
 
   return (
     <Card style={{ marginTop: 12 }}>
       <CardTitle right={<Chip tone="blue">NOAA / Open-Meteo</Chip>}>Storm history — date of loss</CardTitle>
       <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
-        Pulls high-wind, hail and heavy-rain days for this address so you can set the date of loss from the record.
-        Gusts &amp; precip are ERA5 reanalysis; the strongest days are cross-checked against official NOAA storm reports,
-        so where a report exists you'll see the measured hail size and peak wind. Confirm the NOAA report before filing.
+        Hail and wind days on record for this address, so you can set the date of loss from the record rather than memory.
+        Hail sizes and measured wind come from official NOAA Local Storm Reports near the property; gusts and rain
+        without a “NOAA” tag are ERA5 reanalysis — real, but modelled rather than observed. Confirm the NOAA report before filing.
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }}>
         <Field label="From"><input style={dateInputStyle} type="date" value={start} max={end} onChange={(e) => setStart(e.target.value)} /></Field>
         <Field label="To"><input style={dateInputStyle} type="date" value={end} max={iso(new Date())} onChange={(e) => setEnd(e.target.value)} /></Field>
         <Btn small onClick={run} disabled={loading} style={{ marginBottom: 12 }}>{loading ? "Looking…" : "Look up"}</Btn>
       </div>
+      {/* Hail is episodic — the honest first question is "how far back?",
+          so make widening the window one tap instead of two date pickers. */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: -4, marginBottom: 4 }}>
+        <span style={{ fontSize: 12, color: S.sub, alignSelf: "center" }}>Look back:</span>
+        {[[1, "1 yr"], [2, "2 yrs"], [5, "5 yrs"], [10, "10 yrs"]].map(([y, label]) => (
+          <Btn key={y} kind="ghost" small onClick={() => setWindow(y)}>{label}</Btn>
+        ))}
+      </div>
       {err && <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 6 }}>{err}</div>}
+      {reportsFailed && rows && (
+        <Callout label="Hail record unavailable" tone="amber">
+          The NOAA storm-report service didn't respond, so what's below is modelled weather only — it is not
+          evidence that no hail fell here. Run the lookup again before telling a homeowner there's no hail on record.
+        </Callout>
+      )}
+      {rows && rows.length === 0 && !err && (
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 8 }}>
+          No storm reports or notable weather between {start} and {end}. Try a longer look-back — hail
+          often skips several years in a given neighborhood.
+        </div>
+      )}
       {rows && rows.length > 0 && (
         <div style={{ marginTop: 6 }}>
           {rows.map((r) => {
             const picked = r.date === dol;
+            const size = hailSizeLabel(r.hailIn);
+            const nearest = (r.reportList || [])[0];
             return (
-              <div key={r.date} style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0", borderTop: `1px solid ${S.line}` }}>
+              <div key={r.date} style={{ borderTop: `1px solid ${S.line}` }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "9px 0" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{r.date}</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }}>
                     {r.hailIn != null
-                      ? <Chip tone="red">Hail — {r.hailIn.toFixed(2).replace(/\.?0+$/, "")}″ (NOAA)</Chip>
+                      ? <Chip tone="red">Hail — {r.hailIn.toFixed(2).replace(/\.?0+$/, "")}″{size ? ` (${size})` : ""} · NOAA</Chip>
                       : r.hail && <Chip tone="amber">Hail possible</Chip>}
                     {r.reportWind != null
-                      ? <Chip tone={r.reportWind >= 58 ? "red" : "amber"}>{r.reportWind >= 58 ? "Damaging wind" : "High wind"} — {Math.round(r.reportWind)} mph (NOAA)</Chip>
+                      ? <Chip tone={r.reportWind >= 58 ? "red" : "amber"}>{r.reportWind >= 58 ? "Damaging wind" : "High wind"} — {Math.round(r.reportWind)} mph · NOAA</Chip>
                       : r.gust != null && <Chip tone={r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray"}>
                           {r.gust >= 58 ? "Damaging wind" : r.gust >= 45 ? "High wind" : "Gusts"} — {r.gust} mph
                         </Chip>}
                     {r.precip != null && r.precip >= 0.5 && <Chip tone="blue">{r.precip.toFixed(2)}″ rain</Chip>}
+                    {r.reports > 0 && (
+                      <button onClick={() => setOpen(open === r.date ? null : r.date)}
+                        style={{ border: "none", background: "none", padding: 0, cursor: "pointer",
+                          fontSize: 11.5, fontWeight: 700, color: T.accent, fontFamily: "inherit" }}>
+                        {r.reports} report{r.reports === 1 ? "" : "s"}
+                        {nearest ? ` · nearest ${nearest.miles < 1 ? "<1" : Math.round(nearest.miles)} mi` : ""}
+                        {open === r.date ? " ▾" : " ▸"}
+                      </button>
+                    )}
                   </div>
                 </div>
                 <a href={spcReportLink(r.date)} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: T.accent, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }}>NOAA ↗</a>
                 <Btn kind={picked ? "green" : "soft"} small onClick={() => { onPick(r.date); toast && toast(`Date of loss set to ${r.date}`); }} style={{ flexShrink: 0 }}>
                   {picked ? "✓ Set" : "Use"}
                 </Btn>
+              </div>
+              {/* The individual reports behind the day. Distance and
+                  "measured vs estimated" are what make this usable as
+                  evidence rather than a headline — a 2" report 25 miles
+                  away is not this roof's storm. */}
+              {open === r.date && (r.reportList || []).length > 0 && (
+                <div style={{ padding: "2px 0 10px" }}>
+                  {r.reportList.slice(0, 12).map((rep, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "5px 0", fontSize: 12.5, color: S.sub }}>
+                      <span style={{ fontWeight: 700, color: S.ink, minWidth: 84 }}>
+                        {rep.kind === "hail" ? `${rep.mag}″ hail`
+                          : rep.kind === "wind" ? `${Math.round(lsrWindMph(rep.mag, rep.unit) || 0)} mph wind`
+                          : rep.kind === "tornado" ? "Tornado" : "Wind damage"}
+                      </span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        {rep.miles < 1 ? "<1" : Math.round(rep.miles)} mi — {rep.city}
+                        {rep.county ? `, ${rep.county} Co` : ""}{rep.state ? `, ${rep.state}` : ""}
+                        {rep.qualifier ? ` · ${rep.qualifier}` : ""}
+                        {rep.source ? ` · ${rep.source}` : ""}
+                      </span>
+                    </div>
+                  ))}
+                  {r.reportList.length > 12 && (
+                    <div style={{ fontSize: 12, color: S.sub, paddingTop: 4 }}>
+                      + {r.reportList.length - 12} more within {Math.round(LSR_RADIUS_DEG * 69)} mi
+                    </div>
+                  )}
+                </div>
+              )}
               </div>
             );
           })}
@@ -28134,6 +28419,1014 @@ function HelpDesk({ onBack, brand }) {
   );
 }
 
+/* ==================================================================
+   CANVASSING — the door-knocking map
+
+   WHY THIS MAP IS HAND-BUILT rather than Leaflet or Mapbox.
+
+   ridgeline.jsx is deliberately a single self-contained file with no
+   CSS imports and no import.meta, so it can be bundled by esbuild for
+   the test harness and rendered in preview sandboxes. Leaflet needs
+   its stylesheet imported to position panes correctly, which breaks
+   `npm run bundle:test` — the pipeline every build in this codebase
+   is verified through. The map a canvassing tool actually needs is
+   pan, zoom, pins, and tap-to-drop; that reduces to Web Mercator
+   projection plus pointer handling, and keeping it here means the
+   projection math is directly testable instead of hidden behind a
+   rendered map.
+
+   Tiles come from Geoapify on the key the address autocomplete
+   already uses, so there is nothing new to sign up for. The style is
+   overridable via window.__MAP_TILE_URL__ — that is the hook for
+   satellite imagery later, which needs a paid key.
+
+   Attribution is not optional: OpenStreetMap's licence and
+   Geoapify's terms both require it, so it renders on the map itself
+   rather than being tucked in a settings page.
+   ================================================================== */
+const MAP_TILE_STYLE = "osm-bright";
+function tileUrl(z, x, y) {
+  const custom = typeof window !== "undefined" && window.__MAP_TILE_URL__;
+  if (custom) return String(custom).replace("{z}", z).replace("{x}", x).replace("{y}", y);
+  return `https://maps.geoapify.com/v1/tile/${MAP_TILE_STYLE}/${z}/${x}/${y}.png?apiKey=${GEO_PROVIDER.apiKey}`;
+}
+const MAP_MIN_ZOOM = 3, MAP_MAX_ZOOM = 19;
+/* How close a tap has to be to an existing pin to mean "that one".
+   Suburban lots run 15–25 m wide, so 20 m selects the house you meant
+   without swallowing its neighbour. Without this, the second rep down
+   the street silently stacks a duplicate pin on a door that already
+   has one — and the whole point of shared pins is not knocking twice. */
+const PIN_SNAP_METRES = 20;
+function nearestPin(pins, lat, lng, within = PIN_SNAP_METRES) {
+  let best = null, bestD = Infinity;
+  (pins || []).forEach((p) => {
+    const d = metresBetween(lat, lng, p.lat, p.lng);
+    if (d < bestD) { bestD = d; best = p; }
+  });
+  return bestD <= within ? best : null;
+}
+
+function CanvassMap({ center, zoom, onMove, pins, statuses, selectedId, onTapPin, onTapMap, me }) {
+  const boxRef = useRef(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const drag = useRef(null);
+  const pointers = useRef(new Map());
+  const pinch = useRef(null);
+
+  /* Measure rather than assume: the map fills whatever the screen
+     gives it, and every projection below is relative to that box. */
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const { w, h } = size;
+  const z = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, zoom));
+  const cx = lngToWorldX(center.lng, z), cy = latToWorldY(center.lat, z);
+  /* Tiles only exist at integer zooms, so render the nearest integer
+     level and scale the layer for the fractional remainder — the same
+     trick every slippy map uses to keep pinch-zoom smooth without
+     re-fetching a tile per frame. Pins are positioned at the true
+     fractional zoom OUTSIDE that layer, so they never scale with it. */
+  const tileZ = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, Math.round(z)));
+  const scale = Math.pow(2, z - tileZ);
+  const tcx = lngToWorldX(center.lng, tileZ), tcy = latToWorldY(center.lat, tileZ);
+
+  const tiles = [];
+  if (w && h) {
+    const span = Math.pow(2, tileZ);
+    const halfW = w / (2 * scale), halfH = h / (2 * scale);
+    const x0 = Math.floor((tcx - halfW) / TILE_SIZE), x1 = Math.floor((tcx + halfW) / TILE_SIZE);
+    const y0 = Math.floor((tcy - halfH) / TILE_SIZE), y1 = Math.floor((tcy + halfH) / TILE_SIZE);
+    for (let ty = y0; ty <= y1; ty++) {
+      if (ty < 0 || ty >= span) continue;               // no tiles past the poles
+      for (let tx = x0; tx <= x1; tx++) {
+        const wrapped = ((tx % span) + span) % span;    // the world repeats east–west
+        tiles.push({ key: `${tileZ}/${tx}/${ty}`, x: tx, y: ty, src: tileUrl(tileZ, wrapped, ty) });
+      }
+    }
+  }
+
+  const toScreen = (lat, lng) => ({
+    x: w / 2 + (lngToWorldX(lng, z) - cx),
+    y: h / 2 + (latToWorldY(lat, z) - cy),
+  });
+  const toLatLng = (px, py) => ({
+    lat: worldYToLat(cy + (py - h / 2), z),
+    lng: worldXToLng(cx + (px - w / 2), z),
+  });
+
+  const localPoint = (e) => {
+    const r = boxRef.current.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  const onPointerDown = (e) => {
+    boxRef.current.setPointerCapture && boxRef.current.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, localPoint(e));
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom: z };
+      drag.current = null;
+      return;
+    }
+    const p = localPoint(e);
+    drag.current = { startX: p.x, startY: p.y, cx, cy, moved: 0, at: nowMs() };
+  };
+  const onPointerMove = (e) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, localPoint(e));
+    if (pinch.current && pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch.current.dist > 0) {
+        const next = pinch.current.zoom + Math.log2(dist / pinch.current.dist);
+        onMove({ center, zoom: Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, next)) });
+      }
+      return;
+    }
+    if (!drag.current) return;
+    const p = localPoint(e);
+    const dx = p.x - drag.current.startX, dy = p.y - drag.current.startY;
+    drag.current.moved = Math.max(drag.current.moved, Math.hypot(dx, dy));
+    onMove({
+      center: {
+        lat: worldYToLat(drag.current.cy - dy, z),
+        lng: worldXToLng(drag.current.cx - dx, z),
+      },
+      zoom: z,
+    });
+  };
+  const onPointerUp = (e) => {
+    const wasDrag = drag.current;
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+    if (!wasDrag) return;
+    drag.current = null;
+    /* A tap, not a pan. The 6px slop is what separates "I meant to
+       press this" from a finger that slid slightly on the way down —
+       without it, dropping a pin on a phone is nearly impossible. */
+    if (wasDrag.moved > 6) return;
+    const p = localPoint(e);
+    const { lat, lng } = toLatLng(p.x, p.y);
+    const hit = nearestPin(pins, lat, lng);
+    if (hit) onTapPin(hit); else onTapMap(lat, lng);
+  };
+
+  const nudgeZoom = (delta) =>
+    onMove({ center, zoom: Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, Math.round(z) + delta)) });
+
+  return (
+    <div ref={boxRef} data-testid="canvass-map"
+      onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
+      style={{
+        position: "relative", width: "100%", height: "100%", overflow: "hidden",
+        background: S.soft, touchAction: "none", cursor: "grab", userSelect: "none",
+      }}>
+      {/* tile layer — scaled for fractional zoom */}
+      <div style={{
+        position: "absolute", left: w / 2, top: h / 2, width: 0, height: 0,
+        transform: `scale(${scale}) translate(${-tcx}px, ${-tcy}px)`, transformOrigin: "0 0",
+      }}>
+        {tiles.map((t) => (
+          <img key={t.key} src={t.src} alt="" draggable={false} width={TILE_SIZE} height={TILE_SIZE}
+            style={{ position: "absolute", left: t.x * TILE_SIZE, top: t.y * TILE_SIZE, width: TILE_SIZE, height: TILE_SIZE }} />
+        ))}
+      </div>
+
+      {/* the rep's own position */}
+      {me && w > 0 && (() => {
+        const p = toScreen(me.lat, me.lng);
+        return (
+          <div style={{
+            position: "absolute", left: p.x - 8, top: p.y - 8, width: 16, height: 16, borderRadius: "50%",
+            background: "#2563EB", border: "3px solid #fff", boxShadow: "0 0 0 2px rgba(37,99,235,.35)", pointerEvents: "none",
+          }} />
+        );
+      })()}
+
+      {/* pins */}
+      {w > 0 && (pins || []).map((pin) => {
+        const p = toScreen(pin.lat, pin.lng);
+        if (p.x < -40 || p.y < -40 || p.x > w + 40 || p.y > h + 40) return null;
+        const st = canvassStatus(statuses, pin.status);
+        const on = pin.id === selectedId;
+        return (
+          <div key={pin.id} data-testid={`pin-${pin.id}`} title={pin.address || st.name}
+            style={{
+              position: "absolute", left: p.x - (on ? 12 : 8), top: p.y - (on ? 12 : 8),
+              width: on ? 24 : 16, height: on ? 24 : 16, borderRadius: "50%",
+              background: st.color, border: `${on ? 3 : 2}px solid #fff`,
+              boxShadow: on ? "0 0 0 3px rgba(17,24,39,.28)" : "0 1px 3px rgba(0,0,0,.35)",
+              pointerEvents: "none", zIndex: on ? 3 : 2,
+            }} />
+        );
+      })}
+
+      <div style={{ position: "absolute", right: 10, top: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+        {[["+", 1], ["−", -1]].map(([label, d]) => (
+          <button key={label} type="button" aria-label={d > 0 ? "Zoom in" : "Zoom out"}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => nudgeZoom(d)}
+            style={{
+              width: 34, height: 34, borderRadius: 9, border: `1px solid ${S.line}`, background: S.card,
+              color: S.ink, fontSize: 18, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", lineHeight: 1,
+            }}>{label}</button>
+        ))}
+      </div>
+
+      {/* Required by OpenStreetMap's licence and Geoapify's terms. */}
+      <div style={{
+        position: "absolute", right: 0, bottom: 0, background: "rgba(255,255,255,.82)", color: "#374151",
+        fontSize: 9.5, padding: "2px 6px", borderTopLeftRadius: 6, pointerEvents: "auto",
+      }}>
+        <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer" style={{ color: "inherit" }}>Geoapify</a>
+        {" · "}
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: "inherit" }}>© OpenStreetMap</a>
+      </div>
+    </div>
+  );
+}
+
+/* Live epoch millis, isolated so the map's tap/drag timing has one
+   source and tests can reason about it. */
+function nowMs() { return Date.now(); }
+
+/* ------------------------------------------------------------------
+   Canvass pins — loaded for the viewport, not all at once.
+
+   A company that has worked a season has tens of thousands of pins.
+   Pulling them all to render a few streets is the kind of thing that
+   works in a demo and dies in year two, so the map asks only for what
+   is inside its current bounds (crm_canvass_bbox_idx exists for
+   exactly this), keyed by id so overlapping viewports merge instead
+   of duplicating.
+
+   Writes are single-row upserts and their failures are SURFACED. A
+   knock that silently fails to save is the same bug class that hid
+   three production faults in this codebase already, and it is worse
+   here: the rep has physically walked to the door and will not do it
+   again.
+------------------------------------------------------------------- */
+function useCanvassPins({ tenantId, ready }) {
+  const [pins, setPins] = useState({});     // id -> row
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+  const seq = useRef(0);
+
+  const merge = (rows) => setPins((prev) => {
+    const next = { ...prev };
+    rows.forEach((r) => { next[r.id] = r; });
+    return next;
+  });
+
+  const loadBounds = async (b) => {
+    const db = DB();
+    if (!db || !ready || !b) return;
+    const mine = ++seq.current;
+    setLoading(true);
+    const { data, error } = await db.from("crm_canvass").select("*")
+      .gte("lat", b.south).lte("lat", b.north)
+      .gte("lng", b.west).lte("lng", b.east)
+      .limit(2000);
+    if (mine !== seq.current) return;          // a later pan already won
+    setLoading(false);
+    if (error) { setErr("Couldn't load pins for this area. " + (error.message || "")); return; }
+    setErr("");
+    merge(data || []);
+  };
+
+  /* Optimistic locally so the pin appears under the rep's thumb
+     immediately, then reconciled against what the database actually
+     stored — and rolled back with a visible message if it refused. */
+  const savePin = async (row) => {
+    const before = pins[row.id];
+    merge([row]);
+    const db = DB();
+    if (!db) return row;
+    const { data, error } = await db.from("crm_canvass")
+      .upsert({ ...row, updated_at: new Date().toISOString() }).select().maybeSingle();
+    if (error) {
+      setErr("That knock didn't save — you're seeing it on this device only. " + (error.message || ""));
+      if (before) merge([before]); else setPins((prev) => { const n = { ...prev }; delete n[row.id]; return n; });
+      return null;
+    }
+    if (data) merge([data]);
+    return data || row;
+  };
+
+  const removePin = async (id) => {
+    const before = pins[id];
+    setPins((prev) => { const n = { ...prev }; delete n[id]; return n; });
+    const db = DB();
+    if (!db) return;
+    const { error } = await db.from("crm_canvass").delete().eq("id", id);
+    if (error) {
+      setErr("Couldn't remove that pin. " + (error.message || ""));
+      if (before) merge([before]);
+    }
+  };
+
+  /* Two reps on one street see each other's work without reloading —
+     the reason these rows are shared in the first place. */
+  useEffect(() => {
+    const db = DB();
+    if (!db || !ready || !tenantId) return;
+    const ch = db.channel("crm-canvass")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_canvass", filter: `tenant_id=eq.${tenantId}` },
+        (p) => p.new && merge([p.new]))
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "crm_canvass", filter: `tenant_id=eq.${tenantId}` },
+        (p) => p.new && merge([p.new]))
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "crm_canvass" },
+        (p) => {
+          const id = p.old && p.old.id;
+          if (id) setPins((prev) => { const n = { ...prev }; delete n[id]; return n; });
+        })
+      .subscribe();
+    return () => { db.removeChannel(ch); };
+  }, [ready, tenantId]);
+
+  return { pins, list: Object.values(pins), loadBounds, savePin, removePin, err, setErr, loading };
+}
+
+/* Company-editable dispositions. Same shape as the lead-source and
+   pipeline-stage editors, and gated the same way.
+
+   The id is what pins store, so it is fixed once created — renaming
+   changes the label everywhere without orphaning a single pin, which
+   is the whole reason name and id are separate. Deleting is allowed
+   but never silently: pins already carrying that status keep
+   rendering with their real name and flags via canvassStatus's
+   fallback, and the editor says how many would be affected. */
+function CanvassStatusEditor({ statuses, setStatuses, onBack, toast, currentUser }) {
+  const list = canvassStatusList(statuses);
+  const canEdit = canManageCompanyConfig(currentUser);
+  const [draft, setDraft] = useState("");
+  const write = (next) => setStatuses(next);
+  const patch = (id, p) => write(list.map((s) => (s.id === id ? { ...s, ...p } : s)));
+  const add = () => {
+    const name = draft.trim();
+    if (!name) return;
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || `s_${list.length}`;
+    if (list.some((s) => s.id === id)) { toast("There's already one with that name"); return; }
+    write([...list, { id, name, color: "#6B7280", contact: false, open: true, terminal: false }]);
+    setDraft(""); toast("Disposition added");
+  };
+  const move = (i, d) => {
+    const a = [...list]; const j = i + d;
+    if (j < 0 || j >= a.length) return;
+    [a[i], a[j]] = [a[j], a[i]];
+    write(a);
+  };
+  const COLORS = ["#9CA3AF", "#6B7280", "#B45309", "#B42318", "#1D4ED8", "#7C3AED", "#047857", "#111827"];
+  return (
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
+      <SubHeader title="Canvassing dispositions" onBack={onBack} />
+      <Card style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 13, color: S.sub, marginBottom: 12, lineHeight: 1.5 }}>
+          What reps mark at a door, and the colors they show as on the map. Renaming one changes it everywhere —
+          doors already marked keep their history. Two settings do real work rather than decorate:
+          <b> Counts as contact</b> is the denominator your appointment rate is measured against, and
+          <b> Do not knock</b> marks a promise to a homeowner.
+        </div>
+        {canEdit && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <input style={{ ...inputStyle, flex: 1 }} value={draft} placeholder="Add a disposition — Renter, Dog…"
+              onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
+            <Btn onClick={add} disabled={!draft.trim()} data-testid="add-disposition"><Plus size={14} /></Btn>
+          </div>
+        )}
+      </Card>
+      {list.map((s, i) => (
+        <Card key={s.id} pad={13} style={{ marginTop: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0, flex: 1 }}>
+              <span style={{ width: 13, height: 13, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
+              {canEdit ? (
+                <input style={{ ...inputStyle, flex: 1 }} value={s.name}
+                  onChange={(e) => patch(s.id, { name: e.target.value })} />
+              ) : <span style={{ fontSize: 14.5, fontWeight: 700 }}>{s.name}</span>}
+            </div>
+            {canEdit && (
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <Btn kind="ghost" small disabled={i === 0} onClick={() => move(i, -1)}>↑</Btn>
+                <Btn kind="ghost" small disabled={i === list.length - 1} onClick={() => move(i, 1)}>↓</Btn>
+                <button aria-label={`Delete ${s.name}`}
+                  onClick={() => { write(list.filter((x) => x.id !== s.id)); toast("Disposition removed — doors already marked with it keep their label"); }}
+                  style={{ border: "none", background: "none", cursor: "pointer" }}>
+                  <Trash2 size={16} color="#B42318" />
+                </button>
+              </div>
+            )}
+          </div>
+          {canEdit && (
+            <>
+              <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                {COLORS.map((c) => (
+                  <button key={c} type="button" aria-label={`Color ${c}`} onClick={() => patch(s.id, { color: c })}
+                    style={{
+                      width: 24, height: 24, borderRadius: "50%", background: c, cursor: "pointer",
+                      border: s.color === c ? "3px solid #111827" : `1px solid ${S.line}`,
+                    }} />
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 14, marginTop: 10, flexWrap: "wrap", fontSize: 13 }}>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!s.contact} onChange={(e) => patch(s.id, { contact: e.target.checked })} />
+                  Counts as contact
+                </label>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!s.open} onChange={(e) => patch(s.id, { open: e.target.checked })} />
+                  Still worth revisiting
+                </label>
+                <label style={{ display: "flex", gap: 7, alignItems: "center", cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!s.terminal} onChange={(e) => patch(s.id, { terminal: e.target.checked })} />
+                  Do not knock
+                </label>
+              </div>
+            </>
+          )}
+        </Card>
+      ))}
+      {!canEdit && (
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 12 }}>
+          Only an admin or someone with company-settings access can change these.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------
+   Working the territory — filtering, and counting honestly.
+
+   The one number a canvassing scoreboard gets wrong is the
+   denominator. Doors KNOCKED and doors ANSWERED are different, and
+   quoting a close rate against doors knocked makes every rep look bad
+   on a street where nobody was home. So contacts are counted from the
+   status flags (contact: true), and the conversion rate is measured
+   against contacts, with doors reported alongside rather than divided
+   into.
+
+   Both of these are pure functions so the numbers can be checked
+   without a rendered screen — a scoreboard nobody can verify is a
+   scoreboard people stop trusting.
+------------------------------------------------------------------- */
+function filterCanvassPins(pins, f, meId) {
+  const from = f.from ? f.from : null, to = f.to ? f.to : null;
+  return (pins || []).filter((p) => {
+    if (f.statuses && f.statuses.length && !f.statuses.includes(p.status)) return false;
+    if (f.mineOnly && p.assigned_to !== meId && p.created_by !== meId) return false;
+    if (f.rep && p.assigned_to !== f.rep) return false;
+    if (from || to) {
+      /* An un-knocked pin has no date to compare, so a date filter
+         excludes it rather than silently treating it as today. */
+      if (!p.knocked_at) return false;
+      const d = String(p.knocked_at).slice(0, 10);
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+    }
+    if (f.q) {
+      const hay = [p.address, (p.prospect || {}).name, (p.prospect || {}).phone, p.notes]
+        .filter(Boolean).join(" ").toLowerCase();
+      if (!hay.includes(f.q.toLowerCase())) return false;
+    }
+    return true;
+  });
+}
+function canvassStats(pins, statuses) {
+  const st = (id) => canvassStatus(statuses, id);
+  const knocked = (pins || []).filter((p) => p.knocked_at);
+  const contacts = knocked.filter((p) => st(p.status).contact);
+  const appointments = knocked.filter((p) => p.status === "appointment");
+  const sold = knocked.filter((p) => p.status === "sold");
+  const converted = (pins || []).filter((p) => p.job_id);
+  const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
+  return {
+    doors: knocked.length,
+    contacts: contacts.length,
+    appointments: appointments.length,
+    sold: sold.length,
+    converted: converted.length,
+    /* Answered per door knocked — a measure of the street and the time
+       of day, not of the rep. */
+    contactRate: pct(contacts.length, knocked.length),
+    /* Appointments per CONTACT. This is the number that actually says
+       something about how someone talks to people. */
+    apptRate: pct(appointments.length, contacts.length),
+  };
+}
+function canvassLeaderboard(pins, statuses, users) {
+  /* Credit goes to whoever made each knock — read from the history
+     entries, not from assigned_to. A pin reassigned later must not
+     silently move yesterday's doors onto someone else's total. */
+  const byRep = new Map();
+  (pins || []).forEach((p) => {
+    (p.history || []).forEach((h) => {
+      const key = h.byId || h.by || "—";
+      const row = byRep.get(key) || { id: h.byId, name: h.by || "", doors: 0, contacts: 0, appointments: 0 };
+      row.doors++;
+      if (canvassStatus(statuses, h.status).contact) row.contacts++;
+      if (h.status === "appointment") row.appointments++;
+      if (!row.name && h.byId) {
+        const u = (users || []).find((x) => x.id === h.byId);
+        if (u) row.name = u.name;
+      }
+      byRep.set(key, row);
+    });
+  });
+  return [...byRep.values()].sort((a, b) => b.doors - a.doors);
+}
+
+/* The pin's own record. Split out of CanvassScreen because it is a
+   different job: the map is about the street, this is about one door.
+
+   The knock history is rendered newest-first and is READ ONLY. It is
+   the part of a canvassing record that has to be trustworthy — "she
+   said come back after six" is worth more than the current status,
+   and a rep who could quietly edit an earlier visit could rewrite what
+   a teammate reported. */
+function CanvassPinSheet({ pin, statuses, users, onClose, onSave, onConvert, onOpenJob, toast }) {
+  const [p, setP] = useState({});
+  const [notes, setNotes] = useState("");
+  const [converting, setConverting] = useState(false);
+  useEffect(() => {
+    if (!pin) return;
+    setP(pin.prospect || {});
+    setNotes(pin.notes || "");
+  }, [pin && pin.id]); // eslint-disable-line
+  if (!pin) return null;
+  const st = canvassStatus(statuses, pin.status);
+  const hist = [...(pin.history || [])].reverse();
+  const nameOf = (id) => {
+    const u = (users || []).find((x) => x.id === id);
+    return u ? u.name : "";
+  };
+  const save = () => { onSave({ prospect: p, notes }); toast && toast("Saved"); };
+  const set = (k) => (v) => setP((prev) => ({ ...prev, [k]: v }));
+
+  return (
+    <Sheet open={!!pin} onClose={onClose} title={pin.address || "Dropped pin"} tall
+      footer={
+        <div style={{ display: "flex", gap: 10 }}>
+          <Btn kind="ghost" style={{ flex: 1 }} onClick={onClose}>Close</Btn>
+          <Btn style={{ flex: 1 }} data-testid="save-pin" onClick={() => { save(); onClose(); }}>Save</Btn>
+        </div>
+      }>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+        <span style={{ width: 12, height: 12, borderRadius: "50%", background: st.color, border: "2px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,.2)" }} />
+        <span style={{ fontSize: 13.5, fontWeight: 700 }}>{st.name}</span>
+        {pin.job_id && <Chip tone="green">Became a job</Chip>}
+      </div>
+
+      <Field label="Who lives here" hint="Whatever they gave you. A first name and a phone is plenty to work with.">
+        <input style={inputStyle} placeholder="Name" value={p.name || ""} onChange={(e) => set("name")(e.target.value)} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }}>
+          <input style={inputStyle} placeholder="Phone" inputMode="tel" value={p.phone || ""}
+            onChange={(e) => set("phone")(formatPhone(e.target.value))} />
+          <input style={inputStyle} type="email" placeholder="Email" value={p.email || ""}
+            onChange={(e) => set("email")(e.target.value)} />
+        </div>
+        <input style={{ ...inputStyle, marginTop: 8 }} placeholder="Best time to come back"
+          value={p.bestTime || ""} onChange={(e) => set("bestTime")(e.target.value)} />
+      </Field>
+
+      <Field label="Notes" hint="What was actually said. This is what the next person at this door reads.">
+        <textarea style={{ ...inputStyle, minHeight: 84, resize: "vertical" }} value={notes}
+          onChange={(e) => setNotes(e.target.value)} />
+      </Field>
+
+      {/* Whose door this is now. Reassigning does NOT move the knocks
+          already in the history onto the new rep — the scoreboard reads
+          who actually knocked, not who owns the pin today. */}
+      <Field label="Owned by" hint="Who works this door from here. Past knocks stay credited to whoever made them.">
+        <select style={selStyle} value={pin.assigned_to || ""} data-testid="assign-pin"
+          onChange={(e) => onSave({ assigned_to: e.target.value || null })}>
+          <option value="">Nobody in particular</option>
+          {(users || []).filter((u) => u.active !== false).map((u) => (
+            <option key={u.id} value={u.id}>{u.name}</option>
+          ))}
+        </select>
+      </Field>
+
+      {/* Storm history for THIS address — the whole reason a rep is on
+          this street. Reuses the same engine the claim tab uses, so a
+          hail size quoted on a doorstep is the same figure that will
+          back the claim later. */}
+      <Field label="Storm history at this address"
+        hint="What NOAA has on record here. This is the pitch: name the date and the hail size.">
+        <StormLookup job={{ lat: pin.lat, lng: pin.lng, address: pin.address, zip: "" }}
+          dol={p.stormDate || ""} onPick={(d) => set("stormDate")(d)} toast={toast} />
+      </Field>
+
+      {onConvert && !pin.job_id && (
+        <Field label="Turn this into a job"
+          hint="Creates a lead at your first pipeline stage with this address and contact, and links it back to this pin. You stay on the map.">
+          <Btn style={{ width: "100%" }} disabled={converting} data-testid="convert-pin"
+            onClick={async () => {
+              setConverting(true);
+              /* Save first: the conversion reads name/phone/email off
+                 the pin, and a rep who typed them in this sheet and
+                 tapped straight through would otherwise create a lead
+                 with none of it. */
+              await onSave({ prospect: p, notes });
+              await onConvert();
+              setConverting(false);
+              onClose();
+            }}>
+            {converting ? "Creating…" : "Create a lead from this door"}
+          </Btn>
+        </Field>
+      )}
+      {pin.job_id && onOpenJob && (
+        <Btn kind="ghost" style={{ width: "100%" }} onClick={() => { onClose(); onOpenJob(pin.job_id); }}>
+          Open the job this became
+        </Btn>
+      )}
+
+      <Field label={`Knock history (${hist.length})`}
+        hint="Every visit, in order. Nothing here is editable — it is the record of what people were actually told.">
+        {hist.length === 0 ? (
+          <div style={{ fontSize: 13, color: S.sub }}>Nobody has knocked this door yet.</div>
+        ) : hist.map((h, i) => {
+          const hs = canvassStatus(statuses, h.status);
+          return (
+            <div key={i} style={{ display: "flex", gap: 10, padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }}>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: hs.color, marginTop: 4, flexShrink: 0 }} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{hs.name}</div>
+                <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>
+                  {String(h.at || "").slice(0, 16).replace("T", " ")}
+                  {(h.by || nameOf(h.byId)) ? ` · ${h.by || nameOf(h.byId)}` : ""}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </Field>
+    </Sheet>
+  );
+}
+
+function CanvassScreen({ onBack, currentUser, jobs, users, canvassStatuses, toast, onCreateLeadFromPin, onOpenJob }) {
+  const [center, setCenter] = useState(() => {
+    /* Open where the company works. A rep who has to pan across the
+       Atlantic before the first knock will not open this twice. */
+    const withGeo = (jobs || []).find((j) => j.lat != null && j.lng != null);
+    return withGeo ? { lat: withGeo.lat, lng: withGeo.lng } : { lat: 41.78, lng: -88.15 };
+  });
+  const [zoom, setZoom] = useState(17);
+  const [selectedId, setSelectedId] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [me, setMe] = useState(null);
+  const [addr, setAddr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const boundsTimer = useRef(null);
+  const mapWrapRef = useRef(null);
+
+  const tenantId = currentUser && currentUser.tenantId;
+  const { list, loadBounds, savePin, removePin, err, setErr, loading } =
+    useCanvassPins({ tenantId, ready: !!currentUser });
+  const [view, setView] = useState("map");
+  const [filters, setFilters] = useState({ statuses: [], rep: "", mineOnly: false, from: "", to: "", q: "" });
+  const [filterOpen, setFilterOpen] = useState(false);
+  const statuses = canvassStatusList(canvassStatuses);
+  const meId = currentUser && currentUser.id;
+  const shown = filterCanvassPins(list, filters, meId);
+  const stats = canvassStats(shown, canvassStatuses);
+  const board = canvassLeaderboard(shown, canvassStatuses, users);
+  const filterCount = (filters.statuses || []).length + (filters.rep ? 1 : 0)
+    + (filters.mineOnly ? 1 : 0) + (filters.from ? 1 : 0) + (filters.to ? 1 : 0) + (filters.q ? 1 : 0);
+  const selected = list.find((p) => p.id === selectedId) || null;
+  const detailPin = list.find((p) => p.id === detail) || null;
+
+  /* Ask for pins after the pan settles, not on every frame. */
+  const onMove = ({ center: c, zoom: zm }) => {
+    setCenter(c); setZoom(zm);
+    if (boundsTimer.current) clearTimeout(boundsTimer.current);
+    boundsTimer.current = setTimeout(() => {
+      const el = mapWrapRef.current;
+      const w = el ? el.clientWidth : 360, h = el ? el.clientHeight : 420;
+      const cx = lngToWorldX(c.lng, zm), cy = latToWorldY(c.lat, zm);
+      loadBounds({
+        west: worldXToLng(cx - w / 2, zm), east: worldXToLng(cx + w / 2, zm),
+        south: worldYToLat(cy + h / 2, zm), north: worldYToLat(cy - h / 2, zm),
+      });
+    }, 350);
+  };
+  useEffect(() => { onMove({ center, zoom }); /* initial load */ }, []); // eslint-disable-line
+
+  const dropPin = async (lat, lng) => {
+    setBusy(true);
+    const id = uid("cv");
+    const rev = await geoReverse(lat, lng);
+    const row = {
+      id, lat, lng,
+      address: rev ? (rev.formatted || rev.street) : "",
+      status: "new", prospect: {}, notes: "", history: [],
+      created_by: currentUser ? currentUser.id : null,
+      assigned_to: currentUser ? currentUser.id : null,
+      knocked_at: null,
+    };
+    const saved = await savePin(row);
+    setBusy(false);
+    if (saved) { setSelectedId(id); toast && toast(row.address ? `Pin dropped — ${row.address}` : "Pin dropped"); }
+  };
+
+  /* Every disposition APPENDS. A door knocked three times over a
+     season is one pin with three entries, not a pin whose first two
+     visits were overwritten by the third. */
+  const setStatus = async (pin, statusId) => {
+    const st = canvassStatus(canvassStatuses, statusId);
+    const entry = {
+      at: new Date().toISOString(), status: statusId,
+      by: currentUser ? currentUser.name : "", byId: currentUser ? currentUser.id : null,
+    };
+    await savePin({
+      ...pin, status: statusId,
+      history: [...(pin.history || []), entry],
+      knocked_at: entry.at,
+    });
+    toast && toast(st.name);
+  };
+
+  const findMe = () => {
+    if (!navigator.geolocation) { toast && toast("This device won't share its location"); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const c = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setMe(c); setCenter(c); setZoom(18); onMove({ center: c, zoom: 18 });
+      },
+      () => toast && toast("Couldn't get your location — check location permission"),
+      { enableHighAccuracy: true, timeout: 8000 },
+    );
+  };
+
+  const knockedToday = list.filter((p) => p.knocked_at
+    && String(p.knocked_at).slice(0, 10) === todayIso()).length;
+
+  return (
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
+      <SubHeader title="Canvassing" onBack={onBack}
+        right={<Chip tone={knockedToday ? "green" : "gray"}>{knockedToday} today</Chip>} />
+
+      <Card style={{ marginTop: 12 }} pad={13}>
+        <Field label="Find an address" hint="Jump the map to a street, or use your own location.">
+          <AddressAutocomplete value={addr} onChange={setAddr} placeholder="123 Main St"
+            onPick={(it) => {
+              setAddr(it.formatted || it.street || "");
+              const c = { lat: it.lat, lng: it.lng };
+              setCenter(c); setZoom(18); onMove({ center: c, zoom: 18 });
+            }} />
+        </Field>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Btn kind="ghost" small style={{ flex: 1 }} onClick={findMe}><MapPin size={13} /> Where I am</Btn>
+          <Btn kind={view === "list" ? "soft" : "ghost"} small data-testid="canvass-view-toggle"
+            onClick={() => setView(view === "map" ? "list" : "map")}>
+            {view === "map" ? "List" : "Map"}
+          </Btn>
+          <Btn kind={filterCount ? "soft" : "ghost"} small data-testid="canvass-filters"
+            onClick={() => setFilterOpen(true)}>
+            <Filter size={13} /> {filterCount ? `Filters · ${filterCount}` : "Filters"}
+          </Btn>
+          {loading && <Chip tone="gray">Loading…</Chip>}
+        </div>
+      </Card>
+
+      {err && (
+        <Callout label="Not saved" tone="red">
+          {err}
+          <div style={{ marginTop: 8 }}><Btn kind="ghost" small onClick={() => setErr("")}>Dismiss</Btn></div>
+        </Callout>
+      )}
+
+      {view === "map" ? (
+        <>
+          <Card style={{ marginTop: 12, padding: 0, overflow: "hidden" }}>
+            <div ref={mapWrapRef} style={{ height: 420, position: "relative" }}>
+              <CanvassMap
+                center={center} zoom={zoom} onMove={onMove}
+                pins={shown} statuses={canvassStatuses} selectedId={selectedId}
+                onTapPin={(p) => setSelectedId(p.id)}
+                onTapMap={(lat, lng) => { setSelectedId(null); dropPin(lat, lng); }}
+                me={me} />
+            </div>
+          </Card>
+          <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 10 }}>
+            Tap anywhere to drop a pin at that house — tapping within {PIN_SNAP_METRES} m of an existing pin
+            opens that one instead, so two reps on the same street don't double up. Pins are shared with the whole team.
+            {filterCount > 0 && " Filters are hiding some pins right now."}
+          </div>
+        </>
+      ) : (
+        /* The list is not a lesser map. It is what a rep uses in a
+           moving truck, on a bad signal, or when working a callback
+           list at 6pm — sorted by the thing that matters then, which
+           is who was last spoken to. */
+        <Card style={{ marginTop: 12 }} testId="canvass-list">
+          <CardTitle right={<Chip tone="gray">{shown.length}</Chip>}>Doors</CardTitle>
+          {shown.length === 0 ? (
+            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+              {list.length === 0
+                ? "No pins in this area yet. Switch to the map and tap a house to start."
+                : "No pins match these filters."}
+            </div>
+          ) : [...shown].sort((a, b) => String(b.knocked_at || "").localeCompare(String(a.knocked_at || ""))).map((p, i) => {
+            const st = canvassStatus(canvassStatuses, p.status);
+            return (
+              <button key={p.id} data-testid={`row-${p.id}`}
+                onClick={() => { setSelectedId(p.id); setCenter({ lat: p.lat, lng: p.lng }); setDetail(p.id); }}
+                style={{
+                  display: "flex", gap: 10, alignItems: "center", width: "100%", textAlign: "left",
+                  border: "none", background: "none", cursor: "pointer", fontFamily: "inherit",
+                  padding: "10px 0", borderTop: i ? `1px solid ${S.line}` : "none",
+                }}>
+                <span style={{ width: 11, height: 11, borderRadius: "50%", background: st.color, flexShrink: 0 }} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: S.ink }}>
+                    {p.address || "Dropped pin"}
+                  </span>
+                  <span style={{ display: "block", fontSize: 12, color: S.sub, marginTop: 2 }}>
+                    {st.name}
+                    {(p.prospect || {}).name ? ` · ${p.prospect.name}` : ""}
+                    {p.knocked_at ? ` · ${String(p.knocked_at).slice(0, 10)}` : " · never knocked"}
+                  </span>
+                </span>
+                {p.job_id && <Chip tone="green">Job</Chip>}
+              </button>
+            );
+          })}
+        </Card>
+      )}
+
+      {/* Counted where a rep can see it, against the right denominator. */}
+      <Card style={{ marginTop: 12 }} testId="canvass-scoreboard">
+        <CardTitle right={filterCount ? <Chip tone="blue">filtered</Chip> : null}>Scoreboard</CardTitle>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 10 }}>
+          {[["Doors", stats.doors], ["Answered", stats.contacts], ["Appointments", stats.appointments],
+            ["Sold", stats.sold], ["Became jobs", stats.converted]].map(([label, n]) => (
+            <div key={label} style={{ background: S.soft, borderRadius: 10, padding: "10px 12px" }}>
+              <div style={{ fontSize: 19, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{n}</div>
+              <div style={{ fontSize: 11.5, color: S.sub, marginTop: 2 }}>{label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }}>
+          <b>{stats.contactRate}%</b> of doors were answered, and <b>{stats.apptRate}%</b> of the
+          people who answered set an appointment. The second number is the one that says something about
+          selling — the first mostly says who was home.
+        </div>
+        {board.length > 1 && (
+          <div style={{ marginTop: 12 }}>
+            {board.map((r, i) => (
+              <div key={r.id || r.name || i} style={{ display: "flex", gap: 10, alignItems: "baseline", padding: "7px 0", borderTop: `1px solid ${S.line}` }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600 }}>{r.name || "Unattributed"}</span>
+                <span style={{ fontSize: 12.5, color: S.sub, fontVariantNumeric: "tabular-nums" }}>
+                  {r.doors} doors · {r.contacts} answered · {r.appointments} appts
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Sheet open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter doors"
+        footer={
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn kind="ghost" style={{ flex: 1 }} data-testid="clear-filters"
+              onClick={() => setFilters({ statuses: [], rep: "", mineOnly: false, from: "", to: "", q: "" })}>
+              Clear
+            </Btn>
+            <Btn style={{ flex: 1 }} onClick={() => setFilterOpen(false)}>Show {shown.length}</Btn>
+          </div>
+        }>
+        <Field label="Search" hint="Address, name, phone or anything in the notes.">
+          <input style={inputStyle} value={filters.q} placeholder="Oak St, or Dana"
+            onChange={(e) => setFilters({ ...filters, q: e.target.value })} />
+        </Field>
+        <Field label="Status">
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+            {statuses.map((s) => {
+              const on = (filters.statuses || []).includes(s.id);
+              return (
+                <button key={s.id} type="button"
+                  onClick={() => setFilters({
+                    ...filters,
+                    statuses: on ? filters.statuses.filter((x) => x !== s.id) : [...(filters.statuses || []), s.id],
+                  })}
+                  style={{
+                    border: `1.5px solid ${on ? s.color : S.line}`, background: on ? s.color : S.card,
+                    color: on ? "#fff" : S.ink, borderRadius: 999, padding: "7px 13px",
+                    fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                  }}>{s.name}</button>
+              );
+            })}
+          </div>
+        </Field>
+        <Field label="Rep">
+          <select style={selStyle} value={filters.rep} onChange={(e) => setFilters({ ...filters, rep: e.target.value })}>
+            <option value="">Anyone</option>
+            {(users || []).filter((u) => u.active !== false).map((u) => (
+              <option key={u.id} value={u.id}>{u.name}</option>
+            ))}
+          </select>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 9, fontSize: 13.5, cursor: "pointer" }}>
+            <input type="checkbox" checked={filters.mineOnly}
+              onChange={(e) => setFilters({ ...filters, mineOnly: e.target.checked })} />
+            Only doors I dropped or own
+          </label>
+        </Field>
+        <Field label="Knocked between" hint="A door nobody has knocked has no date, so a date range hides it.">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <input type="date" style={dateInputStyle} value={filters.from}
+              onChange={(e) => setFilters({ ...filters, from: e.target.value })} />
+            <input type="date" style={dateInputStyle} value={filters.to}
+              onChange={(e) => setFilters({ ...filters, to: e.target.value })} />
+          </div>
+        </Field>
+      </Sheet>
+
+      {busy && <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8 }}>Looking up that address…</div>}
+
+      {selected && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={<Chip tone="gray">{canvassStatus(canvassStatuses, selected.status).name}</Chip>}>
+            {selected.address || "Dropped pin"}
+          </CardTitle>
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 4 }}>
+            {statuses.filter((s) => s.id !== "new").map((s) => (
+              <button key={s.id} type="button" onClick={() => setStatus(selected, s.id)}
+                style={{
+                  border: `1.5px solid ${selected.status === s.id ? s.color : S.line}`,
+                  background: selected.status === s.id ? s.color : S.card,
+                  color: selected.status === s.id ? "#fff" : S.ink,
+                  borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 600,
+                  cursor: "pointer", fontFamily: "inherit",
+                }}>{s.name}</button>
+            ))}
+          </div>
+          {(selected.history || []).length > 0 && (
+            <div style={{ marginTop: 12, fontSize: 12.5, color: S.sub }}>
+              Knocked {(selected.history || []).length} time{(selected.history || []).length === 1 ? "" : "s"} ·
+              last by {(selected.history || [])[selected.history.length - 1].by || "someone"}
+            </div>
+          )}
+          {selected.job_id && (
+            <div style={{ marginTop: 10 }}>
+              <Chip tone="green">Became a job</Chip>
+              {onOpenJob && (
+                <Btn kind="ghost" small style={{ marginLeft: 8 }} onClick={() => onOpenJob(selected.job_id)}>Open job</Btn>
+              )}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <Btn small style={{ flex: 1 }} data-testid="open-pin-details" onClick={() => setDetail(selected.id)}>Details</Btn>
+            <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => setSelectedId(null)}>Done</Btn>
+            <Btn kind="ghost" small aria-label="Remove pin" style={{ color: "#B42318", flex: "0 0 auto" }}
+              onClick={() => { removePin(selected.id); setSelectedId(null); }}>
+              <Trash2 size={13} />
+            </Btn>
+          </div>
+        </Card>
+      )}
+
+      {/* The door itself: who lives here, what was said, what the
+          weather did to this roof, and the one tap that turns a good
+          conversation into a job. */}
+      <CanvassPinSheet
+        pin={detailPin} statuses={canvassStatuses} users={users}
+        onClose={() => setDetail(null)}
+        onSave={(patch) => savePin({ ...detailPin, ...patch })}
+        onConvert={onCreateLeadFromPin ? async () => {
+          const job = await onCreateLeadFromPin(detailPin);
+          if (job) await savePin({ ...detailPin, job_id: job.id });
+        } : null}
+        onOpenJob={onOpenJob} toast={toast} />
+
+      <Card style={{ marginTop: 12 }} pad={13}>
+        <CardTitle>Legend</CardTitle>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {statuses.map((s) => (
+            <span key={s.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.sub }}>
+              <span style={{ width: 11, height: 11, borderRadius: "50%", background: s.color, border: "1.5px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,.15)" }} />
+              {s.name}
+            </span>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setTheme = () => {} }) {
   const admin = currentUser && currentUser.role === "admin";
   const groups = [
@@ -28145,6 +29438,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["warranties", Shield, "Warranties", "Every roof's labor and manufacturer terms"],
     ]],
     ["Sales & marketing", [
+      ["canvass", MapPin, "Canvassing", "Knock a neighborhood — pins, dispositions, storm history"],
       ["activity", ClipboardList, "Activity feed", currentUser && canManageCompanyConfig(currentUser) ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", Phone, "Calls & attribution", "Log calls, see which sources make money"],
       ["contacts", Users, "Contacts", "Every client, with consent status"],
@@ -28173,6 +29467,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["vendors", Building2, "Vendors & suppliers", "Material suppliers and account details"],
       ["branding", Settings, "Company branding", "Name, logo, colors, what prints on documents"],
       ["workflow", ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
+      ["canvassstatuses", MapPin, "Canvassing dispositions", "What reps mark at a door, and the map colors"],
       ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam, Google reviews"],
       ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
       canManageFeatures(currentUser) && ["admin", Shield, "Admin controls", "Feature switches, security and the audit log"],
@@ -29208,6 +30503,10 @@ export default function SupremeCRM() {
     return () => { alive = false; if (off) off(); };
   }, []);
   const [crews, setCrews] = useState(SEED_CREWS);
+  /* Canvassing dispositions live in the org blob beside pipeline
+     stages, so a company can rename them without a migration. The
+     pins themselves are a real table (037) — see useCanvassPins. */
+  const [canvassStatuses, setCanvassStatuses] = useState(CANVASS_STATUSES);
   const [templates, setTemplates] = useState(SEED_TEMPLATES);
   const [companyDocs, setCompanyDocs] = useState(SEED_COMPANY_DOCS);
   const [priceList, setPriceList] = useState(SEED_PRICE_LIST);
@@ -29392,10 +30691,10 @@ export default function SupremeCRM() {
   };
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, canvassStatuses, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
     announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates,
-    priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate,
+    priceList, companyDocs, crews, canvassStatuses, vendors, reviewSettings, apiSetup, ccAutoCreate,
     features, security, jurisContacts, learnedJuris, version: 1,
   });
   const unpackOrg = (d) => {
@@ -29414,6 +30713,9 @@ export default function SupremeCRM() {
     if (d.priceList) setPriceList(d.priceList);
     if (d.companyDocs) setCompanyDocs(d.companyDocs);
     if (d.crews) setCrews(d.crews);
+    /* No saved list means this company predates canvassing — they keep
+       the shipped dispositions rather than ending up with none. */
+    if (d.canvassStatuses) setCanvassStatuses(d.canvassStatuses);
     if (d.vendors) setVendors(d.vendors);
     if (d.reviewSettings) setReviewSettings(d.reviewSettings);
     if (d.apiSetup) setApiSetup(d.apiSetup);
@@ -29541,6 +30843,48 @@ export default function SupremeCRM() {
      (payments[].to, fin.labor[].by), never by id, so what they were
      paid stays on the books. Blocked upstream when an invoice is still
      unpaid; see unpaidSubInvoiceJobs. */
+  /* A knock becomes a job. Reuses createLead rather than assembling a
+     job object here, so a canvassed lead is structurally identical to
+     one typed into the intake form — same intake defaults, same
+     commission rate off the seat, same first task. Everything the pin
+     already knows is carried across; anything the door didn't give up
+     (carrier, deductible) stays blank for the rep to fill in later,
+     exactly as it would on a phone lead.
+
+     Returns the job so the caller can point the pin at it. */
+  const createLeadFromCanvassPin = (pin) => new Promise((resolve) => {
+    const p = pin.prospect || {};
+    const parts = String(p.name || "").trim().split(/\s+/).filter(Boolean);
+    /* The address is one formatted string from the reverse geocoder;
+       split off the street so the job's own street/city/state fields
+       are populated rather than dumping the whole line into street. */
+    const bits = String(pin.address || "").split(",").map((s) => s.trim());
+    const stateZip = (bits[2] || "").split(/\s+/);
+    createLead({
+      contactMode: "new", existingContactId: "", existingPropertyId: "",
+      first: parts[0] || "", last: parts.slice(1).join(" ") || "",
+      phone: p.phone || "", email: p.email || "",
+      street: bits[0] || pin.address || "", city: bits[1] || "",
+      stateSel: stateZip[0] || "", zip: stateZip[1] || "",
+      lat: pin.lat, lng: pin.lng,
+      leadSource: "Door knock",
+      assignee: (currentUser && currentUser.name) || "",
+      claimType: "Insurance",
+      roofTypes: [], roofAge: "", layers: "", workRequested: [], reasonForCalling: "",
+      propertyUse: "Primary residence", decisionTimeline: "",
+      carrier: "", policy: "", claim: "", adjusterName: "", adjusterPhone: "",
+      deductible: "", coverage: "", oLaw: false,
+      rps: false, cosmetic: false, windHailDed: false, acvRoof: false, matching: false,
+      /* Consent is NOT assumed from a doorstep conversation. A rep
+         standing on a porch has not collected a timestamped opt-in to
+         text or email, and recording one that never happened is the
+         kind of thing that matters when a TCPA complaint arrives. */
+      smsConsent: false, emailConsent: false,
+      notes: [pin.notes, p.bestTime ? `Best time: ${p.bestTime}` : "",
+        p.stormDate ? `Storm date discussed: ${p.stormDate}` : ""].filter(Boolean).join("\n"),
+    }, { stayPut: true, toast: "Lead created from the door", onCreated: resolve });
+  });
+
   const deleteCrew = (id) => {
     const crew = crews.find((c) => c.id === id);
     const affected = jobs.filter((j) => j.crewId === id);
@@ -29885,7 +31229,12 @@ export default function SupremeCRM() {
     setStages(nextStages);
   };
 
-  const createLead = (f) => {
+  /* opts is optional and NewLeadSheet never passes it, so the form path
+     is unchanged. Canvassing needs the two things a form doesn't: to
+     stay where it is (a rep converting a door wants to keep knocking,
+     not be thrown onto the job screen mid-street) and to learn which
+     job was created, so the pin can point at it. */
+  const createLead = (f, opts = {}) => {
     const id = uid("j");
     const contactId = f.existingContactId || uid("ct");
     const propertyId = f.existingPropertyId || uid("pr");
@@ -29955,10 +31304,11 @@ export default function SupremeCRM() {
     };
     setJobs((prev) => [job, ...prev]);
     logAct({ kind: "lead", jobId: job.id, jobName: job.name, text: `created new lead ${job.name} (${job.leadSource})` });
-    toast("Lead created");
+    toast(opts.toast || "Lead created");
     setNewLeadOpen(false);
     setLeadSeed(null);
-    setOpenJobId(id); setNav("jobs");
+    if (!opts.stayPut) { setOpenJobId(id); setNav("jobs"); }
+    if (opts.onCreated) opts.onCreated(job);
 
     /* Auto-create the matching CompanyCam project when the seat is
        connected and the company has the setting on. Best-effort and
@@ -30344,6 +31694,13 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "crews" ? (
         <CrewManager crews={crews} setCrews={setCrews} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} onDeleteCrew={deleteCrew} />
+      ) : nav === "canvass" ? (
+        <CanvassScreen onBack={() => setNav("more")} currentUser={liveUser} jobs={jobs} users={users}
+          canvassStatuses={canvassStatuses} toast={toast}
+          onCreateLeadFromPin={createLeadFromCanvassPin} onOpenJob={openJobScreen} />
+      ) : nav === "canvassstatuses" ? (
+        <CanvassStatusEditor statuses={canvassStatuses} setStatuses={setCanvassStatuses}
+          onBack={() => setNav("more")} toast={toast} currentUser={liveUser} />
       ) : nav === "claims" ? (
         <ClaimsDashboard jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
       ) : nav === "crewpay" ? (

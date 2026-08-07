@@ -1733,6 +1733,24 @@ function nextStepAfter(job, completedLabel) {
 }
 var WON_STAGES = ["s5", "s6", "s7", "s8", "s9", "s10"];
 var DEAD_STAGES = ["s11", "s12"];
+var CANVASS_STATUSES = [
+  { id: "new", name: "Not knocked", color: "#9CA3AF", contact: false, open: true, terminal: false },
+  { id: "not_home", name: "Not home", color: "#6B7280", contact: false, open: true, terminal: false },
+  { id: "callback", name: "Come back", color: "#B45309", contact: true, open: true, terminal: false },
+  { id: "not_interested", name: "Not interested", color: "#B42318", contact: true, open: false, terminal: false },
+  { id: "appointment", name: "Appointment set", color: "#1D4ED8", contact: true, open: true, terminal: false },
+  { id: "inspected", name: "Inspected", color: "#7C3AED", contact: true, open: true, terminal: false },
+  { id: "sold", name: "Sold", color: "#047857", contact: true, open: false, terminal: false },
+  { id: "dnk", name: "Do not knock", color: "#111827", contact: false, open: false, terminal: true }
+];
+function canvassStatusList(saved) {
+  const list = Array.isArray(saved) && saved.length ? saved : CANVASS_STATUSES;
+  return list.map((s) => ({ ...CANVASS_STATUSES.find((d) => d.id === s.id), ...s }));
+}
+function canvassStatus(saved, id) {
+  const list = canvassStatusList(saved);
+  return list.find((s) => s.id === id) || CANVASS_STATUSES.find((s) => s.id === id) || { id: id || "new", name: id || "Not knocked", color: "#9CA3AF", contact: false, open: true, terminal: false };
+}
 var SEED_CREWS = [
   { id: "c1", name: "Hillwood Contractors", contact: "Luis Hernandez", phone: "(815) 555-0142", email: "info@hillwoodcontractors.com", trades: ["Roofing", "Gutters"], active: true },
   { id: "c2", name: "Northgate Exteriors", contact: "Danny Pruitt", phone: "(847) 555-0188", email: "dispatch@northgateext.com", trades: ["Roofing", "Siding"], active: true },
@@ -3196,6 +3214,29 @@ async function geoAutocomplete(text, signal) {
     return [];
   }
 }
+var TILE_SIZE = 256;
+var MAX_LAT = 85.05112878;
+function lngToWorldX(lng, z) {
+  return (lng + 180) / 360 * TILE_SIZE * Math.pow(2, z);
+}
+function latToWorldY(lat, z) {
+  const clamped = Math.max(-MAX_LAT, Math.min(MAX_LAT, lat));
+  const s = Math.sin(clamped * Math.PI / 180);
+  return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * TILE_SIZE * Math.pow(2, z);
+}
+function worldXToLng(x, z) {
+  return x / (TILE_SIZE * Math.pow(2, z)) * 360 - 180;
+}
+function worldYToLat(y, z) {
+  const n = Math.PI - 2 * Math.PI * y / (TILE_SIZE * Math.pow(2, z));
+  return 180 / Math.PI * Math.atan(Math.sinh(n));
+}
+function metresBetween(lat1, lng1, lat2, lng2) {
+  const R = 6371e3, rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
 var PROPERTY_PROVIDER = {
   name: "rentcast",
   apiKey: typeof window !== "undefined" && window.__PROPERTY_KEY__ || "",
@@ -3228,8 +3269,11 @@ async function fetchPropertyRecord(address) {
     return null;
   }
 }
+var REVERSE_CACHE = /* @__PURE__ */ new Map();
 async function geoReverse(lat, lng) {
   if (!geoReady() || lat == null || lng == null) return null;
+  const key = `${Math.round(lat * 1e5)},${Math.round(lng * 1e5)}`;
+  if (REVERSE_CACHE.has(key)) return REVERSE_CACHE.get(key);
   const url = `${GEO_PROVIDER.base}/reverse?lat=${lat}&lon=${lng}&format=json&apiKey=${GEO_PROVIDER.apiKey}`;
   try {
     const res = await fetch(url);
@@ -3237,13 +3281,15 @@ async function geoReverse(lat, lng) {
     const data = await res.json();
     const r = (data.results || [])[0];
     if (!r) return null;
-    return {
+    const out = {
       formatted: r.formatted || "",
       street: [r.housenumber, r.street].filter(Boolean).join(" ") || r.address_line1 || "",
       city: r.city || r.town || r.village || "",
       state: r.state_code || "",
       zip: r.postcode || ""
     };
+    REVERSE_CACHE.set(key, out);
+    return out;
   } catch {
     return null;
   }
@@ -3993,8 +4039,8 @@ var dateInputStyle = {
   width: "100%",
   minWidth: 0
 };
-function Card({ children, style, pad = 18, onClick }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { onClick, style: { background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }, children });
+function Card({ children, style, pad = 18, onClick, testId }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { onClick, "data-testid": testId, style: { background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: pad, ...style }, children });
 }
 function CardTitle({ children, right }) {
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }, children: [
@@ -15059,40 +15105,98 @@ async function fetchStormHistory(lat, lng, start, end) {
   }
 }
 var LSR_CACHE = /* @__PURE__ */ new Map();
-async function enrichStormDay(lat, lng, iso) {
-  const key = `${weatherKey(lat, lng)}:${iso}`;
+var LSR_RADIUS_DEG = 0.45;
+function lsrKind(p) {
+  const t = String(p.typetext || "").toUpperCase();
+  const code = String(p.type || "").toUpperCase();
+  if (t.includes("HAIL") || code === "H") return "hail";
+  if (t.includes("TORNADO") || code === "T") return "tornado";
+  if (/WND GST|WIND|DOWNBURST/.test(t) || code === "G") return "wind";
+  if (/DMG|DAMAGE/.test(t) || code === "D") return "damage";
+  return "other";
+}
+function lsrWindMph(mag, unit) {
+  if (!isFinite(mag)) return null;
+  return /KT|KNOT/i.test(String(unit || "")) ? mag * 1.15078 : mag;
+}
+function localDateAt(utcIso, lng) {
+  const t = Date.parse(utcIso);
+  if (!isFinite(t)) return null;
+  return new Date(t + Math.round(lng / 15) * 36e5).toISOString().slice(0, 10);
+}
+async function fetchStormReports(lat, lng, start, end) {
+  const key = `${weatherKey(lat, lng)}:${start}:${end}`;
   if (LSR_CACHE.has(key)) return LSR_CACHE.get(key);
   try {
-    const sts = `${iso}T00:00Z`;
-    const nextIso = new Date((/* @__PURE__ */ new Date(iso + "T00:00Z")).getTime() + 864e5).toISOString().slice(0, 10);
-    const ets = `${nextIso}T00:00Z`;
-    const url = `https://mesonet.agron.iastate.edu/geojson/lsr.geojson?sts=${sts}&ets=${ets}`;
+    const ets = new Date(Date.parse(end + "T00:00Z") + 2 * 864e5).toISOString().slice(0, 10);
+    const url = `https://mesonet.agron.iastate.edu/geojson/lsr.geojson?sts=${start}T00:00Z&ets=${ets}T00:00Z&west=${(lng - LSR_RADIUS_DEG).toFixed(3)}&east=${(lng + LSR_RADIUS_DEG).toFixed(3)}&south=${(lat - LSR_RADIUS_DEG).toFixed(3)}&north=${(lat + LSR_RADIUS_DEG).toFixed(3)}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error("lsr");
     const gj = await res.json();
-    let hailIn = null, windMph = null, count = 0;
+    const byDate = {};
     for (const f of gj.features || []) {
       const c = f.geometry && f.geometry.coordinates;
       if (!c) continue;
       const [flng, flat] = c;
-      if (Math.abs(flat - lat) > 0.5 || Math.abs(flng - lng) > 0.6) continue;
       const p = f.properties || {};
-      const type = String(p.type || "").toUpperCase();
+      const date = localDateAt(p.valid, lng);
+      if (!date || date < start || date > end) continue;
+      const kind = lsrKind(p);
+      if (kind === "other") continue;
       const mag = parseFloat(p.magnitude);
-      if (type.includes("HAIL") && !isNaN(mag)) {
-        hailIn = Math.max(hailIn ?? 0, mag);
-        count++;
-      } else if (type.includes("WND") && !isNaN(mag)) {
-        windMph = Math.max(windMph ?? 0, mag);
-        count++;
-      } else if (type.includes("TORNADO")) count++;
+      const row = byDate[date] || (byDate[date] = { hailIn: null, reportWind: null, count: 0, reports: [] });
+      row.count++;
+      if (kind === "hail" && isFinite(mag)) row.hailIn = Math.max(row.hailIn ?? 0, mag);
+      if (kind === "wind") {
+        const mph = lsrWindMph(mag, p.unit);
+        if (mph != null) row.reportWind = Math.max(row.reportWind ?? 0, mph);
+      }
+      row.reports.push({
+        kind,
+        mag: isFinite(mag) ? mag : null,
+        unit: p.unit || "",
+        at: p.valid || "",
+        city: p.city || "",
+        county: p.county || "",
+        state: p.state || "",
+        qualifier: p.qualifier || "",
+        source: p.source || "",
+        remark: p.remark || "",
+        miles: haversineMiles(lat, lng, flat, flng)
+      });
     }
-    const out = { hailIn, reportWind: windMph, count };
-    LSR_CACHE.set(key, out);
-    return out;
+    Object.values(byDate).forEach((r) => r.reports.sort((a, b) => a.miles - b.miles));
+    LSR_CACHE.set(key, byDate);
+    return byDate;
   } catch (e) {
     return null;
   }
+}
+function haversineMiles(lat1, lng1, lat2, lng2) {
+  const R = 3958.8, rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+var HAIL_SIZES = [
+  [4.5, "softball"],
+  [4, "grapefruit"],
+  [3, "teacup"],
+  [2.75, "baseball"],
+  [2.5, "tennis ball"],
+  [2, "hen egg"],
+  [1.75, "golf ball"],
+  [1.5, "ping pong ball"],
+  [1.25, "half dollar"],
+  [1, "quarter"],
+  [0.88, "nickel"],
+  [0.75, "penny"],
+  [0.5, "marble"]
+];
+function hailSizeLabel(inches) {
+  if (inches == null) return "";
+  const hit = HAIL_SIZES.find(([n]) => inches >= n);
+  return hit ? hit[1] : "pea";
 }
 function spcReportLink(iso) {
   const yymmdd = iso.slice(2).replace(/-/g, "");
@@ -15100,6 +15204,30 @@ function spcReportLink(iso) {
 }
 function stormSeverity(r) {
   return (r.hailIn ? 4e3 + r.hailIn * 500 : r.hail ? 3e3 : 0) + (r.reportWind || r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
+}
+function mergeStormDays(days, reportsByDate) {
+  const byDate = /* @__PURE__ */ new Map();
+  (days || []).forEach((d) => byDate.set(d.date, { ...d }));
+  Object.entries(reportsByDate || {}).forEach(([date, rep]) => {
+    const base = byDate.get(date) || {
+      date,
+      gust: null,
+      precip: null,
+      code: null,
+      hail: false,
+      highWind: false,
+      damagingWind: false,
+      storm: false
+    };
+    byDate.set(date, {
+      ...base,
+      hailIn: rep.hailIn,
+      reportWind: rep.reportWind,
+      reports: rep.count,
+      reportList: rep.reports
+    });
+  });
+  return [...byDate.values()].filter((r) => r.reports || r.hail || r.highWind || r.storm || r.precip != null && r.precip >= 0.75).sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1));
 }
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded = false }) {
   const [day, setDay] = (0, import_react.useState)(() => todayIso());
@@ -16791,17 +16919,20 @@ function StormLookup({ job, dol, onPick, toast }) {
   const iso = (d) => d.toISOString().slice(0, 10);
   const [start, setStart] = (0, import_react.useState)(() => {
     const d = /* @__PURE__ */ new Date();
-    d.setFullYear(d.getFullYear() - 1);
+    d.setFullYear(d.getFullYear() - 2);
     return iso(d);
   });
+  const [open, setOpen] = (0, import_react.useState)(null);
   const [end, setEnd] = (0, import_react.useState)(() => iso(/* @__PURE__ */ new Date()));
   const [rows, setRows] = (0, import_react.useState)(null);
   const [loading, setLoading] = (0, import_react.useState)(false);
   const [err, setErr] = (0, import_react.useState)("");
+  const [reportsFailed, setReportsFailed] = (0, import_react.useState)(false);
   const run = async () => {
     setLoading(true);
     setErr("");
     setRows(null);
+    setReportsFailed(false);
     let lat = job.lat ?? job.property?.lat, lng = job.lng ?? job.property?.lng;
     if (lat == null || lng == null) {
       const g = await geocodeZip(job.zip);
@@ -16815,67 +16946,130 @@ function StormLookup({ job, dol, onPick, toast }) {
       setLoading(false);
       return;
     }
-    const days = await fetchStormHistory(lat, lng, start, end);
-    if (!days) {
-      setErr("Couldn't reach the weather archive. Check the connection and try again.");
-      setLoading(false);
-      return;
-    }
-    const notable = days.filter((r) => r.hail || r.highWind || r.storm || r.precip != null && r.precip >= 0.75).sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1)).slice(0, 24);
-    setRows(notable);
+    const [days, reports] = await Promise.all([
+      fetchStormHistory(lat, lng, start, end),
+      fetchStormReports(lat, lng, start, end)
+    ]);
     setLoading(false);
-    if (!notable.length) {
-      toast && toast("No notable storm days in that window");
+    if (!days && !reports) {
+      setErr("Couldn't reach the weather archive or the NOAA report service. Check the connection and try again.");
       return;
     }
-    notable.slice(0, 8).forEach(async (r) => {
-      const info = await enrichStormDay(lat, lng, r.date);
-      if (!info) return;
-      setRows((prev) => prev && prev.map((x) => x.date === r.date ? { ...x, hailIn: info.hailIn, reportWind: info.reportWind, reports: info.count } : x));
-    });
+    setReportsFailed(!reports);
+    const merged = mergeStormDays(days || [], reports || {}).slice(0, 40);
+    setRows(merged);
+    if (!merged.length) toast && toast("No storm reports or notable weather in that window");
+  };
+  const setWindow = (years) => {
+    const d = /* @__PURE__ */ new Date();
+    d.setFullYear(d.getFullYear() - years);
+    setStart(iso(d));
+    setEnd(iso(/* @__PURE__ */ new Date()));
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "NOAA / Open-Meteo" }), children: "Storm history \u2014 date of loss" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Pulls high-wind, hail and heavy-rain days for this address so you can set the date of loss from the record. Gusts & precip are ERA5 reanalysis; the strongest days are cross-checked against official NOAA storm reports, so where a report exists you'll see the measured hail size and peak wind. Confirm the NOAA report before filing." }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Hail and wind days on record for this address, so you can set the date of loss from the record rather than memory. Hail sizes and measured wind come from official NOAA Local Storm Reports near the property; gusts and rain without a \u201CNOAA\u201D tag are ERA5 reanalysis \u2014 real, but modelled rather than observed. Confirm the NOAA report before filing." }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "From", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: start, max: end, onChange: (e) => setStart(e.target.value) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "To", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: end, max: iso(/* @__PURE__ */ new Date()), onChange: (e) => setEnd(e.target.value) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, onClick: run, disabled: loading, style: { marginBottom: 12 }, children: loading ? "Looking\u2026" : "Look up" })
     ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: -4, marginBottom: 4 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 12, color: S.sub, alignSelf: "center" }, children: "Look back:" }),
+      [[1, "1 yr"], [2, "2 yrs"], [5, "5 yrs"], [10, "10 yrs"]].map(([y, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => setWindow(y), children: label }, y))
+    ] }),
     err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginTop: 6 }, children: err }),
+    reportsFailed && rows && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Hail record unavailable", tone: "amber", children: "The NOAA storm-report service didn't respond, so what's below is modelled weather only \u2014 it is not evidence that no hail fell here. Run the lookup again before telling a homeowner there's no hail on record." }),
+    rows && rows.length === 0 && !err && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 8 }, children: [
+      "No storm reports or notable weather between ",
+      start,
+      " and ",
+      end,
+      ". Try a longer look-back \u2014 hail often skips several years in a given neighborhood."
+    ] }),
     rows && rows.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 6 }, children: rows.map((r) => {
       const picked = r.date === dol;
-      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "center", padding: "9px 0", borderTop: `1px solid ${S.line}` }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: r.date }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }, children: [
-            r.hailIn != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "red", children: [
-              "Hail \u2014 ",
-              r.hailIn.toFixed(2).replace(/\.?0+$/, ""),
-              "\u2033 (NOAA)"
-            ] }) : r.hail && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "Hail possible" }),
-            r.reportWind != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.reportWind >= 58 ? "red" : "amber", children: [
-              r.reportWind >= 58 ? "Damaging wind" : "High wind",
-              " \u2014 ",
-              Math.round(r.reportWind),
-              " mph (NOAA)"
-            ] }) : r.gust != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray", children: [
-              r.gust >= 58 ? "Damaging wind" : r.gust >= 45 ? "High wind" : "Gusts",
-              " \u2014 ",
-              r.gust,
-              " mph"
-            ] }),
-            r.precip != null && r.precip >= 0.5 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
-              r.precip.toFixed(2),
-              "\u2033 rain"
+      const size = hailSizeLabel(r.hailIn);
+      const nearest = (r.reportList || [])[0];
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { borderTop: `1px solid ${S.line}` }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "center", padding: "9px 0" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: S.ink }, children: r.date }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }, children: [
+              r.hailIn != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "red", children: [
+                "Hail \u2014 ",
+                r.hailIn.toFixed(2).replace(/\.?0+$/, ""),
+                "\u2033",
+                size ? ` (${size})` : "",
+                " \xB7 NOAA"
+              ] }) : r.hail && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "Hail possible" }),
+              r.reportWind != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.reportWind >= 58 ? "red" : "amber", children: [
+                r.reportWind >= 58 ? "Damaging wind" : "High wind",
+                " \u2014 ",
+                Math.round(r.reportWind),
+                " mph \xB7 NOAA"
+              ] }) : r.gust != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray", children: [
+                r.gust >= 58 ? "Damaging wind" : r.gust >= 45 ? "High wind" : "Gusts",
+                " \u2014 ",
+                r.gust,
+                " mph"
+              ] }),
+              r.precip != null && r.precip >= 0.5 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
+                r.precip.toFixed(2),
+                "\u2033 rain"
+              ] }),
+              r.reports > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+                "button",
+                {
+                  onClick: () => setOpen(open === r.date ? null : r.date),
+                  style: {
+                    border: "none",
+                    background: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    color: T.accent,
+                    fontFamily: "inherit"
+                  },
+                  children: [
+                    r.reports,
+                    " report",
+                    r.reports === 1 ? "" : "s",
+                    nearest ? ` \xB7 nearest ${nearest.miles < 1 ? "<1" : Math.round(nearest.miles)} mi` : "",
+                    open === r.date ? " \u25BE" : " \u25B8"
+                  ]
+                }
+              )
             ] })
-          ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: spcReportLink(r.date), target: "_blank", rel: "noreferrer", style: { fontSize: 11.5, color: T.accent, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }, children: "NOAA \u2197" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: picked ? "green" : "soft", small: true, onClick: () => {
+            onPick(r.date);
+            toast && toast(`Date of loss set to ${r.date}`);
+          }, style: { flexShrink: 0 }, children: picked ? "\u2713 Set" : "Use" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: spcReportLink(r.date), target: "_blank", rel: "noreferrer", style: { fontSize: 11.5, color: T.accent, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }, children: "NOAA \u2197" }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: picked ? "green" : "soft", small: true, onClick: () => {
-          onPick(r.date);
-          toast && toast(`Date of loss set to ${r.date}`);
-        }, style: { flexShrink: 0 }, children: picked ? "\u2713 Set" : "Use" })
+        open === r.date && (r.reportList || []).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "2px 0 10px" }, children: [
+          r.reportList.slice(0, 12).map((rep, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "baseline", padding: "5px 0", fontSize: 12.5, color: S.sub }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 700, color: S.ink, minWidth: 84 }, children: rep.kind === "hail" ? `${rep.mag}\u2033 hail` : rep.kind === "wind" ? `${Math.round(lsrWindMph(rep.mag, rep.unit) || 0)} mph wind` : rep.kind === "tornado" ? "Tornado" : "Wind damage" }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+              rep.miles < 1 ? "<1" : Math.round(rep.miles),
+              " mi \u2014 ",
+              rep.city,
+              rep.county ? `, ${rep.county} Co` : "",
+              rep.state ? `, ${rep.state}` : "",
+              rep.qualifier ? ` \xB7 ${rep.qualifier}` : "",
+              rep.source ? ` \xB7 ${rep.source}` : ""
+            ] })
+          ] }, i)),
+          r.reportList.length > 12 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, paddingTop: 4 }, children: [
+            "+ ",
+            r.reportList.length - 12,
+            " more within ",
+            Math.round(LSR_RADIUS_DEG * 69),
+            " mi"
+          ] })
+        ] })
       ] }, r.date);
     }) })
   ] });
@@ -29529,6 +29723,1139 @@ function HelpDesk({ onBack, brand }) {
     })
   ] });
 }
+var MAP_TILE_STYLE = "osm-bright";
+function tileUrl(z, x, y) {
+  const custom = typeof window !== "undefined" && window.__MAP_TILE_URL__;
+  if (custom) return String(custom).replace("{z}", z).replace("{x}", x).replace("{y}", y);
+  return `https://maps.geoapify.com/v1/tile/${MAP_TILE_STYLE}/${z}/${x}/${y}.png?apiKey=${GEO_PROVIDER.apiKey}`;
+}
+var MAP_MIN_ZOOM = 3;
+var MAP_MAX_ZOOM = 19;
+var PIN_SNAP_METRES = 20;
+function nearestPin(pins, lat, lng, within = PIN_SNAP_METRES) {
+  let best = null, bestD = Infinity;
+  (pins || []).forEach((p) => {
+    const d = metresBetween(lat, lng, p.lat, p.lng);
+    if (d < bestD) {
+      bestD = d;
+      best = p;
+    }
+  });
+  return bestD <= within ? best : null;
+}
+function CanvassMap({ center, zoom, onMove, pins, statuses, selectedId, onTapPin, onTapMap, me }) {
+  const boxRef = (0, import_react.useRef)(null);
+  const [size, setSize] = (0, import_react.useState)({ w: 0, h: 0 });
+  const drag = (0, import_react.useRef)(null);
+  const pointers = (0, import_react.useRef)(/* @__PURE__ */ new Map());
+  const pinch = (0, import_react.useRef)(null);
+  (0, import_react.useEffect)(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const { w, h } = size;
+  const z = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, zoom));
+  const cx = lngToWorldX(center.lng, z), cy = latToWorldY(center.lat, z);
+  const tileZ = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, Math.round(z)));
+  const scale = Math.pow(2, z - tileZ);
+  const tcx = lngToWorldX(center.lng, tileZ), tcy = latToWorldY(center.lat, tileZ);
+  const tiles = [];
+  if (w && h) {
+    const span = Math.pow(2, tileZ);
+    const halfW = w / (2 * scale), halfH = h / (2 * scale);
+    const x0 = Math.floor((tcx - halfW) / TILE_SIZE), x1 = Math.floor((tcx + halfW) / TILE_SIZE);
+    const y0 = Math.floor((tcy - halfH) / TILE_SIZE), y1 = Math.floor((tcy + halfH) / TILE_SIZE);
+    for (let ty = y0; ty <= y1; ty++) {
+      if (ty < 0 || ty >= span) continue;
+      for (let tx = x0; tx <= x1; tx++) {
+        const wrapped = (tx % span + span) % span;
+        tiles.push({ key: `${tileZ}/${tx}/${ty}`, x: tx, y: ty, src: tileUrl(tileZ, wrapped, ty) });
+      }
+    }
+  }
+  const toScreen = (lat, lng) => ({
+    x: w / 2 + (lngToWorldX(lng, z) - cx),
+    y: h / 2 + (latToWorldY(lat, z) - cy)
+  });
+  const toLatLng = (px, py) => ({
+    lat: worldYToLat(cy + (py - h / 2), z),
+    lng: worldXToLng(cx + (px - w / 2), z)
+  });
+  const localPoint = (e) => {
+    const r = boxRef.current.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  const onPointerDown = (e) => {
+    boxRef.current.setPointerCapture && boxRef.current.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, localPoint(e));
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom: z };
+      drag.current = null;
+      return;
+    }
+    const p = localPoint(e);
+    drag.current = { startX: p.x, startY: p.y, cx, cy, moved: 0, at: nowMs() };
+  };
+  const onPointerMove = (e) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, localPoint(e));
+    if (pinch.current && pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch.current.dist > 0) {
+        const next = pinch.current.zoom + Math.log2(dist / pinch.current.dist);
+        onMove({ center, zoom: Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, next)) });
+      }
+      return;
+    }
+    if (!drag.current) return;
+    const p = localPoint(e);
+    const dx = p.x - drag.current.startX, dy = p.y - drag.current.startY;
+    drag.current.moved = Math.max(drag.current.moved, Math.hypot(dx, dy));
+    onMove({
+      center: {
+        lat: worldYToLat(drag.current.cy - dy, z),
+        lng: worldXToLng(drag.current.cx - dx, z)
+      },
+      zoom: z
+    });
+  };
+  const onPointerUp = (e) => {
+    const wasDrag = drag.current;
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+    if (!wasDrag) return;
+    drag.current = null;
+    if (wasDrag.moved > 6) return;
+    const p = localPoint(e);
+    const { lat, lng } = toLatLng(p.x, p.y);
+    const hit = nearestPin(pins, lat, lng);
+    if (hit) onTapPin(hit);
+    else onTapMap(lat, lng);
+  };
+  const nudgeZoom = (delta) => onMove({ center, zoom: Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, Math.round(z) + delta)) });
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+    "div",
+    {
+      ref: boxRef,
+      "data-testid": "canvass-map",
+      onPointerDown,
+      onPointerMove,
+      onPointerUp,
+      onPointerCancel: onPointerUp,
+      style: {
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        overflow: "hidden",
+        background: S.soft,
+        touchAction: "none",
+        cursor: "grab",
+        userSelect: "none"
+      },
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+          position: "absolute",
+          left: w / 2,
+          top: h / 2,
+          width: 0,
+          height: 0,
+          transform: `scale(${scale}) translate(${-tcx}px, ${-tcy}px)`,
+          transformOrigin: "0 0"
+        }, children: tiles.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "img",
+          {
+            src: t.src,
+            alt: "",
+            draggable: false,
+            width: TILE_SIZE,
+            height: TILE_SIZE,
+            style: { position: "absolute", left: t.x * TILE_SIZE, top: t.y * TILE_SIZE, width: TILE_SIZE, height: TILE_SIZE }
+          },
+          t.key
+        )) }),
+        me && w > 0 && (() => {
+          const p = toScreen(me.lat, me.lng);
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+            position: "absolute",
+            left: p.x - 8,
+            top: p.y - 8,
+            width: 16,
+            height: 16,
+            borderRadius: "50%",
+            background: "#2563EB",
+            border: "3px solid #fff",
+            boxShadow: "0 0 0 2px rgba(37,99,235,.35)",
+            pointerEvents: "none"
+          } });
+        })(),
+        w > 0 && (pins || []).map((pin) => {
+          const p = toScreen(pin.lat, pin.lng);
+          if (p.x < -40 || p.y < -40 || p.x > w + 40 || p.y > h + 40) return null;
+          const st = canvassStatus(statuses, pin.status);
+          const on = pin.id === selectedId;
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "div",
+            {
+              "data-testid": `pin-${pin.id}`,
+              title: pin.address || st.name,
+              style: {
+                position: "absolute",
+                left: p.x - (on ? 12 : 8),
+                top: p.y - (on ? 12 : 8),
+                width: on ? 24 : 16,
+                height: on ? 24 : 16,
+                borderRadius: "50%",
+                background: st.color,
+                border: `${on ? 3 : 2}px solid #fff`,
+                boxShadow: on ? "0 0 0 3px rgba(17,24,39,.28)" : "0 1px 3px rgba(0,0,0,.35)",
+                pointerEvents: "none",
+                zIndex: on ? 3 : 2
+              }
+            },
+            pin.id
+          );
+        }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", right: 10, top: 10, display: "flex", flexDirection: "column", gap: 6 }, children: [["+", 1], ["\u2212", -1]].map(([label, d]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            type: "button",
+            "aria-label": d > 0 ? "Zoom in" : "Zoom out",
+            onPointerDown: (e) => e.stopPropagation(),
+            onClick: () => nudgeZoom(d),
+            style: {
+              width: 34,
+              height: 34,
+              borderRadius: 9,
+              border: `1px solid ${S.line}`,
+              background: S.card,
+              color: S.ink,
+              fontSize: 18,
+              fontWeight: 700,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              lineHeight: 1
+            },
+            children: label
+          },
+          label
+        )) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+          position: "absolute",
+          right: 0,
+          bottom: 0,
+          background: "rgba(255,255,255,.82)",
+          color: "#374151",
+          fontSize: 9.5,
+          padding: "2px 6px",
+          borderTopLeftRadius: 6,
+          pointerEvents: "auto"
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: "https://www.geoapify.com/", target: "_blank", rel: "noreferrer", style: { color: "inherit" }, children: "Geoapify" }),
+          " \xB7 ",
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", { href: "https://www.openstreetmap.org/copyright", target: "_blank", rel: "noreferrer", style: { color: "inherit" }, children: "\xA9 OpenStreetMap" })
+        ] })
+      ]
+    }
+  );
+}
+function nowMs() {
+  return Date.now();
+}
+function useCanvassPins({ tenantId, ready }) {
+  const [pins, setPins] = (0, import_react.useState)({});
+  const [err, setErr] = (0, import_react.useState)("");
+  const [loading, setLoading] = (0, import_react.useState)(false);
+  const seq = (0, import_react.useRef)(0);
+  const merge = (rows) => setPins((prev) => {
+    const next = { ...prev };
+    rows.forEach((r) => {
+      next[r.id] = r;
+    });
+    return next;
+  });
+  const loadBounds = async (b) => {
+    const db = DB();
+    if (!db || !ready || !b) return;
+    const mine = ++seq.current;
+    setLoading(true);
+    const { data, error } = await db.from("crm_canvass").select("*").gte("lat", b.south).lte("lat", b.north).gte("lng", b.west).lte("lng", b.east).limit(2e3);
+    if (mine !== seq.current) return;
+    setLoading(false);
+    if (error) {
+      setErr("Couldn't load pins for this area. " + (error.message || ""));
+      return;
+    }
+    setErr("");
+    merge(data || []);
+  };
+  const savePin = async (row) => {
+    const before = pins[row.id];
+    merge([row]);
+    const db = DB();
+    if (!db) return row;
+    const { data, error } = await db.from("crm_canvass").upsert({ ...row, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).select().maybeSingle();
+    if (error) {
+      setErr("That knock didn't save \u2014 you're seeing it on this device only. " + (error.message || ""));
+      if (before) merge([before]);
+      else setPins((prev) => {
+        const n = { ...prev };
+        delete n[row.id];
+        return n;
+      });
+      return null;
+    }
+    if (data) merge([data]);
+    return data || row;
+  };
+  const removePin = async (id) => {
+    const before = pins[id];
+    setPins((prev) => {
+      const n = { ...prev };
+      delete n[id];
+      return n;
+    });
+    const db = DB();
+    if (!db) return;
+    const { error } = await db.from("crm_canvass").delete().eq("id", id);
+    if (error) {
+      setErr("Couldn't remove that pin. " + (error.message || ""));
+      if (before) merge([before]);
+    }
+  };
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db || !ready || !tenantId) return;
+    const ch = db.channel("crm-canvass").on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "crm_canvass", filter: `tenant_id=eq.${tenantId}` },
+      (p) => p.new && merge([p.new])
+    ).on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "crm_canvass", filter: `tenant_id=eq.${tenantId}` },
+      (p) => p.new && merge([p.new])
+    ).on(
+      "postgres_changes",
+      { event: "DELETE", schema: "public", table: "crm_canvass" },
+      (p) => {
+        const id = p.old && p.old.id;
+        if (id) setPins((prev) => {
+          const n = { ...prev };
+          delete n[id];
+          return n;
+        });
+      }
+    ).subscribe();
+    return () => {
+      db.removeChannel(ch);
+    };
+  }, [ready, tenantId]);
+  return { pins, list: Object.values(pins), loadBounds, savePin, removePin, err, setErr, loading };
+}
+function CanvassStatusEditor({ statuses, setStatuses, onBack, toast, currentUser }) {
+  const list = canvassStatusList(statuses);
+  const canEdit = canManageCompanyConfig(currentUser);
+  const [draft, setDraft] = (0, import_react.useState)("");
+  const write = (next) => setStatuses(next);
+  const patch = (id, p) => write(list.map((s) => s.id === id ? { ...s, ...p } : s));
+  const add = () => {
+    const name = draft.trim();
+    if (!name) return;
+    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || `s_${list.length}`;
+    if (list.some((s) => s.id === id)) {
+      toast("There's already one with that name");
+      return;
+    }
+    write([...list, { id, name, color: "#6B7280", contact: false, open: true, terminal: false }]);
+    setDraft("");
+    toast("Disposition added");
+  };
+  const move = (i, d) => {
+    const a = [...list];
+    const j = i + d;
+    if (j < 0 || j >= a.length) return;
+    [a[i], a[j]] = [a[j], a[i]];
+    write(a);
+  };
+  const COLORS = ["#9CA3AF", "#6B7280", "#B45309", "#B42318", "#1D4ED8", "#7C3AED", "#047857", "#111827"];
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Canvassing dispositions", onBack }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, marginBottom: 12, lineHeight: 1.5 }, children: [
+        "What reps mark at a door, and the colors they show as on the map. Renaming one changes it everywhere \u2014 doors already marked keep their history. Two settings do real work rather than decorate:",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: " Counts as contact" }),
+        " is the denominator your appointment rate is measured against, and",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: " Do not knock" }),
+        " marks a promise to a homeowner."
+      ] }),
+      canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            style: { ...inputStyle, flex: 1 },
+            value: draft,
+            placeholder: "Add a disposition \u2014 Renter, Dog\u2026",
+            onChange: (e) => setDraft(e.target.value),
+            onKeyDown: (e) => {
+              if (e.key === "Enter") add();
+            }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { onClick: add, disabled: !draft.trim(), "data-testid": "add-disposition", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }) })
+      ] })
+    ] }),
+    list.map((s, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 13, style: { marginTop: 8 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 9, minWidth: 0, flex: 1 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 13, height: 13, borderRadius: "50%", background: s.color, flexShrink: 0 } }),
+          canEdit ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: { ...inputStyle, flex: 1 },
+              value: s.name,
+              onChange: (e) => patch(s.id, { name: e.target.value })
+            }
+          ) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14.5, fontWeight: 700 }, children: s.name })
+        ] }),
+        canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 6, alignItems: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, disabled: i === 0, onClick: () => move(i, -1), children: "\u2191" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, disabled: i === list.length - 1, onClick: () => move(i, 1), children: "\u2193" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "button",
+            {
+              "aria-label": `Delete ${s.name}`,
+              onClick: () => {
+                write(list.filter((x) => x.id !== s.id));
+                toast("Disposition removed \u2014 doors already marked with it keep their label");
+              },
+              style: { border: "none", background: "none", cursor: "pointer" },
+              children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 16, color: "#B42318" })
+            }
+          )
+        ] })
+      ] }),
+      canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }, children: COLORS.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            type: "button",
+            "aria-label": `Color ${c}`,
+            onClick: () => patch(s.id, { color: c }),
+            style: {
+              width: 24,
+              height: 24,
+              borderRadius: "50%",
+              background: c,
+              cursor: "pointer",
+              border: s.color === c ? "3px solid #111827" : `1px solid ${S.line}`
+            }
+          },
+          c
+        )) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 14, marginTop: 10, flexWrap: "wrap", fontSize: 13 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 7, alignItems: "center", cursor: "pointer" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: !!s.contact, onChange: (e) => patch(s.id, { contact: e.target.checked }) }),
+            "Counts as contact"
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 7, alignItems: "center", cursor: "pointer" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: !!s.open, onChange: (e) => patch(s.id, { open: e.target.checked }) }),
+            "Still worth revisiting"
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 7, alignItems: "center", cursor: "pointer" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: !!s.terminal, onChange: (e) => patch(s.id, { terminal: e.target.checked }) }),
+            "Do not knock"
+          ] })
+        ] })
+      ] })
+    ] }, s.id)),
+    !canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 12 }, children: "Only an admin or someone with company-settings access can change these." })
+  ] });
+}
+function filterCanvassPins(pins, f, meId) {
+  const from = f.from ? f.from : null, to = f.to ? f.to : null;
+  return (pins || []).filter((p) => {
+    if (f.statuses && f.statuses.length && !f.statuses.includes(p.status)) return false;
+    if (f.mineOnly && p.assigned_to !== meId && p.created_by !== meId) return false;
+    if (f.rep && p.assigned_to !== f.rep) return false;
+    if (from || to) {
+      if (!p.knocked_at) return false;
+      const d = String(p.knocked_at).slice(0, 10);
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+    }
+    if (f.q) {
+      const hay = [p.address, (p.prospect || {}).name, (p.prospect || {}).phone, p.notes].filter(Boolean).join(" ").toLowerCase();
+      if (!hay.includes(f.q.toLowerCase())) return false;
+    }
+    return true;
+  });
+}
+function canvassStats(pins, statuses) {
+  const st = (id) => canvassStatus(statuses, id);
+  const knocked = (pins || []).filter((p) => p.knocked_at);
+  const contacts = knocked.filter((p) => st(p.status).contact);
+  const appointments = knocked.filter((p) => p.status === "appointment");
+  const sold = knocked.filter((p) => p.status === "sold");
+  const converted = (pins || []).filter((p) => p.job_id);
+  const pct = (n, d) => d > 0 ? Math.round(n / d * 100) : 0;
+  return {
+    doors: knocked.length,
+    contacts: contacts.length,
+    appointments: appointments.length,
+    sold: sold.length,
+    converted: converted.length,
+    /* Answered per door knocked — a measure of the street and the time
+       of day, not of the rep. */
+    contactRate: pct(contacts.length, knocked.length),
+    /* Appointments per CONTACT. This is the number that actually says
+       something about how someone talks to people. */
+    apptRate: pct(appointments.length, contacts.length)
+  };
+}
+function canvassLeaderboard(pins, statuses, users) {
+  const byRep = /* @__PURE__ */ new Map();
+  (pins || []).forEach((p) => {
+    (p.history || []).forEach((h) => {
+      const key = h.byId || h.by || "\u2014";
+      const row = byRep.get(key) || { id: h.byId, name: h.by || "", doors: 0, contacts: 0, appointments: 0 };
+      row.doors++;
+      if (canvassStatus(statuses, h.status).contact) row.contacts++;
+      if (h.status === "appointment") row.appointments++;
+      if (!row.name && h.byId) {
+        const u = (users || []).find((x) => x.id === h.byId);
+        if (u) row.name = u.name;
+      }
+      byRep.set(key, row);
+    });
+  });
+  return [...byRep.values()].sort((a, b) => b.doors - a.doors);
+}
+function CanvassPinSheet({ pin, statuses, users, onClose, onSave, onConvert, onOpenJob, toast }) {
+  const [p, setP] = (0, import_react.useState)({});
+  const [notes, setNotes] = (0, import_react.useState)("");
+  const [converting, setConverting] = (0, import_react.useState)(false);
+  (0, import_react.useEffect)(() => {
+    if (!pin) return;
+    setP(pin.prospect || {});
+    setNotes(pin.notes || "");
+  }, [pin && pin.id]);
+  if (!pin) return null;
+  const st = canvassStatus(statuses, pin.status);
+  const hist = [...pin.history || []].reverse();
+  const nameOf = (id) => {
+    const u = (users || []).find((x) => x.id === id);
+    return u ? u.name : "";
+  };
+  const save = () => {
+    onSave({ prospect: p, notes });
+    toast && toast("Saved");
+  };
+  const set = (k) => (v) => setP((prev) => ({ ...prev, [k]: v }));
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+    Sheet,
+    {
+      open: !!pin,
+      onClose,
+      title: pin.address || "Dropped pin",
+      tall: true,
+      footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: onClose, children: "Close" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { flex: 1 }, "data-testid": "save-pin", onClick: () => {
+          save();
+          onClose();
+        }, children: "Save" })
+      ] }),
+      children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 12, height: 12, borderRadius: "50%", background: st.color, border: "2px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,.2)" } }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 13.5, fontWeight: 700 }, children: st.name }),
+          pin.job_id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Became a job" })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Who lives here", hint: "Whatever they gave you. A first name and a phone is plenty to work with.", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: inputStyle, placeholder: "Name", value: p.name || "", onChange: (e) => set("name")(e.target.value) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 8 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: inputStyle,
+                placeholder: "Phone",
+                inputMode: "tel",
+                value: p.phone || "",
+                onChange: (e) => set("phone")(formatPhone(e.target.value))
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: inputStyle,
+                type: "email",
+                placeholder: "Email",
+                value: p.email || "",
+                onChange: (e) => set("email")(e.target.value)
+              }
+            )
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: { ...inputStyle, marginTop: 8 },
+              placeholder: "Best time to come back",
+              value: p.bestTime || "",
+              onChange: (e) => set("bestTime")(e.target.value)
+            }
+          )
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Notes", hint: "What was actually said. This is what the next person at this door reads.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "textarea",
+          {
+            style: { ...inputStyle, minHeight: 84, resize: "vertical" },
+            value: notes,
+            onChange: (e) => setNotes(e.target.value)
+          }
+        ) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Owned by", hint: "Who works this door from here. Past knocks stay credited to whoever made them.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          "select",
+          {
+            style: selStyle,
+            value: pin.assigned_to || "",
+            "data-testid": "assign-pin",
+            onChange: (e) => onSave({ assigned_to: e.target.value || null }),
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Nobody in particular" }),
+              (users || []).filter((u) => u.active !== false).map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: u.id, children: u.name }, u.id))
+            ]
+          }
+        ) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Field,
+          {
+            label: "Storm history at this address",
+            hint: "What NOAA has on record here. This is the pitch: name the date and the hail size.",
+            children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              StormLookup,
+              {
+                job: { lat: pin.lat, lng: pin.lng, address: pin.address, zip: "" },
+                dol: p.stormDate || "",
+                onPick: (d) => set("stormDate")(d),
+                toast
+              }
+            )
+          }
+        ),
+        onConvert && !pin.job_id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Field,
+          {
+            label: "Turn this into a job",
+            hint: "Creates a lead at your first pipeline stage with this address and contact, and links it back to this pin. You stay on the map.",
+            children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              Btn,
+              {
+                style: { width: "100%" },
+                disabled: converting,
+                "data-testid": "convert-pin",
+                onClick: async () => {
+                  setConverting(true);
+                  await onSave({ prospect: p, notes });
+                  await onConvert();
+                  setConverting(false);
+                  onClose();
+                },
+                children: converting ? "Creating\u2026" : "Create a lead from this door"
+              }
+            )
+          }
+        ),
+        pin.job_id && onOpenJob && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%" }, onClick: () => {
+          onClose();
+          onOpenJob(pin.job_id);
+        }, children: "Open the job this became" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Field,
+          {
+            label: `Knock history (${hist.length})`,
+            hint: "Every visit, in order. Nothing here is editable \u2014 it is the record of what people were actually told.",
+            children: hist.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "Nobody has knocked this door yet." }) : hist.map((h, i) => {
+              const hs = canvassStatus(statuses, h.status);
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, padding: "9px 0", borderTop: i ? `1px solid ${S.line}` : "none" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 10, height: 10, borderRadius: "50%", background: hs.color, marginTop: 4, flexShrink: 0 } }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 600 }, children: hs.name }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 2 }, children: [
+                    String(h.at || "").slice(0, 16).replace("T", " "),
+                    h.by || nameOf(h.byId) ? ` \xB7 ${h.by || nameOf(h.byId)}` : ""
+                  ] })
+                ] })
+              ] }, i);
+            })
+          }
+        )
+      ]
+    }
+  );
+}
+function CanvassScreen({ onBack, currentUser, jobs, users, canvassStatuses, toast, onCreateLeadFromPin, onOpenJob }) {
+  const [center, setCenter] = (0, import_react.useState)(() => {
+    const withGeo = (jobs || []).find((j) => j.lat != null && j.lng != null);
+    return withGeo ? { lat: withGeo.lat, lng: withGeo.lng } : { lat: 41.78, lng: -88.15 };
+  });
+  const [zoom, setZoom] = (0, import_react.useState)(17);
+  const [selectedId, setSelectedId] = (0, import_react.useState)(null);
+  const [detail, setDetail] = (0, import_react.useState)(null);
+  const [me, setMe] = (0, import_react.useState)(null);
+  const [addr, setAddr] = (0, import_react.useState)("");
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const boundsTimer = (0, import_react.useRef)(null);
+  const mapWrapRef = (0, import_react.useRef)(null);
+  const tenantId = currentUser && currentUser.tenantId;
+  const { list, loadBounds, savePin, removePin, err, setErr, loading } = useCanvassPins({ tenantId, ready: !!currentUser });
+  const [view, setView] = (0, import_react.useState)("map");
+  const [filters, setFilters] = (0, import_react.useState)({ statuses: [], rep: "", mineOnly: false, from: "", to: "", q: "" });
+  const [filterOpen, setFilterOpen] = (0, import_react.useState)(false);
+  const statuses = canvassStatusList(canvassStatuses);
+  const meId = currentUser && currentUser.id;
+  const shown = filterCanvassPins(list, filters, meId);
+  const stats = canvassStats(shown, canvassStatuses);
+  const board = canvassLeaderboard(shown, canvassStatuses, users);
+  const filterCount = (filters.statuses || []).length + (filters.rep ? 1 : 0) + (filters.mineOnly ? 1 : 0) + (filters.from ? 1 : 0) + (filters.to ? 1 : 0) + (filters.q ? 1 : 0);
+  const selected = list.find((p) => p.id === selectedId) || null;
+  const detailPin = list.find((p) => p.id === detail) || null;
+  const onMove = ({ center: c, zoom: zm }) => {
+    setCenter(c);
+    setZoom(zm);
+    if (boundsTimer.current) clearTimeout(boundsTimer.current);
+    boundsTimer.current = setTimeout(() => {
+      const el = mapWrapRef.current;
+      const w = el ? el.clientWidth : 360, h = el ? el.clientHeight : 420;
+      const cx = lngToWorldX(c.lng, zm), cy = latToWorldY(c.lat, zm);
+      loadBounds({
+        west: worldXToLng(cx - w / 2, zm),
+        east: worldXToLng(cx + w / 2, zm),
+        south: worldYToLat(cy + h / 2, zm),
+        north: worldYToLat(cy - h / 2, zm)
+      });
+    }, 350);
+  };
+  (0, import_react.useEffect)(() => {
+    onMove({ center, zoom });
+  }, []);
+  const dropPin = async (lat, lng) => {
+    setBusy(true);
+    const id = uid("cv");
+    const rev = await geoReverse(lat, lng);
+    const row = {
+      id,
+      lat,
+      lng,
+      address: rev ? rev.formatted || rev.street : "",
+      status: "new",
+      prospect: {},
+      notes: "",
+      history: [],
+      created_by: currentUser ? currentUser.id : null,
+      assigned_to: currentUser ? currentUser.id : null,
+      knocked_at: null
+    };
+    const saved = await savePin(row);
+    setBusy(false);
+    if (saved) {
+      setSelectedId(id);
+      toast && toast(row.address ? `Pin dropped \u2014 ${row.address}` : "Pin dropped");
+    }
+  };
+  const setStatus = async (pin, statusId) => {
+    const st = canvassStatus(canvassStatuses, statusId);
+    const entry = {
+      at: (/* @__PURE__ */ new Date()).toISOString(),
+      status: statusId,
+      by: currentUser ? currentUser.name : "",
+      byId: currentUser ? currentUser.id : null
+    };
+    await savePin({
+      ...pin,
+      status: statusId,
+      history: [...pin.history || [], entry],
+      knocked_at: entry.at
+    });
+    toast && toast(st.name);
+  };
+  const findMe = () => {
+    if (!navigator.geolocation) {
+      toast && toast("This device won't share its location");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const c = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setMe(c);
+        setCenter(c);
+        setZoom(18);
+        onMove({ center: c, zoom: 18 });
+      },
+      () => toast && toast("Couldn't get your location \u2014 check location permission"),
+      { enableHighAccuracy: true, timeout: 8e3 }
+    );
+  };
+  const knockedToday = list.filter((p) => p.knocked_at && String(p.knocked_at).slice(0, 10) === todayIso()).length;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      SubHeader,
+      {
+        title: "Canvassing",
+        onBack,
+        right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: knockedToday ? "green" : "gray", children: [
+          knockedToday,
+          " today"
+        ] })
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, pad: 13, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Find an address", hint: "Jump the map to a street, or use your own location.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        AddressAutocomplete,
+        {
+          value: addr,
+          onChange: setAddr,
+          placeholder: "123 Main St",
+          onPick: (it) => {
+            setAddr(it.formatted || it.street || "");
+            const c = { lat: it.lat, lng: it.lng };
+            setCenter(c);
+            setZoom(18);
+            onMove({ center: c, zoom: 18 });
+          }
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: findMe, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 13 }),
+          " Where I am"
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Btn,
+          {
+            kind: view === "list" ? "soft" : "ghost",
+            small: true,
+            "data-testid": "canvass-view-toggle",
+            onClick: () => setView(view === "map" ? "list" : "map"),
+            children: view === "map" ? "List" : "Map"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+          Btn,
+          {
+            kind: filterCount ? "soft" : "ghost",
+            small: true,
+            "data-testid": "canvass-filters",
+            onClick: () => setFilterOpen(true),
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Filter, { size: 13 }),
+              " ",
+              filterCount ? `Filters \xB7 ${filterCount}` : "Filters"
+            ]
+          }
+        ),
+        loading && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Loading\u2026" })
+      ] })
+    ] }),
+    err && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Not saved", tone: "red", children: [
+      err,
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 8 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => setErr(""), children: "Dismiss" }) })
+    ] }),
+    view === "map" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { style: { marginTop: 12, padding: 0, overflow: "hidden" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { ref: mapWrapRef, style: { height: 420, position: "relative" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        CanvassMap,
+        {
+          center,
+          zoom,
+          onMove,
+          pins: shown,
+          statuses: canvassStatuses,
+          selectedId,
+          onTapPin: (p) => setSelectedId(p.id),
+          onTapMap: (lat, lng) => {
+            setSelectedId(null);
+            dropPin(lat, lng);
+          },
+          me
+        }
+      ) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 10 }, children: [
+        "Tap anywhere to drop a pin at that house \u2014 tapping within ",
+        PIN_SNAP_METRES,
+        " m of an existing pin opens that one instead, so two reps on the same street don't double up. Pins are shared with the whole team.",
+        filterCount > 0 && " Filters are hiding some pins right now."
+      ] })
+    ] }) : (
+      /* The list is not a lesser map. It is what a rep uses in a
+         moving truck, on a bad signal, or when working a callback
+         list at 6pm — sorted by the thing that matters then, which
+         is who was last spoken to. */
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, testId: "canvass-list", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: shown.length }), children: "Doors" }),
+        shown.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: list.length === 0 ? "No pins in this area yet. Switch to the map and tap a house to start." : "No pins match these filters." }) : [...shown].sort((a, b) => String(b.knocked_at || "").localeCompare(String(a.knocked_at || ""))).map((p, i) => {
+          const st = canvassStatus(canvassStatuses, p.status);
+          return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            "button",
+            {
+              "data-testid": `row-${p.id}`,
+              onClick: () => {
+                setSelectedId(p.id);
+                setCenter({ lat: p.lat, lng: p.lng });
+                setDetail(p.id);
+              },
+              style: {
+                display: "flex",
+                gap: 10,
+                alignItems: "center",
+                width: "100%",
+                textAlign: "left",
+                border: "none",
+                background: "none",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                padding: "10px 0",
+                borderTop: i ? `1px solid ${S.line}` : "none"
+              },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 11, height: 11, borderRadius: "50%", background: st.color, flexShrink: 0 } }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { display: "block", fontSize: 13.5, fontWeight: 600, color: S.ink }, children: p.address || "Dropped pin" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "block", fontSize: 12, color: S.sub, marginTop: 2 }, children: [
+                    st.name,
+                    (p.prospect || {}).name ? ` \xB7 ${p.prospect.name}` : "",
+                    p.knocked_at ? ` \xB7 ${String(p.knocked_at).slice(0, 10)}` : " \xB7 never knocked"
+                  ] })
+                ] }),
+                p.job_id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Job" })
+              ]
+            },
+            p.id
+          );
+        })
+      ] })
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, testId: "canvass-scoreboard", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: filterCount ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "filtered" }) : null, children: "Scoreboard" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 10 }, children: [
+        ["Doors", stats.doors],
+        ["Answered", stats.contacts],
+        ["Appointments", stats.appointments],
+        ["Sold", stats.sold],
+        ["Became jobs", stats.converted]
+      ].map(([label, n]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { background: S.soft, borderRadius: 10, padding: "10px 12px" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 19, fontWeight: 800, fontVariantNumeric: "tabular-nums" }, children: n }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 2 }, children: label })
+      ] }, label)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 10, lineHeight: 1.5 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("b", { children: [
+          stats.contactRate,
+          "%"
+        ] }),
+        " of doors were answered, and ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("b", { children: [
+          stats.apptRate,
+          "%"
+        ] }),
+        " of the people who answered set an appointment. The second number is the one that says something about selling \u2014 the first mostly says who was home."
+      ] }),
+      board.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 12 }, children: board.map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "baseline", padding: "7px 0", borderTop: `1px solid ${S.line}` }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600 }, children: r.name || "Unattributed" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 12.5, color: S.sub, fontVariantNumeric: "tabular-nums" }, children: [
+          r.doors,
+          " doors \xB7 ",
+          r.contacts,
+          " answered \xB7 ",
+          r.appointments,
+          " appts"
+        ] })
+      ] }, r.id || r.name || i)) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+      Sheet,
+      {
+        open: filterOpen,
+        onClose: () => setFilterOpen(false),
+        title: "Filter doors",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            Btn,
+            {
+              kind: "ghost",
+              style: { flex: 1 },
+              "data-testid": "clear-filters",
+              onClick: () => setFilters({ statuses: [], rep: "", mineOnly: false, from: "", to: "", q: "" }),
+              children: "Clear"
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { style: { flex: 1 }, onClick: () => setFilterOpen(false), children: [
+            "Show ",
+            shown.length
+          ] })
+        ] }),
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Search", hint: "Address, name, phone or anything in the notes.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: inputStyle,
+              value: filters.q,
+              placeholder: "Oak St, or Dana",
+              onChange: (e) => setFilters({ ...filters, q: e.target.value })
+            }
+          ) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Status", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, flexWrap: "wrap" }, children: statuses.map((s) => {
+            const on = (filters.statuses || []).includes(s.id);
+            return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "button",
+              {
+                type: "button",
+                onClick: () => setFilters({
+                  ...filters,
+                  statuses: on ? filters.statuses.filter((x) => x !== s.id) : [...filters.statuses || [], s.id]
+                }),
+                style: {
+                  border: `1.5px solid ${on ? s.color : S.line}`,
+                  background: on ? s.color : S.card,
+                  color: on ? "#fff" : S.ink,
+                  borderRadius: 999,
+                  padding: "7px 13px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "inherit"
+                },
+                children: s.name
+              },
+              s.id
+            );
+          }) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Field, { label: "Rep", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", { style: selStyle, value: filters.rep, onChange: (e) => setFilters({ ...filters, rep: e.target.value }), children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: "", children: "Anyone" }),
+              (users || []).filter((u) => u.active !== false).map((u) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", { value: u.id, children: u.name }, u.id))
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 8, alignItems: "center", marginTop: 9, fontSize: 13.5, cursor: "pointer" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "input",
+                {
+                  type: "checkbox",
+                  checked: filters.mineOnly,
+                  onChange: (e) => setFilters({ ...filters, mineOnly: e.target.checked })
+                }
+              ),
+              "Only doors I dropped or own"
+            ] })
+          ] }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Knocked between", hint: "A door nobody has knocked has no date, so a date range hides it.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                type: "date",
+                style: dateInputStyle,
+                value: filters.from,
+                onChange: (e) => setFilters({ ...filters, from: e.target.value })
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                type: "date",
+                style: dateInputStyle,
+                value: filters.to,
+                onChange: (e) => setFilters({ ...filters, to: e.target.value })
+              }
+            )
+          ] }) })
+        ]
+      }
+    ),
+    busy && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 8 }, children: "Looking up that address\u2026" }),
+    selected && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: canvassStatus(canvassStatuses, selected.status).name }), children: selected.address || "Dropped pin" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, flexWrap: "wrap", marginTop: 4 }, children: statuses.filter((s) => s.id !== "new").map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "button",
+        {
+          type: "button",
+          onClick: () => setStatus(selected, s.id),
+          style: {
+            border: `1.5px solid ${selected.status === s.id ? s.color : S.line}`,
+            background: selected.status === s.id ? s.color : S.card,
+            color: selected.status === s.id ? "#fff" : S.ink,
+            borderRadius: 999,
+            padding: "8px 13px",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+            fontFamily: "inherit"
+          },
+          children: s.name
+        },
+        s.id
+      )) }),
+      (selected.history || []).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12, fontSize: 12.5, color: S.sub }, children: [
+        "Knocked ",
+        (selected.history || []).length,
+        " time",
+        (selected.history || []).length === 1 ? "" : "s",
+        " \xB7 last by ",
+        (selected.history || [])[selected.history.length - 1].by || "someone"
+      ] }),
+      selected.job_id && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Became a job" }),
+        onOpenJob && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { marginLeft: 8 }, onClick: () => onOpenJob(selected.job_id), children: "Open job" })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, style: { flex: 1 }, "data-testid": "open-pin-details", onClick: () => setDetail(selected.id), children: "Details" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => setSelectedId(null), children: "Done" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          Btn,
+          {
+            kind: "ghost",
+            small: true,
+            "aria-label": "Remove pin",
+            style: { color: "#B42318", flex: "0 0 auto" },
+            onClick: () => {
+              removePin(selected.id);
+              setSelectedId(null);
+            },
+            children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 13 })
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      CanvassPinSheet,
+      {
+        pin: detailPin,
+        statuses: canvassStatuses,
+        users,
+        onClose: () => setDetail(null),
+        onSave: (patch) => savePin({ ...detailPin, ...patch }),
+        onConvert: onCreateLeadFromPin ? async () => {
+          const job = await onCreateLeadFromPin(detailPin);
+          if (job) await savePin({ ...detailPin, job_id: job.id });
+        } : null,
+        onOpenJob,
+        toast
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, pad: 13, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { children: "Legend" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 12, flexWrap: "wrap" }, children: statuses.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.sub }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 11, height: 11, borderRadius: "50%", background: s.color, border: "1.5px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,.15)" } }),
+        s.name
+      ] }, s.id)) })
+    ] })
+  ] });
+}
 function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setTheme = () => {
 } }) {
   const admin = currentUser && currentUser.role === "admin";
@@ -29541,6 +30868,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["warranties", import_lucide_react.Shield, "Warranties", "Every roof's labor and manufacturer terms"]
     ]],
     ["Sales & marketing", [
+      ["canvass", import_lucide_react.MapPin, "Canvassing", "Knock a neighborhood \u2014 pins, dispositions, storm history"],
       ["activity", import_lucide_react.ClipboardList, "Activity feed", currentUser && canManageCompanyConfig(currentUser) ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", import_lucide_react.Phone, "Calls & attribution", "Log calls, see which sources make money"],
       ["contacts", import_lucide_react.Users, "Contacts", "Every client, with consent status"],
@@ -29569,6 +30897,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["vendors", import_lucide_react.Building2, "Vendors & suppliers", "Material suppliers and account details"],
       ["branding", import_lucide_react.Settings, "Company branding", "Name, logo, colors, what prints on documents"],
       ["workflow", import_lucide_react.ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
+      ["canvassstatuses", import_lucide_react.MapPin, "Canvassing dispositions", "What reps mark at a door, and the map colors"],
       ["integrations", import_lucide_react.Share2, "Integrations", "Gmail, texting, CompanyCam, Google reviews"],
       ["import", import_lucide_react.Upload, "Import jobs", "Bring a pipeline in from CSV"],
       canManageFeatures(currentUser) && ["admin", import_lucide_react.Shield, "Admin controls", "Feature switches, security and the audit log"],
@@ -30550,6 +31879,7 @@ function SupremeCRM() {
     };
   }, []);
   const [crews, setCrews] = (0, import_react.useState)(SEED_CREWS);
+  const [canvassStatuses, setCanvassStatuses] = (0, import_react.useState)(CANVASS_STATUSES);
   const [templates, setTemplates] = (0, import_react.useState)(SEED_TEMPLATES);
   const [companyDocs, setCompanyDocs] = (0, import_react.useState)(SEED_COMPANY_DOCS);
   const [priceList, setPriceList] = (0, import_react.useState)(SEED_PRICE_LIST);
@@ -30712,7 +32042,7 @@ function SupremeCRM() {
       setNav("home");
     }
   };
-  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, canvassStatuses, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
     announcements,
     calls,
@@ -30726,6 +32056,7 @@ function SupremeCRM() {
     priceList,
     companyDocs,
     crews,
+    canvassStatuses,
     vendors,
     reviewSettings,
     apiSetup,
@@ -30749,6 +32080,7 @@ function SupremeCRM() {
     if (d.priceList) setPriceList(d.priceList);
     if (d.companyDocs) setCompanyDocs(d.companyDocs);
     if (d.crews) setCrews(d.crews);
+    if (d.canvassStatuses) setCanvassStatuses(d.canvassStatuses);
     if (d.vendors) setVendors(d.vendors);
     if (d.reviewSettings) setReviewSettings(d.reviewSettings);
     if (d.apiSetup) setApiSetup(d.apiSetup);
@@ -30864,6 +32196,61 @@ function SupremeCRM() {
     logAct({ type: "delete", text: `Deleted ${ids.length === 1 ? "job" : ids.length + " jobs"}: ${label}` });
     toast(ids.length === 1 ? "Job deleted" : ids.length + " jobs deleted");
   };
+  const createLeadFromCanvassPin = (pin) => new Promise((resolve) => {
+    const p = pin.prospect || {};
+    const parts = String(p.name || "").trim().split(/\s+/).filter(Boolean);
+    const bits = String(pin.address || "").split(",").map((s) => s.trim());
+    const stateZip = (bits[2] || "").split(/\s+/);
+    createLead({
+      contactMode: "new",
+      existingContactId: "",
+      existingPropertyId: "",
+      first: parts[0] || "",
+      last: parts.slice(1).join(" ") || "",
+      phone: p.phone || "",
+      email: p.email || "",
+      street: bits[0] || pin.address || "",
+      city: bits[1] || "",
+      stateSel: stateZip[0] || "",
+      zip: stateZip[1] || "",
+      lat: pin.lat,
+      lng: pin.lng,
+      leadSource: "Door knock",
+      assignee: currentUser && currentUser.name || "",
+      claimType: "Insurance",
+      roofTypes: [],
+      roofAge: "",
+      layers: "",
+      workRequested: [],
+      reasonForCalling: "",
+      propertyUse: "Primary residence",
+      decisionTimeline: "",
+      carrier: "",
+      policy: "",
+      claim: "",
+      adjusterName: "",
+      adjusterPhone: "",
+      deductible: "",
+      coverage: "",
+      oLaw: false,
+      rps: false,
+      cosmetic: false,
+      windHailDed: false,
+      acvRoof: false,
+      matching: false,
+      /* Consent is NOT assumed from a doorstep conversation. A rep
+         standing on a porch has not collected a timestamped opt-in to
+         text or email, and recording one that never happened is the
+         kind of thing that matters when a TCPA complaint arrives. */
+      smsConsent: false,
+      emailConsent: false,
+      notes: [
+        pin.notes,
+        p.bestTime ? `Best time: ${p.bestTime}` : "",
+        p.stormDate ? `Storm date discussed: ${p.stormDate}` : ""
+      ].filter(Boolean).join("\n")
+    }, { stayPut: true, toast: "Lead created from the door", onCreated: resolve });
+  });
   const deleteCrew = (id) => {
     const crew = crews.find((c) => c.id === id);
     const affected = jobs.filter((j) => j.crewId === id);
@@ -31137,7 +32524,7 @@ function SupremeCRM() {
     setJobs((prev) => prev.map((j) => ids.has(j.stageId) ? j : { ...j, stageId: nextStages[0].id }));
     setStages(nextStages);
   };
-  const createLead = (f) => {
+  const createLead = (f, opts = {}) => {
     const id = uid("j");
     const contactId = f.existingContactId || uid("ct");
     const propertyId = f.existingPropertyId || uid("pr");
@@ -31235,11 +32622,14 @@ function SupremeCRM() {
     };
     setJobs((prev) => [job, ...prev]);
     logAct({ kind: "lead", jobId: job.id, jobName: job.name, text: `created new lead ${job.name} (${job.leadSource})` });
-    toast("Lead created");
+    toast(opts.toast || "Lead created");
     setNewLeadOpen(false);
     setLeadSeed(null);
-    setOpenJobId(id);
-    setNav("jobs");
+    if (!opts.stayPut) {
+      setOpenJobId(id);
+      setNav("jobs");
+    }
+    if (opts.onCreated) opts.onCreated(job);
     if (ccToken && ccAutoCreate) {
       const twin = existingPropertyJob && existingPropertyJob.companyCam;
       if (twin) {
@@ -31839,6 +33229,27 @@ function SupremeCRM() {
         onBack: () => setNav("more"),
         toast,
         onDeleteCrew: deleteCrew
+      }
+    ) : nav === "canvass" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      CanvassScreen,
+      {
+        onBack: () => setNav("more"),
+        currentUser: liveUser,
+        jobs,
+        users,
+        canvassStatuses,
+        toast,
+        onCreateLeadFromPin: createLeadFromCanvassPin,
+        onOpenJob: openJobScreen
+      }
+    ) : nav === "canvassstatuses" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      CanvassStatusEditor,
+      {
+        statuses: canvassStatuses,
+        setStatuses: setCanvassStatuses,
+        onBack: () => setNav("more"),
+        toast,
+        currentUser: liveUser
       }
     ) : nav === "claims" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimsDashboard, { jobs, onBack: () => setNav("more"), onOpenJob: openJobScreen }) : nav === "crewpay" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       CrewPayouts,

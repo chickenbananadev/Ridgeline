@@ -24,7 +24,11 @@ ok(/const verifyLine = `Per \$\{label\}/.test(src), "citeFor keeps the badge cit
 ok(/function municodeUrl\(state, city\)/.test(src), "municodeUrl helper exists");
 ok(/sources: \["ICC", "MUNICODE"\]/.test(src), "Municode injected into fallback sources");
 ok(/function deptSearchUrl\(city, state\)/.test(src), "building-department search helper");
-ok(/function enrichStormDay\(/.test(src) && /lsr\.geojson/.test(src), "storm days enriched from NOAA/IEM LSR");
+/* Build 127 replaced the per-day enrichStormDay with a single
+   bbox-scoped fetchStormReports over the whole window — same intent
+   (storm days corroborated against the NOAA/IEM Local Storm Reports),
+   one request instead of one per day. */
+ok(/function fetchStormReports\(/.test(src) && /lsr\.geojson/.test(src), "storm days corroborated against NOAA/IEM LSR");
 ok(/Hail — \{r\.hailIn/.test(src), "storm chip labels real hail size");
 ok(/function StormScout\(/.test(src) && /\["storm", "Storm"\]/.test(src), "standalone Storm tab");
 
