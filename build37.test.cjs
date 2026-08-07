@@ -27,9 +27,14 @@ check("signup button copy reflects payment step ('Continue to payment')",
 check("signup copy says a card IS required, not 'no card required'",
   /Card required to start/.test(src) && !/No card required\. After the trial/.test(src));
 
-/* ---- plan selection threaded from pricing cards through to checkout ---- */
-check("per-seat pricing card passes plan explicitly", /onClick=\{\(\) => onStartTrial\("per_seat"\)\}/.test(src));
-check("unlimited pricing card passes plan explicitly", /onClick=\{\(\) => onStartTrial\("unlimited"\)\}/.test(src));
+/* ---- plan selection threaded from pricing card through to checkout ----
+   Build 99 removed the unlimited tier — one plan, one optional add-on
+   purchased later via Manage billing, not chosen at signup — so the
+   single remaining pricing card's button no longer needs to pass a
+   plan argument; it defaults to "per_seat" the same way every other
+   "Start trial" button on the marketing page already does. */
+check("no pricing-card button passes an explicit plan argument anymore", !/onStartTrial\("per_seat"\)|onStartTrial\("unlimited"\)/.test(src));
+check("plain onClick={onStartTrial} buttons (incl. the pricing card) still exist", (src.match(/onClick=\{onStartTrial\}/g) || []).length >= 4);
 check("selectedPlan state threaded into Login", /selectedPlan=\{selectedPlan\}/.test(src));
 
 /* ---- checkout return handling ---- */

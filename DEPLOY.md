@@ -310,10 +310,24 @@ supabase functions deploy stripe-webhook            # keeps status/seats in sync
 supabase db push                                    # apply any pending migrations
 ```
 
+One plan, one optional add-on — create both as real Stripe Prices before
+setting the secrets below:
+- **Base plan**: recurring, $119.99/mo, no metering — this is what
+  every new signup's Checkout session uses (`STRIPE_PRICE_PER_SEAT`,
+  the name is a holdover from an earlier per-seat model).
+- **Seat add-on**: recurring, $59.99/mo, quantity 1 — NOT offered at
+  signup. Add it as a second selectable product in the Stripe
+  dashboard's **Billing Portal configuration** (Settings → Billing →
+  Customer portal → Products) so an existing customer can add/remove it
+  themselves from "Manage billing" in the app. `stripe-webhook` watches
+  for this exact price ID on `customer.subscription.updated` and syncs
+  `tenants.seats_paid` (0 or 10) accordingly — the app's own seat cap
+  will never reflect a Portal-purchased add-on without this secret set.
+
 ```bash
 supabase secrets set STRIPE_SECRET_KEY=sk_live_...          # Stripe → Developers → API keys
-supabase secrets set STRIPE_PRICE_PER_SEAT=price_...         # Stripe → Products → Team price ID
-supabase secrets set STRIPE_PRICE_UNLIMITED=price_...        # Stripe → Products → Unlimited price ID
+supabase secrets set STRIPE_PRICE_PER_SEAT=price_...         # Stripe → Products → base plan ($119.99/mo, 10 seats)
+supabase secrets set STRIPE_PRICE_SEAT_ADDON=price_...       # Stripe → Products → seat add-on ($59.99/mo, +10 seats)
 supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...          # set after creating the webhook endpoint below
 supabase secrets set APP_URL=https://roofstride.com          # your domain, no trailing slash
 ```

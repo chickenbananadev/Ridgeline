@@ -103,7 +103,8 @@
     "test:build95": "node build95.test.cjs",
     "test:build96": "node build96.test.cjs",
     "test:build97": "node build97.test.cjs",
-    "test:build98": "node build98.test.cjs"
+    "test:build98": "node build98.test.cjs",
+    "test:build99": "node build99.test.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

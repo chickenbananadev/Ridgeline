@@ -38,18 +38,15 @@ var import_jsx_runtime = require("react/jsx-runtime");
 var PRODUCT = {
   name: "RoofStride",
   tagline: "Built for Roofing. Made to Move.",
-  /* Two-tier pricing: a base plan covering the first few seats, extra
-     seats billed individually beyond that — or a flat unlimited-up-to-
-     a-cap plan for teams that would rather not think about seat count.
-     seatPrice is kept as a back-compat alias (= basePrice) for any
-     other code that hasn't been migrated to the new fields yet. */
-  basePrice: 49.99,
-  baseSeats: 3,
-  extraSeatPrice: 14.99,
-  unlimitedPrice: 169.99,
-  unlimitedSeatCap: 20,
-  get seatPrice() {
-    return this.basePrice;
+  /* One plan: a base price covering 10 seats, plus one optional add-on
+     block of 10 more seats (20 total, hard cap — not repeatable). No
+     unlimited tier. */
+  basePrice: 119.99,
+  baseSeats: 10,
+  addonSeats: 10,
+  addonPrice: 59.99,
+  get maxSeats() {
+    return this.baseSeats + this.addonSeats;
   },
   trialDays: 7,
   supportEmail: "support@roofstride.com"
@@ -4535,7 +4532,7 @@ function Marketing({ onSignIn, onStartTrial }) {
     ["Do you handle insurance restoration?", "Deeply. Track ACV, supplements, deductible and recoverable depreciation per job; a supplement checker cites the code behind every missed line for all 50 states; pull storm history for a date of loss; and chase depreciation to release."],
     ["Am I locked into a contract?", "No. Every plan is month-to-month \u2014 the 7-day trial doesn't charge if you cancel before it ends, and you can cancel anytime after. No tiers to unlock; every account gets every feature."],
     ["Is my data mine?", "Always. Export jobs and financials to CSV and QuickBooks whenever you want. Your customer list and history are yours to take with you."],
-    ["Can my whole crew have logins?", "Yes. Add seats as you grow, or go unlimited and stop counting logins. Roles keep money and settings visible only to who should see them."]
+    ["Can my whole crew have logins?", "Yes, up to 20 seats. Roles keep money and settings visible only to who should see them."]
   ];
   const STRIDE = [
     ["S", "Simplicity", "We turn complicated roofing workflows into clear, straightforward steps.", "stride-simplicity.jpg"],
@@ -4780,86 +4777,44 @@ function Marketing({ onSignIn, onStartTrial }) {
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { id: "pricing", style: { padding: "72px 20px", background: MKT.bg }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Reveal, { style: { maxWidth: 780, margin: "0 auto", textAlign: "center" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, fontWeight: 800, letterSpacing: 1.2, color: MKT.teal, textTransform: "uppercase", marginBottom: 10 }, children: "Pricing" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontFamily: MKT_DISPLAY_FONT, fontSize: 30, fontWeight: 700, color: MKT.ink, marginBottom: 12, letterSpacing: -0.3 }, children: "Every feature, either way you pay." }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, color: MKT.sub, marginBottom: 34, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }, children: "No feature gates, no tiers to unlock \u2014 the only choice is how you'd rather pay for seats." }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { className: "mkt-pricing-grid", style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, textAlign: "left", marginBottom: 28 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
-          background: S.card,
-          borderRadius: 20,
-          padding: "30px 26px",
-          border: `1px solid ${MKT.line}`,
-          boxShadow: "0 20px 50px rgba(32,36,42,.06)"
-        }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: MKT.sub, marginBottom: 6 }, children: "Pay per seat" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 36, fontWeight: 800, color: MKT.ink, marginBottom: 2 }, children: [
-            "$",
-            PRODUCT.basePrice.toFixed(2),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 600, color: MKT.sub }, children: "/mo" })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: MKT.sub, marginBottom: 18 }, children: [
-            "Includes ",
-            PRODUCT.baseSeats,
-            " seats \xB7 $",
-            PRODUCT.extraSeatPrice.toFixed(2),
-            "/mo per seat after that"
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onStartTrial("per_seat"), style: {
-            width: "100%",
-            border: `1.5px solid ${MKT.teal}`,
-            background: "transparent",
-            color: MKT.teal,
-            fontWeight: 700,
-            fontSize: 15,
-            cursor: "pointer",
-            fontFamily: "inherit",
-            padding: "13px",
-            borderRadius: 10
-          }, children: "Start your free trial" })
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, color: MKT.sub, marginBottom: 34, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }, children: "No feature gates, no tiers to unlock \u2014 one plan, one optional add-on." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "mkt-pricing-grid", style: { display: "grid", gridTemplateColumns: "1fr", gap: 20, textAlign: "left", marginBottom: 28, maxWidth: 380, marginLeft: "auto", marginRight: "auto" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+        background: MKT.ink,
+        borderRadius: 20,
+        padding: "30px 26px",
+        position: "relative",
+        boxShadow: "0 20px 50px rgba(32,36,42,.18)"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: "rgba(255,255,255,.6)", marginBottom: 6 }, children: "Every feature, one price" }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 36, fontWeight: 800, color: "#fff", marginBottom: 2 }, children: [
+          "$",
+          PRODUCT.basePrice.toFixed(2),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,.6)" }, children: "/mo" })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
-          background: MKT.ink,
-          borderRadius: 20,
-          padding: "30px 26px",
-          position: "relative",
-          boxShadow: "0 20px 50px rgba(32,36,42,.18)"
-        }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
-            position: "absolute",
-            top: -12,
-            left: 26,
-            background: MKT.teal,
-            color: "#fff",
-            fontSize: 11,
-            fontWeight: 800,
-            letterSpacing: 0.5,
-            textTransform: "uppercase",
-            padding: "4px 10px",
-            borderRadius: 999
-          }, children: "Best for growing crews" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: "rgba(255,255,255,.6)", marginBottom: 6 }, children: "Unlimited seats" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 36, fontWeight: 800, color: "#fff", marginBottom: 2 }, children: [
-            "$",
-            PRODUCT.unlimitedPrice.toFixed(2),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,.6)" }, children: "/mo" })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: "rgba(255,255,255,.6)", marginBottom: 18 }, children: [
-            "Flat rate, up to ",
-            PRODUCT.unlimitedSeatCap,
-            " seats \u2014 never count logins again"
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => onStartTrial("unlimited"), style: {
-            width: "100%",
-            border: "none",
-            background: MKT.teal,
-            color: "#fff",
-            fontWeight: 700,
-            fontSize: 15,
-            cursor: "pointer",
-            fontFamily: "inherit",
-            padding: "13px",
-            borderRadius: 10
-          }, children: "Start your free trial" })
-        ] })
-      ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: "rgba(255,255,255,.6)", marginBottom: 18 }, children: [
+          "Includes ",
+          PRODUCT.baseSeats,
+          " seats \xB7 add ",
+          PRODUCT.addonSeats,
+          " more anytime for $",
+          PRODUCT.addonPrice.toFixed(2),
+          "/mo (up to ",
+          PRODUCT.maxSeats,
+          " total)"
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: onStartTrial, style: {
+          width: "100%",
+          border: "none",
+          background: MKT.teal,
+          color: "#fff",
+          fontWeight: 700,
+          fontSize: 15,
+          cursor: "pointer",
+          fontFamily: "inherit",
+          padding: "13px",
+          borderRadius: 10
+        }, children: "Start your free trial" })
+      ] }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
         background: S.card,
         borderRadius: 16,
@@ -5261,15 +5216,15 @@ function Login({ brand, users, onLogin, initialMode = "login", selectedPlan = "p
           PRODUCT.trialDays,
           " days. After that it's $",
           PRODUCT.basePrice.toFixed(2),
-          "/mo for the first ",
+          "/mo for ",
           PRODUCT.baseSeats,
-          " seats ($",
-          PRODUCT.extraSeatPrice.toFixed(2),
-          "/seat after that), or $",
-          PRODUCT.unlimitedPrice.toFixed(2),
-          "/mo flat for up to ",
-          PRODUCT.unlimitedSeatCap,
-          ". Cancel anytime before the trial ends and you won't be charged."
+          " seats, with an optional add-on of",
+          PRODUCT.addonSeats,
+          " more seats for $",
+          PRODUCT.addonPrice.toFixed(2),
+          "/mo (up to ",
+          PRODUCT.maxSeats,
+          " total). Cancel anytime before the trial ends and you won't be charged."
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Your name", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           "input",
@@ -27425,8 +27380,8 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
     };
   }, []);
   const activeCount = users.filter((u) => u.active).length;
-  const plan = tenant && tenant.plan;
-  const seatsIncluded = tenant ? plan === "unlimited" ? PRODUCT.unlimitedSeatCap : PRODUCT.baseSeats + (tenant.seats_paid || 0) : null;
+  const hasAddon = !!tenant && (tenant.seats_paid || 0) >= PRODUCT.addonSeats;
+  const seatsIncluded = tenant ? PRODUCT.baseSeats + (hasAddon ? PRODUCT.addonSeats : 0) : null;
   const atLimit = seatsIncluded != null && activeCount >= seatsIncluded;
   const manageBilling = async () => {
     const auth = AUTH();
@@ -27449,7 +27404,7 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
     try {
       if (editing === "new") {
         if (atLimit) {
-          setSeatErr(plan === "unlimited" ? `Your Unlimited plan covers up to ${seatsIncluded} seats and all ${activeCount} are in use. Deactivate a seat or contact support to raise the cap.` : `Your plan includes ${seatsIncluded} seat${seatsIncluded === 1 ? "" : "s"} and all are in use. Add a seat to your subscription in Manage billing, then invite this person.`);
+          setSeatErr(hasAddon ? `You're at the 20-seat maximum and all are in use. Deactivate a seat before inviting this person.` : `Your plan includes ${seatsIncluded} seats and all are in use. Add the 10-seat add-on in Manage billing, then invite this person.`);
           setSaving(false);
           return;
         }
@@ -27580,9 +27535,9 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
     ] }),
     tenant && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: tenant.status === "active" ? "green" : tenant.status === "past_due" || tenant.status === "canceled" ? "red" : "amber", children: tenant.status === "trialing" ? `Trial${tenant.days_left != null ? ` \u2014 ${tenant.days_left}d left` : ""}` : tenant.status || "\u2014" }), children: "Subscription" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Plan", v: plan === "unlimited" ? `Unlimited \u2014 up to ${PRODUCT.unlimitedSeatCap} seats` : `Team \u2014 ${PRODUCT.baseSeats} seats + ${tenant.seats_paid || 0} added` }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Plan", v: hasAddon ? `${PRODUCT.baseSeats} + ${PRODUCT.addonSeats} seats (${PRODUCT.maxSeats} total)` : `${PRODUCT.baseSeats} seats` }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KV, { k: "Seats", v: `${activeCount} used of ${seatsIncluded} included` }),
-      atLimit && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Seat limit reached", tone: "amber", children: plan === "unlimited" ? "Every seat on your plan is in use. Deactivate one to free it up, or contact support to raise the cap." : "Add a seat to your subscription in Manage billing, then invite the new person." }),
+      atLimit && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Seat limit reached", tone: "amber", children: hasAddon ? "You're at the 20-seat maximum. Deactivate a seat to free it up." : "Add the 10-seat add-on in Manage billing, then invite the new person." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "soft", small: true, onClick: manageBilling, disabled: billingBusy, children: billingBusy ? "Opening\u2026" : "Manage billing" }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 9, lineHeight: 1.5 }, children: "Manage billing opens the secure Stripe portal to change your plan, add or remove seats, update your card, or cancel. It's the only place a subscription can be changed." })
     ] }),

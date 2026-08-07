@@ -5,6 +5,13 @@
 // database level) actually track reality, not just what was true at
 // the moment someone signed up.
 //
+// customer.subscription.updated also syncs tenants.seats_paid: the
+// 10-seat add-on isn't offered at signup (see create-checkout-session),
+// it's purchased afterward through the Stripe Billing Portal by adding
+// STRIPE_PRICE_SEAT_ADDON as a second line item on the subscription.
+// Without this sync, buying the add-on through the Portal would charge
+// the card but never actually raise the app's own seat cap.
+//
 // Deploy:  supabase functions deploy stripe-webhook --no-verify-jwt
 //   (--no-verify-jwt is required: Stripe calls this directly, with no
 //   Supabase auth header at all — the signature check below is what
@@ -55,7 +62,14 @@ Deno.serve(async (req) => {
           : sub.status === "past_due" ? "past_due"
           : sub.status === "canceled" || sub.status === "unpaid" ? "canceled"
           : sub.status;
-        await admin.from("tenants").update({ status }).eq("stripe_subscription_id", sub.id);
+        const addonPriceId = Deno.env.get("STRIPE_PRICE_SEAT_ADDON");
+        const hasAddon = !!addonPriceId && sub.items.data.some((li) => li.price?.id === addonPriceId);
+        const update: Record<string, unknown> = { status };
+        // Only touch seats_paid once the add-on price is actually
+        // configured — without it, every tenant would get silently
+        // reset to 0 on every subscription update.
+        if (addonPriceId) update.seats_paid = hasAddon ? 10 : 0;
+        await admin.from("tenants").update(update).eq("stripe_subscription_id", sub.id);
         break;
       }
       case "customer.subscription.deleted": {

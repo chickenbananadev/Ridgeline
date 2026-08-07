@@ -6,11 +6,13 @@
 // Deploy:  supabase functions deploy create-checkout-session
 // Secrets required (supabase secrets set):
 //   STRIPE_SECRET_KEY        — from the Stripe dashboard, Developers > API keys
-//   STRIPE_PRICE_PER_SEAT    — Price ID for the graduated per-seat plan
-//                              (see SETUP.md for exactly how to create this
-//                              tiered price in the Stripe dashboard)
-//   STRIPE_PRICE_UNLIMITED   — Price ID for the flat $169.99/mo, up to 20
-//                              seats plan
+//   STRIPE_PRICE_PER_SEAT    — Price ID for the one plan: $119.99/mo,
+//                              10 seats included. The optional 10-seat
+//                              add-on ($59.99/mo, STRIPE_PRICE_SEAT_ADDON)
+//                              is not offered at signup — it's added
+//                              afterward through the Stripe Billing
+//                              Portal (see stripe-webhook's comment for
+//                              how that syncs back to seats_paid).
 //   APP_URL                  — e.g. https://roofstride.com (no trailing
 //                              slash) — where Stripe redirects back to
 //
@@ -49,12 +51,10 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Not signed in" }), { status: 401, headers: cors });
     }
 
-    const { plan, company } = await req.json();
-    const priceId = plan === "unlimited"
-      ? Deno.env.get("STRIPE_PRICE_UNLIMITED")
-      : Deno.env.get("STRIPE_PRICE_PER_SEAT");
+    const { company } = await req.json();
+    const priceId = Deno.env.get("STRIPE_PRICE_PER_SEAT");
     if (!priceId) {
-      return new Response(JSON.stringify({ error: `Stripe price for the "${plan || "per_seat"}" plan is not configured yet. Contact support.` }),
+      return new Response(JSON.stringify({ error: "Stripe pricing is not configured yet. Contact support." }),
         { status: 500, headers: cors });
     }
 
@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
       payment_method_collection: "always", // card required even during the trial
       success_url: `${appUrl}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/?checkout=cancelled`,
-      metadata: { supabase_user_id: user.id, company: company || "", plan: plan || "per_seat" },
+      metadata: { supabase_user_id: user.id, company: company || "", plan: "per_seat" },
     });
 
     return new Response(JSON.stringify({ url: session.url }), { headers: { ...cors, "Content-Type": "application/json" } });

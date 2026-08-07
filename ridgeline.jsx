@@ -24,17 +24,14 @@ import {
 const PRODUCT = {
   name: "RoofStride",
   tagline: "Built for Roofing. Made to Move.",
-  /* Two-tier pricing: a base plan covering the first few seats, extra
-     seats billed individually beyond that — or a flat unlimited-up-to-
-     a-cap plan for teams that would rather not think about seat count.
-     seatPrice is kept as a back-compat alias (= basePrice) for any
-     other code that hasn't been migrated to the new fields yet. */
-  basePrice: 49.99,
-  baseSeats: 3,
-  extraSeatPrice: 14.99,
-  unlimitedPrice: 169.99,
-  unlimitedSeatCap: 20,
-  get seatPrice() { return this.basePrice; },
+  /* One plan: a base price covering 10 seats, plus one optional add-on
+     block of 10 more seats (20 total, hard cap — not repeatable). No
+     unlimited tier. */
+  basePrice: 119.99,
+  baseSeats: 10,
+  addonSeats: 10,
+  addonPrice: 59.99,
+  get maxSeats() { return this.baseSeats + this.addonSeats; },
   trialDays: 7,
   supportEmail: "support@roofstride.com",
 };
@@ -3925,7 +3922,7 @@ function Marketing({ onSignIn, onStartTrial }) {
     ["Do you handle insurance restoration?", "Deeply. Track ACV, supplements, deductible and recoverable depreciation per job; a supplement checker cites the code behind every missed line for all 50 states; pull storm history for a date of loss; and chase depreciation to release."],
     ["Am I locked into a contract?", "No. Every plan is month-to-month — the 7-day trial doesn't charge if you cancel before it ends, and you can cancel anytime after. No tiers to unlock; every account gets every feature."],
     ["Is my data mine?", "Always. Export jobs and financials to CSV and QuickBooks whenever you want. Your customer list and history are yours to take with you."],
-    ["Can my whole crew have logins?", "Yes. Add seats as you grow, or go unlimited and stop counting logins. Roles keep money and settings visible only to who should see them."],
+    ["Can my whole crew have logins?", "Yes, up to 20 seats. Roles keep money and settings visible only to who should see them."],
   ];
   const STRIDE = [
     ["S", "Simplicity", "We turn complicated roofing workflows into clear, straightforward steps.", "stride-simplicity.jpg"],
@@ -4162,42 +4159,21 @@ function Marketing({ onSignIn, onStartTrial }) {
             Every feature, either way you pay.
           </div>
           <div style={{ fontSize: 15, color: MKT.sub, marginBottom: 34, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
-            No feature gates, no tiers to unlock — the only choice is how you'd rather pay for seats.
+            No feature gates, no tiers to unlock — one plan, one optional add-on.
           </div>
-          <div className="mkt-pricing-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, textAlign: "left", marginBottom: 28 }}>
-            <div style={{
-              background: S.card, borderRadius: 20, padding: "30px 26px", border: `1px solid ${MKT.line}`,
-              boxShadow: "0 20px 50px rgba(32,36,42,.06)",
-            }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: MKT.sub, marginBottom: 6 }}>Pay per seat</div>
-              <div style={{ fontSize: 36, fontWeight: 800, color: MKT.ink, marginBottom: 2 }}>
-                ${PRODUCT.basePrice.toFixed(2)}<span style={{ fontSize: 14, fontWeight: 600, color: MKT.sub }}>/mo</span>
-              </div>
-              <div style={{ fontSize: 13, color: MKT.sub, marginBottom: 18 }}>
-                Includes {PRODUCT.baseSeats} seats · ${PRODUCT.extraSeatPrice.toFixed(2)}/mo per seat after that
-              </div>
-              <button onClick={() => onStartTrial("per_seat")} style={{
-                width: "100%", border: `1.5px solid ${MKT.teal}`, background: "transparent", color: MKT.teal, fontWeight: 700,
-                fontSize: 15, cursor: "pointer", fontFamily: "inherit", padding: "13px", borderRadius: 10,
-              }}>Start your free trial</button>
-            </div>
+          <div className="mkt-pricing-grid" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 20, textAlign: "left", marginBottom: 28, maxWidth: 380, marginLeft: "auto", marginRight: "auto" }}>
             <div style={{
               background: MKT.ink, borderRadius: 20, padding: "30px 26px", position: "relative",
               boxShadow: "0 20px 50px rgba(32,36,42,.18)",
             }}>
-              <div style={{
-                position: "absolute", top: -12, left: 26, background: MKT.teal, color: "#fff",
-                fontSize: 11, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase",
-                padding: "4px 10px", borderRadius: 999,
-              }}>Best for growing crews</div>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: "rgba(255,255,255,.6)", marginBottom: 6 }}>Unlimited seats</div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: "rgba(255,255,255,.6)", marginBottom: 6 }}>Every feature, one price</div>
               <div style={{ fontSize: 36, fontWeight: 800, color: "#fff", marginBottom: 2 }}>
-                ${PRODUCT.unlimitedPrice.toFixed(2)}<span style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,.6)" }}>/mo</span>
+                ${PRODUCT.basePrice.toFixed(2)}<span style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,.6)" }}>/mo</span>
               </div>
               <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)", marginBottom: 18 }}>
-                Flat rate, up to {PRODUCT.unlimitedSeatCap} seats — never count logins again
+                Includes {PRODUCT.baseSeats} seats · add {PRODUCT.addonSeats} more anytime for ${PRODUCT.addonPrice.toFixed(2)}/mo (up to {PRODUCT.maxSeats} total)
               </div>
-              <button onClick={() => onStartTrial("unlimited")} style={{
+              <button onClick={onStartTrial} style={{
                 width: "100%", border: "none", background: MKT.teal, color: "#fff", fontWeight: 700,
                 fontSize: 15, cursor: "pointer", fontFamily: "inherit", padding: "13px", borderRadius: 10,
               }}>Start your free trial</button>
@@ -4503,8 +4479,8 @@ function Login({ brand, users, onLogin, initialMode = "login", selectedPlan = "p
               </div>
               <div style={{ fontSize: 13.5, color: S.sub, marginBottom: 18, lineHeight: 1.5 }}>
                 Card required to start — you won't be charged for {PRODUCT.trialDays} days. After that it's
-                ${PRODUCT.basePrice.toFixed(2)}/mo for the first {PRODUCT.baseSeats} seats (${PRODUCT.extraSeatPrice.toFixed(2)}/seat after that),
-                or ${PRODUCT.unlimitedPrice.toFixed(2)}/mo flat for up to {PRODUCT.unlimitedSeatCap}. Cancel anytime before the trial ends and you won't be charged.
+                ${PRODUCT.basePrice.toFixed(2)}/mo for {PRODUCT.baseSeats} seats, with an optional add-on of
+                {PRODUCT.addonSeats} more seats for ${PRODUCT.addonPrice.toFixed(2)}/mo (up to {PRODUCT.maxSeats} total). Cancel anytime before the trial ends and you won't be charged.
               </div>
               <Field label="Your name">
                 <input style={inputStyle} value={suName} autoComplete="name"
@@ -25974,11 +25950,10 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
     return () => { alive = false; };
   }, []);
   const activeCount = users.filter((u) => u.active).length;
-  const plan = tenant && tenant.plan;
-  /* Per-seat: base seats plus any extra paid seats. Unlimited: flat cap. */
-  const seatsIncluded = tenant
-    ? (plan === "unlimited" ? PRODUCT.unlimitedSeatCap : PRODUCT.baseSeats + (tenant.seats_paid || 0))
-    : null;
+  /* One plan, one optional add-on block — not a per-seat increment.
+     seats_paid is either 0 or PRODUCT.addonSeats, never in between. */
+  const hasAddon = !!tenant && (tenant.seats_paid || 0) >= PRODUCT.addonSeats;
+  const seatsIncluded = tenant ? PRODUCT.baseSeats + (hasAddon ? PRODUCT.addonSeats : 0) : null;
   const atLimit = seatsIncluded != null && activeCount >= seatsIncluded;
 
   const manageBilling = async () => {
@@ -25997,9 +25972,9 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
       if (editing === "new") {
         /* Enforce the plan's seat allowance before creating a billable seat. */
         if (atLimit) {
-          setSeatErr(plan === "unlimited"
-            ? `Your Unlimited plan covers up to ${seatsIncluded} seats and all ${activeCount} are in use. Deactivate a seat or contact support to raise the cap.`
-            : `Your plan includes ${seatsIncluded} seat${seatsIncluded === 1 ? "" : "s"} and all are in use. Add a seat to your subscription in Manage billing, then invite this person.`);
+          setSeatErr(hasAddon
+            ? `You're at the 20-seat maximum and all are in use. Deactivate a seat before inviting this person.`
+            : `Your plan includes ${seatsIncluded} seats and all are in use. Add the 10-seat add-on in Manage billing, then invite this person.`);
           setSaving(false);
           return;
         }
@@ -26129,13 +26104,13 @@ function TeamManager({ users, setUsers, currentUser, jobs, onBack, toast, brand 
           <CardTitle right={<Chip tone={tenant.status === "active" ? "green" : tenant.status === "past_due" || tenant.status === "canceled" ? "red" : "amber"}>
             {tenant.status === "trialing" ? `Trial${tenant.days_left != null ? ` — ${tenant.days_left}d left` : ""}` : (tenant.status || "—")}
           </Chip>}>Subscription</CardTitle>
-          <KV k="Plan" v={plan === "unlimited" ? `Unlimited — up to ${PRODUCT.unlimitedSeatCap} seats` : `Team — ${PRODUCT.baseSeats} seats + ${tenant.seats_paid || 0} added`} />
+          <KV k="Plan" v={hasAddon ? `${PRODUCT.baseSeats} + ${PRODUCT.addonSeats} seats (${PRODUCT.maxSeats} total)` : `${PRODUCT.baseSeats} seats`} />
           <KV k="Seats" v={`${activeCount} used of ${seatsIncluded} included`} />
           {atLimit && (
             <Callout label="Seat limit reached" tone="amber">
-              {plan === "unlimited"
-                ? "Every seat on your plan is in use. Deactivate one to free it up, or contact support to raise the cap."
-                : "Add a seat to your subscription in Manage billing, then invite the new person."}
+              {hasAddon
+                ? "You're at the 20-seat maximum. Deactivate a seat to free it up."
+                : "Add the 10-seat add-on in Manage billing, then invite the new person."}
             </Callout>
           )}
           <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>

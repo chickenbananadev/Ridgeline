@@ -42,6 +42,22 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "Name and email required" }), { status: 400, headers: cors });
   }
 
+  // Seat cap, enforced here rather than trusting the client — the
+  // TeamManager UI already blocks this before calling us, but that
+  // check is trivially bypassed by calling this function directly.
+  // One plan (10 seats) plus one optional 10-seat add-on block; no
+  // other tier exists.
+  const { data: tenantRow } = await admin.from("tenants").select("seats_paid").eq("id", me.tenant_id).single();
+  const BASE_SEATS = 10, ADDON_SEATS = 10;
+  const seatsIncluded = BASE_SEATS + ((tenantRow?.seats_paid || 0) >= ADDON_SEATS ? ADDON_SEATS : 0);
+  const { count: activeCount } = await admin.from("profiles")
+    .select("id", { count: "exact", head: true }).eq("tenant_id", me.tenant_id).eq("active", true);
+  if ((activeCount ?? 0) >= seatsIncluded) {
+    return new Response(JSON.stringify({
+      error: `Your plan includes ${seatsIncluded} seats and all are in use. Add the 10-seat add-on in Manage billing, then invite this person.`,
+    }), { status: 403, headers: cors });
+  }
+
   // tenant_id rides in the invite metadata so handle_new_auth_user()
   // (the profile-creation trigger) stamps it on insert. Without this
   // the new profile is created with tenant_id NULL — the account can
