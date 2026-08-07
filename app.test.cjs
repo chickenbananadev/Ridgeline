@@ -3748,6 +3748,9 @@ function crewDocAlerts(crew, today) {
   const soon = isoLocal(new Date((/* @__PURE__ */ new Date(t + "T12:00:00")).getTime() + 30 * 864e5));
   return (crew && crew.docs || []).filter((d) => d.expires).map((d) => ({ name: d.name, type: d.type || "", expires: d.expires, status: d.expires < t ? "expired" : d.expires <= soon ? "expiring" : "ok" })).filter((d) => d.status !== "ok");
 }
+function unpaidSubInvoiceJobs(jobs, crewId) {
+  return (jobs || []).filter((j) => j.crewId === crewId && j.subInvoice && ["confirmed", "submitted"].includes(j.subInvoice.status));
+}
 function mkSubInvoice(over = {}) {
   return {
     status: "draft",
@@ -21891,13 +21894,20 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
   };
   const revokeCrewPortal = async () => {
     const db = DB();
-    try {
-      if (db && job.crewPortalToken) await db.from("crm_portal").update({ revoked: true }).eq("token", job.crewPortalToken);
-      mut((j) => ({ ...j, crewPortalToken: null }));
-      toast("Crew link disabled \u2014 it no longer opens");
-    } catch (e) {
-      toast("Couldn't disable that link");
+    if (db && job.crewPortalToken) {
+      let error = null;
+      try {
+        ({ error } = await db.from("crm_portal").update({ revoked: true }).eq("token", job.crewPortalToken));
+      } catch (e) {
+        error = e;
+      }
+      if (error) {
+        toast("Couldn't disable that link \u2014 it's still live. " + (error.message || ""));
+        return;
+      }
     }
+    mut((j) => ({ ...j, crewPortalToken: null }));
+    toast("Crew link disabled \u2014 it no longer opens");
   };
   const openSend = () => {
     const ctx = templateContext(job, brand, crew, users);
@@ -21973,9 +21983,9 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
         ] })
       ] })
     ] }),
-    crew && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
+    (crew || job.crewPortalToken) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: job.crewPortalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Live" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "gray", children: "Off" }), children: "Crew portal" }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: job.crewPortalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: !crew ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, { children: "A crew link for this job is still live even though no crew is assigned \u2014 whoever holds it can still open the work order and punch list. Disable it, or assign a crew above and issue a fresh one." }) : job.crewPortalToken ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
         "One link for ",
         crew.name,
         " on this job: the work order, the punch list (they can check items off), photo uploads straight to this job's album, and a message thread to the office. No prices anywhere on it."
@@ -21986,12 +21996,12 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
       ] }) }),
       job.crewPortalToken && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { background: S.soft, borderRadius: 9, padding: "9px 12px", marginTop: 10, fontSize: 12, color: S.ink, wordBreak: "break-all" }, children: `${window.location.origin}/?portal=${job.crewPortalToken}` }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, style: { flex: 2 }, onClick: publishCrewPortal, children: [
+        crew && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, style: { flex: 2 }, onClick: publishCrewPortal, children: [
           /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Share2, { size: 13 }),
           " ",
           job.crewPortalToken ? "Update & copy link" : "Create crew link"
         ] }),
-        job.crewPortalToken && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: revokeCrewPortal, children: "Disable" })
+        job.crewPortalToken && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, "data-testid": "revoke-crew-portal", onClick: revokeCrewPortal, children: "Disable" })
       ] })
     ] }),
     crew && canSeeMoney(currentUser) && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubInvoiceCard, { job, crew, mut, toast, currentUser, brand, integrations, users }),
@@ -26513,7 +26523,7 @@ function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, 
     )
   ] });
 }
-function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
+function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast, onDeleteCrew = null }) {
   const [editing, setEditing] = (0, import_react.useState)(null);
   const blank = { name: "", contact: "", phone: "", email: "", trades: [], active: true };
   const [f, setF] = (0, import_react.useState)(blank);
@@ -26521,6 +26531,8 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const TRADES = ["Roofing", "Siding", "Gutters", "Metal", "Flashing", "Windows", "Carpentry"];
   const [customTrade, setCustomTrade] = (0, import_react.useState)("");
   const [range, setRange] = (0, import_react.useState)("all");
+  const [confirmDel, setConfirmDel] = (0, import_react.useState)(null);
+  const [delTyped, setDelTyped] = (0, import_react.useState)("");
   const docRef = (0, import_react.useRef)(null);
   const priceRef = (0, import_react.useRef)(null);
   const [docBusy, setDocBusy] = (0, import_react.useState)(false);
@@ -26628,6 +26640,7 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const paidFor = (crewId) => {
     const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 864e5;
     const crewName = (crews.find((c) => c.id === crewId) || {}).name || "";
+    if (!crewName) return 0;
     return jobs.filter((j) => j.crewId === crewId).reduce((sum, j) => {
       const payouts = (j.payments || []).filter((p) => p.type !== "Received" && String(p.to || "").toLowerCase().includes(crewName.toLowerCase()));
       return sum + payouts.filter((p) => !p.at || new Date(p.at).getTime() >= cutoff).reduce((t, p) => t + num(p.amt), 0);
@@ -26720,6 +26733,20 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
               style: { flex: 1 },
               onClick: () => setCrews(crews.map((x) => x.id === c.id ? { ...x, active: !x.active } : x)),
               children: c.active ? "Deactivate" : "Reactivate"
+            }
+          ),
+          onDeleteCrew && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            Btn,
+            {
+              kind: "ghost",
+              small: true,
+              "aria-label": `Delete ${c.name}`,
+              style: { color: "#B42318", flex: "0 0 auto" },
+              onClick: () => {
+                setConfirmDel(c);
+                setDelTyped("");
+              },
+              children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 13 })
             }
           )
         ] })
@@ -27032,7 +27059,100 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
           ] })
         ]
       }
-    )
+    ),
+    (() => {
+      if (!confirmDel) return null;
+      const owed = unpaidSubInvoiceJobs(jobs, confirmDel.id);
+      const assigned = jobs.filter((j) => j.crewId === confirmDel.id);
+      const close = () => {
+        setConfirmDel(null);
+        setDelTyped("");
+      };
+      const needsTyping = assigned.length > 0;
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        Sheet,
+        {
+          open: true,
+          onClose: close,
+          title: `Delete ${confirmDel.name}`,
+          footer: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { flex: 1 }, onClick: close, children: owed.length ? "Close" : "Cancel" }),
+            !owed.length && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              Btn,
+              {
+                "data-testid": "confirm-delete-crew",
+                style: { flex: 1, background: "#B3261E", borderColor: "#B3261E" },
+                disabled: needsTyping && delTyped.trim().toUpperCase() !== "DELETE",
+                onClick: () => {
+                  onDeleteCrew(confirmDel.id);
+                  close();
+                },
+                children: "Delete crew"
+              }
+            )
+          ] }),
+          children: owed.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "Settle what's owed first", tone: "amber", children: [
+              confirmDel.name,
+              " still has ",
+              owed.length === 1 ? "an unpaid sub invoice" : `${owed.length} unpaid sub invoices`,
+              ". Marking one paid only happens on the job's Work order tab, and that card disappears along with the crew \u2014 so deleting now would leave a payable nothing could ever clear."
+            ] }),
+            owed.map((j) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", gap: 10, padding: "10px 0", borderBottom: `1px solid ${S.line}` }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 600 }, children: j.name }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: S.sub, marginTop: 2, textTransform: "capitalize" }, children: j.subInvoice.status })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }, children: money(subInvoiceTotal(j.subInvoice)) })
+            ] }, j.id)),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 12, lineHeight: 1.5 }, children: [
+              "Mark ",
+              owed.length === 1 ? "it" : "them",
+              " paid on ",
+              owed.length === 1 ? "that job's" : "each job's",
+              " Work order tab, then come back. Deactivate hides ",
+              confirmDel.name,
+              " from every picker in the meantime."
+            ] })
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+            assigned.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "This cannot be undone", tone: "red", children: [
+              assigned.length,
+              " job",
+              assigned.length === 1 ? "" : "s",
+              " ",
+              assigned.length === 1 ? "is" : "are",
+              " assigned to ",
+              confirmDel.name,
+              ". ",
+              assigned.length === 1 ? "It" : "They",
+              " won't be deleted \u2014 ",
+              assigned.length === 1 ? "it goes" : "they go",
+              " back to having no crew, and any crew portal link they were given stops working immediately. What you've already paid ",
+              confirmDel.name,
+              " stays on the books."
+            ] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: "This cannot be undone", tone: "red", children: [
+              confirmDel.name,
+              " has no jobs assigned, so nothing else changes \u2014 the crew is removed from every picker and from this list."
+            ] }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 12, lineHeight: 1.5 }, children: [
+              "Only removing them for good? ",
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Deactivate" }),
+              " keeps their file, price sheet and history intact and hides them from every picker."
+            ] }),
+            needsTyping && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Type DELETE to confirm", hint: "Deliberately awkward \u2014 this is permanent.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              "input",
+              {
+                style: inputStyle,
+                value: delTyped,
+                onChange: (e) => setDelTyped(e.target.value),
+                autoCapitalize: "characters",
+                placeholder: "DELETE"
+              }
+            ) })
+          ] })
+        }
+      );
+    })()
   ] });
 }
 var CC_API = "https://api.companycam.com/v2";
@@ -30744,6 +30864,30 @@ function SupremeCRM() {
     logAct({ type: "delete", text: `Deleted ${ids.length === 1 ? "job" : ids.length + " jobs"}: ${label}` });
     toast(ids.length === 1 ? "Job deleted" : ids.length + " jobs deleted");
   };
+  const deleteCrew = (id) => {
+    const crew = crews.find((c) => c.id === id);
+    const affected = jobs.filter((j) => j.crewId === id);
+    const hit = new Set(affected.map((j) => j.id));
+    const tokens = affected.map((j) => j.crewPortalToken).filter(Boolean);
+    const db = DB();
+    const clearTokens = () => setJobs((prev) => prev.map((j) => hit.has(j.id) && j.crewPortalToken ? { ...j, crewPortalToken: null } : j));
+    if (tokens.length) {
+      if (!db) clearTokens();
+      else {
+        const warn = () => setSyncErr("Removed the crew, but their job links are still live \u2014 open each affected job's Work order tab and disable the crew portal there.");
+        db.from("crm_portal").update({ revoked: true }).in("token", tokens).then(({ error }) => {
+          if (error) warn();
+          else clearTokens();
+        }, warn);
+      }
+    }
+    if (affected.length) {
+      setJobs((prev) => prev.map((j) => hit.has(j.id) ? { ...j, crewId: null } : j));
+    }
+    setCrews((prev) => prev.filter((c) => c.id !== id));
+    logAct({ type: "delete", text: `Deleted crew: ${crew ? crew.name : id}${affected.length ? ` \u2014 unassigned from ${affected.length} job${affected.length === 1 ? "" : "s"}` : ""}` });
+    toast(affected.length ? `Crew removed \u2014 ${affected.length} job${affected.length === 1 ? "" : "s"} now unassigned` : "Crew removed");
+  };
   const logAct = (entry2) => setActivity((prev) => [{
     id: uid("act"),
     at: (/* @__PURE__ */ new Date()).toISOString().slice(0, 16).replace("T", " "),
@@ -31693,7 +31837,8 @@ function SupremeCRM() {
         currentUser: liveUser,
         jobs,
         onBack: () => setNav("more"),
-        toast
+        toast,
+        onDeleteCrew: deleteCrew
       }
     ) : nav === "claims" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ClaimsDashboard, { jobs, onBack: () => setNav("more"), onOpenJob: openJobScreen }) : nav === "crewpay" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       CrewPayouts,

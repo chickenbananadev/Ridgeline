@@ -3113,6 +3113,18 @@ function crewDocAlerts(crew, today) {
     .map((d) => ({ name: d.name, type: d.type || "", expires: d.expires, status: d.expires < t ? "expired" : (d.expires <= soon ? "expiring" : "ok") }))
     .filter((d) => d.status !== "ok");
 }
+/* Jobs where this crew is still owed money — a confirmed or submitted
+   invoice that has not been marked paid. Exactly the status set the
+   Crew payouts "Subs to pay" queue treats as owed, so the two agree.
+   Deleting a crew is blocked on this: the invoice would stay in that
+   queue (and in the Home ready-to-pay count) while SubInvoiceCard,
+   which is the only place it can be marked paid, renders solely for an
+   assigned crew — leaving a payable nothing in the UI could ever
+   clear. Settle it first, then the crew can go. */
+function unpaidSubInvoiceJobs(jobs, crewId) {
+  return (jobs || []).filter((j) => j.crewId === crewId && j.subInvoice
+    && ["confirmed", "submitted"].includes(j.subInvoice.status));
+}
 /* Per-job subcontractor invoice — a draft that starts from what we can compute
    and stays editable until it's confirmed after install (actuals change:
    extra decking, dump fees, etc.). status: draft → needs_review → confirmed →
@@ -20690,13 +20702,23 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
     if (navigator.clipboard) await navigator.clipboard.writeText(url).catch(() => {});
     toast(`Crew link copied — send it to ${crew.name}`);
   };
+  /* Clearing crewPortalToken locally only hides the link from this
+     screen — what actually stops the sub's link opening is revoked=true
+     on the crm_portal row. So the local clear has to wait on the write
+     landing: a swallowed failure here reads as "disabled" while the
+     link keeps serving the job, with no token left in the UI to try
+     again with. */
   const revokeCrewPortal = async () => {
     const db = DB();
-    try {
-      if (db && job.crewPortalToken) await db.from("crm_portal").update({ revoked: true }).eq("token", job.crewPortalToken);
-      mut((j) => ({ ...j, crewPortalToken: null }));
-      toast("Crew link disabled — it no longer opens");
-    } catch (e) { toast("Couldn't disable that link"); }
+    if (db && job.crewPortalToken) {
+      let error = null;
+      try {
+        ({ error } = await db.from("crm_portal").update({ revoked: true }).eq("token", job.crewPortalToken));
+      } catch (e) { error = e; }
+      if (error) { toast("Couldn't disable that link — it's still live. " + (error.message || "")); return; }
+    }
+    mut((j) => ({ ...j, crewPortalToken: null }));
+    toast("Crew link disabled — it no longer opens");
   };
   const openSend = () => {
     const ctx = templateContext(job, brand, crew, users);
@@ -20765,14 +20787,21 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
       {/* The sub's own live link for this job — work order, punch list,
           photo uploads and a thread to the office, no login and no seat
           (migration 035). Same token machinery as the client portal;
-          the snapshot never contains a dollar figure by construction. */}
-      {crew && (
+          the snapshot never contains a dollar figure by construction.
+
+          Shown whenever there is a crew OR a live token — never gate a
+          live link's only Disable button on the crew still existing, or
+          removing the crew strands a working link with nothing in the
+          app able to revoke it. */}
+      {(crew || job.crewPortalToken) && (
         <Card style={{ marginTop: 12 }}>
           <CardTitle right={job.crewPortalToken ? <Chip tone="green">Live</Chip> : <Chip tone="gray">Off</Chip>}>Crew portal</CardTitle>
           <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
-            {job.crewPortalToken
-              ? <>One link for {crew.name} on this job: the work order, the punch list (they can check items off), photo uploads straight to this job's album, and a message thread to the office. No prices anywhere on it.</>
-              : <>Give {crew.name} a link to this job — work order, punch list check-off, photo uploads, and a thread to the office. No login, no seat, and never any pricing.</>}
+            {!crew
+              ? <>A crew link for this job is still live even though no crew is assigned — whoever holds it can still open the work order and punch list. Disable it, or assign a crew above and issue a fresh one.</>
+              : job.crewPortalToken
+                ? <>One link for {crew.name} on this job: the work order, the punch list (they can check items off), photo uploads straight to this job's album, and a message thread to the office. No prices anywhere on it.</>
+                : <>Give {crew.name} a link to this job — work order, punch list check-off, photo uploads, and a thread to the office. No login, no seat, and never any pricing.</>}
           </div>
           {job.crewPortalToken && (
             <div style={{ background: S.soft, borderRadius: 9, padding: "9px 12px", marginTop: 10, fontSize: 12, color: S.ink, wordBreak: "break-all" }}>
@@ -20780,11 +20809,13 @@ function TabWorkOrder({ job, mut, toast, brand, crews, templates, currentUser, u
             </div>
           )}
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <Btn small style={{ flex: 2 }} onClick={publishCrewPortal}>
-              <Share2 size={13} /> {job.crewPortalToken ? "Update & copy link" : "Create crew link"}
-            </Btn>
+            {crew && (
+              <Btn small style={{ flex: 2 }} onClick={publishCrewPortal}>
+                <Share2 size={13} /> {job.crewPortalToken ? "Update & copy link" : "Create crew link"}
+              </Btn>
+            )}
             {job.crewPortalToken && (
-              <Btn kind="ghost" small style={{ flex: 1 }} onClick={revokeCrewPortal}>Disable</Btn>
+              <Btn kind="ghost" small style={{ flex: 1 }} data-testid="revoke-crew-portal" onClick={revokeCrewPortal}>Disable</Btn>
             )}
           </div>
         </Card>
@@ -25270,7 +25301,7 @@ function TemplateManager({ templates, setTemplates, currentUser, onBack, toast, 
 /* ================================================================
    CREWS — the directory work orders are dispatched to.
    ================================================================ */
-function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
+function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast, onDeleteCrew = null }) {
   const [editing, setEditing] = useState(null);
   const blank = { name: "", contact: "", phone: "", email: "", trades: [], active: true };
   const [f, setF] = useState(blank);
@@ -25278,6 +25309,8 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const TRADES = ["Roofing", "Siding", "Gutters", "Metal", "Flashing", "Windows", "Carpentry"];
   const [customTrade, setCustomTrade] = useState("");
   const [range, setRange] = useState("all");
+  const [confirmDel, setConfirmDel] = useState(null);
+  const [delTyped, setDelTyped] = useState("");
   const docRef = useRef(null);
   const priceRef = useRef(null);
   const [docBusy, setDocBusy] = useState(false);
@@ -25375,6 +25408,11 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
   const paidFor = (crewId) => {
     const cutoff = range === "all" ? 0 : Date.now() - (range === "30" ? 30 : range === "90" ? 90 : 365) * 86400000;
     const crewName = (crews.find((c) => c.id === crewId) || {}).name || "";
+    /* No name means no crew to match against — and "".includes("") is
+       true for every payment, so falling through would total the whole
+       company's payouts under one sub. Unreachable today, but only by
+       luck of the call site. */
+    if (!crewName) return 0;
     return jobs.filter((j) => j.crewId === crewId).reduce((sum, j) => {
       const payouts = (j.payments || [])
         .filter((p) => p.type !== "Received" && String(p.to || "").toLowerCase().includes(crewName.toLowerCase()));
@@ -25441,6 +25479,12 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
                   onClick={() => setCrews(crews.map((x) => (x.id === c.id ? { ...x, active: !x.active } : x)))}>
                   {c.active ? "Deactivate" : "Reactivate"}
                 </Btn>
+                {onDeleteCrew && (
+                  <Btn kind="ghost" small aria-label={`Delete ${c.name}`} style={{ color: "#B42318", flex: "0 0 auto" }}
+                    onClick={() => { setConfirmDel(c); setDelTyped(""); }}>
+                    <Trash2 size={13} />
+                  </Btn>
+                )}
               </div>
             )}
           </Card>
@@ -25655,6 +25699,82 @@ function CrewManager({ crews, setCrews, currentUser, jobs, onBack, toast }) {
           </>
         )}
       </Sheet>
+
+      {/* Deleting a sub is a cross-entity action, so the confirmation
+          has to say what actually happens to their jobs — and refuse
+          outright in the one case where deleting leaves money owed
+          with nothing in the UI able to clear it. */}
+      {(() => {
+        if (!confirmDel) return null;
+        const owed = unpaidSubInvoiceJobs(jobs, confirmDel.id);
+        const assigned = jobs.filter((j) => j.crewId === confirmDel.id);
+        const close = () => { setConfirmDel(null); setDelTyped(""); };
+        const needsTyping = assigned.length > 0;
+        return (
+          <Sheet open onClose={close} title={`Delete ${confirmDel.name}`}
+            footer={
+              <div style={{ display: "flex", gap: 10 }}>
+                <Btn kind="ghost" style={{ flex: 1 }} onClick={close}>{owed.length ? "Close" : "Cancel"}</Btn>
+                {!owed.length && (
+                  <Btn data-testid="confirm-delete-crew" style={{ flex: 1, background: "#B3261E", borderColor: "#B3261E" }}
+                    disabled={needsTyping && delTyped.trim().toUpperCase() !== "DELETE"}
+                    onClick={() => { onDeleteCrew(confirmDel.id); close(); }}>Delete crew</Btn>
+                )}
+              </div>
+            }>
+            {owed.length ? (
+              <>
+                <Callout label="Settle what's owed first" tone="amber">
+                  {confirmDel.name} still has {owed.length === 1 ? "an unpaid sub invoice" : `${owed.length} unpaid sub invoices`}.
+                  Marking one paid only happens on the job's Work order tab, and that card disappears
+                  along with the crew — so deleting now would leave a payable nothing could ever clear.
+                </Callout>
+                {owed.map((j) => (
+                  <div key={j.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "10px 0", borderBottom: `1px solid ${S.line}` }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600 }}>{j.name}</div>
+                      <div style={{ fontSize: 12, color: S.sub, marginTop: 2, textTransform: "capitalize" }}>{j.subInvoice.status}</div>
+                    </div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                      {money(subInvoiceTotal(j.subInvoice))}
+                    </div>
+                  </div>
+                ))}
+                <div style={{ fontSize: 12.5, color: S.sub, marginTop: 12, lineHeight: 1.5 }}>
+                  Mark {owed.length === 1 ? "it" : "them"} paid on {owed.length === 1 ? "that job's" : "each job's"} Work
+                  order tab, then come back. Deactivate hides {confirmDel.name} from every picker in the meantime.
+                </div>
+              </>
+            ) : (
+              <>
+                {assigned.length > 0 ? (
+                  <Callout label="This cannot be undone" tone="red">
+                    {assigned.length} job{assigned.length === 1 ? "" : "s"} {assigned.length === 1 ? "is" : "are"} assigned
+                    to {confirmDel.name}. {assigned.length === 1 ? "It" : "They"} won't be deleted — {assigned.length === 1 ? "it goes" : "they go"} back
+                    to having no crew, and any crew portal link they were given stops working immediately.
+                    What you've already paid {confirmDel.name} stays on the books.
+                  </Callout>
+                ) : (
+                  <Callout label="This cannot be undone" tone="red">
+                    {confirmDel.name} has no jobs assigned, so nothing else changes — the crew is removed
+                    from every picker and from this list.
+                  </Callout>
+                )}
+                <div style={{ fontSize: 12.5, color: S.sub, marginTop: 12, lineHeight: 1.5 }}>
+                  Only removing them for good? <b>Deactivate</b> keeps their file, price sheet and history intact
+                  and hides them from every picker.
+                </div>
+                {needsTyping && (
+                  <Field label="Type DELETE to confirm" hint="Deliberately awkward — this is permanent.">
+                    <input style={inputStyle} value={delTyped} onChange={(e) => setDelTyped(e.target.value)}
+                      autoCapitalize="characters" placeholder="DELETE" />
+                  </Field>
+                )}
+              </>
+            )}
+          </Sheet>
+        );
+      })()}
     </div>
   );
 }
@@ -29405,6 +29525,54 @@ export default function SupremeCRM() {
     toast(ids.length === 1 ? "Job deleted" : ids.length + " jobs deleted");
   };
 
+  /* Removing a subcontractor is more than dropping a row from a list.
+     Their jobs still point at them by id, and every "is this job
+     unassigned?" test in the app reads !j.crewId rather than "does
+     that crew still exist" — so a dangling id would drop the job off
+     the dispatch board entirely, skip the no-crew alert, and let it
+     clear the production stage gate. The jobs are unassigned here for
+     that reason, not for tidiness.
+
+     Their crew portal links go too — a link the sub can still open on
+     a job they're no longer on is the same stale-portal leak already
+     closed for homeowners.
+
+     Payout history is untouched — payments record a sub by NAME
+     (payments[].to, fin.labor[].by), never by id, so what they were
+     paid stays on the books. Blocked upstream when an invoice is still
+     unpaid; see unpaidSubInvoiceJobs. */
+  const deleteCrew = (id) => {
+    const crew = crews.find((c) => c.id === id);
+    const affected = jobs.filter((j) => j.crewId === id);
+    const hit = new Set(affected.map((j) => j.id));
+    const tokens = affected.map((j) => j.crewPortalToken).filter(Boolean);
+    const db = DB();
+    /* Clearing crewPortalToken locally is cosmetic — revoked=true on the
+       crm_portal row is what actually closes the link. So the token is
+       only dropped once that write lands. If it fails the token stays
+       put, which keeps the job's Work order tab showing a live-link card
+       with a working Disable button (it renders on the token now, not on
+       the crew), and says so rather than looking finished. */
+    const clearTokens = () =>
+      setJobs((prev) => prev.map((j) => (hit.has(j.id) && j.crewPortalToken ? { ...j, crewPortalToken: null } : j)));
+    if (tokens.length) {
+      if (!db) clearTokens();
+      else {
+        const warn = () => setSyncErr("Removed the crew, but their job links are still live — open each affected job's Work order tab and disable the crew portal there.");
+        db.from("crm_portal").update({ revoked: true }).in("token", tokens)
+          .then(({ error }) => { if (error) warn(); else clearTokens(); }, warn);
+      }
+    }
+    if (affected.length) {
+      setJobs((prev) => prev.map((j) => (hit.has(j.id) ? { ...j, crewId: null } : j)));
+    }
+    setCrews((prev) => prev.filter((c) => c.id !== id));
+    logAct({ type: "delete", text: `Deleted crew: ${crew ? crew.name : id}${affected.length ? ` — unassigned from ${affected.length} job${affected.length === 1 ? "" : "s"}` : ""}` });
+    toast(affected.length
+      ? `Crew removed — ${affected.length} job${affected.length === 1 ? "" : "s"} now unassigned`
+      : "Crew removed");
+  };
+
   const logAct = (entry) =>
     setActivity((prev) => [{
       id: uid("act"),
@@ -30175,7 +30343,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onBack={() => setNav("more")} toast={toast} brand={brand} />
       ) : nav === "crews" ? (
         <CrewManager crews={crews} setCrews={setCrews} currentUser={liveUser} jobs={jobs}
-          onBack={() => setNav("more")} toast={toast} />
+          onBack={() => setNav("more")} toast={toast} onDeleteCrew={deleteCrew} />
       ) : nav === "claims" ? (
         <ClaimsDashboard jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
       ) : nav === "crewpay" ? (

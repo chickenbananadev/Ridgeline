@@ -33,7 +33,11 @@ ok(!/onClick=\{\(\) => onOpenJob && onOpenJob\(r\.job\.id\)\}/.test(src),
 /* ---------- static: paidFor reads real payments, not the dead financials field ---------- */
 const pfStart = src.indexOf("const paidFor = (crewId) => {");
 ok(pfStart !== -1, "paidFor exists");
-const pfSrc = src.slice(pfStart, pfStart + 500);
+/* Bounded by what follows paidFor rather than a character count —
+   build 126 added an empty-name guard and its comment inside this
+   function, which pushed the matching lines past a fixed 500-char
+   window and failed these assertions without anything being wrong. */
+const pfSrc = src.slice(pfStart, src.indexOf("const open = (c) => {", pfStart));
 ok(!/j\.financials/.test(pfSrc), "paidFor no longer reads the dead job.financials field (renamed to job.fin long ago, always undefined)");
 ok(!/costLines/.test(pfSrc), "paidFor no longer looks for a costLines array that markPaid() never writes to");
 ok(/j\.payments \|\| \[\]/.test(pfSrc) && /p\.type !== "Received"/.test(pfSrc),
