@@ -104,7 +104,14 @@ supabase functions deploy create-portal-session
 Then, once in the Stripe dashboard, enable the **Customer Portal**
 (Settings → Billing → Customer portal) and turn on the actions you want owners
 to have — update card, change plan, cancel subscription. That's the only place
-a subscription can be cancelled, by design.
+a subscription can be cancelled, by design. **"Cancel subscription" is off by
+default on a new Stripe account** — this needs to be switched on explicitly,
+or "Manage billing" opens but has no cancel option at all. Under that same
+toggle, Stripe asks when a cancellation takes effect: **"At the end of the
+billing period"** is the right choice here — someone who cancels mid-trial
+keeps trial access through the trial's end instead of losing it immediately,
+and someone who cancels mid-subscription keeps what they already paid for
+instead of being cut off with unused days left on the current charge.
 
 ---
 
@@ -405,10 +412,35 @@ supabase secrets set APP_URL=https://roofstride.com          # your domain, no t
 
 Then, in the Stripe dashboard: **Developers → Webhooks → Add endpoint**,
 pointing at `https://<project-ref>.functions.supabase.co/stripe-webhook`,
-subscribed to `customer.subscription.updated`,
-`customer.subscription.deleted`, and `checkout.session.completed`. Stripe
-shows the signing secret once the endpoint is created — that's the
-`STRIPE_WEBHOOK_SECRET` value above.
+subscribed to exactly the 4 events the function's own `switch` handles —
+`customer.subscription.updated`, `customer.subscription.deleted`,
+`invoice.payment_failed`, and `invoice.paid`. (Not
+`checkout.session.completed` — that step is handled separately, by the
+browser calling `complete-signup` directly right after Checkout
+redirects back; the webhook doesn't listen for it and would silently
+ignore it if subscribed.) Stripe shows the signing secret once the
+endpoint is created — that's the `STRIPE_WEBHOOK_SECRET` value above.
+
+**This is exactly what makes trial-to-paid conversion and cancellation
+show up correctly in the app**, not just in Stripe:
+- Stripe itself auto-charges the card on file the moment the 7-day
+  trial ends — nothing in this codebase drives that, Checkout's
+  `trial_period_days: 7` plus `payment_method_collection: "always"`
+  are what make it automatic. This webhook's job is only to mirror the
+  *result* back into `tenants.status`: `invoice.paid` confirms the
+  charge succeeded (and clears any prior `past_due` lock),
+  `invoice.payment_failed` catches a declined card and sets
+  `past_due`, and `customer.subscription.updated` is the fallback that
+  independently reflects whatever status Stripe settles on regardless
+  of which invoice event landed first.
+- Canceling (via "Manage billing" → the Stripe Billing Portal, see §2)
+  fires `customer.subscription.deleted` once the subscription actually
+  ends, which is what sets `tenants.status = 'canceled'`.
+- Without this webhook correctly configured, Stripe still bills (or
+  stops billing) the customer's card exactly the same either way — but
+  `tenants.status` inside this app silently stops updating, so a
+  canceled or payment-failed company keeps showing as if nothing
+  happened.
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are
 injected into every function automatically — don't set them by hand.
