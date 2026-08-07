@@ -28728,10 +28728,9 @@ export default function SupremeCRM() {
           {brand.logo ? (
             <img src={brand.logo} alt={brand.company} style={{ height: 64, maxWidth: 200, objectFit: "contain", margin: "0 auto 14px", display: "block" }} />
           ) : (
-            <div style={{
-              width: 56, height: 56, borderRadius: 14, background: brand.primary, color: "#fff",
-              display: "grid", placeItems: "center", fontWeight: 800, margin: "0 auto 14px",
-            }}>{brand.short}</div>
+            <img src="/icon-512.png" alt="RoofStride" style={{
+              width: 73, height: 73, borderRadius: 16, objectFit: "contain", margin: "0 auto 14px", display: "block",
+            }} />
           )}
           <div style={{ fontSize: 14, color: S.sub }}>Loading…</div>
         </div>
