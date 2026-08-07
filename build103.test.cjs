@@ -46,7 +46,13 @@ ok(/<img src="\/icon-512\.png" alt="RoofStride" width="56" height="56"/.test(htm
   "the RoofStride mark now appears at the top of the pre-mount fallback, matching the app's own loading-screen branding");
 ok(html.includes("RoofStride — the roofing CRM built for the field"), "the real H1 marketing copy is untouched");
 ok(html.includes("What RoofStride does"), "the real feature-list section is untouched");
-ok(html.includes("Crawlable marketing content: real HTML so search engines"), "the explanatory comment about why this markup exists is untouched");
+/* Build 105 moved this marketing block into <noscript> (it was flashing
+   full-page on cold loads) and rewrote the comment above it to explain
+   that placement. The comment's job is unchanged — say why the markup
+   exists at all — so assert on that meaning rather than the old wording. */
+const flatHtml = html.replace(/\s+/g, " ");
+ok(flatHtml.includes("crawlers and link unfurlers — which read the served markup, not the painted page"),
+  "the explanatory comment still records why this markup exists: crawlers read the served HTML, not the painted page");
 
 if (fails) { console.log("\nbuild 103: " + fails + " FAILED"); process.exit(1); }
 console.log("build 103 tests passed");
