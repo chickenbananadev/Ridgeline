@@ -1395,6 +1395,55 @@ function nextStepAfter(job, completedLabel) {
 const WON_STAGES = ["s5", "s6", "s7", "s8", "s9", "s10"];
 const DEAD_STAGES = ["s11", "s12"];
 
+/* ================================================================
+   CANVASSING DISPOSITIONS
+
+   What a rep marks at a door. Shipped as a working default rather
+   than a blank list, because a canvassing tool that asks you to
+   invent your own vocabulary before the first knock does not get
+   used — but stored in the org blob like pipeline stages, so a
+   company can rename, recolor and reorder them.
+
+   Two flags carry real behaviour rather than decoration:
+
+     contact    — someone actually answered. This is the denominator
+                  a canvassing scoreboard is built on: doors knocked
+                  versus doors ANSWERED are different numbers, and
+                  conflating them makes a rep look bad on a street
+                  where nobody was home.
+     terminal   — stop coming back. "Do not knock" is a promise the
+                  company made to a homeowner; anything that treats
+                  it as just another color will eventually send
+                  someone back up that driveway.
+
+   `open` marks the states that still want a follow-up, which is what
+   a rep's "who do I revisit tonight" list reads.
+   ================================================================ */
+const CANVASS_STATUSES = [
+  { id: "new", name: "Not knocked", color: "#9CA3AF", contact: false, open: true, terminal: false },
+  { id: "not_home", name: "Not home", color: "#6B7280", contact: false, open: true, terminal: false },
+  { id: "callback", name: "Come back", color: "#B45309", contact: true, open: true, terminal: false },
+  { id: "not_interested", name: "Not interested", color: "#B42318", contact: true, open: false, terminal: false },
+  { id: "appointment", name: "Appointment set", color: "#1D4ED8", contact: true, open: true, terminal: false },
+  { id: "inspected", name: "Inspected", color: "#7C3AED", contact: true, open: true, terminal: false },
+  { id: "sold", name: "Sold", color: "#047857", contact: true, open: false, terminal: false },
+  { id: "dnk", name: "Do not knock", color: "#111827", contact: false, open: false, terminal: true },
+];
+/* A company's saved list wins, but only for the statuses it actually
+   defines. An id that was dropped from the list still has pins
+   pointing at it, and those pins must keep a name and a color rather
+   than rendering as an unlabelled grey dot — so the shipped
+   definition stays available as a fallback. */
+function canvassStatusList(saved) {
+  const list = Array.isArray(saved) && saved.length ? saved : CANVASS_STATUSES;
+  return list.map((s) => ({ ...CANVASS_STATUSES.find((d) => d.id === s.id), ...s }));
+}
+function canvassStatus(saved, id) {
+  const list = canvassStatusList(saved);
+  return list.find((s) => s.id === id)
+    || CANVASS_STATUSES.find((s) => s.id === id)
+    || { id: id || "new", name: id || "Not knocked", color: "#9CA3AF", contact: false, open: true, terminal: false };
+}
 
 /* ================================================================
    CREWS — work orders are sent to a crew, not an individual.
@@ -2490,6 +2539,45 @@ async function geoAutocomplete(text, signal) {
   } catch { return []; }
 }
 
+/* ------------------------------------------------------------------
+   SLIPPY-MAP PROJECTION
+
+   Web Mercator, the same scheme every raster tile server uses: the
+   world is one 256px tile at zoom 0 and doubles each level, so a
+   lat/lng maps to an absolute pixel on that grid and back again.
+
+   These are pure functions on purpose — the map component's panning,
+   pin placement and tap-to-drop all reduce to project/unproject, and
+   pure math is the part worth testing directly rather than through a
+   rendered map.
+------------------------------------------------------------------- */
+const TILE_SIZE = 256;
+const MAX_LAT = 85.05112878;   // where Mercator goes infinite
+function lngToWorldX(lng, z) {
+  return ((lng + 180) / 360) * TILE_SIZE * Math.pow(2, z);
+}
+function latToWorldY(lat, z) {
+  const clamped = Math.max(-MAX_LAT, Math.min(MAX_LAT, lat));
+  const s = Math.sin((clamped * Math.PI) / 180);
+  return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * TILE_SIZE * Math.pow(2, z);
+}
+function worldXToLng(x, z) {
+  return (x / (TILE_SIZE * Math.pow(2, z))) * 360 - 180;
+}
+function worldYToLat(y, z) {
+  const n = Math.PI - (2 * Math.PI * y) / (TILE_SIZE * Math.pow(2, z));
+  return (180 / Math.PI) * Math.atan(Math.sinh(n));
+}
+/* Great-circle distance in METRES. Canvassing works at street scale —
+   "is this tap the same house as that pin" is a 15 m question, and
+   miles are the wrong unit to ask it in. */
+function metresBetween(lat1, lng1, lat2, lng2) {
+  const R = 6371000, rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
 /* Property records (year built, square footage) — a keyed provider (e.g.
    RentCast's free tier) auto-fills the fields; without a key the free
    county-records deep-link still works nationwide. Mirrors GEO_PROVIDER. */
@@ -2526,9 +2614,19 @@ async function fetchPropertyRecord(address) {
 }
 
 /* Coordinates -> street address. Used to stamp photos with a real address
-   alongside the GPS fix. */
+   alongside the GPS fix, and to name a canvassing pin the moment it is
+   dropped ("412 Oak St" is what a rep needs on screen, not a lat/lng).
+
+   Cached because canvassing changed the call pattern: photo stamping
+   asks once per photo, but a rep working a street drops pins minute
+   after minute, and re-asking the provider for a house already looked
+   up spends quota on an answer we hold. Keyed to ~1 m so the same door
+   tapped twice is one lookup. */
+const REVERSE_CACHE = new Map();
 async function geoReverse(lat, lng) {
   if (!geoReady() || lat == null || lng == null) return null;
+  const key = `${Math.round(lat * 1e5)},${Math.round(lng * 1e5)}`;
+  if (REVERSE_CACHE.has(key)) return REVERSE_CACHE.get(key);
   const url = `${GEO_PROVIDER.base}/reverse?lat=${lat}&lon=${lng}&format=json&apiKey=${GEO_PROVIDER.apiKey}`;
   try {
     const res = await fetch(url);
@@ -2536,13 +2634,15 @@ async function geoReverse(lat, lng) {
     const data = await res.json();
     const r = (data.results || [])[0];
     if (!r) return null;
-    return {
+    const out = {
       formatted: r.formatted || "",
       street: [r.housenumber, r.street].filter(Boolean).join(" ") || r.address_line1 || "",
       city: r.city || r.town || r.village || "",
       state: r.state_code || "",
       zip: r.postcode || "",
     };
+    REVERSE_CACHE.set(key, out);
+    return out;
   } catch { return null; }
 }
 
@@ -28315,6 +28415,524 @@ function HelpDesk({ onBack, brand }) {
   );
 }
 
+/* ==================================================================
+   CANVASSING — the door-knocking map
+
+   WHY THIS MAP IS HAND-BUILT rather than Leaflet or Mapbox.
+
+   ridgeline.jsx is deliberately a single self-contained file with no
+   CSS imports and no import.meta, so it can be bundled by esbuild for
+   the test harness and rendered in preview sandboxes. Leaflet needs
+   its stylesheet imported to position panes correctly, which breaks
+   `npm run bundle:test` — the pipeline every build in this codebase
+   is verified through. The map a canvassing tool actually needs is
+   pan, zoom, pins, and tap-to-drop; that reduces to Web Mercator
+   projection plus pointer handling, and keeping it here means the
+   projection math is directly testable instead of hidden behind a
+   rendered map.
+
+   Tiles come from Geoapify on the key the address autocomplete
+   already uses, so there is nothing new to sign up for. The style is
+   overridable via window.__MAP_TILE_URL__ — that is the hook for
+   satellite imagery later, which needs a paid key.
+
+   Attribution is not optional: OpenStreetMap's licence and
+   Geoapify's terms both require it, so it renders on the map itself
+   rather than being tucked in a settings page.
+   ================================================================== */
+const MAP_TILE_STYLE = "osm-bright";
+function tileUrl(z, x, y) {
+  const custom = typeof window !== "undefined" && window.__MAP_TILE_URL__;
+  if (custom) return String(custom).replace("{z}", z).replace("{x}", x).replace("{y}", y);
+  return `https://maps.geoapify.com/v1/tile/${MAP_TILE_STYLE}/${z}/${x}/${y}.png?apiKey=${GEO_PROVIDER.apiKey}`;
+}
+const MAP_MIN_ZOOM = 3, MAP_MAX_ZOOM = 19;
+/* How close a tap has to be to an existing pin to mean "that one".
+   Suburban lots run 15–25 m wide, so 20 m selects the house you meant
+   without swallowing its neighbour. Without this, the second rep down
+   the street silently stacks a duplicate pin on a door that already
+   has one — and the whole point of shared pins is not knocking twice. */
+const PIN_SNAP_METRES = 20;
+function nearestPin(pins, lat, lng, within = PIN_SNAP_METRES) {
+  let best = null, bestD = Infinity;
+  (pins || []).forEach((p) => {
+    const d = metresBetween(lat, lng, p.lat, p.lng);
+    if (d < bestD) { bestD = d; best = p; }
+  });
+  return bestD <= within ? best : null;
+}
+
+function CanvassMap({ center, zoom, onMove, pins, statuses, selectedId, onTapPin, onTapMap, me }) {
+  const boxRef = useRef(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const drag = useRef(null);
+  const pointers = useRef(new Map());
+  const pinch = useRef(null);
+
+  /* Measure rather than assume: the map fills whatever the screen
+     gives it, and every projection below is relative to that box. */
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const { w, h } = size;
+  const z = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, zoom));
+  const cx = lngToWorldX(center.lng, z), cy = latToWorldY(center.lat, z);
+  /* Tiles only exist at integer zooms, so render the nearest integer
+     level and scale the layer for the fractional remainder — the same
+     trick every slippy map uses to keep pinch-zoom smooth without
+     re-fetching a tile per frame. Pins are positioned at the true
+     fractional zoom OUTSIDE that layer, so they never scale with it. */
+  const tileZ = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, Math.round(z)));
+  const scale = Math.pow(2, z - tileZ);
+  const tcx = lngToWorldX(center.lng, tileZ), tcy = latToWorldY(center.lat, tileZ);
+
+  const tiles = [];
+  if (w && h) {
+    const span = Math.pow(2, tileZ);
+    const halfW = w / (2 * scale), halfH = h / (2 * scale);
+    const x0 = Math.floor((tcx - halfW) / TILE_SIZE), x1 = Math.floor((tcx + halfW) / TILE_SIZE);
+    const y0 = Math.floor((tcy - halfH) / TILE_SIZE), y1 = Math.floor((tcy + halfH) / TILE_SIZE);
+    for (let ty = y0; ty <= y1; ty++) {
+      if (ty < 0 || ty >= span) continue;               // no tiles past the poles
+      for (let tx = x0; tx <= x1; tx++) {
+        const wrapped = ((tx % span) + span) % span;    // the world repeats east–west
+        tiles.push({ key: `${tileZ}/${tx}/${ty}`, x: tx, y: ty, src: tileUrl(tileZ, wrapped, ty) });
+      }
+    }
+  }
+
+  const toScreen = (lat, lng) => ({
+    x: w / 2 + (lngToWorldX(lng, z) - cx),
+    y: h / 2 + (latToWorldY(lat, z) - cy),
+  });
+  const toLatLng = (px, py) => ({
+    lat: worldYToLat(cy + (py - h / 2), z),
+    lng: worldXToLng(cx + (px - w / 2), z),
+  });
+
+  const localPoint = (e) => {
+    const r = boxRef.current.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  const onPointerDown = (e) => {
+    boxRef.current.setPointerCapture && boxRef.current.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, localPoint(e));
+    if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom: z };
+      drag.current = null;
+      return;
+    }
+    const p = localPoint(e);
+    drag.current = { startX: p.x, startY: p.y, cx, cy, moved: 0, at: nowMs() };
+  };
+  const onPointerMove = (e) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, localPoint(e));
+    if (pinch.current && pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch.current.dist > 0) {
+        const next = pinch.current.zoom + Math.log2(dist / pinch.current.dist);
+        onMove({ center, zoom: Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, next)) });
+      }
+      return;
+    }
+    if (!drag.current) return;
+    const p = localPoint(e);
+    const dx = p.x - drag.current.startX, dy = p.y - drag.current.startY;
+    drag.current.moved = Math.max(drag.current.moved, Math.hypot(dx, dy));
+    onMove({
+      center: {
+        lat: worldYToLat(drag.current.cy - dy, z),
+        lng: worldXToLng(drag.current.cx - dx, z),
+      },
+      zoom: z,
+    });
+  };
+  const onPointerUp = (e) => {
+    const wasDrag = drag.current;
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+    if (!wasDrag) return;
+    drag.current = null;
+    /* A tap, not a pan. The 6px slop is what separates "I meant to
+       press this" from a finger that slid slightly on the way down —
+       without it, dropping a pin on a phone is nearly impossible. */
+    if (wasDrag.moved > 6) return;
+    const p = localPoint(e);
+    const { lat, lng } = toLatLng(p.x, p.y);
+    const hit = nearestPin(pins, lat, lng);
+    if (hit) onTapPin(hit); else onTapMap(lat, lng);
+  };
+
+  const nudgeZoom = (delta) =>
+    onMove({ center, zoom: Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, Math.round(z) + delta)) });
+
+  return (
+    <div ref={boxRef} data-testid="canvass-map"
+      onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
+      style={{
+        position: "relative", width: "100%", height: "100%", overflow: "hidden",
+        background: S.soft, touchAction: "none", cursor: "grab", userSelect: "none",
+      }}>
+      {/* tile layer — scaled for fractional zoom */}
+      <div style={{
+        position: "absolute", left: w / 2, top: h / 2, width: 0, height: 0,
+        transform: `scale(${scale}) translate(${-tcx}px, ${-tcy}px)`, transformOrigin: "0 0",
+      }}>
+        {tiles.map((t) => (
+          <img key={t.key} src={t.src} alt="" draggable={false} width={TILE_SIZE} height={TILE_SIZE}
+            style={{ position: "absolute", left: t.x * TILE_SIZE, top: t.y * TILE_SIZE, width: TILE_SIZE, height: TILE_SIZE }} />
+        ))}
+      </div>
+
+      {/* the rep's own position */}
+      {me && w > 0 && (() => {
+        const p = toScreen(me.lat, me.lng);
+        return (
+          <div style={{
+            position: "absolute", left: p.x - 8, top: p.y - 8, width: 16, height: 16, borderRadius: "50%",
+            background: "#2563EB", border: "3px solid #fff", boxShadow: "0 0 0 2px rgba(37,99,235,.35)", pointerEvents: "none",
+          }} />
+        );
+      })()}
+
+      {/* pins */}
+      {w > 0 && (pins || []).map((pin) => {
+        const p = toScreen(pin.lat, pin.lng);
+        if (p.x < -40 || p.y < -40 || p.x > w + 40 || p.y > h + 40) return null;
+        const st = canvassStatus(statuses, pin.status);
+        const on = pin.id === selectedId;
+        return (
+          <div key={pin.id} data-testid={`pin-${pin.id}`} title={pin.address || st.name}
+            style={{
+              position: "absolute", left: p.x - (on ? 12 : 8), top: p.y - (on ? 12 : 8),
+              width: on ? 24 : 16, height: on ? 24 : 16, borderRadius: "50%",
+              background: st.color, border: `${on ? 3 : 2}px solid #fff`,
+              boxShadow: on ? "0 0 0 3px rgba(17,24,39,.28)" : "0 1px 3px rgba(0,0,0,.35)",
+              pointerEvents: "none", zIndex: on ? 3 : 2,
+            }} />
+        );
+      })}
+
+      <div style={{ position: "absolute", right: 10, top: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+        {[["+", 1], ["−", -1]].map(([label, d]) => (
+          <button key={label} type="button" aria-label={d > 0 ? "Zoom in" : "Zoom out"}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => nudgeZoom(d)}
+            style={{
+              width: 34, height: 34, borderRadius: 9, border: `1px solid ${S.line}`, background: S.card,
+              color: S.ink, fontSize: 18, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", lineHeight: 1,
+            }}>{label}</button>
+        ))}
+      </div>
+
+      {/* Required by OpenStreetMap's licence and Geoapify's terms. */}
+      <div style={{
+        position: "absolute", right: 0, bottom: 0, background: "rgba(255,255,255,.82)", color: "#374151",
+        fontSize: 9.5, padding: "2px 6px", borderTopLeftRadius: 6, pointerEvents: "auto",
+      }}>
+        <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer" style={{ color: "inherit" }}>Geoapify</a>
+        {" · "}
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: "inherit" }}>© OpenStreetMap</a>
+      </div>
+    </div>
+  );
+}
+
+/* Live epoch millis, isolated so the map's tap/drag timing has one
+   source and tests can reason about it. */
+function nowMs() { return Date.now(); }
+
+/* ------------------------------------------------------------------
+   Canvass pins — loaded for the viewport, not all at once.
+
+   A company that has worked a season has tens of thousands of pins.
+   Pulling them all to render a few streets is the kind of thing that
+   works in a demo and dies in year two, so the map asks only for what
+   is inside its current bounds (crm_canvass_bbox_idx exists for
+   exactly this), keyed by id so overlapping viewports merge instead
+   of duplicating.
+
+   Writes are single-row upserts and their failures are SURFACED. A
+   knock that silently fails to save is the same bug class that hid
+   three production faults in this codebase already, and it is worse
+   here: the rep has physically walked to the door and will not do it
+   again.
+------------------------------------------------------------------- */
+function useCanvassPins({ tenantId, ready }) {
+  const [pins, setPins] = useState({});     // id -> row
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+  const seq = useRef(0);
+
+  const merge = (rows) => setPins((prev) => {
+    const next = { ...prev };
+    rows.forEach((r) => { next[r.id] = r; });
+    return next;
+  });
+
+  const loadBounds = async (b) => {
+    const db = DB();
+    if (!db || !ready || !b) return;
+    const mine = ++seq.current;
+    setLoading(true);
+    const { data, error } = await db.from("crm_canvass").select("*")
+      .gte("lat", b.south).lte("lat", b.north)
+      .gte("lng", b.west).lte("lng", b.east)
+      .limit(2000);
+    if (mine !== seq.current) return;          // a later pan already won
+    setLoading(false);
+    if (error) { setErr("Couldn't load pins for this area. " + (error.message || "")); return; }
+    setErr("");
+    merge(data || []);
+  };
+
+  /* Optimistic locally so the pin appears under the rep's thumb
+     immediately, then reconciled against what the database actually
+     stored — and rolled back with a visible message if it refused. */
+  const savePin = async (row) => {
+    const before = pins[row.id];
+    merge([row]);
+    const db = DB();
+    if (!db) return row;
+    const { data, error } = await db.from("crm_canvass")
+      .upsert({ ...row, updated_at: new Date().toISOString() }).select().maybeSingle();
+    if (error) {
+      setErr("That knock didn't save — you're seeing it on this device only. " + (error.message || ""));
+      if (before) merge([before]); else setPins((prev) => { const n = { ...prev }; delete n[row.id]; return n; });
+      return null;
+    }
+    if (data) merge([data]);
+    return data || row;
+  };
+
+  const removePin = async (id) => {
+    const before = pins[id];
+    setPins((prev) => { const n = { ...prev }; delete n[id]; return n; });
+    const db = DB();
+    if (!db) return;
+    const { error } = await db.from("crm_canvass").delete().eq("id", id);
+    if (error) {
+      setErr("Couldn't remove that pin. " + (error.message || ""));
+      if (before) merge([before]);
+    }
+  };
+
+  /* Two reps on one street see each other's work without reloading —
+     the reason these rows are shared in the first place. */
+  useEffect(() => {
+    const db = DB();
+    if (!db || !ready || !tenantId) return;
+    const ch = db.channel("crm-canvass")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_canvass", filter: `tenant_id=eq.${tenantId}` },
+        (p) => p.new && merge([p.new]))
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "crm_canvass", filter: `tenant_id=eq.${tenantId}` },
+        (p) => p.new && merge([p.new]))
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "crm_canvass" },
+        (p) => {
+          const id = p.old && p.old.id;
+          if (id) setPins((prev) => { const n = { ...prev }; delete n[id]; return n; });
+        })
+      .subscribe();
+    return () => { db.removeChannel(ch); };
+  }, [ready, tenantId]);
+
+  return { pins, list: Object.values(pins), loadBounds, savePin, removePin, err, setErr, loading };
+}
+
+function CanvassScreen({ onBack, currentUser, jobs, canvassStatuses, toast }) {
+  const [center, setCenter] = useState(() => {
+    /* Open where the company works. A rep who has to pan across the
+       Atlantic before the first knock will not open this twice. */
+    const withGeo = (jobs || []).find((j) => j.lat != null && j.lng != null);
+    return withGeo ? { lat: withGeo.lat, lng: withGeo.lng } : { lat: 41.78, lng: -88.15 };
+  });
+  const [zoom, setZoom] = useState(17);
+  const [selectedId, setSelectedId] = useState(null);
+  const [me, setMe] = useState(null);
+  const [addr, setAddr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const boundsTimer = useRef(null);
+  const mapWrapRef = useRef(null);
+
+  const tenantId = currentUser && currentUser.tenantId;
+  const { list, loadBounds, savePin, removePin, err, setErr, loading } =
+    useCanvassPins({ tenantId, ready: !!currentUser });
+  const statuses = canvassStatusList(canvassStatuses);
+  const selected = list.find((p) => p.id === selectedId) || null;
+
+  /* Ask for pins after the pan settles, not on every frame. */
+  const onMove = ({ center: c, zoom: zm }) => {
+    setCenter(c); setZoom(zm);
+    if (boundsTimer.current) clearTimeout(boundsTimer.current);
+    boundsTimer.current = setTimeout(() => {
+      const el = mapWrapRef.current;
+      const w = el ? el.clientWidth : 360, h = el ? el.clientHeight : 420;
+      const cx = lngToWorldX(c.lng, zm), cy = latToWorldY(c.lat, zm);
+      loadBounds({
+        west: worldXToLng(cx - w / 2, zm), east: worldXToLng(cx + w / 2, zm),
+        south: worldYToLat(cy + h / 2, zm), north: worldYToLat(cy - h / 2, zm),
+      });
+    }, 350);
+  };
+  useEffect(() => { onMove({ center, zoom }); /* initial load */ }, []); // eslint-disable-line
+
+  const dropPin = async (lat, lng) => {
+    setBusy(true);
+    const id = uid("cv");
+    const rev = await geoReverse(lat, lng);
+    const row = {
+      id, lat, lng,
+      address: rev ? (rev.formatted || rev.street) : "",
+      status: "new", prospect: {}, notes: "", history: [],
+      created_by: currentUser ? currentUser.id : null,
+      assigned_to: currentUser ? currentUser.id : null,
+      knocked_at: null,
+    };
+    const saved = await savePin(row);
+    setBusy(false);
+    if (saved) { setSelectedId(id); toast && toast(row.address ? `Pin dropped — ${row.address}` : "Pin dropped"); }
+  };
+
+  /* Every disposition APPENDS. A door knocked three times over a
+     season is one pin with three entries, not a pin whose first two
+     visits were overwritten by the third. */
+  const setStatus = async (pin, statusId) => {
+    const st = canvassStatus(canvassStatuses, statusId);
+    const entry = {
+      at: new Date().toISOString(), status: statusId,
+      by: currentUser ? currentUser.name : "", byId: currentUser ? currentUser.id : null,
+    };
+    await savePin({
+      ...pin, status: statusId,
+      history: [...(pin.history || []), entry],
+      knocked_at: entry.at,
+    });
+    toast && toast(st.name);
+  };
+
+  const findMe = () => {
+    if (!navigator.geolocation) { toast && toast("This device won't share its location"); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const c = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setMe(c); setCenter(c); setZoom(18); onMove({ center: c, zoom: 18 });
+      },
+      () => toast && toast("Couldn't get your location — check location permission"),
+      { enableHighAccuracy: true, timeout: 8000 },
+    );
+  };
+
+  const knockedToday = list.filter((p) => p.knocked_at
+    && String(p.knocked_at).slice(0, 10) === todayIso()).length;
+
+  return (
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
+      <SubHeader title="Canvassing" onBack={onBack}
+        right={<Chip tone={knockedToday ? "green" : "gray"}>{knockedToday} today</Chip>} />
+
+      <Card style={{ marginTop: 12 }} pad={13}>
+        <Field label="Find an address" hint="Jump the map to a street, or use your own location.">
+          <AddressAutocomplete value={addr} onChange={setAddr} placeholder="123 Main St"
+            onPick={(it) => {
+              setAddr(it.formatted || it.street || "");
+              const c = { lat: it.lat, lng: it.lng };
+              setCenter(c); setZoom(18); onMove({ center: c, zoom: 18 });
+            }} />
+        </Field>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn kind="ghost" small style={{ flex: 1 }} onClick={findMe}><MapPin size={13} /> Where I am</Btn>
+          {loading && <Chip tone="gray">Loading…</Chip>}
+        </div>
+      </Card>
+
+      {err && (
+        <Callout label="Not saved" tone="red">
+          {err}
+          <div style={{ marginTop: 8 }}><Btn kind="ghost" small onClick={() => setErr("")}>Dismiss</Btn></div>
+        </Callout>
+      )}
+
+      <Card style={{ marginTop: 12, padding: 0, overflow: "hidden" }}>
+        <div ref={mapWrapRef} style={{ height: 420, position: "relative" }}>
+          <CanvassMap
+            center={center} zoom={zoom} onMove={onMove}
+            pins={list} statuses={canvassStatuses} selectedId={selectedId}
+            onTapPin={(p) => setSelectedId(p.id)}
+            onTapMap={(lat, lng) => { setSelectedId(null); dropPin(lat, lng); }}
+            me={me} />
+        </div>
+      </Card>
+
+      <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 10 }}>
+        Tap anywhere to drop a pin at that house — tapping within {PIN_SNAP_METRES} m of an existing pin
+        opens that one instead, so two reps on the same street don't double up. Pins are shared with the whole team.
+      </div>
+
+      {busy && <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8 }}>Looking up that address…</div>}
+
+      {selected && (
+        <Card style={{ marginTop: 12 }}>
+          <CardTitle right={<Chip tone="gray">{canvassStatus(canvassStatuses, selected.status).name}</Chip>}>
+            {selected.address || "Dropped pin"}
+          </CardTitle>
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 4 }}>
+            {statuses.filter((s) => s.id !== "new").map((s) => (
+              <button key={s.id} type="button" onClick={() => setStatus(selected, s.id)}
+                style={{
+                  border: `1.5px solid ${selected.status === s.id ? s.color : S.line}`,
+                  background: selected.status === s.id ? s.color : S.card,
+                  color: selected.status === s.id ? "#fff" : S.ink,
+                  borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 600,
+                  cursor: "pointer", fontFamily: "inherit",
+                }}>{s.name}</button>
+            ))}
+          </div>
+          {(selected.history || []).length > 0 && (
+            <div style={{ marginTop: 12, fontSize: 12.5, color: S.sub }}>
+              Knocked {(selected.history || []).length} time{(selected.history || []).length === 1 ? "" : "s"} ·
+              last by {(selected.history || [])[selected.history.length - 1].by || "someone"}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => setSelectedId(null)}>Done</Btn>
+            <Btn kind="ghost" small aria-label="Remove pin" style={{ color: "#B42318", flex: "0 0 auto" }}
+              onClick={() => { removePin(selected.id); setSelectedId(null); }}>
+              <Trash2 size={13} />
+            </Btn>
+          </div>
+        </Card>
+      )}
+
+      <Card style={{ marginTop: 12 }} pad={13}>
+        <CardTitle>Legend</CardTitle>
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {statuses.map((s) => (
+            <span key={s.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.sub }}>
+              <span style={{ width: 11, height: 11, borderRadius: "50%", background: s.color, border: "1.5px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,.15)" }} />
+              {s.name}
+            </span>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
 function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setTheme = () => {} }) {
   const admin = currentUser && currentUser.role === "admin";
   const groups = [
@@ -28326,6 +28944,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["warranties", Shield, "Warranties", "Every roof's labor and manufacturer terms"],
     ]],
     ["Sales & marketing", [
+      ["canvass", MapPin, "Canvassing", "Knock a neighborhood — pins, dispositions, storm history"],
       ["activity", ClipboardList, "Activity feed", currentUser && canManageCompanyConfig(currentUser) ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", Phone, "Calls & attribution", "Log calls, see which sources make money"],
       ["contacts", Users, "Contacts", "Every client, with consent status"],
@@ -29389,6 +30008,10 @@ export default function SupremeCRM() {
     return () => { alive = false; if (off) off(); };
   }, []);
   const [crews, setCrews] = useState(SEED_CREWS);
+  /* Canvassing dispositions live in the org blob beside pipeline
+     stages, so a company can rename them without a migration. The
+     pins themselves are a real table (037) — see useCanvassPins. */
+  const [canvassStatuses, setCanvassStatuses] = useState(CANVASS_STATUSES);
   const [templates, setTemplates] = useState(SEED_TEMPLATES);
   const [companyDocs, setCompanyDocs] = useState(SEED_COMPANY_DOCS);
   const [priceList, setPriceList] = useState(SEED_PRICE_LIST);
@@ -29573,10 +30196,10 @@ export default function SupremeCRM() {
   };
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, canvassStatuses, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
     announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates,
-    priceList, companyDocs, crews, vendors, reviewSettings, apiSetup, ccAutoCreate,
+    priceList, companyDocs, crews, canvassStatuses, vendors, reviewSettings, apiSetup, ccAutoCreate,
     features, security, jurisContacts, learnedJuris, version: 1,
   });
   const unpackOrg = (d) => {
@@ -29595,6 +30218,9 @@ export default function SupremeCRM() {
     if (d.priceList) setPriceList(d.priceList);
     if (d.companyDocs) setCompanyDocs(d.companyDocs);
     if (d.crews) setCrews(d.crews);
+    /* No saved list means this company predates canvassing — they keep
+       the shipped dispositions rather than ending up with none. */
+    if (d.canvassStatuses) setCanvassStatuses(d.canvassStatuses);
     if (d.vendors) setVendors(d.vendors);
     if (d.reviewSettings) setReviewSettings(d.reviewSettings);
     if (d.apiSetup) setApiSetup(d.apiSetup);
@@ -30525,6 +31151,9 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
       ) : nav === "crews" ? (
         <CrewManager crews={crews} setCrews={setCrews} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} onDeleteCrew={deleteCrew} />
+      ) : nav === "canvass" ? (
+        <CanvassScreen onBack={() => setNav("more")} currentUser={liveUser} jobs={jobs}
+          canvassStatuses={canvassStatuses} toast={toast} />
       ) : nav === "claims" ? (
         <ClaimsDashboard jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
       ) : nav === "crewpay" ? (
