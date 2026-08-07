@@ -28153,6 +28153,20 @@ export default function SupremeCRM() {
   const [checkoutDone, setCheckoutDone] = useState(false);
   /* Guards the "Finish setup" button on the no-tenant screen below. */
   const [setupBusy, setSetupBusy] = useState(false);
+  /* Guards the "Reactivate billing" button on the locked-tenant screen below. */
+  const [reactivateBusy, setReactivateBusy] = useState(false);
+  /* Whether this session's own company is locked out (subscription
+     genuinely canceled — see is_tenant_locked(), migration 030).
+     Fetched once per sign-in, same as TeamManager's own tenant fetch;
+     a cancellation that happens mid-session won't retract access until
+     the next sign-in, which is an acceptable gap for how rarely that
+     actually happens. Deliberately NOT part of the boot/loading gate:
+     the overwhelming majority of sign-ins are never locked, so this
+     resolves in the background rather than adding a network
+     round-trip to every login. While it's still null (unresolved) the
+     app renders normally; only a confirmed {locked:true} blocks it —
+     a network hiccup here fails open, not closed. */
+  const [tenantLock, setTenantLock] = useState(null);
   const [users, setUsers] = useState(SEED_USERS);
   const [booting, setBooting] = useState(liveAuth());
   const [authError, setAuthError] = useState("");
@@ -28274,6 +28288,19 @@ export default function SupremeCRM() {
   useEffect(() => {
     try { localStorage.setItem("rl_board_view", boardView); } catch (e) { /* private mode */ }
   }, [boardView]);
+  /* Fetch whether this session's own company is billing-locked, once
+     per sign-in. my_tenant() is security-definer and already scopes
+     strictly to the caller's own tenant, so there is nothing to guard
+     here beyond "is there a live session at all." */
+  useEffect(() => {
+    const auth = AUTH();
+    if (!auth || !auth.myTenant || !liveAuth() || !currentUser) { setTenantLock(null); return; }
+    let alive = true;
+    auth.myTenant()
+      .then((t) => { if (alive) setTenantLock({ locked: !!(t && t.locked) }); })
+      .catch(() => { if (alive) setTenantLock({ locked: false }); });
+    return () => { alive = false; };
+  }, [currentUser && currentUser.id]);
   /* Dark/light appearance. Follows the OS until the user picks one, then the
      choice persists on the device. Flipping data-theme on <html> repaints the
      whole app via the CSS variables in index.html.
@@ -28880,6 +28907,48 @@ export default function SupremeCRM() {
             try { await a.startCheckout({ company: liveUser.name || "" }); }
             catch (e) { toast((e && e.message) || "Couldn't reopen checkout"); setSetupBusy(false); }
           }}>{setupBusy ? "Opening…" : "Finish setup"}</Btn>
+          <Btn kind="ghost" style={{ width: "100%", marginTop: 8 }} onClick={async () => {
+            const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } }
+            setCurrentUser(null);
+          }}>Sign out</Btn>
+          <div style={{ fontSize: 12, color: S.sub, marginTop: 12 }}>
+            Stuck? Email {PRODUCT.supportEmail}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+  /* A canceled subscription must not leave the company's data reachable
+     forever. is_tenant_locked() (migration 030) only ever returns true
+     once Stripe has genuinely, finally ended the subscription — never
+     on the first failed charge or the instant someone clicks cancel —
+     so this gate is the real grace period, not an extra one built here.
+     Only an admin (or someone delegated seat/billing management) sees
+     a working "Reactivate billing" button, matching who can already
+     reach Manage billing from Team & seats; anyone else is told to ask
+     their admin, since create-portal-session enforces the same check
+     server-side regardless of what this screen shows. */
+  if (liveAuth() && liveUser.tenantId && tenantLock && tenantLock.locked) {
+    const canReactivate = canManageSeats(liveUser);
+    return (
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, background: S.bg }}>
+        <Card style={{ maxWidth: 400, textAlign: "center" }}>
+          <Lock size={28} color={S.sub} />
+          <div style={{ fontSize: 17, fontWeight: 800, color: S.ink, marginTop: 10 }}>Subscription canceled</div>
+          <div style={{ fontSize: 14, color: S.sub, marginTop: 8, lineHeight: 1.55 }}>
+            {canReactivate
+              ? "Your RoofStride subscription has ended. Reactivate billing to get back into your jobs, customers, and everything else — nothing has been deleted."
+              : "Your company's RoofStride subscription has ended. Ask an admin to reactivate billing — nothing has been deleted."}
+          </div>
+          {canReactivate && (
+            <Btn style={{ width: "100%", marginTop: 16 }} disabled={reactivateBusy} onClick={async () => {
+              const a = AUTH();
+              if (!a || !a.manageBilling) { toast("Billing portal isn't available yet — contact " + PRODUCT.supportEmail); return; }
+              setReactivateBusy(true);
+              try { await a.manageBilling(); }
+              catch (e) { toast((e && e.message) || "Couldn't open the billing portal"); setReactivateBusy(false); }
+            }}>{reactivateBusy ? "Opening…" : "Reactivate billing"}</Btn>
+          )}
           <Btn kind="ghost" style={{ width: "100%", marginTop: 8 }} onClick={async () => {
             const a = AUTH(); if (a) { try { await a.signOut(); } catch (e) { /* clear locally regardless */ } }
             setCurrentUser(null);

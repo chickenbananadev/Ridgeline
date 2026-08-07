@@ -29549,6 +29549,8 @@ function SupremeCRM() {
   const [selectedPlan, setSelectedPlan] = (0, import_react.useState)("per_seat");
   const [checkoutDone, setCheckoutDone] = (0, import_react.useState)(false);
   const [setupBusy, setSetupBusy] = (0, import_react.useState)(false);
+  const [reactivateBusy, setReactivateBusy] = (0, import_react.useState)(false);
+  const [tenantLock, setTenantLock] = (0, import_react.useState)(null);
   const [users, setUsers] = (0, import_react.useState)(SEED_USERS);
   const [booting, setBooting] = (0, import_react.useState)(liveAuth());
   const [authError, setAuthError] = (0, import_react.useState)("");
@@ -29674,6 +29676,22 @@ function SupremeCRM() {
     } catch (e) {
     }
   }, [boardView]);
+  (0, import_react.useEffect)(() => {
+    const auth = AUTH();
+    if (!auth || !auth.myTenant || !liveAuth() || !currentUser) {
+      setTenantLock(null);
+      return;
+    }
+    let alive = true;
+    auth.myTenant().then((t) => {
+      if (alive) setTenantLock({ locked: !!(t && t.locked) });
+    }).catch(() => {
+      if (alive) setTenantLock({ locked: false });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [currentUser && currentUser.id]);
   const scrollPane = (0, import_react.useRef)(null);
   const themeExplicit = (0, import_react.useRef)(false);
   const [theme, setThemeState] = (0, import_react.useState)(() => {
@@ -30283,6 +30301,42 @@ function SupremeCRM() {
           setSetupBusy(false);
         }
       }, children: setupBusy ? "Opening\u2026" : "Finish setup" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%", marginTop: 8 }, onClick: async () => {
+        const a = AUTH();
+        if (a) {
+          try {
+            await a.signOut();
+          } catch (e) {
+          }
+        }
+        setCurrentUser(null);
+      }, children: "Sign out" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 12 }, children: [
+        "Stuck? Email ",
+        PRODUCT.supportEmail
+      ] })
+    ] }) });
+  }
+  if (liveAuth() && liveUser.tenantId && tenantLock && tenantLock.locked) {
+    const canReactivate = canManageSeats(liveUser);
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, background: S.bg }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { maxWidth: 400, textAlign: "center" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Lock, { size: 28, color: S.sub }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 17, fontWeight: 800, color: S.ink, marginTop: 10 }, children: "Subscription canceled" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14, color: S.sub, marginTop: 8, lineHeight: 1.55 }, children: canReactivate ? "Your RoofStride subscription has ended. Reactivate billing to get back into your jobs, customers, and everything else \u2014 nothing has been deleted." : "Your company's RoofStride subscription has ended. Ask an admin to reactivate billing \u2014 nothing has been deleted." }),
+      canReactivate && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { style: { width: "100%", marginTop: 16 }, disabled: reactivateBusy, onClick: async () => {
+        const a = AUTH();
+        if (!a || !a.manageBilling) {
+          toast("Billing portal isn't available yet \u2014 contact " + PRODUCT.supportEmail);
+          return;
+        }
+        setReactivateBusy(true);
+        try {
+          await a.manageBilling();
+        } catch (e) {
+          toast(e && e.message || "Couldn't open the billing portal");
+          setReactivateBusy(false);
+        }
+      }, children: reactivateBusy ? "Opening\u2026" : "Reactivate billing" }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", style: { width: "100%", marginTop: 8 }, onClick: async () => {
         const a = AUTH();
         if (a) {
