@@ -27626,7 +27626,7 @@ function Inbox({ jobs, onOpenJob, onCompose, chatMsgs, setChatMsgs, users, curre
 const DB = () => (typeof window !== "undefined" ? window.__SUPABASE__ || null : null);
 const liveDb = () => !!DB();
 
-const EMPTY_FIN = () => ({ costLines: [], reimbursements: [] });
+const EMPTY_FIN = () => ({ materials: [], labor: [], other: [], commissionRate: 60, structure: "grossProfit", overheadPct: 10, reimbursements: [] });
 
 function useBrandSync(brand, setBrand, hasSession, tenantId) {
   const lastSaved = useRef(null);
@@ -27773,7 +27773,7 @@ function useDbSync(st) {
           const fin = finMap[r.id] || {};
           return {
             ...base, id: r.id,
-            financials: fin.financials || base.financials || EMPTY_FIN(),
+            fin: fin.financials || base.fin || EMPTY_FIN(),
             payments: fin.payments || base.payments || [],
           };
         });
@@ -27850,7 +27850,7 @@ function useDbSync(st) {
         const removed = [...jobRefs.current.keys()].filter((id) => !current.has(id));
         if (changed.length) {
           const rows = changed.map((j) => {
-            const { financials, payments, ...rest } = j;
+            const { fin, payments, ...rest } = j;
             return { id: j.id, name: j.name, stage_id: j.stageId, assignee: j.assignee, data: rest, updated_at: new Date().toISOString() };
           });
           const { error } = await db.from("crm_jobs").upsert(rows);
@@ -27867,7 +27867,7 @@ function useDbSync(st) {
             await db.from("crm_portal").upsert(snaps);
           }
           if (!isCrew) {
-            const finRows = changed.map((j) => ({ job_id: j.id, data: { financials: j.financials, payments: j.payments }, updated_at: new Date().toISOString() }));
+            const finRows = changed.map((j) => ({ job_id: j.id, data: { financials: j.fin, payments: j.payments }, updated_at: new Date().toISOString() }));
             await db.from("crm_financials").upsert(finRows);
           }
           changed.forEach((j) => jobRefs.current.set(j.id, j));
