@@ -14427,7 +14427,10 @@ async function fetchStormReports(lat, lng, start, end) {
         kind, mag: isFinite(mag) ? mag : null, unit: p.unit || "",
         at: p.valid || "", city: p.city || "", county: p.county || "", state: p.state || "",
         qualifier: p.qualifier || "", source: p.source || "", remark: p.remark || "",
-        miles,
+        /* Where the stone actually landed, not just how far away it was.
+           A storm alert has to put a rep on a map at the right place,
+           and "26 mi from the office" is not a place. */
+        lat: flat, lng: flng, miles,
       });
     }
     /* Nearest report first — "3 mi away" and "26 mi away" are very
@@ -14489,6 +14492,173 @@ function mergeStormDays(days, reportsByDate) {
   return [...byDate.values()]
     .filter((r) => r.reports || r.hail || r.highWind || r.storm || (r.precip != null && r.precip >= 0.75))
     .sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1));
+}
+
+/* ------------------------------------------------------------------
+   STORM WATCH — turning weather into reps on doorsteps
+
+   Everything above this point answers "what happened at this
+   address", asked by someone already standing at it. Storm watch
+   asks the question the other way round: hail fell somewhere in the
+   territory last night — where, how big, and is anybody there yet?
+
+   The two share one engine on purpose. The hail size that raises an
+   alert is the same figure that later backs the claim, read from the
+   same NOAA reports by the same fetchStormReports. If they diverged
+   the alert would be marketing and the claim would be evidence, and
+   nobody would trust the first one.
+
+   The settings ride in the org blob beside pipeline stages and
+   canvassing dispositions — a handful of rows, rewritten whole, one
+   editor at a time. The ALERTS are a real table (038).
+------------------------------------------------------------------- */
+
+/* 1" hail is the NWS severe threshold and the size most carriers
+   treat as the start of a functional-damage conversation; 58 mph
+   (50 kt) is the matching severe-wind threshold. Starting below
+   either means alerting on weather that will not sell a roof. */
+const STORM_WATCH_DEFAULTS = { enabled: false, areas: [], minHailIn: 1, minWindMph: 58, lookbackDays: 7 };
+const STORM_WATCH_MAX_RADIUS = Math.round(LSR_RADIUS_DEG * 69);  // the bounded query's reach; a wider radius would silently under-report
+
+/* Saved settings are merged over the defaults rather than replacing
+   them, so a company that saved this before a field existed gets the
+   shipped value instead of undefined arithmetic. */
+function normalizeStormWatch(v) {
+  const s = { ...STORM_WATCH_DEFAULTS, ...(v || {}) };
+  s.areas = (s.areas || []).filter((a) => a && a.lat != null && a.lng != null).map((a) => ({
+    id: a.id, name: a.name || "Watched area", address: a.address || "",
+    lat: Number(a.lat), lng: Number(a.lng),
+    radiusMiles: Math.min(STORM_WATCH_MAX_RADIUS, Math.max(1, Number(a.radiusMiles) || 15)),
+  }));
+  s.minHailIn = Math.max(0, Number(s.minHailIn) || 0);
+  s.minWindMph = Math.max(0, Number(s.minWindMph) || 0);
+  s.lookbackDays = Math.min(30, Math.max(1, Math.round(Number(s.lookbackDays) || 7)));
+  return s;
+}
+
+/* The identity of a storm, stable across detectors.
+
+   Detection runs twice — in-app when someone opens the app, and on a
+   schedule from an Edge Function — and both read the same NOAA feed,
+   so both will see the same hail. This key is what stops that
+   becoming two alerts: it is unique per tenant in 038, so whichever
+   detector arrives second updates the row instead of raising a
+   duplicate.
+
+   Deliberately one alert per area, per kind, per DAY — not per
+   report. One hailstorm files dozens of spotter reports as it tracks
+   across a county, and forty notifications for one storm is not an
+   alert system, it is a reason to switch alerts off. */
+function stormAlertKey(watchId, kind, date) {
+  return `${watchId}|${kind}|${date}`;
+}
+
+/* Pure so the numbers can be checked without a rendered screen or a
+   network call, and so the Edge Function can run this exact code
+   rather than a second implementation that drifts.
+
+   Takes what fetchStormReports returns, one watched area, and the
+   company's thresholds. Returns alert candidates — the caller writes
+   them, because writing is where the in-app path and the scheduled
+   path legitimately differ. */
+function detectStormAlerts(reportsByDate, area, thresholds) {
+  if (!area || area.lat == null) return [];
+  const t = { minHailIn: 0, minWindMph: 0, ...(thresholds || {}) };
+  const radius = Number(area.radiusMiles) || 15;
+  const out = [];
+  Object.entries(reportsByDate || {}).forEach(([date, day]) => {
+    /* Worst-per-kind, not first-per-kind. A rep needs to hear the 2"
+       stone that fell three streets over, not the 1" one that
+       happened to be reported first. */
+    const worst = {};
+    (day.reports || []).forEach((r) => {
+      if (r.kind !== "hail" && r.kind !== "wind") return;
+      /* fetchStormReports measures `miles` from the point it was
+         asked about, which for storm watch IS the area centre — so
+         this is the company's own radius doing the filtering, not the
+         30-mile query box. */
+      if (r.miles != null && r.miles > radius) return;
+      const value = r.kind === "hail" ? r.mag : lsrWindMph(r.mag, r.unit);
+      if (value == null || !isFinite(value)) return;
+      const floor = r.kind === "hail" ? t.minHailIn : t.minWindMph;
+      if (value < floor) return;
+      const cur = worst[r.kind];
+      if (!cur) worst[r.kind] = { value, report: r, count: 1 };
+      else {
+        cur.count++;
+        if (value > cur.value) { cur.value = value; cur.report = r; }
+      }
+    });
+    Object.entries(worst).forEach(([kind, w]) => {
+      const r = w.report;
+      out.push({
+        watchId: area.id, watchName: area.name || "", kind,
+        occurredOn: date,
+        magnitude: Math.round(w.value * 100) / 100,
+        unit: kind === "hail" ? "in" : "mph",
+        /* Centre on the STORM, not the office. The whole payoff is a
+           rep opening the map already standing where the hail fell. */
+        lat: r.lat != null ? r.lat : area.lat,
+        lng: r.lng != null ? r.lng : area.lng,
+        radiusMiles: radius,
+        place: [r.city, [r.county, r.state].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+        reportCount: w.count,
+        reportKey: stormAlertKey(area.id, kind, date),
+      });
+    });
+  });
+  /* Biggest first, then newest — the order an owner would read them. */
+  return out.sort((a, b) => (b.occurredOn < a.occurredOn ? -1 : b.occurredOn > a.occurredOn ? 1 : b.magnitude - a.magnitude));
+}
+
+/* Which of the company's own roofs sit under a storm.
+
+   This is what turns "hail fell somewhere" into a reason to move: an
+   alert saying eleven of your jobs are inside that circle is a
+   morning's work, and one saying zero is a decision not to drive an
+   hour. Also drives the radius preview in setup. */
+function jobsWithinRadius(jobs, area) {
+  if (!area || area.lat == null) return [];
+  const radius = Number(area.radiusMiles) || 15;
+  return (jobs || []).filter((j) => j.lat != null && j.lng != null
+    && haversineMiles(area.lat, area.lng, j.lat, j.lng) <= radius);
+}
+
+/* One sentence a rep can act on, in the vocabulary they already use. */
+function stormAlertHeadline(a) {
+  if (!a) return "";
+  const where = a.place || a.watch_name || a.watchName || "your area";
+  if (a.kind === "hail") {
+    const size = hailSizeLabel(Number(a.magnitude));
+    const inches = Number(a.magnitude).toFixed(2).replace(/\.?0+$/, "");
+    return `${inches}" hail${size ? ` (${size})` : ""} — ${where}`;
+  }
+  return `${Math.round(Number(a.magnitude))} mph winds — ${where}`;
+}
+
+/* Suggest watched areas from where the company already works, so
+   setup is confirming a list rather than typing addresses from
+   memory. Greedy clustering: the first job seeds an area, every job
+   within the radius joins it, the next uncovered job seeds the next.
+   Crude, and right — these are starting points a human then edits. */
+function seedStormAreas(jobs, radiusMiles = 15) {
+  const pts = (jobs || []).filter((j) => j.lat != null && j.lng != null);
+  const areas = [];
+  pts.forEach((j) => {
+    const hit = areas.find((a) => haversineMiles(a.lat, a.lng, j.lat, j.lng) <= radiusMiles);
+    if (hit) { hit.count++; return; }
+    areas.push({
+      lat: j.lat, lng: j.lng, count: 1,
+      /* City is what a rep calls a territory; the street address of
+         whichever job happened to be first is meaningless as a name.
+         Falling back to the second comma-field of the address is the
+         city for every address the geocoder returns. */
+      name: (j.property && j.property.city) || String(j.address || "").split(",")[1]?.trim() || j.address || "Watched area",
+      address: j.address || "",
+      radiusMiles,
+    });
+  });
+  return areas.sort((a, b) => b.count - a.count);
 }
 
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded = false }) {
@@ -28917,6 +29087,194 @@ function CanvassStatusEditor({ statuses, setStatuses, onBack, toast, currentUser
   );
 }
 
+/* Where the company wants to be told about weather, and how hard it
+   has to blow before anyone is woken up.
+
+   This is the "set the radius in the back end" half of storm alerts.
+   Areas are addresses with a radius, because that is how a roofing
+   company actually thinks about territory — "everything within
+   twenty miles of the Naperville office" — not as a drawn polygon
+   nobody wants to trace on a phone.
+
+   The radius is capped at the reach of the bounded NOAA query. A
+   larger number would look like it was watching further while
+   quietly finding nothing out there, which is the worst possible
+   failure for an alert: silence that reads as good news. */
+function StormWatchEditor({ watch, setWatch, jobs, onBack, toast, currentUser }) {
+  const canEdit = canManageCompanyConfig(currentUser);
+  const s = normalizeStormWatch(watch);
+  const write = (patch) => setWatch(normalizeStormWatch({ ...s, ...patch }));
+  const patchArea = (id, p) => write({ areas: s.areas.map((a) => (a.id === id ? { ...a, ...p } : a)) });
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [draft, setDraft] = useState({ name: "", address: "", lat: null, lng: null, radiusMiles: 15 });
+
+  /* Offered rather than added. A company with 400 jobs in one metro
+     should not silently end up watching forty overlapping circles —
+     these are one-tap suggestions a human confirms. */
+  const already = (lat, lng) => s.areas.some((a) => haversineMiles(a.lat, a.lng, lat, lng) <= 10);
+  const suggestions = seedStormAreas(jobs).filter((a) => !already(a.lat, a.lng)).slice(0, 4);
+
+  const addArea = (a) => {
+    if (a.lat == null || a.lng == null) { toast("Pick an address from the list so we know where to watch"); return; }
+    write({ areas: [...s.areas, { ...a, id: `sw_${Date.now().toString(36)}_${s.areas.length}` }] });
+    setAddOpen(false);
+    setDraft({ name: "", address: "", lat: null, lng: null, radiusMiles: 15 });
+    toast("Watching that area");
+  };
+
+  return (
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
+      <SubHeader title="Storm watch" onBack={onBack} />
+
+      <Card style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.55 }}>
+          When hail or damaging wind lands inside one of your areas, everyone gets told — a banner on the home
+          screen and a badge in the menu — so you can be on those streets the same day instead of waiting for
+          the phone to ring. The reports come from NOAA storm spotters, the same source behind the hail history
+          on a property, so the size in the alert is the size that backs the claim later.
+        </div>
+        <label style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 14, cursor: canEdit ? "pointer" : "default", fontSize: 14.5, fontWeight: 700 }}>
+          <input type="checkbox" checked={!!s.enabled} disabled={!canEdit}
+            data-testid="storm-watch-enabled"
+            onChange={(e) => write({ enabled: e.target.checked })} />
+          Watch for storms
+        </label>
+        {s.enabled && !s.areas.length && (
+          <div style={{ marginTop: 10, fontSize: 12.5, color: "#B45309", display: "flex", gap: 7, alignItems: "flex-start" }}>
+            <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+            <span>Watching is on, but no areas are set — so nothing will ever alert. Add at least one below.</span>
+          </div>
+        )}
+      </Card>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "18px 2px 8px" }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, letterSpacing: 0.3 }}>WATCHED AREAS</div>
+        {canEdit && <Btn small onClick={() => setAddOpen(true)} data-testid="add-storm-area"><Plus size={14} /> Add area</Btn>}
+      </div>
+
+      {!s.areas.length && (
+        <Card pad={14}>
+          <div style={{ fontSize: 13, color: S.sub }}>
+            No areas yet. Add the addresses you work out of — an office, a yard, a neighborhood you farm.
+          </div>
+        </Card>
+      )}
+
+      {s.areas.map((a) => (
+        <Card key={a.id} pad={14} style={{ marginTop: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              {canEdit ? (
+                <input style={{ ...inputStyle, fontWeight: 700 }} value={a.name}
+                  aria-label={`Name for ${a.name}`}
+                  onChange={(e) => patchArea(a.id, { name: e.target.value })} />
+              ) : <div style={{ fontSize: 15, fontWeight: 800 }}>{a.name}</div>}
+              <div style={{ fontSize: 12.5, color: S.sub, marginTop: 6 }}>{a.address || `${a.lat.toFixed(4)}, ${a.lng.toFixed(4)}`}</div>
+            </div>
+            {canEdit && (
+              <button aria-label={`Stop watching ${a.name}`}
+                onClick={() => { write({ areas: s.areas.filter((x) => x.id !== a.id) }); toast("Stopped watching that area"); }}
+                style={{ border: "none", background: "none", cursor: "pointer", padding: 4 }}>
+                <Trash2 size={16} color="#B42318" />
+              </button>
+            )}
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: S.sub, marginBottom: 4 }}>
+              <span>Radius</span>
+              <b style={{ color: S.ink, fontVariantNumeric: "tabular-nums" }}>{a.radiusMiles} mi</b>
+            </div>
+            <input type="range" min={1} max={STORM_WATCH_MAX_RADIUS} step={1} value={a.radiusMiles}
+              disabled={!canEdit} aria-label={`Radius for ${a.name} in miles`}
+              onChange={(e) => patchArea(a.id, { radiusMiles: Number(e.target.value) })}
+              style={{ width: "100%" }} />
+            <div style={{ fontSize: 11.5, color: S.sub, marginTop: 4 }}>
+              {(() => {
+                const n = jobsWithinRadius(jobs, a).length;
+                return n === 1 ? "1 of your jobs sits inside this circle." : `${n} of your jobs sit inside this circle.`;
+              })()}
+            </div>
+          </div>
+        </Card>
+      ))}
+
+      {canEdit && suggestions.length > 0 && (
+        <Card pad={14} style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 4 }}>Where you already work</div>
+          <div style={{ fontSize: 12.5, color: S.sub, marginBottom: 10 }}>
+            Taken from the addresses on your jobs. Tap one to watch it.
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {suggestions.map((sg, i) => (
+              <Btn key={i} kind="ghost" small onClick={() => addArea({ ...sg, count: undefined })}>
+                <MapPin size={13} /> {sg.name} <span style={{ opacity: 0.65 }}>· {sg.count} job{sg.count === 1 ? "" : "s"}</span>
+              </Btn>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <div style={{ fontSize: 13, fontWeight: 800, color: S.sub, letterSpacing: 0.3, margin: "20px 2px 8px" }}>
+        HOW BIG BEFORE WE TELL YOU
+      </div>
+      <Card pad={14}>
+        <Field label="Hail at least" hint={`1" is the National Weather Service severe threshold, and roughly where a functional-damage conversation starts. Below that you'll hear about storms that won't sell a roof.`}>
+          <select style={inputStyle} value={String(s.minHailIn)} disabled={!canEdit}
+            data-testid="storm-min-hail"
+            onChange={(e) => write({ minHailIn: Number(e.target.value) })}>
+            {[0.75, 1, 1.25, 1.5, 1.75, 2].map((n) => (
+              <option key={n} value={n}>{n}" — {hailSizeLabel(n)}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Wind at least" hint="58 mph is the severe-thunderstorm threshold. Gusts reported in knots are converted before they're compared.">
+          <select style={inputStyle} value={String(s.minWindMph)} disabled={!canEdit}
+            onChange={(e) => write({ minWindMph: Number(e.target.value) })}>
+            {[50, 58, 65, 75, 90].map((n) => <option key={n} value={n}>{n} mph</option>)}
+          </select>
+        </Field>
+        <Field label="Look back" hint="How far back a check reaches. A week catches a storm that landed over a holiday weekend without dredging up last season.">
+          <select style={inputStyle} value={String(s.lookbackDays)} disabled={!canEdit}
+            onChange={(e) => write({ lookbackDays: Number(e.target.value) })}>
+            {[3, 7, 14, 30].map((n) => <option key={n} value={n}>{n} days</option>)}
+          </select>
+        </Field>
+      </Card>
+
+      {!canEdit && (
+        <div style={{ fontSize: 12.5, color: S.sub, marginTop: 12 }}>
+          Only an admin or someone with company-settings access can change these.
+        </div>
+      )}
+
+      <Sheet open={addOpen} onClose={() => setAddOpen(false)} title="Watch an area"
+        footer={<Btn onClick={() => addArea(draft)} disabled={draft.lat == null} data-testid="save-storm-area">Watch this area</Btn>}>
+        <Field label="Address" hint="Pick one from the list — we need the coordinates, not just the text.">
+          <AddressAutocomplete value={draft.address} placeholder="Office, yard or neighborhood"
+            onChange={(v) => setDraft((d) => ({ ...d, address: v, lat: null, lng: null }))}
+            onPick={(it) => setDraft((d) => ({
+              ...d, address: it.formatted || d.address, lat: it.lat, lng: it.lng,
+              /* Only fills a name the user hasn't typed — retyping the
+                 city after picking the address is a pointless step. */
+              name: d.name || it.city || "Watched area",
+            }))} />
+        </Field>
+        <Field label="Call it">
+          <input style={inputStyle} value={draft.name} placeholder="Naperville"
+            onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
+        </Field>
+        <Field label={`Radius — ${draft.radiusMiles} mi`}>
+          <input type="range" min={1} max={STORM_WATCH_MAX_RADIUS} step={1} value={draft.radiusMiles}
+            aria-label="Radius in miles"
+            onChange={(e) => setDraft((d) => ({ ...d, radiusMiles: Number(e.target.value) }))}
+            style={{ width: "100%" }} />
+        </Field>
+      </Sheet>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------
    Working the territory — filtering, and counting honestly.
 
@@ -29615,6 +29973,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["branding", Settings, "Company branding", "Name, logo, colors, what prints on documents"],
       ["workflow", ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
       ["canvassstatuses", MapPin, "Canvassing dispositions", "What reps mark at a door, and the map colors"],
+      ["stormwatch", CloudRain, "Storm watch", "Get told when hail lands in your territory — areas and radius"],
       ["integrations", Share2, "Integrations", "Gmail, texting, CompanyCam, Google reviews"],
       ["import", Upload, "Import jobs", "Bring a pipeline in from CSV"],
       canManageFeatures(currentUser) && ["admin", Shield, "Admin controls", "Feature switches, security and the audit log"],
@@ -30654,6 +31013,12 @@ export default function SupremeCRM() {
      stages, so a company can rename them without a migration. The
      pins themselves are a real table (037) — see useCanvassPins. */
   const [canvassStatuses, setCanvassStatuses] = useState(CANVASS_STATUSES);
+  /* Which areas to watch for hail, how wide, and how hard it has to
+     blow. Settings only — the alerts themselves are a real table
+     (038), because a background job writes them. Off until someone
+     turns it on: a company with no areas set would otherwise be told
+     nothing while believing it was covered. */
+  const [stormWatch, setStormWatch] = useState(STORM_WATCH_DEFAULTS);
   const [templates, setTemplates] = useState(SEED_TEMPLATES);
   const [companyDocs, setCompanyDocs] = useState(SEED_COMPANY_DOCS);
   const [priceList, setPriceList] = useState(SEED_PRICE_LIST);
@@ -30838,10 +31203,10 @@ export default function SupremeCRM() {
   };
 
   /* ----- persistence wiring ----- */
-  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, canvassStatuses, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, canvassStatuses, stormWatch, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
     announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates,
-    priceList, companyDocs, crews, canvassStatuses, vendors, reviewSettings, apiSetup, ccAutoCreate,
+    priceList, companyDocs, crews, canvassStatuses, stormWatch, vendors, reviewSettings, apiSetup, ccAutoCreate,
     features, security, jurisContacts, learnedJuris, version: 1,
   });
   const unpackOrg = (d) => {
@@ -30863,6 +31228,10 @@ export default function SupremeCRM() {
     /* No saved list means this company predates canvassing — they keep
        the shipped dispositions rather than ending up with none. */
     if (d.canvassStatuses) setCanvassStatuses(d.canvassStatuses);
+    /* Normalised on the way in, not only on the way out: a blob saved
+       before a threshold existed must not reach the detector as
+       undefined, or every comparison against it silently passes. */
+    if (d.stormWatch) setStormWatch(normalizeStormWatch(d.stormWatch));
     if (d.vendors) setVendors(d.vendors);
     if (d.reviewSettings) setReviewSettings(d.reviewSettings);
     if (d.apiSetup) setApiSetup(d.apiSetup);
@@ -31847,6 +32216,9 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
           onCreateLeadFromPin={createLeadFromCanvassPin} onOpenJob={openJobScreen} />
       ) : nav === "canvassstatuses" ? (
         <CanvassStatusEditor statuses={canvassStatuses} setStatuses={setCanvassStatuses}
+          onBack={() => setNav("more")} toast={toast} currentUser={liveUser} />
+      ) : nav === "stormwatch" ? (
+        <StormWatchEditor watch={stormWatch} setWatch={setStormWatch} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} currentUser={liveUser} />
       ) : nav === "claims" ? (
         <ClaimsDashboard jobs={jobs} onBack={() => setNav("more")} onOpenJob={openJobScreen} />
