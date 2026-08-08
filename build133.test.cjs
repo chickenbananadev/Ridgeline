@@ -54,7 +54,10 @@ ok(/radius_miles numeric/.test(sql),
   "the radius in force is recorded on the alert, so changing the setting later doesn't rewrite history");
 
 /* ================= 2. the settings model ================= */
-ok(/const STORM_WATCH_DEFAULTS = \{ enabled: false, areas: \[\], minHailIn: 1, minWindMph: 58, lookbackDays: 7 \};/.test(src),
+/* Build 138 raised the look-back from 7 days to 90 at the owner's
+   request. The thresholds and the off-by-default are what this line
+   exists to protect, and both are unchanged. */
+ok(/const STORM_WATCH_DEFAULTS = \{ enabled: false, areas: \[\], minHailIn: 1, minWindMph: 58, lookbackDays: 90 \};/.test(src),
   "defaults start OFF with the NWS severe thresholds for hail and wind");
 ok(/const STORM_WATCH_MAX_RADIUS = Math\.round\(LSR_RADIUS_DEG \* 69\);/.test(src),
   "the radius cap is derived from the storm query's actual reach, not a made-up number");

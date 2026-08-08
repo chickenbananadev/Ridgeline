@@ -64,7 +64,10 @@ ok(/const moved = metresBetween\(c\.lat, c\.lng, center\.lat, center\.lng\) > 25
 /* ---------- it is a map screen now ---------- */
 ok(/height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", background: S\.bg/.test(src),
   "the screen is a flex column that fills its pane instead of a scrolling page of cards");
-ok(/<div ref=\{mapWrapRef\} style=\{\{ flex: 1, position: "relative", minHeight: 0 \}\}>/.test(src),
+/* Build 138 added `isolation: isolate` here so sheets stop painting
+   underneath the map; the full-height layout this line guards is
+   unchanged. */
+ok(/<div ref=\{mapWrapRef\} className="rl-map"\s*\n\s*style=\{\{ flex: 1, position: "relative", minHeight: 0, isolation: "isolate" \}\}>/.test(src),
   "the map takes all the remaining height");
 ok(/position: "absolute", left: 10, right: 10, top: 10, zIndex: 600/.test(src),
   "search floats over the map rather than pushing it down the page");

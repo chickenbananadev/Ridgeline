@@ -255,7 +255,7 @@ function detectStormAlerts(
 }
 
 function normalizeStormWatch(v: Record<string, any> | null) {
-  const s = { enabled: false, areas: [], minHailIn: 1, minWindMph: 58, lookbackDays: 7, ...(v || {}) };
+  const s = { enabled: false, areas: [], minHailIn: 1, minWindMph: 58, lookbackDays: 90, ...(v || {}) };
   s.areas = (s.areas || [])
     .filter((a: Record<string, any>) => a && a.lat != null && a.lng != null)
     .map((a: Record<string, any>) => ({
@@ -265,7 +265,8 @@ function normalizeStormWatch(v: Record<string, any> | null) {
     }));
   s.minHailIn = Math.max(0, Number(s.minHailIn) || 0);
   s.minWindMph = Math.max(0, Number(s.minWindMph) || 0);
-  s.lookbackDays = Math.min(30, Math.max(1, Math.round(Number(s.lookbackDays) || 7)));
+  const rawLookback = Math.round(Number(s.lookbackDays));
+  s.lookbackDays = isFinite(rawLookback) && rawLookback > 0 ? Math.min(90, rawLookback) : 90;
   return s;
 }
 
