@@ -15284,6 +15284,74 @@ async function fetchRadarHail(lat, lng, start, end, radiusMiles = LSR_RADIUS_DEG
     return null;
   }
 }
+var RADAR_ATTR_CACHE = /* @__PURE__ */ new Map();
+async function fetchRadarAttrs(lat, lng, start, end, radiusMiles = LSR_RADIUS_DEG * 69) {
+  const key = `${weatherKey(lat, lng)}:${start}:${end}:${Math.round(radiusMiles)}`;
+  if (RADAR_ATTR_CACHE.has(key)) return RADAR_ATTR_CACHE.get(key);
+  try {
+    const ets = new Date(Date.parse(end + "T00:00Z") + 2 * 864e5).toISOString().slice(0, 10);
+    let radarParam = "";
+    try {
+      const res2 = await fetch("https://mesonet.agron.iastate.edu/geojson/network/NEXRAD.geojson");
+      if (res2.ok) {
+        const gj = await res2.json();
+        const sites = nearestStations(gj && gj.features || [], lat, lng, 3);
+        if (sites.length) radarParam = sites.map((s) => `&radar=${encodeURIComponent(s.sid)}`).join("");
+      }
+    } catch (e) {
+    }
+    const url = `https://mesonet.agron.iastate.edu/cgi-bin/request/gis/nexrad_storm_attrs.py?fmt=csv&sts=${start}T00:00:00Z&ets=${ets}T00:00:00Z&min_hail_size=0.25${radarParam}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("attrs");
+    const text = await res.text();
+    if (/^ERROR/i.test(String(text).trim())) {
+      RADAR_ATTR_CACHE.set(key, {});
+      return {};
+    }
+    const lines = String(text).split("\n").filter((l) => l.trim());
+    const header = (lines.shift() || "").split(",").map((h) => h.trim().toUpperCase());
+    const col = (name) => header.indexOf(name);
+    const iLat = col("LAT"), iLng = col("LON"), iSize = col("MAX_SIZE"), iValid = col("VALID"), iPoh = col("POH"), iPosh = col("POSH"), iRadar = col("NEXRAD");
+    if (iLat < 0 || iLng < 0 || iSize < 0 || iValid < 0) throw new Error("attrs-header");
+    const byDate = {};
+    for (const line of lines) {
+      const cells = line.split(",");
+      const rlat = parseFloat(cells[iLat]), rlng = parseFloat(cells[iLng]);
+      const size = parseFloat(cells[iSize]);
+      if (!isFinite(rlat) || !isFinite(rlng) || !isFinite(size)) continue;
+      const miles = haversineMiles(lat, lng, rlat, rlng);
+      if (miles > radiusMiles) continue;
+      const iso = String(cells[iValid] || "").replace(
+        /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/,
+        "$1-$2-$3T$4:$5:00Z"
+      );
+      const date = localDateAt(iso, lng);
+      if (!date || date < start || date > end) continue;
+      const row = byDate[date] || (byDate[date] = {
+        maxSizeIn: null,
+        prob: null,
+        sevProb: null,
+        cells: 0,
+        nearestMiles: null,
+        radars: [],
+        points: []
+      });
+      row.cells++;
+      if (row.points.length < RADAR_POINT_CAP) row.points.push({ lat: rlat, lng: rlng, sizeIn: size });
+      row.maxSizeIn = Math.max(row.maxSizeIn ?? 0, size);
+      const poh = parseFloat(cells[iPoh]), posh = parseFloat(cells[iPosh]);
+      if (isFinite(poh)) row.prob = Math.max(row.prob ?? 0, poh);
+      if (isFinite(posh)) row.sevProb = Math.max(row.sevProb ?? 0, posh);
+      if (row.nearestMiles == null || miles < row.nearestMiles) row.nearestMiles = miles;
+      const wsr = (cells[iRadar] || "").trim();
+      if (wsr && !row.radars.includes(wsr)) row.radars.push(wsr);
+    }
+    RADAR_ATTR_CACHE.set(key, byDate);
+    return byDate;
+  } catch (e) {
+    return null;
+  }
+}
 var ASOS_NET_CACHE = /* @__PURE__ */ new Map();
 var GUST_CACHE = /* @__PURE__ */ new Map();
 function nearestStations(features, lat, lng, n = 3) {
@@ -15428,6 +15496,18 @@ function hailSwath(points, gridDeg = HAIL_GRID_DEG) {
 function swathBands(swath) {
   const present = new Set((swath || []).map((c) => hailBand(c.sizeIn).label));
   return HAIL_BANDS.filter((b) => present.has(b.label));
+}
+function reportedHailPoints(day) {
+  return (day && day.reports || []).filter((r) => r.kind === "hail" && r.mag != null && r.lat != null && r.lng != null).map((r) => ({ lat: r.lat, lng: r.lng, sizeIn: r.mag }));
+}
+function stormGeometry(radarByDate, lsrByDate, date) {
+  const radar = radarByDate && radarByDate[date];
+  if (radar && radar.points && radar.points.length) {
+    return { swath: hailSwath(radar.points), source: "radar" };
+  }
+  const pts = reportedHailPoints(lsrByDate && lsrByDate[date]);
+  if (pts.length) return { swath: hailSwath(pts), source: "reported" };
+  return { swath: [], source: null };
 }
 function spcReportLink(iso) {
   const yymmdd = iso.slice(2).replace(/-/g, "");
@@ -30343,6 +30423,7 @@ function CanvassMap({
   const circleRef = (0, import_react.useRef)(null);
   const swathRef = (0, import_react.useRef)(null);
   const fittedRef = (0, import_react.useRef)(null);
+  const circleFitRef = (0, import_react.useRef)(null);
   const tapPinRef = (0, import_react.useRef)(onTapPin);
   const moveRef = (0, import_react.useRef)(onMove);
   const [tileFails, setTileFails] = (0, import_react.useState)(0);
@@ -30384,6 +30465,7 @@ function CanvassMap({
       map.remove();
       mapRef.current = null;
       if (mapApiRef) mapApiRef.current = null;
+      circleFitRef.current = null;
     };
   }, [L]);
   (0, import_react.useEffect)(() => {
@@ -30470,17 +30552,35 @@ function CanvassMap({
       map.removeLayer(circleRef.current);
       circleRef.current = null;
     }
-    if (!highlight) return;
+    if (!highlight) {
+      circleFitRef.current = null;
+      return;
+    }
+    const hasSwath = !!(swath && swath.length);
     circleRef.current = L.circle([highlight.lat, highlight.lng], {
       radius: highlight.radiusMiles * 1609.34,
       color: "#B42318",
       weight: 1.5,
       opacity: 0.55,
       dashArray: "6 5",
-      fill: false,
+      fill: !hasSwath,
+      fillColor: "#B42318",
+      fillOpacity: hasSwath ? 0 : 0.07,
       interactive: false
     }).addTo(map);
-  }, [L, highlight, ready]);
+    const key = `${highlight.lat},${highlight.lng},${highlight.radiusMiles}`;
+    if (!hasSwath && circleFitRef.current !== key) {
+      circleFitRef.current = key;
+      map.fitBounds(circleRef.current.getBounds(), { padding: [24, 24] });
+    }
+  }, [
+    L,
+    highlight && highlight.lat,
+    highlight && highlight.lng,
+    highlight && highlight.radiusMiles,
+    ready,
+    swath
+  ]);
   (0, import_react.useEffect)(() => {
     const map = mapRef.current;
     if (!L || !map) return;
@@ -31557,24 +31657,36 @@ function CanvassScreen({
   const [zoom, setZoom] = (0, import_react.useState)(() => focus && focus.date ? 12 : 17);
   const highlight = focus && focus.radiusMiles ? { lat: focus.lat, lng: focus.lng, radiusMiles: focus.radiusMiles } : null;
   const [swath, setSwath] = (0, import_react.useState)(null);
+  const [swathSource, setSwathSource] = (0, import_react.useState)(null);
   const [swathErr, setSwathErr] = (0, import_react.useState)(false);
   (0, import_react.useEffect)(() => {
     let alive = true;
     setSwath(null);
+    setSwathSource(null);
     setSwathErr(false);
     if (!focus || !focus.date || focus.kind === "wind") return void 0;
     const reach = Math.max(Number(focus.radiusMiles) || 15, 15);
-    fetchRadarHail(focus.lat, focus.lng, focus.date, focus.date, reach).then((byDate) => {
+    (async () => {
+      const hasPoints = (byDate) => {
+        const d = byDate && byDate[focus.date];
+        return !!(d && d.points && d.points.length);
+      };
+      let radar = await fetchRadarHail(focus.lat, focus.lng, focus.date, focus.date, reach);
+      let live = null;
+      if (!hasPoints(radar)) {
+        live = await fetchRadarAttrs(focus.lat, focus.lng, focus.date, focus.date, reach);
+        if (hasPoints(live)) radar = live;
+      }
+      const lsr = hasPoints(radar) ? null : await fetchStormReports(focus.lat, focus.lng, focus.date, focus.date);
       if (!alive) return;
-      if (!byDate) {
+      if (!radar && !live && !lsr) {
         setSwathErr(true);
         return;
       }
-      const day = byDate[focus.date];
-      setSwath(day ? hailSwath(day.points) : []);
-    }, () => {
-      if (alive) setSwathErr(true);
-    });
+      const g = stormGeometry(radar || {}, lsr || {}, focus.date);
+      setSwath(g.swath);
+      setSwathSource(g.source);
+    })();
     return () => {
       alive = false;
     };
@@ -31812,7 +31924,7 @@ function CanvassScreen({
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 14, height: 10, borderRadius: 2, background: b.color, opacity: 0.85, flexShrink: 0 } }),
                 /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.ink, fontVariantNumeric: "tabular-nums" }, children: b.label })
               ] }, b.label)),
-              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, marginTop: 5, lineHeight: 1.35 }, children: "Radar estimate \u2014 approximate area, not a survey" })
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, marginTop: 5, lineHeight: 1.35 }, children: swathSource === "reported" ? "Spotter reports \u2014 where hail was called in, not full coverage" : "Radar estimate \u2014 approximate area, not a survey" })
             ] }),
             swathErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
               position: "absolute",
@@ -31828,6 +31940,21 @@ function CanvassScreen({
               color: "#B42318",
               lineHeight: 1.4
             }, children: "Couldn't load the hail area for this storm. The pins and dispositions all still work." }),
+            swath && swath.length === 0 && !swathErr && focus && focus.date && focus.kind !== "wind" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { "data-testid": "swath-pending", style: {
+              position: "absolute",
+              left: 10,
+              bottom: 138,
+              zIndex: 600,
+              maxWidth: 220,
+              background: S.card,
+              border: `1px solid ${S.line}`,
+              borderRadius: 10,
+              padding: "8px 10px",
+              fontSize: 11.5,
+              color: S.sub,
+              lineHeight: 1.4,
+              boxShadow: "0 2px 8px rgba(0,0,0,.18)"
+            }, children: "Radar hasn't published this day's hail track yet \u2014 it can lag a day or two. The circle is the watched area from the alert." }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", left: 10, right: 10, top: 10, zIndex: 600 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
               AddressAutocomplete,
               {
@@ -31862,7 +31989,7 @@ function CanvassScreen({
                 {
                   type: "button",
                   "data-testid": `basemap-${b.id}`,
-                  onClick: () => usable ? setBasemapId(b.id) : toast && toast("Satellite needs an imagery key \u2014 add VITE_MAPBOX_TOKEN and redeploy. See DEPLOY.md."),
+                  onClick: () => usable ? setBasemapId(b.id) : toast && toast(canManageCompanyConfig(currentUser) ? "Satellite needs an imagery key \u2014 add VITE_MAPBOX_TOKEN and redeploy. See DEPLOY.md." : "Satellite isn't set up for your company yet \u2014 ask your admin."),
                   style: {
                     border: "none",
                     borderRadius: 999,

@@ -69,10 +69,16 @@ ok(/if \(swathRef\.current\) \{ map\.removeLayer\(swathRef\.current\); swathRef\
   "the old swath is removed before a new one is drawn — no stacking layers as a rep moves between storms");
 
 /* ================= 4. the circle stops lying ================= */
-ok(/color: "#B42318", weight: 1\.5, opacity: 0\.55, dashArray: "6 5",\s*\n\s*fill: false, interactive: false,/.test(src),
-  "the watched-area circle is now thin, dashed and UNFILLED");
-ok(/it is a SETTING, not weather — with a real swath on the map, a\s*\n     solid circle would read as "hail fell across all of this", which\s*\n     is the misreading the swath exists to prevent\./.test(src),
-  "with the reason: a filled circle asserts something about the weather that isn't true");
+/* Build 140 note: with a swath drawn the circle stays unfilled for
+   exactly the reason below — but when the circle is the ONLY
+   geometry (radar not yet published, wind alert) it now takes a
+   light fill, because an off-screen hairline reads as an unmarked
+   map. The conditional preserves this build's decision where it
+   applies. */
+ok(/fill: !hasSwath, fillColor: "#B42318", fillOpacity: hasSwath \? 0 : 0\.07,/.test(src),
+  "the watched-area circle stays unfilled whenever a real swath is on the map");
+ok(/a solid circle over a swath would read as "hail\s*\n     fell across all of this", the misreading the swath exists to\s*\n     prevent\./.test(src),
+  "with the reason: a filled circle over a swath asserts something about the weather that isn't true");
 
 /* ================= 5. wiring ================= */
 ok(/date: a\.occurred_on, kind: a\.kind,/.test(src), "the alert carries its day and peril into the map");
@@ -95,11 +101,11 @@ ok(/A guessed zoom cannot work here: a swath is whatever size the\s*\n       sto
 ok(/data-testid="swath-legend"/.test(src), "there's a legend");
 ok(/Radar estimate — approximate area, not a survey/.test(src),
   "which says plainly that this is an estimate");
-ok(/A rep quoting this to an adjuster\s*\n                  as a survey is how a claim gets picked apart\./.test(src),
-  "with the reason that caption exists");
+ok(/Captioning spotter cells as radar —\s*\n                  or either as a survey — is how a claim gets picked\s*\n                  apart in front of an adjuster\./.test(src),
+  "with the reason that caption exists (build 140 widened it to cover the spotter-cell caption)");
 ok(/Couldn't load the hail area for this storm\. The pins and dispositions all still work\./.test(src),
   "and a failed swath fetch says so rather than silently drawing nothing");
-ok(/setSwath\(null\); setSwathErr\(false\);/.test(src),
+ok(/setSwath\(null\); setSwathSource\(null\); setSwathErr\(false\);/.test(src),
   "state resets between storms, so one storm's footprint never lingers over another");
 
 /* ================= behavioral: hailSwath ================= */
