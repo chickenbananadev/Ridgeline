@@ -409,6 +409,15 @@ radar figure is shown as `2.5″ est · Radar` and a spotter's as
 they answer different questions and an adjuster conversation uses both.
 Never quote a radar estimate as though it were measured.
 
+**Radar also draws the swath on the canvassing map.** Tapping *Knock
+it* on a hail alert opens the map over the storm's actual footprint —
+the detections binned onto a roughly two-mile grid and coloured by the
+worst size in each cell, so a rep can see which streets took the big
+stones instead of guessing from a circle. The grid is deliberately
+coarse: a NEXRAD row is a storm cell several miles across, not a point
+sample, and finer bins would imply precision the data does not have.
+The legend says "approximate area, not a survey" for the same reason.
+
 If any source doesn't answer, the app names the one that failed rather
 than quietly returning less evidence. "Couldn't check" and "nothing
 happened" are different sentences, and only one of them should ever be
