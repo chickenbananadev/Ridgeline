@@ -1,7 +1,22 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import App from "../ridgeline.jsx";
+
+/* Leaflet is imported HERE, not in ridgeline.jsx, and handed over on
+   window like every other outside dependency this file owns.
+
+   ridgeline.jsx is deliberately a single self-contained file with no
+   imports and no import.meta, so esbuild can bundle it for the test
+   harness (`npm run bundle:test`) and preview sandboxes can render it.
+   Leaflet needs its stylesheet to position map panes at all, and a CSS
+   import inside ridgeline.jsx breaks that bundle outright. Importing it
+   in the composition root sidesteps the whole problem: the app reads
+   window.__LEAFLET__ and falls back gracefully when it is absent, which
+   is exactly what happens under jsdom. */
+window.__LEAFLET__ = L;
 
 /* Env is read here, in a real module, and handed to the app on window.
    Keeping import.meta out of ridgeline.jsx lets that same file run in
@@ -16,6 +31,12 @@ window.__PROPERTY_KEY__ = import.meta.env.VITE_PROPERTY_KEY || "";
    company. Point this at a dedicated tile key (or a satellite style) to
    separate the two. {z}/{x}/{y} are substituted per tile. */
 window.__MAP_TILE_URL__ = import.meta.env.VITE_MAP_TILE_URL || "";
+/* Satellite imagery for the canvassing map. Left empty on purpose:
+   every genuinely free aerial basemap bars commercial use (Esri's World
+   Imagery explicitly), so this needs a real provider key. The
+   Street/Satellite control ships either way — it just explains itself
+   instead of doing nothing until this is set. */
+window.__SATELLITE_TILE_URL__ = import.meta.env.VITE_SATELLITE_TILE_URL || "";
 /* Google OAuth client ID for per-rep Gmail sending. The matching client
    SECRET lives only in the gmail-oauth / gmail-send Edge Functions. */
 window.__GOOGLE_CLIENT_ID__ = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";

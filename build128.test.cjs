@@ -25,12 +25,16 @@
       Overwriting would erase the fact that someone already said "come
       back Tuesday", which is the single most valuable thing on the pin.
 
-   The map is hand-built rather than Leaflet: ridgeline.jsx is a
-   single self-contained file with no CSS imports, and Leaflet needs
-   its stylesheet to position panes, which breaks `npm run
-   bundle:test` — the pipeline every build here is verified through.
-   The upside is that the projection math is a pure function this file
-   can test directly instead of through a rendered map. */
+   NOTE (build 132): this build's map was hand-built, and the owner
+   later called it "wonky to say the least" — correctly. A hand-rolled
+   renderer got the projection right and the feel wrong: no momentum,
+   no inertia, no double-tap zoom. It runs on Leaflet now, imported in
+   src/main.jsx and handed over as window.__LEAFLET__ so ridgeline.jsx
+   stays import-free and `npm run bundle:test` still works. The
+   assertions below were updated where the rewrite moved something,
+   and left alone where the DECISION still holds — shared pins, the
+   20 m snap, appended history — because those are what this build was
+   actually about. */
 const fs = require("fs");
 const path = require("path");
 const src = fs.readFileSync(path.join(__dirname, "ridgeline.jsx"), "utf8");
@@ -67,20 +71,35 @@ ok(/function canvassStatusList\(saved\)/.test(src) && /function canvassStatus\(s
 ok(/function lngToWorldX\(lng, z\)/.test(src) && /function worldXToLng\(x, z\)/.test(src)
   && /function latToWorldY\(lat, z\)/.test(src) && /function worldYToLat\(y, z\)/.test(src),
   "Web Mercator project/unproject exist as pure functions");
-ok(/https:\/\/maps\.geoapify\.com\/v1\/tile\/\$\{MAP_TILE_STYLE\}\/\$\{z\}\/\$\{x\}\/\$\{y\}\.png\?apiKey=\$\{GEO_PROVIDER\.apiKey\}/.test(src),
+/* Build 132 moved the tile URL into the BASEMAPS registry when
+   satellite arrived; same key, same default, one place now. */
+ok(/https:\/\/maps\.geoapify\.com\/v1\/tile\/osm-bright\/\{z\}\/\{x\}\/\{y\}\.png\?apiKey=\$\{GEO_PROVIDER\.apiKey\}/.test(src),
   "tiles come from Geoapify on the key the address lookup already uses — nothing new to sign up for");
 ok(/window\.__MAP_TILE_URL__/.test(src),
   "the tile URL is overridable, which is the hook for satellite imagery later without a rebuild");
 ok(/openstreetmap\.org\/copyright/.test(src) && /geoapify\.com/.test(src),
   "attribution renders on the map — OpenStreetMap's licence and Geoapify's terms both require it");
-ok(/touchAction: "none"/.test(src), "the map swallows browser touch gestures so a pan doesn't scroll the page instead");
-ok(/if \(wasDrag\.moved > 6\) return;/.test(src),
-  "a drag over 6px is a pan, not a tap — without the slop, dropping a pin on a phone is near impossible");
+/* Build 132: this used to assert touchAction:"none" on the map's own
+   container. Leaflet sets that itself from its stylesheet, so the
+   assertion started matching the SIGNATURE PAD instead and verified
+   nothing — the same class of dead test as the data-testid Card was
+   swallowing. What actually keeps a pan from scrolling the page now is
+   the screen not being scrollable at all. */
+ok(/height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", background: S\.bg/.test(src),
+  "the canvassing screen itself doesn't scroll, so a pan on the map can't scroll the page underneath it");
+/* Build 132: the hand-rolled tap/drag discrimination is gone because
+   the thing it protected is gone — a drag can no longer create
+   anything, since adding a door is now an explicit mode. Leaflet owns
+   gesture handling now. */
+ok(!/wasDrag/.test(src) && /const \[adding, setAdding\] = useState\(false\);/.test(src),
+  "a stray drag cannot create a door, because creating one is a deliberate mode rather than a tap");
 
 /* ---------- the snap rule ---------- */
 ok(/const PIN_SNAP_METRES = 20;/.test(src), "the snap radius is a named constant, not a magic number");
-ok(/const hit = nearestPin\(pins, lat, lng\);\s*\n\s*if \(hit\) onTapPin\(hit\); else onTapMap\(lat, lng\);/.test(src),
-  "a tap near an existing pin opens it instead of dropping a duplicate");
+/* Build 132 moved the snap from tap-time to DROP-time. The duplicate
+   it prevents is the same one: two reps lining up on the same house. */
+ok(/const existing = nearestPin\(list, lat, lng\);\s*\n\s*if \(existing\) \{/.test(src),
+  "dropping a pin within the snap radius of an existing door selects that door instead of duplicating it");
 
 /* ---------- viewport loading + honest writes ---------- */
 ok(/\.gte\("lat", b\.south\)\.lte\("lat", b\.north\)\s*\n\s*\.gte\("lng", b\.west\)\.lte\("lng", b\.east\)/.test(src),

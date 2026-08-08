@@ -509,7 +509,8 @@ then redeploy:
 | `VITE_GEOAPIFY_KEY` | address autocomplete (optional but recommended) |
 | `VITE_PROPERTY_KEY` | property-record auto-fill (optional) |
 | `VITE_GOOGLE_CLIENT_ID` | per-rep Gmail sending (optional; pairs with the `GOOGLE_*` secrets) |
-| `VITE_MAP_TILE_URL` | canvassing map imagery (optional — see below) |
+| `VITE_MAP_TILE_URL` | canvassing street tiles (optional — see below) |
+| `VITE_SATELLITE_TILE_URL` | canvassing satellite imagery (optional — see below) |
 
 The app runs in demo mode (no backend) when the Supabase pair is absent, so a
 missing key never white-screens the site.
@@ -529,11 +530,27 @@ Set `VITE_MAP_TILE_URL` to a dedicated tile endpoint to separate the two. The
 VITE_MAP_TILE_URL=https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=SEPARATE_KEY
 ```
 
-This is also how you switch to **satellite imagery**, which reps generally
-prefer for roofs — point it at a provider whose plan includes aerial tiles
-(Geoapify paid, Mapbox, Google). Whatever you use must permit the attribution
-shown in the map's corner, which is currently OpenStreetMap + Geoapify; change
-it in `CanvassMap` if you move providers.
+### Satellite imagery
+
+The canvassing map has a **Street / Satellite** toggle. Satellite stays greyed
+out, with an explanation when tapped, until `VITE_SATELLITE_TILE_URL` is set —
+there is no free option to default to. Every aerial basemap that looks free
+bars commercial use; Esri's World Imagery is explicit that it requires an
+ArcGIS licence and is not licensed for commercial use. So this needs a real
+provider key:
+
+```
+VITE_SATELLITE_TILE_URL=https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}@2x.jpg90?access_token=YOUR_TOKEN
+```
+
+Mapbox is the recommendation — good roof-level imagery, a workable free tier,
+simple pricing after. Google's Map Tiles API has the best imagery and the most
+setup (Cloud billing account + API enablement). MapTiler is the cheapest.
+
+Whatever you use must permit the attribution shown in the map's corner. Update
+the `attribution` field on the matching entry in the `BASEMAPS` registry in
+`ridgeline.jsx` when you pick a provider — it currently reads "Satellite
+imagery", which is a placeholder, not a licence-satisfying credit.
 
 If tiles fail to load for any reason — key missing, quota hit, provider down —
 the map says so plainly and keeps working: pins, dispositions, the list and the
