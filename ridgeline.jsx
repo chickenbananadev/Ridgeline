@@ -14942,7 +14942,11 @@ function mergeStormDays(days, reportsByDate, radarByDate, gustByDate) {
    treat as the start of a functional-damage conversation; 58 mph
    (50 kt) is the matching severe-wind threshold. Starting below
    either means alerting on weather that will not sell a roof. */
-const STORM_WATCH_DEFAULTS = { enabled: false, areas: [], minHailIn: 1, minWindMph: 58, lookbackDays: 7 };
+/* 90 days, not a week. Hail claims stay open for months and a
+   company switching this on wants the storms it has already missed,
+   not only what falls from tomorrow. The report_key dedupe means a
+   long window floods once and never again. */
+const STORM_WATCH_DEFAULTS = { enabled: false, areas: [], minHailIn: 1, minWindMph: 58, lookbackDays: 90 };
 const STORM_WATCH_MAX_RADIUS = Math.round(LSR_RADIUS_DEG * 69);  // the bounded query's reach; a wider radius would silently under-report
 
 /* Saved settings are merged over the defaults rather than replacing
@@ -14957,7 +14961,12 @@ function normalizeStormWatch(v) {
   }));
   s.minHailIn = Math.max(0, Number(s.minHailIn) || 0);
   s.minWindMph = Math.max(0, Number(s.minWindMph) || 0);
-  s.lookbackDays = Math.min(30, Math.max(1, Math.round(Number(s.lookbackDays) || 7)));
+  /* Anything that isn't a positive number falls back to the default,
+     rather than 0 quietly meaning "the default" while -5 quietly means
+     "one day". Both are garbage input and both deserve the same
+     answer. */
+  const rawLookback = Math.round(Number(s.lookbackDays));
+  s.lookbackDays = isFinite(rawLookback) && rawLookback > 0 ? Math.min(90, rawLookback) : 90;
   return s;
 }
 
@@ -16867,10 +16876,13 @@ function StormScout({ toast }) {
    the weather record, then corroborate against the official NOAA SPC report. */
 function StormLookup({ job, dol, onPick, toast }) {
   const iso = (d) => d.toISOString().slice(0, 10);
-  /* Two years, not one. Hail is not an annual event in most markets —
-     a one-year default routinely returns nothing and reads as "no hail
-     here" when the answer is "not in the last twelve months". */
-  const [start, setStart] = useState(() => { const d = new Date(); d.setFullYear(d.getFullYear() - 2); return iso(d); });
+  /* Five years. Hail is not an annual event in most markets — a short
+     default routinely returns nothing and reads as "no hail here" when
+     the honest answer is "not lately". Roofs carry damage from storms
+     several seasons back, and the lookup is one cheap request either
+     way, so the default reaches far enough to find the storm that
+     actually did it. */
+  const [start, setStart] = useState(() => { const d = new Date(); d.setFullYear(d.getFullYear() - 5); return iso(d); });
   const [open, setOpen] = useState(null);
   const [end, setEnd] = useState(() => iso(new Date()));
   const [rows, setRows] = useState(null);
@@ -30249,10 +30261,10 @@ function StormWatchEditor({ watch, setWatch, jobs, onBack, toast, currentUser })
             {[50, 58, 65, 75, 90].map((n) => <option key={n} value={n}>{n} mph</option>)}
           </select>
         </Field>
-        <Field label="Look back" hint="How far back a check reaches. A week catches a storm that landed over a holiday weekend without dredging up last season.">
+        <Field label="Look back" hint="How far back each check reaches. 90 days is the default because hail claims stay open for months — and each storm only ever raises one alert, so a long window doesn't mean repeat notifications.">
           <select style={inputStyle} value={String(s.lookbackDays)} disabled={!canEdit}
             onChange={(e) => write({ lookbackDays: Number(e.target.value) })}>
-            {[3, 7, 14, 30].map((n) => <option key={n} value={n}>{n} days</option>)}
+            {[7, 14, 30, 60, 90].map((n) => <option key={n} value={n}>{n} days</option>)}
           </select>
         </Field>
       </Card>
@@ -30686,7 +30698,22 @@ function CanvassScreen({
       )}
 
       {view === "map" ? (
-        <div ref={mapWrapRef} style={{ flex: 1, position: "relative", minHeight: 0 }}>
+        /* `isolation: isolate` below is load-bearing, not decoration.
+
+           Nothing between this element and <body> created a stacking
+           context, so the map's own layers were competing globally:
+           Leaflet's panes sit at z-index 400 and the floating controls
+           and bottom sheet at 500–602, while every Sheet in the app —
+           pin details, filters, scoreboard — is a z-index 60 overlay.
+           The map therefore painted OVER any sheet opened from this
+           screen, which is why tapping "Details" appeared to do
+           nothing: the sheet opened, underneath the map.
+
+           Isolating makes the whole map one layer in the root stacking
+           context, so its internal ordering stays intact while sheets
+           and toasts land above it where they belong. */
+        <div ref={mapWrapRef} className="rl-map"
+          style={{ flex: 1, position: "relative", minHeight: 0, isolation: "isolate" }}>
           <CanvassMap
             center={center} zoom={zoom} onMove={onMove}
             pins={shown} statuses={canvassStatuses} selectedId={selectedId}

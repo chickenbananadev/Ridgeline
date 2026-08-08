@@ -78,6 +78,23 @@
          without dvh. */
       .rl-shell { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
       .rl-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; }
+
+      /* PULL-TO-REFRESH KILLS THE CANVASSING MAP.
+
+         A rep drags DOWN on a full-screen map to pan north. iOS reads
+         that as a pull-to-refresh on the document, claims the gesture,
+         and reloads the app — so the map "won't drag" and the page
+         "refreshes", which is exactly one bug wearing two faces.
+
+         `touch-action: none` on the map is not enough: Safari has long
+         triggered the refresh regardless. Suppressing overscroll at the
+         document level is the fix that actually holds. The shell never
+         scrolls anyway (it is a fixed-height flex column) — this only
+         removes the browser's rubber-band and refresh on top of it. */
+      html, body { overscroll-behavior: none; }
+      /* The map owns every gesture that starts on it. Without this a
+         drag can still chain out to an ancestor mid-gesture. */
+      .rl-map { touch-action: none; overscroll-behavior: none; }
       [data-theme="light"] {
         --rl-bg:#F7F8FA; --rl-card:#FFFFFF; --rl-soft:#F3F4F6;
         --rl-line:#E5E7EB; --rl-ink:#111827; --rl-sub:#6B7280;

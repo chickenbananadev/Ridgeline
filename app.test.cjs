@@ -15529,7 +15529,7 @@ function mergeStormDays(days, reportsByDate, radarByDate, gustByDate) {
   });
   return [...byDate.values()].filter((r) => r.reports || r.radarHailIn != null || r.hail || r.highWind || r.storm || r.measuredGust != null && r.measuredGust >= 45 || r.precip != null && r.precip >= 0.75).sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1));
 }
-var STORM_WATCH_DEFAULTS = { enabled: false, areas: [], minHailIn: 1, minWindMph: 58, lookbackDays: 7 };
+var STORM_WATCH_DEFAULTS = { enabled: false, areas: [], minHailIn: 1, minWindMph: 58, lookbackDays: 90 };
 var STORM_WATCH_MAX_RADIUS = Math.round(LSR_RADIUS_DEG * 69);
 function normalizeStormWatch(v) {
   const s = { ...STORM_WATCH_DEFAULTS, ...v || {} };
@@ -15543,7 +15543,8 @@ function normalizeStormWatch(v) {
   }));
   s.minHailIn = Math.max(0, Number(s.minHailIn) || 0);
   s.minWindMph = Math.max(0, Number(s.minWindMph) || 0);
-  s.lookbackDays = Math.min(30, Math.max(1, Math.round(Number(s.lookbackDays) || 7)));
+  const rawLookback = Math.round(Number(s.lookbackDays));
+  s.lookbackDays = isFinite(rawLookback) && rawLookback > 0 ? Math.min(90, rawLookback) : 90;
   return s;
 }
 function stormAlertKey(watchId, kind, date) {
@@ -17371,7 +17372,7 @@ function StormLookup({ job, dol, onPick, toast }) {
   const iso = (d) => d.toISOString().slice(0, 10);
   const [start, setStart] = (0, import_react.useState)(() => {
     const d = /* @__PURE__ */ new Date();
-    d.setFullYear(d.getFullYear() - 2);
+    d.setFullYear(d.getFullYear() - 5);
     return iso(d);
   });
   const [open, setOpen] = (0, import_react.useState)(null);
@@ -31225,14 +31226,14 @@ function StormWatchEditor({ watch, setWatch, jobs, onBack, toast, currentUser })
           ] }, n))
         }
       ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Look back", hint: "How far back a check reaches. A week catches a storm that landed over a holiday weekend without dredging up last season.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Look back", hint: "How far back each check reaches. 90 days is the default because hail claims stay open for months \u2014 and each storm only ever raises one alert, so a long window doesn't mean repeat notifications.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         "select",
         {
           style: inputStyle,
           value: String(s.lookbackDays),
           disabled: !canEdit,
           onChange: (e) => write({ lookbackDays: Number(e.target.value) }),
-          children: [3, 7, 14, 30].map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: n, children: [
+          children: [7, 14, 30, 60, 90].map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: n, children: [
             n,
             " days"
           ] }, n))
@@ -31730,258 +31731,282 @@ function CanvassScreen({
       " ",
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { onClick: () => setErr(""), style: { border: "none", background: "none", color: "#fff", textDecoration: "underline", cursor: "pointer" }, children: "Dismiss" })
     ] }),
-    view === "map" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { ref: mapWrapRef, style: { flex: 1, position: "relative", minHeight: 0 }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        CanvassMap,
+    view === "map" ? (
+      /* `isolation: isolate` below is load-bearing, not decoration.
+      
+                 Nothing between this element and <body> created a stacking
+                 context, so the map's own layers were competing globally:
+                 Leaflet's panes sit at z-index 400 and the floating controls
+                 and bottom sheet at 500–602, while every Sheet in the app —
+                 pin details, filters, scoreboard — is a z-index 60 overlay.
+                 The map therefore painted OVER any sheet opened from this
+                 screen, which is why tapping "Details" appeared to do
+                 nothing: the sheet opened, underneath the map.
+      
+                 Isolating makes the whole map one layer in the root stacking
+                 context, so its internal ordering stays intact while sheets
+                 and toasts land above it where they belong. */
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+        "div",
         {
-          center,
-          zoom,
-          onMove,
-          pins: shown,
-          statuses: canvassStatuses,
-          selectedId,
-          onTapPin: (p) => setSelectedId(p.id),
-          me,
-          basemapId,
-          highlight,
-          swath
-        }
-      ),
-      bands.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-testid": "swath-legend", style: {
-        position: "absolute",
-        left: 10,
-        bottom: 138,
-        zIndex: 600,
-        maxWidth: 190,
-        background: S.card,
-        border: `1px solid ${S.line}`,
-        borderRadius: 10,
-        padding: "8px 10px",
-        boxShadow: "0 2px 8px rgba(0,0,0,.18)"
-      }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11, fontWeight: 800, letterSpacing: 0.3, color: S.sub, marginBottom: 5 }, children: [
-          "HAIL ",
-          focus && focus.date ? `\xB7 ${focus.date}` : ""
-        ] }),
-        bands.map((b) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 7, padding: "1.5px 0" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 14, height: 10, borderRadius: 2, background: b.color, opacity: 0.85, flexShrink: 0 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.ink, fontVariantNumeric: "tabular-nums" }, children: b.label })
-        ] }, b.label)),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, marginTop: 5, lineHeight: 1.35 }, children: "Radar estimate \u2014 approximate area, not a survey" })
-      ] }),
-      swathErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
-        position: "absolute",
-        left: 10,
-        bottom: 138,
-        zIndex: 600,
-        maxWidth: 210,
-        background: "#FEF3F2",
-        border: "1px solid #FDA29B",
-        borderRadius: 10,
-        padding: "8px 10px",
-        fontSize: 11.5,
-        color: "#B42318",
-        lineHeight: 1.4
-      }, children: "Couldn't load the hail area for this storm. The pins and dispositions all still work." }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", left: 10, right: 10, top: 10, zIndex: 600 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-        AddressAutocomplete,
-        {
-          value: addr,
-          onChange: setAddr,
-          placeholder: "Jump to an address",
-          onPick: (it) => {
-            setAddr(it.formatted || it.street || "");
-            const c = { lat: it.lat, lng: it.lng };
-            setCenter(c);
-            setZoom(18);
-            onMove({ center: c, zoom: 18 });
-          }
-        }
-      ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
-        position: "absolute",
-        left: 10,
-        bottom: 92,
-        zIndex: 600,
-        display: "flex",
-        background: S.card,
-        border: `1px solid ${S.line}`,
-        borderRadius: 999,
-        padding: 3,
-        boxShadow: "0 2px 8px rgba(0,0,0,.18)"
-      }, children: BASEMAPS.map((b) => {
-        const on = basemapId === b.id;
-        const usable = basemapReady(b.id);
-        return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "button",
-          {
-            type: "button",
-            "data-testid": `basemap-${b.id}`,
-            onClick: () => usable ? setBasemapId(b.id) : toast && toast("Satellite needs an imagery key \u2014 add VITE_MAPBOX_TOKEN and redeploy. See DEPLOY.md."),
-            style: {
-              border: "none",
+          ref: mapWrapRef,
+          className: "rl-map",
+          style: { flex: 1, position: "relative", minHeight: 0, isolation: "isolate" },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              CanvassMap,
+              {
+                center,
+                zoom,
+                onMove,
+                pins: shown,
+                statuses: canvassStatuses,
+                selectedId,
+                onTapPin: (p) => setSelectedId(p.id),
+                me,
+                basemapId,
+                highlight,
+                swath
+              }
+            ),
+            bands.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-testid": "swath-legend", style: {
+              position: "absolute",
+              left: 10,
+              bottom: 138,
+              zIndex: 600,
+              maxWidth: 190,
+              background: S.card,
+              border: `1px solid ${S.line}`,
+              borderRadius: 10,
+              padding: "8px 10px",
+              boxShadow: "0 2px 8px rgba(0,0,0,.18)"
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11, fontWeight: 800, letterSpacing: 0.3, color: S.sub, marginBottom: 5 }, children: [
+                "HAIL ",
+                focus && focus.date ? `\xB7 ${focus.date}` : ""
+              ] }),
+              bands.map((b) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 7, padding: "1.5px 0" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 14, height: 10, borderRadius: 2, background: b.color, opacity: 0.85, flexShrink: 0 } }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.ink, fontVariantNumeric: "tabular-nums" }, children: b.label })
+              ] }, b.label)),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, marginTop: 5, lineHeight: 1.35 }, children: "Radar estimate \u2014 approximate area, not a survey" })
+            ] }),
+            swathErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+              position: "absolute",
+              left: 10,
+              bottom: 138,
+              zIndex: 600,
+              maxWidth: 210,
+              background: "#FEF3F2",
+              border: "1px solid #FDA29B",
+              borderRadius: 10,
+              padding: "8px 10px",
+              fontSize: 11.5,
+              color: "#B42318",
+              lineHeight: 1.4
+            }, children: "Couldn't load the hail area for this storm. The pins and dispositions all still work." }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", left: 10, right: 10, top: 10, zIndex: 600 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+              AddressAutocomplete,
+              {
+                value: addr,
+                onChange: setAddr,
+                placeholder: "Jump to an address",
+                onPick: (it) => {
+                  setAddr(it.formatted || it.street || "");
+                  const c = { lat: it.lat, lng: it.lng };
+                  setCenter(c);
+                  setZoom(18);
+                  onMove({ center: c, zoom: 18 });
+                }
+              }
+            ) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+              position: "absolute",
+              left: 10,
+              bottom: 92,
+              zIndex: 600,
+              display: "flex",
+              background: S.card,
+              border: `1px solid ${S.line}`,
               borderRadius: 999,
-              padding: "6px 13px",
-              cursor: "pointer",
-              fontSize: 12.5,
-              fontWeight: 700,
-              fontFamily: "inherit",
-              background: on ? T.accent : "transparent",
-              color: on ? "#fff" : usable ? S.sub : "#B9BEC6"
-            },
-            children: b.label
-          },
-          b.id
-        );
-      }) }),
-      adding && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { "data-testid": "add-crosshair", style: {
-          position: "absolute",
-          left: "50%",
-          top: "50%",
-          width: 44,
-          height: 44,
-          marginLeft: -22,
-          marginTop: -22,
-          zIndex: 601,
-          pointerEvents: "none"
-        }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", inset: 0, border: `3px solid ${T.accent}`, borderRadius: "50% 50% 50% 0", transform: "rotate(-45deg)", background: "rgba(255,255,255,.25)" } }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
-          position: "absolute",
-          left: 10,
-          right: 10,
-          bottom: 16,
-          zIndex: 602,
-          display: "flex",
-          gap: 8,
-          background: S.card,
-          border: `1px solid ${S.line}`,
-          borderRadius: 14,
-          padding: 10,
-          boxShadow: "0 6px 20px rgba(0,0,0,.22)"
-        }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, fontSize: 12.5, color: S.sub, alignSelf: "center", lineHeight: 1.4 }, children: "Line the marker up on the house, then drop it." }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => setAdding(false), children: "Cancel" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            Btn,
-            {
-              small: true,
-              disabled: busy,
-              "data-testid": "confirm-drop",
-              onClick: async () => {
-                setAdding(false);
-                await dropPin(center.lat, center.lng);
-              },
-              children: busy ? "\u2026" : "Drop pin"
-            }
-          )
-        ] })
-      ] }),
-      !adding && !selected && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "absolute", right: 12, bottom: 16, zIndex: 601, display: "flex", flexDirection: "column", gap: 10 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "aria-label": "Where I am", onClick: findMe, style: {
-          width: 46,
-          height: 46,
-          borderRadius: "50%",
-          border: `1px solid ${S.line}`,
-          background: S.card,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          boxShadow: "0 2px 8px rgba(0,0,0,.2)"
-        }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Navigation, { size: 20, color: S.ink }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "aria-label": "Add a door", "data-testid": "add-door", onClick: () => {
-          setSelectedId(null);
-          setAdding(true);
-        }, style: {
-          width: 56,
-          height: 56,
-          borderRadius: "50%",
-          border: "none",
-          background: T.accent,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          boxShadow: "0 4px 14px rgba(0,0,0,.28)"
-        }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 26, color: "#fff" }) })
-      ] }),
-      selected && !adding && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-testid": "pin-sheet", style: {
-        position: "absolute",
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 602,
-        background: S.card,
-        borderTop: `1px solid ${S.line}`,
-        borderTopLeftRadius: 18,
-        borderTopRightRadius: 18,
-        padding: "12px 14px calc(14px + env(safe-area-inset-bottom))",
-        boxShadow: "0 -6px 24px rgba(0,0,0,.18)",
-        maxHeight: "62%",
-        overflowY: "auto"
-      }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 38, height: 4, borderRadius: 2, background: S.line, margin: "0 auto 10px" } }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700, color: S.ink }, children: selected.address || "Dropped pin" }),
-            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 2 }, children: [
-              canvassStatus(canvassStatuses, selected.status).name,
-              (selected.history || []).length > 0 && ` \xB7 knocked ${selected.history.length}\xD7`,
-              (selected.prospect || {}).name ? ` \xB7 ${selected.prospect.name}` : ""
-            ] })
-          ] }),
-          selected.job_id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Job" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            "button",
-            {
-              "aria-label": "Close",
-              onClick: () => setSelectedId(null),
-              style: { border: "none", background: "none", cursor: "pointer", padding: 4 },
-              children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.X, { size: 18, color: S.sub })
-            }
-          )
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, flexWrap: "wrap", marginTop: 12 }, children: statuses.filter((s) => s.id !== "new").map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-          "button",
-          {
-            type: "button",
-            onClick: () => setStatus(selected, s.id),
-            style: {
-              border: `1.5px solid ${selected.status === s.id ? s.color : S.line}`,
-              background: selected.status === s.id ? s.color : S.card,
-              color: selected.status === s.id ? "#fff" : S.ink,
-              borderRadius: 999,
-              padding: "9px 14px",
-              fontSize: 13.5,
-              fontWeight: 600,
-              cursor: "pointer",
-              fontFamily: "inherit"
-            },
-            children: s.name
-          },
-          s.id
-        )) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, style: { flex: 1 }, "data-testid": "open-pin-details", onClick: () => setDetail(selected.id), children: "Details" }),
-          selected.job_id && onOpenJob && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => onOpenJob(selected.job_id), children: "Open job" }),
-          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
-            Btn,
-            {
-              kind: "ghost",
-              small: true,
-              "aria-label": "Remove pin",
-              style: { color: "#B42318", flex: "0 0 auto" },
-              onClick: () => {
-                removePin(selected.id);
+              padding: 3,
+              boxShadow: "0 2px 8px rgba(0,0,0,.18)"
+            }, children: BASEMAPS.map((b) => {
+              const on = basemapId === b.id;
+              const usable = basemapReady(b.id);
+              return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "button",
+                {
+                  type: "button",
+                  "data-testid": `basemap-${b.id}`,
+                  onClick: () => usable ? setBasemapId(b.id) : toast && toast("Satellite needs an imagery key \u2014 add VITE_MAPBOX_TOKEN and redeploy. See DEPLOY.md."),
+                  style: {
+                    border: "none",
+                    borderRadius: 999,
+                    padding: "6px 13px",
+                    cursor: "pointer",
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    fontFamily: "inherit",
+                    background: on ? T.accent : "transparent",
+                    color: on ? "#fff" : usable ? S.sub : "#B9BEC6"
+                  },
+                  children: b.label
+                },
+                b.id
+              );
+            }) }),
+            adding && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { "data-testid": "add-crosshair", style: {
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                width: 44,
+                height: 44,
+                marginLeft: -22,
+                marginTop: -22,
+                zIndex: 601,
+                pointerEvents: "none"
+              }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", inset: 0, border: `3px solid ${T.accent}`, borderRadius: "50% 50% 50% 0", transform: "rotate(-45deg)", background: "rgba(255,255,255,.25)" } }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+                position: "absolute",
+                left: 10,
+                right: 10,
+                bottom: 16,
+                zIndex: 602,
+                display: "flex",
+                gap: 8,
+                background: S.card,
+                border: `1px solid ${S.line}`,
+                borderRadius: 14,
+                padding: 10,
+                boxShadow: "0 6px 20px rgba(0,0,0,.22)"
+              }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { flex: 1, fontSize: 12.5, color: S.sub, alignSelf: "center", lineHeight: 1.4 }, children: "Line the marker up on the house, then drop it." }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => setAdding(false), children: "Cancel" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  Btn,
+                  {
+                    small: true,
+                    disabled: busy,
+                    "data-testid": "confirm-drop",
+                    onClick: async () => {
+                      setAdding(false);
+                      await dropPin(center.lat, center.lng);
+                    },
+                    children: busy ? "\u2026" : "Drop pin"
+                  }
+                )
+              ] })
+            ] }),
+            !adding && !selected && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { position: "absolute", right: 12, bottom: 16, zIndex: 601, display: "flex", flexDirection: "column", gap: 10 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "aria-label": "Where I am", onClick: findMe, style: {
+                width: 46,
+                height: 46,
+                borderRadius: "50%",
+                border: `1px solid ${S.line}`,
+                background: S.card,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 2px 8px rgba(0,0,0,.2)"
+              }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Navigation, { size: 20, color: S.ink }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", { "aria-label": "Add a door", "data-testid": "add-door", onClick: () => {
                 setSelectedId(null);
-              },
-              children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14 })
-            }
-          )
-        ] })
-      ] })
-    ] }) : (
+                setAdding(true);
+              }, style: {
+                width: 56,
+                height: 56,
+                borderRadius: "50%",
+                border: "none",
+                background: T.accent,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 4px 14px rgba(0,0,0,.28)"
+              }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 26, color: "#fff" }) })
+            ] }),
+            selected && !adding && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-testid": "pin-sheet", style: {
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 602,
+              background: S.card,
+              borderTop: `1px solid ${S.line}`,
+              borderTopLeftRadius: 18,
+              borderTopRightRadius: 18,
+              padding: "12px 14px calc(14px + env(safe-area-inset-bottom))",
+              boxShadow: "0 -6px 24px rgba(0,0,0,.18)",
+              maxHeight: "62%",
+              overflowY: "auto"
+            }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { width: 38, height: 4, borderRadius: 2, background: S.line, margin: "0 auto 10px" } }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 700, color: S.ink }, children: selected.address || "Dropped pin" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, marginTop: 2 }, children: [
+                    canvassStatus(canvassStatuses, selected.status).name,
+                    (selected.history || []).length > 0 && ` \xB7 knocked ${selected.history.length}\xD7`,
+                    (selected.prospect || {}).name ? ` \xB7 ${selected.prospect.name}` : ""
+                  ] })
+                ] }),
+                selected.job_id && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "green", children: "Job" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  "button",
+                  {
+                    "aria-label": "Close",
+                    onClick: () => setSelectedId(null),
+                    style: { border: "none", background: "none", cursor: "pointer", padding: 4 },
+                    children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.X, { size: 18, color: S.sub })
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 7, flexWrap: "wrap", marginTop: 12 }, children: statuses.filter((s) => s.id !== "new").map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                "button",
+                {
+                  type: "button",
+                  onClick: () => setStatus(selected, s.id),
+                  style: {
+                    border: `1.5px solid ${selected.status === s.id ? s.color : S.line}`,
+                    background: selected.status === s.id ? s.color : S.card,
+                    color: selected.status === s.id ? "#fff" : S.ink,
+                    borderRadius: 999,
+                    padding: "9px 14px",
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "inherit"
+                  },
+                  children: s.name
+                },
+                s.id
+              )) }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12 }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, style: { flex: 1 }, "data-testid": "open-pin-details", onClick: () => setDetail(selected.id), children: "Details" }),
+                selected.job_id && onOpenJob && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, style: { flex: 1 }, onClick: () => onOpenJob(selected.job_id), children: "Open job" }),
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+                  Btn,
+                  {
+                    kind: "ghost",
+                    small: true,
+                    "aria-label": "Remove pin",
+                    style: { color: "#B42318", flex: "0 0 auto" },
+                    onClick: () => {
+                      removePin(selected.id);
+                      setSelectedId(null);
+                    },
+                    children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 14 })
+                  }
+                )
+              ] })
+            ] })
+          ]
+        }
+      )
+    ) : (
       /* The list is not a lesser map. It is what a rep uses in a
          moving truck, on a bad signal, or when working a callback
          list at 6pm — sorted by the thing that matters then, which

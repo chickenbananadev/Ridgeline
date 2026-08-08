@@ -100,8 +100,12 @@ ok(/This is not evidence that nothing happened here\./.test(src),
   "\"couldn't check\" is never presented as \"nothing happened\" — the distinction a rep repeats to a homeowner");
 ok(/No storm reports or notable weather between \{start\} and \{end\}/.test(src),
   "a real empty result says so plainly and suggests a longer look-back");
-ok(/d\.setFullYear\(d\.getFullYear\(\) - 2\);/.test(src),
-  "the default window is two years — one year routinely returns nothing and reads as 'no hail here'");
+/* Build 138 widened this to five years at the owner's request. The
+   guarantee is unchanged and is what this line protects: the default
+   must reach far enough that an empty result means "no hail" rather
+   than "not in the window I happened to pick". */
+ok(/d\.setFullYear\(d\.getFullYear\(\) - 5\);/.test(src),
+  "the default window is five years — a short one routinely returns nothing and reads as 'no hail here'");
 
 /* ---------- behavioral: mirror lsrKind against REAL service values ---------- */
 function lsrKind(p) {
