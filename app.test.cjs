@@ -29872,13 +29872,36 @@ var BASEMAPS = [
     url: () => typeof window !== "undefined" && window.__MAP_TILE_URL__ || `https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${GEO_PROVIDER.apiKey}`
   },
   {
+    /* Aerial imagery is most of the point of a map for roofing — you
+           can count facets and see the ridge line before you knock. It
+           needs a paid-tier provider though: every genuinely free
+           satellite basemap bars commercial use, Esri's World Imagery
+           explicitly.
+    
+           Mapbox is the wired default because it has the best free
+           allowance of the realistic options and a plain token. Anything
+           else still works through VITE_SATELLITE_TILE_URL, which takes
+           precedence — a company already paying for Google or MapTiler
+           pastes their template and never touches the token. */
     id: "satellite",
     label: "Satellite",
     needsKey: true,
-    attribution: "Satellite imagery",
-    url: () => typeof window !== "undefined" && window.__SATELLITE_TILE_URL__ || ""
+    attribution: '\xA9 <a href="https://www.mapbox.com/about/maps/">Mapbox</a> \xB7 \xA9 <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    url: () => {
+      if (typeof window === "undefined") return "";
+      if (window.__SATELLITE_TILE_URL__) return window.__SATELLITE_TILE_URL__;
+      const token = window.__MAPBOX_TOKEN__;
+      return token ? `https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}@2x.jpg90?access_token=${token}` : "";
+    }
   }
 ];
+function basemapAttribution(id) {
+  const b = basemap(id);
+  if (b.id === "satellite" && typeof window !== "undefined" && window.__SATELLITE_TILE_URL__) {
+    return window.__SATELLITE_ATTRIBUTION__ || "Satellite imagery";
+  }
+  return b.attribution;
+}
 function basemap(id) {
   return BASEMAPS.find((b) => b.id === id) || BASEMAPS[0];
 }
@@ -29978,7 +30001,7 @@ function CanvassMap({
     const layer = L.tileLayer(url, {
       maxZoom: MAP_MAX_ZOOM,
       minZoom: MAP_MIN_ZOOM,
-      attribution: bm.attribution
+      attribution: basemapAttribution(basemapId)
     });
     layer.on("tileerror", () => setTileFails((n) => n + 1));
     layer.on("tileload", () => setTileFails(0));
@@ -31314,7 +31337,7 @@ function CanvassScreen({
           {
             type: "button",
             "data-testid": `basemap-${b.id}`,
-            onClick: () => usable ? setBasemapId(b.id) : toast && toast("Satellite needs a map key \u2014 add VITE_SATELLITE_TILE_URL and redeploy"),
+            onClick: () => usable ? setBasemapId(b.id) : toast && toast("Satellite needs an imagery key \u2014 add VITE_MAPBOX_TOKEN and redeploy. See DEPLOY.md."),
             style: {
               border: "none",
               borderRadius: 999,

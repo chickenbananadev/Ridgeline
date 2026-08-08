@@ -31,12 +31,23 @@ window.__PROPERTY_KEY__ = import.meta.env.VITE_PROPERTY_KEY || "";
    company. Point this at a dedicated tile key (or a satellite style) to
    separate the two. {z}/{x}/{y} are substituted per tile. */
 window.__MAP_TILE_URL__ = import.meta.env.VITE_MAP_TILE_URL || "";
-/* Satellite imagery for the canvassing map. Left empty on purpose:
-   every genuinely free aerial basemap bars commercial use (Esri's World
-   Imagery explicitly), so this needs a real provider key. The
-   Street/Satellite control ships either way — it just explains itself
-   instead of doing nothing until this is set. */
+/* Satellite imagery for the canvassing map — aerial is most of the
+   point of a map for roofing, since you can count facets and see the
+   ridge line before you knock.
+
+   It needs a paid-tier provider: every genuinely free aerial basemap
+   bars commercial use, Esri's World Imagery explicitly. A Mapbox token
+   is the one-value path — the tile URL is built from it. The
+   Street/Satellite control ships either way and explains itself rather
+   than doing nothing until one of these is set. */
+window.__MAPBOX_TOKEN__ = import.meta.env.VITE_MAPBOX_TOKEN || "";
+/* Any other provider: a full {z}/{x}/{y} template, which WINS over the
+   Mapbox token above so a company already paying for Google or MapTiler
+   never needs one. Set VITE_SATELLITE_ATTRIBUTION too — whoever's
+   imagery it is has to be credited over the tiles, and printing
+   Mapbox's name over someone else's would be a licence breach. */
 window.__SATELLITE_TILE_URL__ = import.meta.env.VITE_SATELLITE_TILE_URL || "";
+window.__SATELLITE_ATTRIBUTION__ = import.meta.env.VITE_SATELLITE_ATTRIBUTION || "";
 /* Google OAuth client ID for per-rep Gmail sending. The matching client
    SECRET lives only in the gmail-oauth / gmail-send Edge Functions. */
 window.__GOOGLE_CLIENT_ID__ = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
