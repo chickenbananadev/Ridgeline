@@ -15263,10 +15263,69 @@ function normalizeStormWatch(v) {
   s.lookbackDays = Math.min(30, Math.max(1, Math.round(Number(s.lookbackDays) || 7)));
   return s;
 }
+function stormAlertKey(watchId, kind, date) {
+  return `${watchId}|${kind}|${date}`;
+}
+function detectStormAlerts(reportsByDate, area, thresholds) {
+  if (!area || area.lat == null) return [];
+  const t = { minHailIn: 0, minWindMph: 0, ...thresholds || {} };
+  const radius = Number(area.radiusMiles) || 15;
+  const out = [];
+  Object.entries(reportsByDate || {}).forEach(([date, day]) => {
+    const worst = {};
+    (day.reports || []).forEach((r) => {
+      if (r.kind !== "hail" && r.kind !== "wind") return;
+      if (r.miles != null && r.miles > radius) return;
+      const value = r.kind === "hail" ? r.mag : lsrWindMph(r.mag, r.unit);
+      if (value == null || !isFinite(value)) return;
+      const floor = r.kind === "hail" ? t.minHailIn : t.minWindMph;
+      if (value < floor) return;
+      const cur = worst[r.kind];
+      if (!cur) worst[r.kind] = { value, report: r, count: 1 };
+      else {
+        cur.count++;
+        if (value > cur.value) {
+          cur.value = value;
+          cur.report = r;
+        }
+      }
+    });
+    Object.entries(worst).forEach(([kind, w]) => {
+      const r = w.report;
+      out.push({
+        watchId: area.id,
+        watchName: area.name || "",
+        kind,
+        occurredOn: date,
+        magnitude: Math.round(w.value * 100) / 100,
+        unit: kind === "hail" ? "in" : "mph",
+        /* Centre on the STORM, not the office. The whole payoff is a
+           rep opening the map already standing where the hail fell. */
+        lat: r.lat != null ? r.lat : area.lat,
+        lng: r.lng != null ? r.lng : area.lng,
+        radiusMiles: radius,
+        place: [r.city, [r.county, r.state].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+        reportCount: w.count,
+        reportKey: stormAlertKey(area.id, kind, date)
+      });
+    });
+  });
+  return out.sort((a, b) => b.occurredOn < a.occurredOn ? -1 : b.occurredOn > a.occurredOn ? 1 : b.magnitude - a.magnitude);
+}
 function jobsWithinRadius(jobs, area) {
   if (!area || area.lat == null) return [];
   const radius = Number(area.radiusMiles) || 15;
   return (jobs || []).filter((j) => j.lat != null && j.lng != null && haversineMiles(area.lat, area.lng, j.lat, j.lng) <= radius);
+}
+function stormAlertHeadline(a) {
+  if (!a) return "";
+  const where = a.place || a.watch_name || a.watchName || "your area";
+  if (a.kind === "hail") {
+    const size = hailSizeLabel(Number(a.magnitude));
+    const inches = Number(a.magnitude).toFixed(2).replace(/\.?0+$/, "");
+    return `${inches}" hail${size ? ` (${size})` : ""} \u2014 ${where}`;
+  }
+  return `${Math.round(Number(a.magnitude))} mph winds \u2014 ${where}`;
 }
 function seedStormAreas(jobs, radiusMiles = 15) {
   const pts = (jobs || []).filter((j) => j.lat != null && j.lng != null);
@@ -15291,6 +15350,25 @@ function seedStormAreas(jobs, radiusMiles = 15) {
     });
   });
   return areas.sort((a, b) => b.count - a.count);
+}
+function mergeStormAlert(existing, candidate) {
+  if (!existing) return "insert";
+  const was = Number(existing.magnitude), now = Number(candidate.magnitude);
+  if (isFinite(now) && (!isFinite(was) || now > was)) return "raise";
+  return "skip";
+}
+function openStormAlerts(alerts) {
+  return (alerts || []).filter((a) => !a.dismissed && !a.acknowledged_at).sort((a, b) => a.occurred_on < b.occurred_on ? 1 : a.occurred_on > b.occurred_on ? -1 : Number(b.magnitude) - Number(a.magnitude));
+}
+function stormAlertAge(occurredOn, todayIsoStr) {
+  if (!occurredOn) return "";
+  const days = Math.round((Date.parse(todayIsoStr + "T00:00Z") - Date.parse(occurredOn + "T00:00Z")) / 864e5);
+  if (!isFinite(days)) return "";
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  if (days < 14) return "last week";
+  return `${Math.round(days / 7)} weeks ago`;
 }
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded = false }) {
   const [day, setDay] = (0, import_react.useState)(() => todayIso());
@@ -30017,6 +30095,161 @@ function CanvassMap({
     ] })
   ] });
 }
+function useStormAlerts({ tenantId, ready }) {
+  const [alerts, setAlerts] = (0, import_react.useState)({});
+  const [err, setErr] = (0, import_react.useState)("");
+  const [loading, setLoading] = (0, import_react.useState)(false);
+  const merge = (rows) => setAlerts((prev) => {
+    const next = { ...prev };
+    (rows || []).forEach((r) => {
+      if (r && r.id) next[r.id] = r;
+    });
+    return next;
+  });
+  const load = async () => {
+    const db = DB();
+    if (!db || !ready) return;
+    setLoading(true);
+    const { data, error } = await db.from("crm_storm_alerts").select("*").order("occurred_on", { ascending: false }).limit(500);
+    setLoading(false);
+    if (error) {
+      setErr("Couldn't load storm alerts. " + (error.message || ""));
+      return;
+    }
+    setErr("");
+    setAlerts(Object.fromEntries((data || []).map((r) => [r.id, r])));
+  };
+  (0, import_react.useEffect)(() => {
+    load();
+  }, [ready, tenantId]);
+  const patch = async (id, fields) => {
+    const before = alerts[id];
+    if (!before) return;
+    merge([{ ...before, ...fields }]);
+    const db = DB();
+    if (!db) return;
+    const { data, error } = await db.from("crm_storm_alerts").update(fields).eq("id", id).select().maybeSingle();
+    if (error) {
+      setErr("That didn't save \u2014 you're seeing it on this device only. " + (error.message || ""));
+      merge([before]);
+      return;
+    }
+    if (data) merge([data]);
+  };
+  const acknowledge = (id, userId) => patch(id, { acknowledged_by: userId || null, acknowledged_at: (/* @__PURE__ */ new Date()).toISOString() });
+  const unacknowledge = (id) => patch(id, { acknowledged_by: null, acknowledged_at: null });
+  const dismiss = (id) => patch(id, { dismissed: true });
+  const restore = (id) => patch(id, { dismissed: false });
+  const record = async (candidate, existingByKey) => {
+    const existing = existingByKey[candidate.reportKey];
+    const action = mergeStormAlert(existing, candidate);
+    if (action === "skip") return "skip";
+    const row = {
+      watch_id: candidate.watchId,
+      watch_name: candidate.watchName,
+      kind: candidate.kind,
+      lat: candidate.lat,
+      lng: candidate.lng,
+      radius_miles: candidate.radiusMiles,
+      occurred_on: candidate.occurredOn,
+      magnitude: candidate.magnitude,
+      unit: candidate.unit,
+      place: candidate.place,
+      report_count: candidate.reportCount,
+      report_key: candidate.reportKey
+    };
+    const db = DB();
+    if (!db) {
+      const local = { id: existing ? existing.id : uid("sa"), ...row, dismissed: false, acknowledged_at: null };
+      merge([local]);
+      return action;
+    }
+    if (action === "raise") {
+      const { data: data2, error: error2 } = await db.from("crm_storm_alerts").update({ ...row, acknowledged_by: null, acknowledged_at: null, dismissed: false }).eq("id", existing.id).select().maybeSingle();
+      if (error2) {
+        setErr("Couldn't update a storm alert. " + (error2.message || ""));
+        return "skip";
+      }
+      if (data2) merge([data2]);
+      return "raise";
+    }
+    const { data, error } = await db.from("crm_storm_alerts").insert({ id: uid("sa"), ...row }).select().maybeSingle();
+    if (error) {
+      if (!/duplicate|unique/i.test(error.message || "")) {
+        setErr("Couldn't raise a storm alert. " + (error.message || ""));
+      }
+      return "skip";
+    }
+    if (data) merge([data]);
+    return "insert";
+  };
+  (0, import_react.useEffect)(() => {
+    const db = DB();
+    if (!db || !ready || !tenantId) return;
+    const ch = db.channel("crm-storm-alerts").on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "crm_storm_alerts", filter: `tenant_id=eq.${tenantId}` },
+      (p) => p.new && merge([p.new])
+    ).on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "crm_storm_alerts", filter: `tenant_id=eq.${tenantId}` },
+      (p) => p.new && merge([p.new])
+    ).subscribe();
+    return () => {
+      db.removeChannel(ch);
+    };
+  }, [ready, tenantId]);
+  const list = Object.values(alerts);
+  return {
+    list,
+    byKey: Object.fromEntries(list.map((a) => [a.report_key, a])),
+    acknowledge,
+    unacknowledge,
+    dismiss,
+    restore,
+    record,
+    reload: load,
+    err,
+    setErr,
+    loading
+  };
+}
+function useStormSweep({ watch, alerts, ready }) {
+  const running = (0, import_react.useRef)(false);
+  const alertsRef = (0, import_react.useRef)(alerts);
+  alertsRef.current = alerts;
+  (0, import_react.useEffect)(() => {
+    const w = normalizeStormWatch(watch);
+    if (!ready || !w.enabled || !w.areas.length) return;
+    let alive = true;
+    const sweep = async () => {
+      if (running.current || !alive) return;
+      running.current = true;
+      try {
+        const end = todayIso();
+        const start = new Date(Date.now() - w.lookbackDays * 864e5).toISOString().slice(0, 10);
+        for (const area of w.areas) {
+          const reports = await fetchStormReports(area.lat, area.lng, start, end);
+          if (!alive) return;
+          if (!reports) continue;
+          const found = detectStormAlerts(reports, area, { minHailIn: w.minHailIn, minWindMph: w.minWindMph });
+          for (const c of found) {
+            if (!alive) return;
+            await alertsRef.current.record(c, alertsRef.current.byKey);
+          }
+        }
+      } finally {
+        running.current = false;
+      }
+    };
+    sweep();
+    const t = setInterval(sweep, 30 * 60 * 1e3);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [ready, JSON.stringify(normalizeStormWatch(watch))]);
+}
 function useCanvassPins({ tenantId, ready }) {
   const [pins, setPins] = (0, import_react.useState)({});
   const [err, setErr] = (0, import_react.useState)("");
@@ -30224,6 +30457,180 @@ function CanvassStatusEditor({ statuses, setStatuses, onBack, toast, currentUser
       ] })
     ] }, s.id)),
     !canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 12 }, children: "Only an admin or someone with company-settings access can change these." })
+  ] });
+}
+function StormAlertBanner({ alerts, onOpen, onCanvass }) {
+  const open = openStormAlerts(alerts);
+  const [i, setI] = (0, import_react.useState)(0);
+  (0, import_react.useEffect)(() => {
+    if (open.length < 2) return;
+    const t = setInterval(() => setI((x) => (x + 1) % open.length), 6e3);
+    return () => clearInterval(t);
+  }, [open.length]);
+  if (!open.length) return null;
+  const a = open[Math.min(i, open.length - 1)];
+  const age = stormAlertAge(a.occurred_on, todayIso());
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-testid": "storm-banner", style: {
+    margin: "0 16px 14px",
+    background: "#FEF3F2",
+    border: "1px solid #FDA29B",
+    borderRadius: 12,
+    padding: "12px 14px"
+  }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.AlertTriangle, { size: 16, color: "#B42318", style: { flexShrink: 0, marginTop: 2 } }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13.5, fontWeight: 700, color: "#B42318", lineHeight: 1.45 }, children: stormAlertHeadline(a) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: "#912018", marginTop: 3 }, children: [
+          age,
+          a.report_count > 1 ? ` \xB7 ${a.report_count} reports` : "",
+          open.length > 1 ? ` \xB7 ${open.length} storms unhandled` : ""
+        ] })
+      ] }),
+      open.length > 1 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "button",
+        {
+          onClick: () => setI((x) => (x + 1) % open.length),
+          "aria-label": "Next storm",
+          style: { border: "none", background: "none", cursor: "pointer", flexShrink: 0, padding: 4 },
+          children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.ChevronRight, { size: 17, color: "#B42318" })
+        }
+      )
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 11 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, onClick: () => onCanvass(a), "data-testid": "storm-banner-canvass", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 13 }),
+        " Knock it"
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: onOpen, children: "All storms" })
+    ] })
+  ] });
+}
+function StormAlertsScreen({ alerts, jobs, users, currentUser, onBack, onCanvass, onSetup, toast }) {
+  const [tab, setTab] = (0, import_react.useState)("open");
+  const list = alerts.list || [];
+  const open = openStormAlerts(list);
+  const handled = list.filter((a) => !a.dismissed && a.acknowledged_at).sort((a, b) => a.occurred_on < b.occurred_on ? 1 : -1);
+  const dropped = list.filter((a) => a.dismissed).sort((a, b) => a.occurred_on < b.occurred_on ? 1 : -1);
+  const shown = tab === "open" ? open : tab === "handled" ? handled : dropped;
+  const today = todayIso();
+  const nameOf = (id) => (users || []).find((u) => u.id === id)?.name || "someone";
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      SubHeader,
+      {
+        title: "Storm alerts",
+        onBack,
+        right: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, kind: "ghost", onClick: onSetup, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Settings, { size: 14 }),
+          " Setup"
+        ] })
+      }
+    ),
+    alerts.err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { marginTop: 12, background: "#FEF3F2", border: "1px solid #FDA29B", borderRadius: 10, padding: "10px 12px", fontSize: 12.5, color: "#B42318" }, children: alerts.err }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", gap: 6, marginTop: 14 }, children: [["open", "Needs attention", open.length], ["handled", "Handled", handled.length], ["dismissed", "Dismissed", dropped.length]].map(([id, label, n]) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { onClick: () => setTab(id), style: {
+      flex: 1,
+      padding: "9px 6px",
+      borderRadius: 9,
+      cursor: "pointer",
+      fontSize: 12.5,
+      fontWeight: 700,
+      border: `1px solid ${tab === id ? T.accent : S.line}`,
+      background: tab === id ? T.accentSoft : S.card,
+      color: tab === id ? T.accent : S.sub
+    }, children: [
+      label,
+      n ? ` \xB7 ${n}` : ""
+    ] }, id)) }),
+    !shown.length && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 16, style: { marginTop: 12 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5 }, children: tab === "open" ? "Nothing unhandled. Storms show up here automatically when hail or damaging wind lands inside one of your watched areas." : tab === "handled" ? "Nothing acknowledged yet." : "Nothing dismissed." }) }),
+    shown.map((a) => {
+      const inside = jobsWithinRadius(jobs, { lat: a.lat, lng: a.lng, radiusMiles: a.radius_miles });
+      return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 14, style: { marginTop: 10 }, testId: "storm-alert-card", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 10, alignItems: "flex-start" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+            width: 30,
+            height: 30,
+            borderRadius: 8,
+            flexShrink: 0,
+            display: "grid",
+            placeItems: "center",
+            background: a.kind === "hail" ? "#FEF0C7" : "#E0EAFF"
+          }, children: a.kind === "hail" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CloudRain, { size: 15, color: "#B54708" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Zap, { size: 15, color: "#3538CD" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 14.5, fontWeight: 800, lineHeight: 1.35 }, children: stormAlertHeadline(a) }),
+            /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 4 }, children: [
+              stormAlertAge(a.occurred_on, today),
+              " \xB7 ",
+              a.occurred_on,
+              a.watch_name ? ` \xB7 ${a.watch_name}` : "",
+              a.report_count > 1 ? ` \xB7 ${a.report_count} spotter reports` : ""
+            ] })
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: {
+          marginTop: 11,
+          padding: "9px 11px",
+          borderRadius: 9,
+          background: S.soft,
+          fontSize: 12.5,
+          color: S.sub,
+          lineHeight: 1.5
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("b", { style: { color: S.ink }, children: [
+            inside.length,
+            " of your job",
+            inside.length === 1 ? "" : "s"
+          ] }),
+          inside.length === 1 ? " sits" : " sit",
+          " within ",
+          Math.round(Number(a.radius_miles) || 0),
+          " mi of where this hit."
+        ] }),
+        a.acknowledged_at && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: "#177245", marginTop: 8, display: "flex", gap: 6, alignItems: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.CheckCircle2, { size: 13 }),
+          " Acknowledged by ",
+          nameOf(a.acknowledged_by),
+          " on ",
+          String(a.acknowledged_at).slice(0, 10)
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, onClick: () => onCanvass(a), "data-testid": "storm-canvass", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 13 }),
+            " Knock it"
+          ] }),
+          !a.dismissed && !a.acknowledged_at && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+            Btn,
+            {
+              small: true,
+              kind: "ghost",
+              "data-testid": "storm-ack",
+              onClick: () => {
+                alerts.acknowledge(a.id, currentUser && currentUser.id);
+                toast("Marked as being worked");
+              },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Check, { size: 13 }),
+                " On it"
+              ]
+            }
+          ),
+          a.acknowledged_at && !a.dismissed && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => alerts.unacknowledge(a.id), children: "Undo" }),
+          !a.dismissed ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            Btn,
+            {
+              small: true,
+              kind: "ghost",
+              "data-testid": "storm-dismiss",
+              onClick: () => {
+                alerts.dismiss(a.id);
+                toast("Dismissed \u2014 it only comes back if a bigger report lands");
+              },
+              children: "Not worth working"
+            }
+          ) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { small: true, kind: "ghost", onClick: () => alerts.restore(a.id), children: "Bring back" })
+        ] })
+      ] }, a.id);
+    })
   ] });
 }
 function StormWatchEditor({ watch, setWatch, jobs, onBack, toast, currentUser }) {
@@ -31288,6 +31695,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
     ]],
     ["Sales & marketing", [
       ["canvass", import_lucide_react.MapPin, "Canvassing", "Knock a neighborhood \u2014 pins, dispositions, storm history"],
+      ["stormalerts", import_lucide_react.CloudRain, "Storm alerts", "Hail and wind that landed in your territory"],
       ["activity", import_lucide_react.ClipboardList, "Activity feed", currentUser && canManageCompanyConfig(currentUser) ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", import_lucide_react.Phone, "Calls & attribution", "Log calls, see which sources make money"],
       ["contacts", import_lucide_react.Users, "Contacts", "Every client, with consent status"],
@@ -32545,6 +32953,19 @@ function SupremeCRM() {
     usersRef: users,
     crewsRef: crews
   });
+  const stormAlerts = useStormAlerts({
+    tenantId: currentUser && currentUser.tenantId,
+    ready: liveAuth() ? !!currentUser : true
+  });
+  useStormSweep({ watch: stormWatch, alerts: stormAlerts, ready: hydrated });
+  const [canvassFocus, setCanvassFocus] = (0, import_react.useState)(null);
+  (0, import_react.useEffect)(() => {
+    if (nav !== "canvass") setCanvassFocus(null);
+  }, [nav]);
+  const canvassStorm = (a) => {
+    setCanvassFocus({ lat: a.lat, lng: a.lng, radiusMiles: Number(a.radius_miles) || 15 });
+    setNav("canvass");
+  };
   const markConversationRead = (conversationId) => {
     const db = DB();
     if (!db || !currentUser || !conversationId) return;
@@ -33269,6 +33690,7 @@ function SupremeCRM() {
   const readyToPayCount = jobs.filter(
     (j) => j.subInvoice && j.subInvoice.status === "confirmed" || j.capOutNotifiedAt && j.stageId !== "s10"
   ).length;
+  const openStormCount = openStormAlerts(stormAlerts.list).length;
   const openJob = openJobId ? jobs.find((j) => j.id === openJobId) : null;
   const quickJob = quickJobId ? jobs.find((j) => j.id === quickJobId) : null;
   const openJobScreen = (id, tab = null) => {
@@ -33338,7 +33760,10 @@ function SupremeCRM() {
       }
     ) : nav === "home" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
       liveDb() && jobs.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { margin: "14px 16px 0", background: "#EAF6EE", border: "1px solid #CDE8D6", borderRadius: 12, padding: "12px 14px", fontSize: 13, color: "#177245", lineHeight: 1.5 }, children: "Fresh database \u2014 no demo customers here. Everything you create now saves for real. Have a Roofr export? More \u2192 Import jobs pulls your whole pipeline in." }),
-      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { paddingTop: 14 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AnnouncementBar, { announcements }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { paddingTop: 14 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(StormAlertBanner, { alerts: stormAlerts.list, onOpen: () => setNav("stormalerts"), onCanvass: canvassStorm }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(AnnouncementBar, { announcements })
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         Dashboard,
         {
@@ -33656,14 +34081,30 @@ function SupremeCRM() {
     ) : nav === "canvass" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       CanvassScreen,
       {
-        onBack: () => setNav("more"),
+        onBack: () => {
+          setCanvassFocus(null);
+          setNav("more");
+        },
         currentUser: liveUser,
         jobs,
         users,
         canvassStatuses,
         toast,
+        focus: canvassFocus,
         onCreateLeadFromPin: createLeadFromCanvassPin,
         onOpenJob: openJobScreen
+      }
+    ) : nav === "stormalerts" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      StormAlertsScreen,
+      {
+        alerts: stormAlerts,
+        jobs,
+        users,
+        currentUser: liveUser,
+        onBack: () => setNav("more"),
+        onCanvass: canvassStorm,
+        onSetup: () => setNav("stormwatch"),
+        toast
       }
     ) : nav === "canvassstatuses" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
       CanvassStatusEditor,
@@ -33754,7 +34195,7 @@ function SupremeCRM() {
           id: "home",
           icon: import_lucide_react.Home,
           label: "Home",
-          badge: isAdmin ? readyToPayCount : 0,
+          badge: (isAdmin ? readyToPayCount : 0) + openStormCount,
           active: nav === "home" && !openJob,
           onPress: (id) => {
             setNav(id);
