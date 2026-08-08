@@ -94,7 +94,10 @@ ok(/window\.__SATELLITE_TILE_URL__ = import\.meta\.env\.VITE_SATELLITE_TILE_URL 
    The browser run is what confirms both actually render. */
 ok(/data-testid=\{`basemap-\$\{b\.id\}`\}/.test(src) && /\{BASEMAPS\.map\(\(b\) => \{/.test(src),
   "every basemap in the registry renders as a real, identifiable control");
-ok(/Satellite needs a map key — add VITE_SATELLITE_TILE_URL and redeploy/.test(src),
+/* Build 135 wired Mapbox as the one-value path, so the message names
+   the token rather than the raw tile URL. Still the same requirement:
+   a disabled control has to say what would enable it. */
+ok(/Satellite needs an imagery key — add VITE_MAPBOX_TOKEN and redeploy\. See DEPLOY\.md\./.test(src),
   "tapping satellite with no key says exactly what to do rather than doing nothing");
 ok(/every aerial basemap that looks free[\s\S]{0,80}bars commercial use/i.test(src)
   || /bars commercial use/.test(src),

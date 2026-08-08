@@ -611,7 +611,9 @@ then redeploy:
 | `VITE_PROPERTY_KEY` | property-record auto-fill (optional) |
 | `VITE_GOOGLE_CLIENT_ID` | per-rep Gmail sending (optional; pairs with the `GOOGLE_*` secrets) |
 | `VITE_MAP_TILE_URL` | canvassing street tiles (optional — see below) |
-| `VITE_SATELLITE_TILE_URL` | canvassing satellite imagery (optional — see below) |
+| `VITE_MAPBOX_TOKEN` | canvassing satellite imagery (optional — see below) |
+| `VITE_SATELLITE_TILE_URL` | satellite from a non-Mapbox provider (optional) |
+| `VITE_SATELLITE_ATTRIBUTION` | required alongside `VITE_SATELLITE_TILE_URL` |
 
 The app runs in demo mode (no backend) when the Supabase pair is absent, so a
 missing key never white-screens the site.
@@ -633,25 +635,46 @@ VITE_MAP_TILE_URL=https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?a
 
 ### Satellite imagery
 
-The canvassing map has a **Street / Satellite** toggle. Satellite stays greyed
-out, with an explanation when tapped, until `VITE_SATELLITE_TILE_URL` is set —
-there is no free option to default to. Every aerial basemap that looks free
-bars commercial use; Esri's World Imagery is explicit that it requires an
-ArcGIS licence and is not licensed for commercial use. So this needs a real
-provider key:
+The canvassing map has a **Street / Satellite** toggle. Aerial is most of the
+point of a map for roofing — you can count facets and see the ridge line before
+you knock — but satellite stays greyed out, with an explanation when tapped,
+until an imagery key is set. There is no free option to default to: every
+aerial basemap that looks free bars commercial use, and Esri's World Imagery is
+explicit that it requires an ArcGIS licence and is not licensed for commercial
+use.
+
+**Mapbox is wired in. One value turns it on.**
+
+1. Sign up at [mapbox.com](https://account.mapbox.com/auth/signup/). No card is
+   required to get a token.
+2. Copy the **Default public token** from your account page (it starts `pk.`).
+   A public token is the right kind — it ships in the browser bundle, which is
+   how all tile providers work. Restrict it to your domain under
+   Account → Tokens → URL restrictions.
+3. In Vercel, set `VITE_MAPBOX_TOKEN` to that value and redeploy.
+
+Satellite lights up on the next load. The free tier covers **200,000 tile
+requests a month**, which is a lot of canvassing — a rep working a
+neighbourhood for an hour is on the order of a few hundred. Past that it's
+metered per thousand; check current rates on Mapbox's pricing page before
+committing a large team.
+
+**Using a different provider instead.** Set `VITE_SATELLITE_TILE_URL` to a full
+`{z}/{x}/{y}` template — it takes precedence over the Mapbox token, so a
+company already paying for Google or MapTiler never needs one. **Set
+`VITE_SATELLITE_ATTRIBUTION` alongside it**: whoever's imagery it is must be
+credited over the tiles, and the app deliberately will not print Mapbox's name
+over someone else's imagery. Without it the corner reads a neutral "Satellite
+imagery", which is unlikely to satisfy your provider's terms.
 
 ```
-VITE_SATELLITE_TILE_URL=https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}@2x.jpg90?access_token=YOUR_TOKEN
+VITE_SATELLITE_TILE_URL=https://example-provider.com/tiles/{z}/{x}/{y}.jpg?key=YOUR_KEY
+VITE_SATELLITE_ATTRIBUTION=© Example Provider
 ```
 
-Mapbox is the recommendation — good roof-level imagery, a workable free tier,
-simple pricing after. Google's Map Tiles API has the best imagery and the most
-setup (Cloud billing account + API enablement). MapTiler is the cheapest.
-
-Whatever you use must permit the attribution shown in the map's corner. Update
-the `attribution` field on the matching entry in the `BASEMAPS` registry in
-`ridgeline.jsx` when you pick a provider — it currently reads "Satellite
-imagery", which is a placeholder, not a licence-satisfying credit.
+Google's Map Tiles API has the best imagery in most US suburbs and the most
+setup (Cloud billing account + API enablement), and bills from the first tile.
+MapTiler sits between the two on both price and imagery.
 
 If tiles fail to load for any reason — key missing, quota hit, provider down —
 the map says so plainly and keeps working: pins, dispositions, the list and the
