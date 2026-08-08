@@ -14586,6 +14586,88 @@ async function fetchRadarHail(lat, lng, start, end, radiusMiles = LSR_RADIUS_DEG
     return byDate;
   } catch (e) { return null; }
 }
+/* The same radar hail detections, from IEM's live feed instead of
+   NCEI's archive. NCEI SWDI publishes days late; IEM ingests the
+   Level III storm-attribute products AS THE RADAR EMITS THEM, so the
+   storm that hit yesterday — the one a canvassing team actually wants
+   — is here now and in SWDI next week. Same output shape as
+   fetchRadarHail so the two are interchangeable to callers.
+
+   Contract (verified from the service's source, akrherz/iem
+   pylib/iemweb/request/gis/nexrad_storm_attrs.py — the service itself
+   is not reachable from every environment we can test in):
+   - CSV, first line the header:
+     VALID,STORM_ID,NEXRAD,...,POSH,POH,MAX_SIZE,...,LAT,LON
+   - VALID is UTC in YYYYMMDDHHMM with no separators.
+   - MAX_SIZE is the hail estimate in inches; min_hail_size filters
+     server-side, which is what keeps a no-radar-filter query small.
+   - Zero matches is HTTP 200 with a plain-text "ERROR: no results…"
+     body, NOT an empty CSV — treated as a real (empty) answer.
+   - No bbox parameter exists, so space is bounded by asking the
+     nearest radar sites (same station-discovery pattern as the ASOS
+     wind path) and by the client-side distance check. If the station
+     list can't be fetched, the hail-only national query still works
+     and the distance check still applies. */
+const RADAR_ATTR_CACHE = new Map();
+async function fetchRadarAttrs(lat, lng, start, end, radiusMiles = LSR_RADIUS_DEG * 69) {
+  const key = `${weatherKey(lat, lng)}:${start}:${end}:${Math.round(radiusMiles)}`;
+  if (RADAR_ATTR_CACHE.has(key)) return RADAR_ATTR_CACHE.get(key);
+  try {
+    /* Same widening as the other storm windows: the end date is
+       inclusive locally, and a late local evening lands on the next
+       UTC date. */
+    const ets = new Date(Date.parse(end + "T00:00Z") + 2 * 864e5).toISOString().slice(0, 10);
+    let radarParam = "";
+    try {
+      const res = await fetch("https://mesonet.agron.iastate.edu/geojson/network/NEXRAD.geojson");
+      if (res.ok) {
+        const gj = await res.json();
+        const sites = nearestStations((gj && gj.features) || [], lat, lng, 3);
+        if (sites.length) radarParam = sites.map((s) => `&radar=${encodeURIComponent(s.sid)}`).join("");
+      }
+    } catch (e) { /* national hail-only query below still answers */ }
+    const url = "https://mesonet.agron.iastate.edu/cgi-bin/request/gis/nexrad_storm_attrs.py"
+      + `?fmt=csv&sts=${start}T00:00:00Z&ets=${ets}T00:00:00Z&min_hail_size=0.25${radarParam}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("attrs");
+    const text = await res.text();
+    if (/^ERROR/i.test(String(text).trim())) { RADAR_ATTR_CACHE.set(key, {}); return {}; }
+    const lines = String(text).split("\n").filter((l) => l.trim());
+    const header = (lines.shift() || "").split(",").map((h) => h.trim().toUpperCase());
+    const col = (name) => header.indexOf(name);
+    const iLat = col("LAT"), iLng = col("LON"), iSize = col("MAX_SIZE"),
+      iValid = col("VALID"), iPoh = col("POH"), iPosh = col("POSH"), iRadar = col("NEXRAD");
+    if (iLat < 0 || iLng < 0 || iSize < 0 || iValid < 0) throw new Error("attrs-header");
+    const byDate = {};
+    for (const line of lines) {
+      const cells = line.split(",");
+      const rlat = parseFloat(cells[iLat]), rlng = parseFloat(cells[iLng]);
+      const size = parseFloat(cells[iSize]);
+      if (!isFinite(rlat) || !isFinite(rlng) || !isFinite(size)) continue;
+      const miles = haversineMiles(lat, lng, rlat, rlng);
+      if (miles > radiusMiles) continue;
+      const iso = String(cells[iValid] || "").replace(
+        /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})$/, "$1-$2-$3T$4:$5:00Z");
+      const date = localDateAt(iso, lng);
+      if (!date || date < start || date > end) continue;
+      const row = byDate[date] || (byDate[date] = {
+        maxSizeIn: null, prob: null, sevProb: null, cells: 0, nearestMiles: null, radars: [],
+        points: [],
+      });
+      row.cells++;
+      if (row.points.length < RADAR_POINT_CAP) row.points.push({ lat: rlat, lng: rlng, sizeIn: size });
+      row.maxSizeIn = Math.max(row.maxSizeIn ?? 0, size);
+      const poh = parseFloat(cells[iPoh]), posh = parseFloat(cells[iPosh]);
+      if (isFinite(poh)) row.prob = Math.max(row.prob ?? 0, poh);
+      if (isFinite(posh)) row.sevProb = Math.max(row.sevProb ?? 0, posh);
+      if (row.nearestMiles == null || miles < row.nearestMiles) row.nearestMiles = miles;
+      const wsr = (cells[iRadar] || "").trim();
+      if (wsr && !row.radars.includes(wsr)) row.radars.push(wsr);
+    }
+    RADAR_ATTR_CACHE.set(key, byDate);
+    return byDate;
+  } catch (e) { return null; }
+}
 
 /* ==================================================================
    MEASURED WIND GUSTS — ASOS/AWOS airport instruments, via IEM.
@@ -14779,6 +14861,33 @@ function hailSwath(points, gridDeg = HAIL_GRID_DEG) {
 function swathBands(swath) {
   const present = new Set((swath || []).map((c) => hailBand(c.sizeIn).label));
   return HAIL_BANDS.filter((b) => present.has(b.label));
+}
+/* A day's spotter reports as swath points: only hail, only reports
+   with a size and a position. The same binner then draws them —
+   sparse cells where hail was actually called in, rather than radar's
+   full coverage, but real geometry the day it happens. */
+function reportedHailPoints(day) {
+  return ((day && day.reports) || [])
+    .filter((r) => r.kind === "hail" && r.mag != null && r.lat != null && r.lng != null)
+    .map((r) => ({ lat: r.lat, lng: r.lng, sizeIn: r.mag }));
+}
+/* What the canvassing map should draw for a storm day, in order of
+   preference. Radar coverage when the archive has it — but the NCEI
+   radar archive lags days behind real time, and "the day after the
+   storm" is exactly when a canvassing team is standing on the
+   driveway. So when radar has nothing yet, the day's spotter reports
+   (which the alert itself was raised from, already cached) become the
+   geometry. Both go through the same hailSwath binner; `source` says
+   which one the rep is looking at, because spotter cells must never
+   be captioned as radar coverage. Pure, so the ladder is testable. */
+function stormGeometry(radarByDate, lsrByDate, date) {
+  const radar = radarByDate && radarByDate[date];
+  if (radar && radar.points && radar.points.length) {
+    return { swath: hailSwath(radar.points), source: "radar" };
+  }
+  const pts = reportedHailPoints(lsrByDate && lsrByDate[date]);
+  if (pts.length) return { swath: hailSwath(pts), source: "reported" };
+  return { swath: [], source: null };
 }
 /* NOAA SPC storm-report page for a given ISO date (official corroboration). */
 function spcReportLink(iso) {
@@ -29375,6 +29484,7 @@ function CanvassMap({
   const circleRef = useRef(null);
   const swathRef = useRef(null);
   const fittedRef = useRef(null);
+  const circleFitRef = useRef(null);
   const tapPinRef = useRef(onTapPin);
   const moveRef = useRef(onMove);
   const [tileFails, setTileFails] = useState(0);
@@ -29413,7 +29523,15 @@ function CanvassMap({
       };
     }
     setReady(true);
-    return () => { map.remove(); mapRef.current = null; if (mapApiRef) mapApiRef.current = null; };
+    return () => {
+      map.remove(); mapRef.current = null;
+      if (mapApiRef) mapApiRef.current = null;
+      /* The fit guards remember what was framed ON THIS MAP — when the
+         map dies (leaving the screen, or StrictMode's dev double-mount
+         throwing away the first instance) that memory must die with
+         it, or the replacement map never gets framed at all. */
+      circleFitRef.current = null;
+    };
   }, [L]); // eslint-disable-line
 
   /* Basemap layer — swapped, not rebuilt, when the toggle changes. */
@@ -29494,21 +29612,47 @@ function CanvassMap({
     }).addTo(map);
   }, [L, me, ready]);
 
-  /* The watched area a rep arrived from. Drawn thin and dashed because
-     it is a SETTING, not weather — with a real swath on the map, a
-     solid circle would read as "hail fell across all of this", which
-     is the misreading the swath exists to prevent. */
+  /* The watched area a rep arrived from. With a real swath on the
+     map it stays a thin dashed outline — it is a SETTING, not
+     weather, and a solid circle over a swath would read as "hail
+     fell across all of this", the misreading the swath exists to
+     prevent. But when the circle is the ONLY geometry (radar not
+     published yet, wind alert, no reports), it gets a light fill:
+     that is the area to work, and an off-screen hairline is
+     indistinguishable from nothing.
+
+     Deps are the three scalars, not the highlight object — the
+     parent rebuilds that object every render, and depending on it
+     tore the circle down and redrew it on every keystroke. */
   useEffect(() => {
     const map = mapRef.current;
     if (!L || !map) return;
     if (circleRef.current) { map.removeLayer(circleRef.current); circleRef.current = null; }
-    if (!highlight) return;
+    if (!highlight) { circleFitRef.current = null; return; }
+    const hasSwath = !!(swath && swath.length);
     circleRef.current = L.circle([highlight.lat, highlight.lng], {
       radius: highlight.radiusMiles * 1609.34,
       color: "#B42318", weight: 1.5, opacity: 0.55, dashArray: "6 5",
-      fill: false, interactive: false,
+      fill: !hasSwath, fillColor: "#B42318", fillOpacity: hasSwath ? 0 : 0.07,
+      interactive: false,
     }).addTo(map);
-  }, [L, highlight, ready]);
+    /* Frame the circle the moment a rep arrives — before this, the
+       deep link opened at a fixed zoom where a 30-mile radius sat
+       entirely outside a 7-mile-wide phone screen, so "Knock it"
+       landed on what looked like an unmarked map. Once per focus
+       per map, and never once a swath is drawn: a rep panning away
+       to work a street — or hopping to the list view and back with
+       the storm's footprint already framed — must never be yanked
+       back to the opening shot. When a swath loads its own fit
+       takes over; the storm's real footprint beats the watched
+       disc. */
+    const key = `${highlight.lat},${highlight.lng},${highlight.radiusMiles}`;
+    if (!hasSwath && circleFitRef.current !== key) {
+      circleFitRef.current = key;
+      map.fitBounds(circleRef.current.getBounds(), { padding: [24, 24] });
+    }
+  }, [L, highlight && highlight.lat, highlight && highlight.lng,
+    highlight && highlight.radiusMiles, ready, swath]);
 
   /* THE HAIL SWATH. Where the storm actually tracked, banded by the
      worst size seen in each cell, so a rep can see which streets took
@@ -30574,20 +30718,50 @@ function CanvassScreen({
   /* The storm's actual footprint. Fetched here rather than carried in
      the alert row because it is thousands of points — far too much to
      put in a database column, and free to re-derive from the cached
-     radar answer. */
+     answers.
+
+     A ladder, not one source. Radar coverage is best, but NCEI's
+     radar archive lags days behind real time — for the storm that
+     hit YESTERDAY (the whole point of a storm alert) it returns
+     nothing. So: radar when published, else the day's spotter
+     reports drawn through the same binner, else an honest notice
+     that only the watched circle is available yet. The first version
+     showed a silently blank map in that third case, which is what
+     "there isn't a polygon or any radius" looks like from a truck. */
   const [swath, setSwath] = useState(null);
+  const [swathSource, setSwathSource] = useState(null);
   const [swathErr, setSwathErr] = useState(false);
   useEffect(() => {
     let alive = true;
-    setSwath(null); setSwathErr(false);
+    setSwath(null); setSwathSource(null); setSwathErr(false);
     if (!focus || !focus.date || focus.kind === "wind") return undefined;
     const reach = Math.max(Number(focus.radiusMiles) || 15, 15);
-    fetchRadarHail(focus.lat, focus.lng, focus.date, focus.date, reach).then((byDate) => {
+    (async () => {
+      const hasPoints = (byDate) => {
+        const d = byDate && byDate[focus.date];
+        return !!(d && d.points && d.points.length);
+      };
+      /* Radar, twice: the NCEI archive first (it carries the full
+         detection algorithm output), then IEM's live feed of the same
+         Level III products — which is the one that answers for the
+         storm that hit YESTERDAY, days before NCEI publishes it. */
+      let radar = await fetchRadarHail(focus.lat, focus.lng, focus.date, focus.date, reach);
+      let live = null;
+      if (!hasPoints(radar)) {
+        live = await fetchRadarAttrs(focus.lat, focus.lng, focus.date, focus.date, reach);
+        if (hasPoints(live)) radar = live;
+      }
+      /* Only ask for spotter reports when radar can't answer — and
+         usually this is a cache hit, because these very reports are
+         what raised the alert. */
+      const lsr = hasPoints(radar)
+        ? null
+        : await fetchStormReports(focus.lat, focus.lng, focus.date, focus.date);
       if (!alive) return;
-      if (!byDate) { setSwathErr(true); return; }
-      const day = byDate[focus.date];
-      setSwath(day ? hailSwath(day.points) : []);
-    }, () => { if (alive) setSwathErr(true); });
+      if (!radar && !live && !lsr) { setSwathErr(true); return; }
+      const g = stormGeometry(radar || {}, lsr || {}, focus.date);
+      setSwath(g.swath); setSwathSource(g.source);
+    })();
     return () => { alive = false; };
   }, [focus && focus.date, focus && focus.lat, focus && focus.lng]);
   const bands = swathBands(swath);
@@ -30775,10 +30949,16 @@ function CanvassScreen({
                   <span style={{ fontSize: 11.5, color: S.ink, fontVariantNumeric: "tabular-nums" }}>{b.label}</span>
                 </div>
               ))}
-              {/* Said once, plainly. A rep quoting this to an adjuster
-                  as a survey is how a claim gets picked apart. */}
+              {/* Said once, plainly, and matched to what is actually
+                  drawn. Radar cells are an estimate of coverage;
+                  spotter cells are where hail was called in and
+                  nothing more. Captioning spotter cells as radar —
+                  or either as a survey — is how a claim gets picked
+                  apart in front of an adjuster. */}
               <div style={{ fontSize: 10.5, color: S.sub, marginTop: 5, lineHeight: 1.35 }}>
-                Radar estimate — approximate area, not a survey
+                {swathSource === "reported"
+                  ? "Spotter reports — where hail was called in, not full coverage"
+                  : "Radar estimate — approximate area, not a survey"}
               </div>
             </div>
           )}
@@ -30789,6 +30969,22 @@ function CanvassScreen({
               padding: "8px 10px", fontSize: 11.5, color: "#B42318", lineHeight: 1.4,
             }}>
               Couldn't load the hail area for this storm. The pins and dispositions all still work.
+            </div>
+          )}
+          {/* Loaded fine and found nothing to draw — say so. The first
+              version left the map silently blank here, and from a
+              truck that is indistinguishable from broken. Info tone,
+              not error tone: nothing failed, the archive just hasn't
+              caught up to yesterday. */}
+          {swath && swath.length === 0 && !swathErr && focus && focus.date && focus.kind !== "wind" && (
+            <div data-testid="swath-pending" style={{
+              position: "absolute", left: 10, bottom: 138, zIndex: 600, maxWidth: 220,
+              background: S.card, border: `1px solid ${S.line}`, borderRadius: 10,
+              padding: "8px 10px", fontSize: 11.5, color: S.sub, lineHeight: 1.4,
+              boxShadow: "0 2px 8px rgba(0,0,0,.18)",
+            }}>
+              Radar hasn't published this day's hail track yet — it can lag a
+              day or two. The circle is the watched area from the alert.
             </div>
           )}
 
@@ -30814,7 +31010,13 @@ function CanvassScreen({
               return (
                 <button key={b.id} type="button" data-testid={`basemap-${b.id}`}
                   onClick={() => (usable ? setBasemapId(b.id)
-                    : toast && toast("Satellite needs an imagery key — add VITE_MAPBOX_TOKEN and redeploy. See DEPLOY.md."))}
+                    /* Two audiences. The person who can fix this gets
+                       told exactly how; a door-knocker told to "add an
+                       env var and redeploy" has just been shown an
+                       error message about someone else's job. */
+                    : toast && toast(canManageCompanyConfig(currentUser)
+                      ? "Satellite needs an imagery key — add VITE_MAPBOX_TOKEN and redeploy. See DEPLOY.md."
+                      : "Satellite isn't set up for your company yet — ask your admin."))}
                   style={{
                     border: "none", borderRadius: 999, padding: "6px 13px", cursor: "pointer",
                     fontSize: 12.5, fontWeight: 700, fontFamily: "inherit",
