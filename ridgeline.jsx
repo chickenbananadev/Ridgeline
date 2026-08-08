@@ -14446,6 +14446,246 @@ function haversineMiles(lat1, lng1, lat2, lng2) {
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 }
+
+/* ==================================================================
+   RADAR-DETECTED HAIL — NEXRAD Level-3, via NCEI's Severe Weather
+   Data Inventory.
+
+   THE PROBLEM THIS SOLVES. Local Storm Reports only exist where a
+   human stood outside during a hailstorm and phoned it in. That makes
+   them sparse and biased toward towns, roads and daylight. A roof two
+   miles from the nearest spotter can be destroyed and the lookup says
+   "no hail found" — which is not "no hail happened", but reads
+   exactly like it on screen, and loses the claim.
+
+   Radar has no such gap. Every sweep covers every address, so this
+   answers "did hail pass over THIS house" rather than "did anyone
+   near this house report hail". It is the same underlying data the
+   commercial hail-report companies resell.
+
+   What it is NOT: a measurement. The Hail Detection Algorithm infers
+   size from reflectivity above the freezing level, so it is an
+   estimate with real error bars, and it is labelled as an estimate
+   everywhere it appears. A spotter who measured a stone against a
+   ruler is better evidence OF SIZE; radar is better evidence of
+   COVERAGE. The two are shown together rather than one overriding the
+   other — see stormEvidence.
+
+   THREE THINGS IN THIS SERVICE'S CONTRACT WILL BITE IF IGNORED:
+
+   1. `limit` DEFAULTS TO 25. A serious hailstorm produces thousands
+      of cell detections; taking the default would silently truncate
+      to the first 25 rows and under-report the storm. Always sent.
+   2. `radius` IS DOCUMENTED AS UNRELIABLE — NCEI's own client docs
+      say do not use it. So the spatial filter is `bbox` (decimal
+      degrees, which is unambiguous) plus a client-side distance
+      check, the same belt-and-braces as the LSR path.
+   3. `enddate` IS EXCLUSIVE. An inclusive read would drop the last
+      day of the window — and the last day is usually the storm
+      someone is actually asking about.
+   ================================================================== */
+const RADAR_CACHE = new Map();
+const SWDI_LIMIT = 20000;
+/* Field names are read tolerantly across the plausible spellings.
+   This service is not reachable from every environment we can test
+   in, and build 127's bug was precisely a field-name assumption
+   (`type` vs `typetext`) that silently reported no hail for months. A
+   missing value must degrade to "unknown", never to zero. */
+function swdiNum(row, names) {
+  for (const n of names) {
+    const v = row[n] ?? row[n.toLowerCase()] ?? row[n.toUpperCase()];
+    if (v == null || v === "") continue;
+    const f = parseFloat(v);
+    if (isFinite(f)) return f;
+  }
+  return null;
+}
+/* SWDI has shipped its rows under a few different envelope keys over
+   the years. Take whichever one is actually an array. */
+function swdiRows(payload) {
+  if (!payload) return null;
+  for (const k of ["result", "results", "data", "rows"]) {
+    if (Array.isArray(payload[k])) return payload[k];
+  }
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.features)) {
+    return payload.features.map((f) => ({ ...(f.properties || {}),
+      LAT: f.geometry?.coordinates?.[1], LON: f.geometry?.coordinates?.[0] }));
+  }
+  return null;
+}
+async function fetchRadarHail(lat, lng, start, end, radiusMiles = LSR_RADIUS_DEG * 69) {
+  const key = `${weatherKey(lat, lng)}:${start}:${end}:${Math.round(radiusMiles)}`;
+  if (RADAR_CACHE.has(key)) return RADAR_CACHE.get(key);
+  const deg = Math.max(0.05, radiusMiles / 69);
+  const compact = (d) => d.replace(/-/g, "");
+  /* +1 day because enddate is EXCLUSIVE, +1 more because a late local
+     evening storm lands on the following UTC date — the same reason
+     the LSR window is widened. */
+  const stop = new Date(Date.parse(end + "T00:00Z") + 2 * 864e5).toISOString().slice(0, 10);
+  const range = `${compact(start)}:${compact(stop)}`;
+  const bbox = `${(lng - deg).toFixed(3)},${(lat - deg).toFixed(3)},${(lng + deg).toFixed(3)},${(lat + deg).toFixed(3)}`;
+  const base = `https://www.ncei.noaa.gov/swdiws/json/nx3hail/${range}`;
+  try {
+    let rows = null;
+    /* Bounded first. If the service rejects the bbox shape, fall back
+       to the 0.1° tile, which is coarser but always accepted. Never
+       fall back to an unbounded national query here — unlike LSRs,
+       radar cells number in the millions. */
+    for (const url of [
+      `${base}?bbox=${bbox}&limit=${SWDI_LIMIT}`,
+      `${base}?tile=${lng.toFixed(1)},${lat.toFixed(1)}&limit=${SWDI_LIMIT}`,
+    ]) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        rows = swdiRows(await res.json());
+        if (rows) break;
+      } catch (e) { /* try the next shape */ }
+    }
+    if (!rows) throw new Error("swdi");
+    const byDate = {};
+    for (const r of rows) {
+      const rlat = swdiNum(r, ["LAT", "Latitude"]);
+      const rlng = swdiNum(r, ["LON", "LONGITUDE", "Longitude"]);
+      if (rlat == null || rlng == null) continue;
+      const miles = haversineMiles(lat, lng, rlat, rlng);
+      if (miles > radiusMiles) continue;
+      /* MAXSIZE is the Hail Detection Algorithm's maximum estimated
+         size in inches. Other spellings are accepted because a silent
+         null here would look identical to "no hail". */
+      const size = swdiNum(r, ["MAXSIZE", "MAX_SIZE", "SIZE", "MESH"]);
+      if (size == null) continue;
+      const when = r.ZTIME || r.ztime || r.TIME || r.time || "";
+      const date = localDateAt(String(when).replace(" ", "T").replace(/Z?$/, "Z"), lng);
+      if (!date || date < start || date > end) continue;
+      const row = byDate[date] || (byDate[date] = {
+        maxSizeIn: null, prob: null, sevProb: null, cells: 0, nearestMiles: null, radars: [],
+      });
+      row.cells++;
+      row.maxSizeIn = Math.max(row.maxSizeIn ?? 0, size);
+      const prob = swdiNum(r, ["PROB", "POH"]);
+      const sev = swdiNum(r, ["SEVPROB", "SEV_PROB", "POSH"]);
+      if (prob != null) row.prob = Math.max(row.prob ?? 0, prob);
+      if (sev != null) row.sevProb = Math.max(row.sevProb ?? 0, sev);
+      if (row.nearestMiles == null || miles < row.nearestMiles) row.nearestMiles = miles;
+      const wsr = r.WSR_ID || r.wsr_id;
+      if (wsr && !row.radars.includes(wsr)) row.radars.push(wsr);
+    }
+    RADAR_CACHE.set(key, byDate);
+    return byDate;
+  } catch (e) { return null; }
+}
+
+/* ==================================================================
+   MEASURED WIND GUSTS — ASOS/AWOS airport instruments, via IEM.
+
+   A wind claim currently rests on a spotter's ESTIMATE ("60 mph") or
+   ERA5's MODEL. Both are arguable. An ASOS anemometer four miles away
+   recording a 71 mph peak gust is an instrument reading from a
+   federally-maintained station, and it is the single most defensible
+   number available for wind — it ends the argument rather than
+   starting one.
+
+   Two requests: the state's station list (GeoJSON, cheap, cached for
+   the session), then one multi-station observation pull for the
+   nearest few. The service is rate-limited to roughly one request per
+   IP per second, so this deliberately does not fan out per station.
+   ================================================================== */
+const ASOS_NET_CACHE = new Map();
+const GUST_CACHE = new Map();
+/* Pure so the choice of stations can be checked without a network. */
+function nearestStations(features, lat, lng, n = 3) {
+  return (features || [])
+    .map((f) => {
+      const c = f.geometry && f.geometry.coordinates;
+      const sid = f.properties && f.properties.sid;
+      if (!c || !sid) return null;
+      return { sid, name: (f.properties.sname || sid), lat: c[1], lng: c[0],
+        miles: haversineMiles(lat, lng, c[1], c[0]) };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.miles - b.miles)
+    .slice(0, n);
+}
+/* The ASOS service answers in CSV, not JSON. Parsed by header name
+   rather than column position — the column set changes with the
+   `data` parameter, and positional parsing would read the wrong
+   column the first time that list is edited. */
+function parseAsosCsv(text) {
+  const lines = String(text || "").split("\n").filter((l) => l && !l.startsWith("#"));
+  if (lines.length < 2) return [];
+  const head = lines[0].split(",").map((h) => h.trim());
+  const idx = (name) => head.indexOf(name);
+  const iSta = idx("station"), iTime = idx("valid"),
+    iGust = idx("gust"), iPeak = idx("peak_wind_gust"), iLon = idx("lon"), iLat = idx("lat");
+  if (iSta < 0 || iTime < 0) return [];
+  const out = [];
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split(",");
+    /* ASOS writes "M" for missing. Number("M") is NaN, but Number("")
+       is 0 — so an empty cell must be rejected explicitly or a calm
+       hour would report as a zero-mph gust and drag a max down. */
+    const num = (j) => {
+      if (j < 0) return null;
+      const v = (c[j] || "").trim();
+      if (!v || v === "M" || v === "T") return null;
+      const f = parseFloat(v);
+      return isFinite(f) ? f : null;
+    };
+    const knots = Math.max(num(iGust) ?? -1, num(iPeak) ?? -1);
+    if (knots < 0) continue;
+    out.push({
+      station: (c[iSta] || "").trim(),
+      valid: (c[iTime] || "").trim(),
+      mph: knots * 1.15078,               // ASOS reports knots
+      lat: num(iLat), lng: num(iLon),
+    });
+  }
+  return out;
+}
+async function fetchMeasuredGusts(lat, lng, state, start, end) {
+  if (!state) return null;                 // no state, no station list — say nothing rather than guess
+  const key = `${weatherKey(lat, lng)}:${start}:${end}`;
+  if (GUST_CACHE.has(key)) return GUST_CACHE.get(key);
+  const net = `${String(state).toUpperCase()}_ASOS`;
+  try {
+    let features = ASOS_NET_CACHE.get(net);
+    if (!features) {
+      const res = await fetch(`https://mesonet.agron.iastate.edu/geojson/network/${net}.geojson`);
+      if (!res.ok) throw new Error("network");
+      features = (await res.json()).features || [];
+      ASOS_NET_CACHE.set(net, features);
+    }
+    const near = nearestStations(features, lat, lng, 3);
+    if (!near.length) throw new Error("stations");
+    const [y1, m1, d1] = start.split("-"), [y2, m2, d2] = end.split("-");
+    const stations = near.map((s) => `station=${encodeURIComponent(s.sid)}`).join("&");
+    const url = "https://mesonet.agron.iastate.edu/cgi-bin/request/asos.py"
+      + `?data=gust&data=peak_wind_gust&tz=Etc/UTC&format=comma&latlon=yes&missing=M&trace=T`
+      + `&year1=${y1}&month1=${+m1}&day1=${+d1}&year2=${y2}&month2=${+m2}&day2=${+d2}&${stations}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("asos");
+    const obs = parseAsosCsv(await res.text());
+    const milesOf = Object.fromEntries(near.map((s) => [s.sid, s.miles]));
+    const nameOf = Object.fromEntries(near.map((s) => [s.sid, s.name]));
+    const byDate = {};
+    for (const o of obs) {
+      const date = localDateAt(o.valid.replace(" ", "T") + "Z", lng);
+      if (!date || date < start || date > end) continue;
+      const row = byDate[date] || (byDate[date] = { gustMph: null, station: "", stationName: "", miles: null });
+      if (row.gustMph == null || o.mph > row.gustMph) {
+        row.gustMph = o.mph;
+        row.station = o.station;
+        row.stationName = nameOf[o.station] || o.station;
+        row.miles = milesOf[o.station] ?? null;
+      }
+    }
+    GUST_CACHE.set(key, byDate);
+    return byDate;
+  } catch (e) { return null; }
+}
+
 /* Hail size in the vocabulary adjusters and homeowners actually use.
    1" is the NWS severe threshold and the size most carriers treat as
    the start of a functional-damage conversation. */
@@ -14462,9 +14702,85 @@ function spcReportLink(iso) {
   const yymmdd = iso.slice(2).replace(/-/g, "");
   return `https://www.spc.noaa.gov/climo/reports/${yymmdd}_rpt.html`;
 }
+/* ------------------------------------------------------------------
+   THE EVIDENCE LADDER
+
+   Four sources now answer "what hit this roof", and they are not
+   equally strong. Presenting them as one undifferentiated blob would
+   be worse than useless in front of an adjuster: it invites the reply
+   "that's just a model" applied to everything, including the parts
+   that are instrument readings.
+
+   So every figure carries where it came from and how strong that is:
+
+     measured  — an instrument recorded it. An ASOS anemometer's peak
+                 gust ends an argument.
+     reported  — a trained spotter observed it and NWS logged it.
+                 Best evidence of HAIL SIZE, because someone held a
+                 stone against a ruler. Sparse by nature.
+     radar     — NEXRAD's hail algorithm inferred it from reflectivity.
+                 Best evidence of COVERAGE, because it saw every
+                 address. An estimate, and labelled as one.
+     modelled  — ERA5 reanalysis. Context, never a finding.
+
+   Radar does not outrank a spotter and a spotter does not outrank
+   radar; they answer different questions and both are shown. What the
+   ladder governs is which number leads a sentence and how it is
+   described.
+------------------------------------------------------------------- */
+const STORM_SOURCES = {
+  measured: { rank: 4, label: "Measured", blurb: "Recorded by an airport weather instrument" },
+  reported: { rank: 3, label: "Spotter", blurb: "Observed and reported to the National Weather Service" },
+  radar: { rank: 2, label: "Radar", blurb: "Estimated by NEXRAD radar — covers every address, not just where someone was standing" },
+  modelled: { rank: 1, label: "Modelled", blurb: "From reanalysis — real, but computed rather than observed" },
+};
+/* What actually backs this day, strongest first. Pure, so the claim a
+   row makes can be checked without rendering it. */
+function stormEvidence(r) {
+  const out = [];
+  if (!r) return out;
+  if (r.measuredGust != null) {
+    out.push({ source: "measured", peril: "wind", value: r.measuredGust, unit: "mph",
+      detail: r.gustStationName ? `${r.gustStationName}${r.gustMiles != null ? `, ${Math.round(r.gustMiles)} mi away` : ""}` : "" });
+  }
+  if (r.hailIn != null) {
+    out.push({ source: "reported", peril: "hail", value: r.hailIn, unit: "in",
+      detail: r.reports ? `${r.reports} spotter report${r.reports === 1 ? "" : "s"}` : "" });
+  }
+  if (r.reportWind != null) {
+    out.push({ source: "reported", peril: "wind", value: r.reportWind, unit: "mph", detail: "" });
+  }
+  if (r.radarHailIn != null) {
+    out.push({ source: "radar", peril: "hail", value: r.radarHailIn, unit: "in",
+      detail: r.radarNearestMiles != null && r.radarNearestMiles < 1
+        ? "directly overhead"
+        : r.radarNearestMiles != null ? `nearest cell ${Math.round(r.radarNearestMiles)} mi away` : "" });
+  }
+  if (r.gust != null && r.measuredGust == null && r.reportWind == null) {
+    out.push({ source: "modelled", peril: "wind", value: r.gust, unit: "mph", detail: "" });
+  }
+  return out.sort((a, b) => STORM_SOURCES[b.source].rank - STORM_SOURCES[a.source].rank);
+}
+/* The best hail figure available, with its provenance — what a rep
+   reads out on a doorstep and what the claim leads with. */
+function bestHail(r) {
+  if (!r) return null;
+  if (r.hailIn != null) return { inches: r.hailIn, source: "reported" };
+  if (r.radarHailIn != null) return { inches: r.radarHailIn, source: "radar" };
+  return null;
+}
 function stormSeverity(r) {
-  return (r.hailIn ? 4000 + r.hailIn * 500 : r.hail ? 3000 : 0)
-    + (r.reportWind || r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
+  /* Radar hail counts, and counts nearly as much as a spotter report.
+     Before this, a day the radar saw hail over the house but nobody
+     phoned in scored ZERO for hail and sank below a rainy afternoon —
+     which is exactly the day the homeowner is asking about. */
+  const hailIn = r.hailIn ?? r.radarHailIn ?? null;
+  const hailScore = hailIn != null
+    ? (r.hailIn != null ? 4000 : 3800) + hailIn * 500
+    : r.hail ? 3000 : 0;
+  return hailScore
+    + (r.measuredGust || r.reportWind || r.gust || 0)
+    + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
 }
 /* Merge the ERA5 day rows with the NOAA storm reports into one list.
 
@@ -14479,18 +14795,44 @@ function stormSeverity(r) {
    Every day carrying a storm report is therefore included
    unconditionally; ERA5-only days still come along when they were
    notable on their own (high wind, thunderstorm, heavy rain), because
-   a wind claim does not need a spotter to have called it in. */
-function mergeStormDays(days, reportsByDate) {
+   a wind claim does not need a spotter to have called it in.
+
+   RADAR EXTENDS THAT SAME ARGUMENT ONE STEP FURTHER, and it is the
+   bigger half. A spotter report proves hail fell where the spotter
+   stood. Radar proves hail passed over THIS address. A day the radar
+   saw hail overhead but nobody phoned in could not previously appear
+   in this list at all — no report, no ERA5 hail code (reanalysis has
+   no hail observation), so nothing to include. That is the "it says
+   no hail but the roof is destroyed" case, and it is now a day with
+   evidence on it. */
+function mergeStormDays(days, reportsByDate, radarByDate, gustByDate) {
   const byDate = new Map();
+  const blank = (date) => ({ date, gust: null, precip: null, code: null,
+    hail: false, highWind: false, damagingWind: false, storm: false });
   (days || []).forEach((d) => byDate.set(d.date, { ...d }));
   Object.entries(reportsByDate || {}).forEach(([date, rep]) => {
-    const base = byDate.get(date) || { date, gust: null, precip: null, code: null,
-      hail: false, highWind: false, damagingWind: false, storm: false };
+    const base = byDate.get(date) || blank(date);
     byDate.set(date, { ...base, hailIn: rep.hailIn, reportWind: rep.reportWind,
       reports: rep.count, reportList: rep.reports });
   });
+  Object.entries(radarByDate || {}).forEach(([date, rad]) => {
+    const base = byDate.get(date) || blank(date);
+    byDate.set(date, { ...base, radarHailIn: rad.maxSizeIn, radarCells: rad.cells,
+      radarProb: rad.prob, radarSevProb: rad.sevProb,
+      radarNearestMiles: rad.nearestMiles, radars: rad.radars });
+  });
+  Object.entries(gustByDate || {}).forEach(([date, g]) => {
+    const base = byDate.get(date) || blank(date);
+    byDate.set(date, { ...base, measuredGust: g.gustMph == null ? null : Math.round(g.gustMph),
+      gustStation: g.station, gustStationName: g.stationName, gustMiles: g.miles });
+  });
   return [...byDate.values()]
-    .filter((r) => r.reports || r.hail || r.highWind || r.storm || (r.precip != null && r.precip >= 0.75))
+    .filter((r) => r.reports || r.radarHailIn != null || r.hail || r.highWind || r.storm
+      /* A measured gust only earns a row at the wind threshold that
+         actually damages a roof. Every breezy Tuesday has a peak gust,
+         and listing them would bury the storms. */
+      || (r.measuredGust != null && r.measuredGust >= 45)
+      || (r.precip != null && r.precip >= 0.75))
     .sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1));
 }
 
@@ -14557,15 +14899,28 @@ function stormAlertKey(watchId, kind, date) {
    network call, and so the Edge Function can run this exact code
    rather than a second implementation that drifts.
 
-   Takes what fetchStormReports returns, one watched area, and the
-   company's thresholds. Returns alert candidates — the caller writes
-   them, because writing is where the in-app path and the scheduled
-   path legitimately differ. */
-function detectStormAlerts(reportsByDate, area, thresholds) {
+   Takes what fetchStormReports returns, one watched area, the
+   company's thresholds, and optionally what fetchRadarHail returns.
+   Returns alert candidates — the caller writes them, because writing
+   is where the in-app path and the scheduled path legitimately
+   differ.
+
+   RADAR IS WHY THIS CATCHES STORMS IT USED TO MISS. Spotter reports
+   are sparse; a hailstorm can cross a whole subdivision with nobody
+   phoning it in, and until now that storm raised no alert at all —
+   the team found out when a homeowner called a competitor. A radar
+   detection over the watched area is enough on its own.
+
+   A spotter report still WINS when both exist for the same day,
+   because a measured stone beats an estimate from reflectivity. The
+   alert says which one it is either way, so nobody quotes a radar
+   estimate to an adjuster as though someone had measured it. */
+function detectStormAlerts(reportsByDate, area, thresholds, radarByDate) {
   if (!area || area.lat == null) return [];
   const t = { minHailIn: 0, minWindMph: 0, ...(thresholds || {}) };
   const radius = Number(area.radiusMiles) || 15;
   const out = [];
+  const seen = new Set();
   Object.entries(reportsByDate || {}).forEach(([date, day]) => {
     /* Worst-per-kind, not first-per-kind. A rep needs to hear the 2"
        stone that fell three streets over, not the 1" one that
@@ -14603,10 +14958,39 @@ function detectStormAlerts(reportsByDate, area, thresholds) {
         radiusMiles: radius,
         place: [r.city, [r.county, r.state].filter(Boolean).join(" ")].filter(Boolean).join(", "),
         reportCount: w.count,
+        source: "reported",
         reportKey: stormAlertKey(area.id, kind, date),
       });
+      seen.add(`${kind}|${date}`);
     });
   });
+
+  /* Radar fills the gaps the spotters left. Same key shape, so a day
+     that later gets a spotter report simply raises the existing alert
+     through the normal magnitude rule rather than raising a second
+     one. */
+  Object.entries(radarByDate || {}).forEach(([date, rad]) => {
+    if (seen.has(`hail|${date}`)) return;          // a measured stone already covers this day
+    const size = rad && rad.maxSizeIn;
+    if (size == null || !isFinite(size) || size < t.minHailIn) return;
+    if (rad.nearestMiles != null && rad.nearestMiles > radius) return;
+    out.push({
+      watchId: area.id, watchName: area.name || "", kind: "hail",
+      occurredOn: date,
+      magnitude: Math.round(size * 100) / 100,
+      unit: "in",
+      /* Radar cells are summarised per day, so the exact cell centre
+         isn't carried — the area centre is the honest answer, and the
+         radius drawn on the map is what a rep actually works. */
+      lat: area.lat, lng: area.lng,
+      radiusMiles: radius,
+      place: area.name || "",
+      reportCount: rad.cells || 1,
+      source: "radar",
+      reportKey: stormAlertKey(area.id, "hail", date),
+    });
+  });
+
   /* Biggest first, then newest — the order an owner would read them. */
   return out.sort((a, b) => (b.occurredOn < a.occurredOn ? -1 : b.occurredOn > a.occurredOn ? 1 : b.magnitude - a.magnitude));
 }
@@ -14631,7 +15015,11 @@ function stormAlertHeadline(a) {
   if (a.kind === "hail") {
     const size = hailSizeLabel(Number(a.magnitude));
     const inches = Number(a.magnitude).toFixed(2).replace(/\.?0+$/, "");
-    return `${inches}" hail${size ? ` (${size})` : ""} — ${where}`;
+    /* "est" is small but load-bearing. A radar figure that reads like
+       a measured one is how a rep ends up quoting an estimate to an
+       adjuster as though someone had held a ruler to the stone. */
+    const est = a.source === "radar" ? " est" : "";
+    return `${inches}"${est} hail${size ? ` (${size})` : ""} — ${where}`;
   }
   return `${Math.round(Number(a.magnitude))} mph winds — ${where}`;
 }
@@ -16406,26 +16794,36 @@ function StormLookup({ job, dol, onPick, toast }) {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  const [reportsFailed, setReportsFailed] = useState(false);
+  const [missing, setMissing] = useState([]);
   const run = async () => {
-    setLoading(true); setErr(""); setRows(null); setReportsFailed(false);
+    setLoading(true); setErr(""); setRows(null); setMissing([]);
     let lat = job.lat ?? job.property?.lat, lng = job.lng ?? job.property?.lng;
     if (lat == null || lng == null) { const g = await geocodeZip(job.zip); if (g) { lat = g.lat; lng = g.lng; } }
     if (lat == null || lng == null) { setErr("No coordinates for this address yet — add a ZIP or pick the address from the map suggestions."); setLoading(false); return; }
-    /* Both sources at once. The storm reports are the hail record and
-       the reanalysis is the wind/rain context; neither one waits on the
-       other, and a failure in either still leaves a usable answer. */
-    const [days, reports] = await Promise.all([
+    const state = job.state || job.property?.state || "";
+    /* All four sources at once, none waiting on another. Radar answers
+       "did hail cross THIS roof", spotter reports answer "how big was
+       the stone someone measured", the airport instruments answer
+       "how hard did it actually blow", and the reanalysis is rain and
+       context. A failure in any one still leaves a usable answer — and
+       is named, rather than quietly shrinking the evidence. */
+    const [days, reports, radar, gusts] = await Promise.all([
       fetchStormHistory(lat, lng, start, end),
       fetchStormReports(lat, lng, start, end),
+      fetchRadarHail(lat, lng, start, end),
+      fetchMeasuredGusts(lat, lng, state, start, end),
     ]);
     setLoading(false);
-    if (!days && !reports) { setErr("Couldn't reach the weather archive or the NOAA report service. Check the connection and try again."); return; }
-    /* Say so when the hail record specifically is the thing that didn't
-       load — "no hail found" and "couldn't check for hail" are very
-       different answers to give a rep standing at a door. */
-    setReportsFailed(!reports);
-    const merged = mergeStormDays(days || [], reports || {}).slice(0, 40);
+    if (!days && !reports && !radar) { setErr("Couldn't reach any of the weather services. Check the connection and try again."); return; }
+    /* "No hail found" and "couldn't check for hail" are very different
+       answers to give a rep standing at a door, so each source that
+       failed is named rather than silently dropped. */
+    setMissing([
+      !reports && "spotter reports",
+      !radar && "radar hail",
+      state && !gusts && "measured wind",
+    ].filter(Boolean));
+    const merged = mergeStormDays(days || [], reports || {}, radar || {}, gusts || {}).slice(0, 40);
     setRows(merged);
     if (!merged.length) toast && toast("No storm reports or notable weather in that window");
   };
@@ -16436,11 +16834,12 @@ function StormLookup({ job, dol, onPick, toast }) {
 
   return (
     <Card style={{ marginTop: 12 }}>
-      <CardTitle right={<Chip tone="blue">NOAA / Open-Meteo</Chip>}>Storm history — date of loss</CardTitle>
+      <CardTitle right={<Chip tone="blue">4 sources</Chip>}>Storm history — date of loss</CardTitle>
       <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }}>
         Hail and wind days on record for this address, so you can set the date of loss from the record rather than memory.
-        Hail sizes and measured wind come from official NOAA Local Storm Reports near the property; gusts and rain
-        without a “NOAA” tag are ERA5 reanalysis — real, but modelled rather than observed. Confirm the NOAA report before filing.
+        Every figure is tagged with where it came from: <b>Measured</b> is an airport instrument, <b>Spotter</b> is a
+        report to the NWS, <b>Radar</b> is NEXRAD's hail estimate — which covers this roof even when nobody nearby
+        called it in — and <b>Modelled</b> is reanalysis, context rather than a finding.
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }}>
         <Field label="From"><input style={dateInputStyle} type="date" value={start} max={end} onChange={(e) => setStart(e.target.value)} /></Field>
@@ -16456,10 +16855,12 @@ function StormLookup({ job, dol, onPick, toast }) {
         ))}
       </div>
       {err && <div style={{ fontSize: 12.5, color: "#B42318", marginTop: 6 }}>{err}</div>}
-      {reportsFailed && rows && (
-        <Callout label="Hail record unavailable" tone="amber">
-          The NOAA storm-report service didn't respond, so what's below is modelled weather only — it is not
-          evidence that no hail fell here. Run the lookup again before telling a homeowner there's no hail on record.
+      {missing.length > 0 && rows && (
+        <Callout label={`Couldn't check ${missing.join(" or ")}`} tone="amber">
+          {missing.length === 3 ? "None of the observed sources answered, so what's below is modelled weather only."
+            : `The ${missing.join(" and ")} lookup didn't respond, so this list is missing that evidence.`}
+          {" "}This is not evidence that nothing happened here. Run the lookup again before telling a homeowner
+          there's nothing on record.
         </Callout>
       )}
       {rows && rows.length === 0 && !err && (
@@ -16480,21 +16881,41 @@ function StormLookup({ job, dol, onPick, toast }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>{r.date}</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 3 }}>
+                    {/* Spotter and radar hail are shown SIDE BY SIDE when
+                        both exist rather than one replacing the other.
+                        They answer different questions — a measured stone
+                        vs. proof the storm crossed this roof — and an
+                        adjuster conversation uses both. */}
                     {r.hailIn != null
-                      ? <Chip tone="red">Hail — {r.hailIn.toFixed(2).replace(/\.?0+$/, "")}″{size ? ` (${size})` : ""} · NOAA</Chip>
-                      : r.hail && <Chip tone="amber">Hail possible</Chip>}
-                    {r.reportWind != null
-                      ? <Chip tone={r.reportWind >= 58 ? "red" : "amber"}>{r.reportWind >= 58 ? "Damaging wind" : "High wind"} — {Math.round(r.reportWind)} mph · NOAA</Chip>
+                      ? <Chip tone="red">Hail — {r.hailIn.toFixed(2).replace(/\.?0+$/, "")}″{size ? ` (${size})` : ""} · Spotter</Chip>
+                      : r.radarHailIn == null && r.hail && <Chip tone="amber">Hail possible</Chip>}
+                    {r.radarHailIn != null && (
+                      <Chip tone={r.radarHailIn >= 1 ? "red" : "amber"}>
+                        Hail — {r.radarHailIn.toFixed(2).replace(/\.?0+$/, "")}″ est · Radar
+                        {r.radarNearestMiles != null && r.radarNearestMiles < 1 ? " overhead" : ""}
+                      </Chip>
+                    )}
+                    {/* Measured beats reported beats modelled, and only
+                        the strongest one gets a chip — three wind numbers
+                        on one row is noise, not evidence. */}
+                    {r.measuredGust != null
+                      ? <Chip tone={r.measuredGust >= 58 ? "red" : "amber"}>
+                          {r.measuredGust >= 58 ? "Damaging wind" : "High wind"} — {r.measuredGust} mph · Measured
+                        </Chip>
+                      : r.reportWind != null
+                      ? <Chip tone={r.reportWind >= 58 ? "red" : "amber"}>{r.reportWind >= 58 ? "Damaging wind" : "High wind"} — {Math.round(r.reportWind)} mph · Spotter</Chip>
                       : r.gust != null && <Chip tone={r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray"}>
-                          {r.gust >= 58 ? "Damaging wind" : r.gust >= 45 ? "High wind" : "Gusts"} — {r.gust} mph
+                          {r.gust >= 58 ? "Damaging wind" : r.gust >= 45 ? "High wind" : "Gusts"} — {r.gust} mph · Modelled
                         </Chip>}
                     {r.precip != null && r.precip >= 0.5 && <Chip tone="blue">{r.precip.toFixed(2)}″ rain</Chip>}
-                    {r.reports > 0 && (
+                    {(r.reports > 0 || r.radarHailIn != null || r.measuredGust != null) && (
                       <button onClick={() => setOpen(open === r.date ? null : r.date)}
+                        data-testid="storm-day-evidence"
                         style={{ border: "none", background: "none", padding: 0, cursor: "pointer",
                           fontSize: 11.5, fontWeight: 700, color: T.accent, fontFamily: "inherit" }}>
-                        {r.reports} report{r.reports === 1 ? "" : "s"}
-                        {nearest ? ` · nearest ${nearest.miles < 1 ? "<1" : Math.round(nearest.miles)} mi` : ""}
+                        {r.reports > 0
+                          ? `${r.reports} report${r.reports === 1 ? "" : "s"}${nearest ? ` · nearest ${nearest.miles < 1 ? "<1" : Math.round(nearest.miles)} mi` : ""}`
+                          : "Where this came from"}
                         {open === r.date ? " ▾" : " ▸"}
                       </button>
                     )}
@@ -16509,9 +16930,39 @@ function StormLookup({ job, dol, onPick, toast }) {
                   "measured vs estimated" are what make this usable as
                   evidence rather than a headline — a 2" report 25 miles
                   away is not this roof's storm. */}
-              {open === r.date && (r.reportList || []).length > 0 && (
+              {open === r.date && (
                 <div style={{ padding: "2px 0 10px" }}>
-                  {r.reportList.slice(0, 12).map((rep, i) => (
+                  {/* The provenance line — what backs this day and how
+                      strong each piece is, in the order an adjuster
+                      would weigh them. */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5, paddingBottom: (r.reportList || []).length ? 8 : 0 }}>
+                    {stormEvidence(r).map((e, i) => (
+                      <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", fontSize: 12.5 }}>
+                        <span style={{
+                          fontSize: 10.5, fontWeight: 800, letterSpacing: 0.3, borderRadius: 5, padding: "2px 6px",
+                          flexShrink: 0, minWidth: 58, textAlign: "center",
+                          background: e.source === "measured" ? "#EAF6EE" : e.source === "reported" ? "#FEF0C7"
+                            : e.source === "radar" ? "#E0EAFF" : S.soft,
+                          color: e.source === "measured" ? "#177245" : e.source === "reported" ? "#B54708"
+                            : e.source === "radar" ? "#3538CD" : S.sub,
+                        }}>{STORM_SOURCES[e.source].label}</span>
+                        <span style={{ color: S.ink, fontWeight: 700, whiteSpace: "nowrap" }}>
+                          {e.peril === "hail" ? `${e.value.toFixed(2).replace(/\.?0+$/, "")}″ hail` : `${Math.round(e.value)} mph`}
+                        </span>
+                        <span style={{ color: S.sub, minWidth: 0 }}>
+                          {e.detail ? `${e.detail} · ` : ""}{STORM_SOURCES[e.source].blurb}
+                        </span>
+                      </div>
+                    ))}
+                    {r.radarCells > 0 && (
+                      <div style={{ fontSize: 11.5, color: S.sub, paddingLeft: 66 }}>
+                        {r.radarCells} radar hail detection{r.radarCells === 1 ? "" : "s"} within {Math.round(LSR_RADIUS_DEG * 69)} mi
+                        {r.radarSevProb != null ? ` · ${Math.round(r.radarSevProb)}% chance of severe hail` : ""}
+                        {r.radars && r.radars.length ? ` · ${r.radars.join(", ")}` : ""}
+                      </div>
+                    )}
+                  </div>
+                  {(r.reportList || []).slice(0, 12).map((rep, i) => (
                     <div key={i} style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "5px 0", fontSize: 12.5, color: S.sub }}>
                       <span style={{ fontWeight: 700, color: S.ink, minWidth: 84 }}>
                         {rep.kind === "hail" ? `${rep.mag}″ hail`
@@ -16526,7 +16977,7 @@ function StormLookup({ job, dol, onPick, toast }) {
                       </span>
                     </div>
                   ))}
-                  {r.reportList.length > 12 && (
+                  {(r.reportList || []).length > 12 && (
                     <div style={{ fontSize: 12, color: S.sub, paddingTop: 4 }}>
                       + {r.reportList.length - 12} more within {Math.round(LSR_RADIUS_DEG * 69)} mi
                     </div>
@@ -29052,6 +29503,10 @@ function useStormAlerts({ tenantId, ready }) {
       lat: candidate.lat, lng: candidate.lng, radius_miles: candidate.radiusMiles,
       occurred_on: candidate.occurredOn, magnitude: candidate.magnitude, unit: candidate.unit,
       place: candidate.place, report_count: candidate.reportCount, report_key: candidate.reportKey,
+      /* Which evidence raised it (039). A radar estimate and a
+         measured stone are both worth knocking on and are NOT the
+         same thing to quote at an adjuster. */
+      source: candidate.source || "reported",
     };
     const db = DB();
     if (!db) {
@@ -29131,12 +29586,20 @@ function useStormSweep({ watch, alerts, ready }) {
         const end = todayIso();
         const start = new Date(Date.now() - w.lookbackDays * 864e5).toISOString().slice(0, 10);
         for (const area of w.areas) {
-          const reports = await fetchStormReports(area.lat, area.lng, start, end);
+          /* Both observed sources, in parallel. Radar is the one that
+             catches a storm nobody phoned in, which is most of them. */
+          const [reports, radar] = await Promise.all([
+            fetchStormReports(area.lat, area.lng, start, end),
+            fetchRadarHail(area.lat, area.lng, start, end, area.radiusMiles),
+          ]);
           if (!alive) return;
-          /* A failed lookup returns null. Skip it rather than treating
-             "we couldn't ask" as "nothing happened". */
-          if (!reports) continue;
-          const found = detectStormAlerts(reports, area, { minHailIn: w.minHailIn, minWindMph: w.minWindMph });
+          /* A failed lookup returns null. Skip only when BOTH failed —
+             one source answering is still an answer, and treating "we
+             couldn't ask" as "nothing happened" is the failure this
+             whole feature exists to avoid. */
+          if (!reports && !radar) continue;
+          const found = detectStormAlerts(reports || {}, area,
+            { minHailIn: w.minHailIn, minWindMph: w.minWindMph }, radar || {});
           for (const c of found) {
             if (!alive) return;
             await alertsRef.current.record(c, alertsRef.current.byKey);

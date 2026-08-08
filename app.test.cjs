@@ -15195,6 +15195,179 @@ function haversineMiles(lat1, lng1, lat2, lng2) {
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 }
+var RADAR_CACHE = /* @__PURE__ */ new Map();
+var SWDI_LIMIT = 2e4;
+function swdiNum(row, names) {
+  for (const n of names) {
+    const v = row[n] ?? row[n.toLowerCase()] ?? row[n.toUpperCase()];
+    if (v == null || v === "") continue;
+    const f = parseFloat(v);
+    if (isFinite(f)) return f;
+  }
+  return null;
+}
+function swdiRows(payload) {
+  if (!payload) return null;
+  for (const k of ["result", "results", "data", "rows"]) {
+    if (Array.isArray(payload[k])) return payload[k];
+  }
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.features)) {
+    return payload.features.map((f) => ({
+      ...f.properties || {},
+      LAT: f.geometry?.coordinates?.[1],
+      LON: f.geometry?.coordinates?.[0]
+    }));
+  }
+  return null;
+}
+async function fetchRadarHail(lat, lng, start, end, radiusMiles = LSR_RADIUS_DEG * 69) {
+  const key = `${weatherKey(lat, lng)}:${start}:${end}:${Math.round(radiusMiles)}`;
+  if (RADAR_CACHE.has(key)) return RADAR_CACHE.get(key);
+  const deg = Math.max(0.05, radiusMiles / 69);
+  const compact = (d) => d.replace(/-/g, "");
+  const stop = new Date(Date.parse(end + "T00:00Z") + 2 * 864e5).toISOString().slice(0, 10);
+  const range = `${compact(start)}:${compact(stop)}`;
+  const bbox = `${(lng - deg).toFixed(3)},${(lat - deg).toFixed(3)},${(lng + deg).toFixed(3)},${(lat + deg).toFixed(3)}`;
+  const base = `https://www.ncei.noaa.gov/swdiws/json/nx3hail/${range}`;
+  try {
+    let rows = null;
+    for (const url of [
+      `${base}?bbox=${bbox}&limit=${SWDI_LIMIT}`,
+      `${base}?tile=${lng.toFixed(1)},${lat.toFixed(1)}&limit=${SWDI_LIMIT}`
+    ]) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        rows = swdiRows(await res.json());
+        if (rows) break;
+      } catch (e) {
+      }
+    }
+    if (!rows) throw new Error("swdi");
+    const byDate = {};
+    for (const r of rows) {
+      const rlat = swdiNum(r, ["LAT", "Latitude"]);
+      const rlng = swdiNum(r, ["LON", "LONGITUDE", "Longitude"]);
+      if (rlat == null || rlng == null) continue;
+      const miles = haversineMiles(lat, lng, rlat, rlng);
+      if (miles > radiusMiles) continue;
+      const size = swdiNum(r, ["MAXSIZE", "MAX_SIZE", "SIZE", "MESH"]);
+      if (size == null) continue;
+      const when = r.ZTIME || r.ztime || r.TIME || r.time || "";
+      const date = localDateAt(String(when).replace(" ", "T").replace(/Z?$/, "Z"), lng);
+      if (!date || date < start || date > end) continue;
+      const row = byDate[date] || (byDate[date] = {
+        maxSizeIn: null,
+        prob: null,
+        sevProb: null,
+        cells: 0,
+        nearestMiles: null,
+        radars: []
+      });
+      row.cells++;
+      row.maxSizeIn = Math.max(row.maxSizeIn ?? 0, size);
+      const prob = swdiNum(r, ["PROB", "POH"]);
+      const sev = swdiNum(r, ["SEVPROB", "SEV_PROB", "POSH"]);
+      if (prob != null) row.prob = Math.max(row.prob ?? 0, prob);
+      if (sev != null) row.sevProb = Math.max(row.sevProb ?? 0, sev);
+      if (row.nearestMiles == null || miles < row.nearestMiles) row.nearestMiles = miles;
+      const wsr = r.WSR_ID || r.wsr_id;
+      if (wsr && !row.radars.includes(wsr)) row.radars.push(wsr);
+    }
+    RADAR_CACHE.set(key, byDate);
+    return byDate;
+  } catch (e) {
+    return null;
+  }
+}
+var ASOS_NET_CACHE = /* @__PURE__ */ new Map();
+var GUST_CACHE = /* @__PURE__ */ new Map();
+function nearestStations(features, lat, lng, n = 3) {
+  return (features || []).map((f) => {
+    const c = f.geometry && f.geometry.coordinates;
+    const sid = f.properties && f.properties.sid;
+    if (!c || !sid) return null;
+    return {
+      sid,
+      name: f.properties.sname || sid,
+      lat: c[1],
+      lng: c[0],
+      miles: haversineMiles(lat, lng, c[1], c[0])
+    };
+  }).filter(Boolean).sort((a, b) => a.miles - b.miles).slice(0, n);
+}
+function parseAsosCsv(text) {
+  const lines = String(text || "").split("\n").filter((l) => l && !l.startsWith("#"));
+  if (lines.length < 2) return [];
+  const head = lines[0].split(",").map((h) => h.trim());
+  const idx = (name) => head.indexOf(name);
+  const iSta = idx("station"), iTime = idx("valid"), iGust = idx("gust"), iPeak = idx("peak_wind_gust"), iLon = idx("lon"), iLat = idx("lat");
+  if (iSta < 0 || iTime < 0) return [];
+  const out = [];
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split(",");
+    const num2 = (j) => {
+      if (j < 0) return null;
+      const v = (c[j] || "").trim();
+      if (!v || v === "M" || v === "T") return null;
+      const f = parseFloat(v);
+      return isFinite(f) ? f : null;
+    };
+    const knots = Math.max(num2(iGust) ?? -1, num2(iPeak) ?? -1);
+    if (knots < 0) continue;
+    out.push({
+      station: (c[iSta] || "").trim(),
+      valid: (c[iTime] || "").trim(),
+      mph: knots * 1.15078,
+      // ASOS reports knots
+      lat: num2(iLat),
+      lng: num2(iLon)
+    });
+  }
+  return out;
+}
+async function fetchMeasuredGusts(lat, lng, state, start, end) {
+  if (!state) return null;
+  const key = `${weatherKey(lat, lng)}:${start}:${end}`;
+  if (GUST_CACHE.has(key)) return GUST_CACHE.get(key);
+  const net = `${String(state).toUpperCase()}_ASOS`;
+  try {
+    let features = ASOS_NET_CACHE.get(net);
+    if (!features) {
+      const res2 = await fetch(`https://mesonet.agron.iastate.edu/geojson/network/${net}.geojson`);
+      if (!res2.ok) throw new Error("network");
+      features = (await res2.json()).features || [];
+      ASOS_NET_CACHE.set(net, features);
+    }
+    const near = nearestStations(features, lat, lng, 3);
+    if (!near.length) throw new Error("stations");
+    const [y1, m1, d1] = start.split("-"), [y2, m2, d2] = end.split("-");
+    const stations = near.map((s) => `station=${encodeURIComponent(s.sid)}`).join("&");
+    const url = `https://mesonet.agron.iastate.edu/cgi-bin/request/asos.py?data=gust&data=peak_wind_gust&tz=Etc/UTC&format=comma&latlon=yes&missing=M&trace=T&year1=${y1}&month1=${+m1}&day1=${+d1}&year2=${y2}&month2=${+m2}&day2=${+d2}&${stations}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("asos");
+    const obs = parseAsosCsv(await res.text());
+    const milesOf = Object.fromEntries(near.map((s) => [s.sid, s.miles]));
+    const nameOf = Object.fromEntries(near.map((s) => [s.sid, s.name]));
+    const byDate = {};
+    for (const o of obs) {
+      const date = localDateAt(o.valid.replace(" ", "T") + "Z", lng);
+      if (!date || date < start || date > end) continue;
+      const row = byDate[date] || (byDate[date] = { gustMph: null, station: "", stationName: "", miles: null });
+      if (row.gustMph == null || o.mph > row.gustMph) {
+        row.gustMph = o.mph;
+        row.station = o.station;
+        row.stationName = nameOf[o.station] || o.station;
+        row.miles = milesOf[o.station] ?? null;
+      }
+    }
+    GUST_CACHE.set(key, byDate);
+    return byDate;
+  } catch (e) {
+    return null;
+  }
+}
 var HAIL_SIZES = [
   [4.5, "softball"],
   [4, "grapefruit"],
@@ -15219,23 +15392,70 @@ function spcReportLink(iso) {
   const yymmdd = iso.slice(2).replace(/-/g, "");
   return `https://www.spc.noaa.gov/climo/reports/${yymmdd}_rpt.html`;
 }
-function stormSeverity(r) {
-  return (r.hailIn ? 4e3 + r.hailIn * 500 : r.hail ? 3e3 : 0) + (r.reportWind || r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
+var STORM_SOURCES = {
+  measured: { rank: 4, label: "Measured", blurb: "Recorded by an airport weather instrument" },
+  reported: { rank: 3, label: "Spotter", blurb: "Observed and reported to the National Weather Service" },
+  radar: { rank: 2, label: "Radar", blurb: "Estimated by NEXRAD radar \u2014 covers every address, not just where someone was standing" },
+  modelled: { rank: 1, label: "Modelled", blurb: "From reanalysis \u2014 real, but computed rather than observed" }
+};
+function stormEvidence(r) {
+  const out = [];
+  if (!r) return out;
+  if (r.measuredGust != null) {
+    out.push({
+      source: "measured",
+      peril: "wind",
+      value: r.measuredGust,
+      unit: "mph",
+      detail: r.gustStationName ? `${r.gustStationName}${r.gustMiles != null ? `, ${Math.round(r.gustMiles)} mi away` : ""}` : ""
+    });
+  }
+  if (r.hailIn != null) {
+    out.push({
+      source: "reported",
+      peril: "hail",
+      value: r.hailIn,
+      unit: "in",
+      detail: r.reports ? `${r.reports} spotter report${r.reports === 1 ? "" : "s"}` : ""
+    });
+  }
+  if (r.reportWind != null) {
+    out.push({ source: "reported", peril: "wind", value: r.reportWind, unit: "mph", detail: "" });
+  }
+  if (r.radarHailIn != null) {
+    out.push({
+      source: "radar",
+      peril: "hail",
+      value: r.radarHailIn,
+      unit: "in",
+      detail: r.radarNearestMiles != null && r.radarNearestMiles < 1 ? "directly overhead" : r.radarNearestMiles != null ? `nearest cell ${Math.round(r.radarNearestMiles)} mi away` : ""
+    });
+  }
+  if (r.gust != null && r.measuredGust == null && r.reportWind == null) {
+    out.push({ source: "modelled", peril: "wind", value: r.gust, unit: "mph", detail: "" });
+  }
+  return out.sort((a, b) => STORM_SOURCES[b.source].rank - STORM_SOURCES[a.source].rank);
 }
-function mergeStormDays(days, reportsByDate) {
+function stormSeverity(r) {
+  const hailIn = r.hailIn ?? r.radarHailIn ?? null;
+  const hailScore = hailIn != null ? (r.hailIn != null ? 4e3 : 3800) + hailIn * 500 : r.hail ? 3e3 : 0;
+  return hailScore + (r.measuredGust || r.reportWind || r.gust || 0) + (r.storm ? 20 : 0) + (r.precip ? r.precip * 12 : 0);
+}
+function mergeStormDays(days, reportsByDate, radarByDate, gustByDate) {
   const byDate = /* @__PURE__ */ new Map();
+  const blank = (date) => ({
+    date,
+    gust: null,
+    precip: null,
+    code: null,
+    hail: false,
+    highWind: false,
+    damagingWind: false,
+    storm: false
+  });
   (days || []).forEach((d) => byDate.set(d.date, { ...d }));
   Object.entries(reportsByDate || {}).forEach(([date, rep]) => {
-    const base = byDate.get(date) || {
-      date,
-      gust: null,
-      precip: null,
-      code: null,
-      hail: false,
-      highWind: false,
-      damagingWind: false,
-      storm: false
-    };
+    const base = byDate.get(date) || blank(date);
     byDate.set(date, {
       ...base,
       hailIn: rep.hailIn,
@@ -15244,7 +15464,29 @@ function mergeStormDays(days, reportsByDate) {
       reportList: rep.reports
     });
   });
-  return [...byDate.values()].filter((r) => r.reports || r.hail || r.highWind || r.storm || r.precip != null && r.precip >= 0.75).sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1));
+  Object.entries(radarByDate || {}).forEach(([date, rad]) => {
+    const base = byDate.get(date) || blank(date);
+    byDate.set(date, {
+      ...base,
+      radarHailIn: rad.maxSizeIn,
+      radarCells: rad.cells,
+      radarProb: rad.prob,
+      radarSevProb: rad.sevProb,
+      radarNearestMiles: rad.nearestMiles,
+      radars: rad.radars
+    });
+  });
+  Object.entries(gustByDate || {}).forEach(([date, g]) => {
+    const base = byDate.get(date) || blank(date);
+    byDate.set(date, {
+      ...base,
+      measuredGust: g.gustMph == null ? null : Math.round(g.gustMph),
+      gustStation: g.station,
+      gustStationName: g.stationName,
+      gustMiles: g.miles
+    });
+  });
+  return [...byDate.values()].filter((r) => r.reports || r.radarHailIn != null || r.hail || r.highWind || r.storm || r.measuredGust != null && r.measuredGust >= 45 || r.precip != null && r.precip >= 0.75).sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1));
 }
 var STORM_WATCH_DEFAULTS = { enabled: false, areas: [], minHailIn: 1, minWindMph: 58, lookbackDays: 7 };
 var STORM_WATCH_MAX_RADIUS = Math.round(LSR_RADIUS_DEG * 69);
@@ -15266,11 +15508,12 @@ function normalizeStormWatch(v) {
 function stormAlertKey(watchId, kind, date) {
   return `${watchId}|${kind}|${date}`;
 }
-function detectStormAlerts(reportsByDate, area, thresholds) {
+function detectStormAlerts(reportsByDate, area, thresholds, radarByDate) {
   if (!area || area.lat == null) return [];
   const t = { minHailIn: 0, minWindMph: 0, ...thresholds || {} };
   const radius = Number(area.radiusMiles) || 15;
   const out = [];
+  const seen = /* @__PURE__ */ new Set();
   Object.entries(reportsByDate || {}).forEach(([date, day]) => {
     const worst = {};
     (day.reports || []).forEach((r) => {
@@ -15306,8 +15549,34 @@ function detectStormAlerts(reportsByDate, area, thresholds) {
         radiusMiles: radius,
         place: [r.city, [r.county, r.state].filter(Boolean).join(" ")].filter(Boolean).join(", "),
         reportCount: w.count,
+        source: "reported",
         reportKey: stormAlertKey(area.id, kind, date)
       });
+      seen.add(`${kind}|${date}`);
+    });
+  });
+  Object.entries(radarByDate || {}).forEach(([date, rad]) => {
+    if (seen.has(`hail|${date}`)) return;
+    const size = rad && rad.maxSizeIn;
+    if (size == null || !isFinite(size) || size < t.minHailIn) return;
+    if (rad.nearestMiles != null && rad.nearestMiles > radius) return;
+    out.push({
+      watchId: area.id,
+      watchName: area.name || "",
+      kind: "hail",
+      occurredOn: date,
+      magnitude: Math.round(size * 100) / 100,
+      unit: "in",
+      /* Radar cells are summarised per day, so the exact cell centre
+         isn't carried — the area centre is the honest answer, and the
+         radius drawn on the map is what a rep actually works. */
+      lat: area.lat,
+      lng: area.lng,
+      radiusMiles: radius,
+      place: area.name || "",
+      reportCount: rad.cells || 1,
+      source: "radar",
+      reportKey: stormAlertKey(area.id, "hail", date)
     });
   });
   return out.sort((a, b) => b.occurredOn < a.occurredOn ? -1 : b.occurredOn > a.occurredOn ? 1 : b.magnitude - a.magnitude);
@@ -15323,7 +15592,8 @@ function stormAlertHeadline(a) {
   if (a.kind === "hail") {
     const size = hailSizeLabel(Number(a.magnitude));
     const inches = Number(a.magnitude).toFixed(2).replace(/\.?0+$/, "");
-    return `${inches}" hail${size ? ` (${size})` : ""} \u2014 ${where}`;
+    const est = a.source === "radar" ? " est" : "";
+    return `${inches}"${est} hail${size ? ` (${size})` : ""} \u2014 ${where}`;
   }
   return `${Math.round(Number(a.magnitude))} mph winds \u2014 ${where}`;
 }
@@ -17068,12 +17338,12 @@ function StormLookup({ job, dol, onPick, toast }) {
   const [rows, setRows] = (0, import_react.useState)(null);
   const [loading, setLoading] = (0, import_react.useState)(false);
   const [err, setErr] = (0, import_react.useState)("");
-  const [reportsFailed, setReportsFailed] = (0, import_react.useState)(false);
+  const [missing, setMissing] = (0, import_react.useState)([]);
   const run = async () => {
     setLoading(true);
     setErr("");
     setRows(null);
-    setReportsFailed(false);
+    setMissing([]);
     let lat = job.lat ?? job.property?.lat, lng = job.lng ?? job.property?.lng;
     if (lat == null || lng == null) {
       const g = await geocodeZip(job.zip);
@@ -17087,17 +17357,24 @@ function StormLookup({ job, dol, onPick, toast }) {
       setLoading(false);
       return;
     }
-    const [days, reports] = await Promise.all([
+    const state = job.state || job.property?.state || "";
+    const [days, reports, radar, gusts] = await Promise.all([
       fetchStormHistory(lat, lng, start, end),
-      fetchStormReports(lat, lng, start, end)
+      fetchStormReports(lat, lng, start, end),
+      fetchRadarHail(lat, lng, start, end),
+      fetchMeasuredGusts(lat, lng, state, start, end)
     ]);
     setLoading(false);
-    if (!days && !reports) {
-      setErr("Couldn't reach the weather archive or the NOAA report service. Check the connection and try again.");
+    if (!days && !reports && !radar) {
+      setErr("Couldn't reach any of the weather services. Check the connection and try again.");
       return;
     }
-    setReportsFailed(!reports);
-    const merged = mergeStormDays(days || [], reports || {}).slice(0, 40);
+    setMissing([
+      !reports && "spotter reports",
+      !radar && "radar hail",
+      state && !gusts && "measured wind"
+    ].filter(Boolean));
+    const merged = mergeStormDays(days || [], reports || {}, radar || {}, gusts || {}).slice(0, 40);
     setRows(merged);
     if (!merged.length) toast && toast("No storm reports or notable weather in that window");
   };
@@ -17108,8 +17385,18 @@ function StormLookup({ job, dol, onPick, toast }) {
     setEnd(iso(/* @__PURE__ */ new Date()));
   };
   return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 12 }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "NOAA / Open-Meteo" }), children: "Storm history \u2014 date of loss" }),
-    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: "Hail and wind days on record for this address, so you can set the date of loss from the record rather than memory. Hail sizes and measured wind come from official NOAA Local Storm Reports near the property; gusts and rain without a \u201CNOAA\u201D tag are ERA5 reanalysis \u2014 real, but modelled rather than observed. Confirm the NOAA report before filing." }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CardTitle, { right: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "blue", children: "4 sources" }), children: "Storm history \u2014 date of loss" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginBottom: 10 }, children: [
+      "Hail and wind days on record for this address, so you can set the date of loss from the record rather than memory. Every figure is tagged with where it came from: ",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Measured" }),
+      " is an airport instrument, ",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Spotter" }),
+      " is a report to the NWS, ",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Radar" }),
+      " is NEXRAD's hail estimate \u2014 which covers this roof even when nobody nearby called it in \u2014 and ",
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("b", { children: "Modelled" }),
+      " is reanalysis, context rather than a finding."
+    ] }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "From", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: start, max: end, onChange: (e) => setStart(e.target.value) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "To", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { style: dateInputStyle, type: "date", value: end, max: iso(/* @__PURE__ */ new Date()), onChange: (e) => setEnd(e.target.value) }) }),
@@ -17120,7 +17407,11 @@ function StormLookup({ job, dol, onPick, toast }) {
       [[1, "1 yr"], [2, "2 yrs"], [5, "5 yrs"], [10, "10 yrs"]].map(([y, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { kind: "ghost", small: true, onClick: () => setWindow(y), children: label }, y))
     ] }),
     err && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: "#B42318", marginTop: 6 }, children: err }),
-    reportsFailed && rows && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Callout, { label: "Hail record unavailable", tone: "amber", children: "The NOAA storm-report service didn't respond, so what's below is modelled weather only \u2014 it is not evidence that no hail fell here. Run the lookup again before telling a homeowner there's no hail on record." }),
+    missing.length > 0 && rows && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Callout, { label: `Couldn't check ${missing.join(" or ")}`, tone: "amber", children: [
+      missing.length === 3 ? "None of the observed sources answered, so what's below is modelled weather only." : `The ${missing.join(" and ")} lookup didn't respond, so this list is missing that evidence.`,
+      " ",
+      "This is not evidence that nothing happened here. Run the lookup again before telling a homeowner there's nothing on record."
+    ] }),
     rows && rows.length === 0 && !err && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.5, marginTop: 8 }, children: [
       "No storm reports or notable weather between ",
       start,
@@ -17142,27 +17433,39 @@ function StormLookup({ job, dol, onPick, toast }) {
                 r.hailIn.toFixed(2).replace(/\.?0+$/, ""),
                 "\u2033",
                 size ? ` (${size})` : "",
-                " \xB7 NOAA"
-              ] }) : r.hail && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "Hail possible" }),
-              r.reportWind != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.reportWind >= 58 ? "red" : "amber", children: [
+                " \xB7 Spotter"
+              ] }) : r.radarHailIn == null && r.hail && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Chip, { tone: "amber", children: "Hail possible" }),
+              r.radarHailIn != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.radarHailIn >= 1 ? "red" : "amber", children: [
+                "Hail \u2014 ",
+                r.radarHailIn.toFixed(2).replace(/\.?0+$/, ""),
+                "\u2033 est \xB7 Radar",
+                r.radarNearestMiles != null && r.radarNearestMiles < 1 ? " overhead" : ""
+              ] }),
+              r.measuredGust != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.measuredGust >= 58 ? "red" : "amber", children: [
+                r.measuredGust >= 58 ? "Damaging wind" : "High wind",
+                " \u2014 ",
+                r.measuredGust,
+                " mph \xB7 Measured"
+              ] }) : r.reportWind != null ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.reportWind >= 58 ? "red" : "amber", children: [
                 r.reportWind >= 58 ? "Damaging wind" : "High wind",
                 " \u2014 ",
                 Math.round(r.reportWind),
-                " mph \xB7 NOAA"
+                " mph \xB7 Spotter"
               ] }) : r.gust != null && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: r.gust >= 58 ? "red" : r.gust >= 45 ? "amber" : "gray", children: [
                 r.gust >= 58 ? "Damaging wind" : r.gust >= 45 ? "High wind" : "Gusts",
                 " \u2014 ",
                 r.gust,
-                " mph"
+                " mph \xB7 Modelled"
               ] }),
               r.precip != null && r.precip >= 0.5 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, { tone: "blue", children: [
                 r.precip.toFixed(2),
                 "\u2033 rain"
               ] }),
-              r.reports > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+              (r.reports > 0 || r.radarHailIn != null || r.measuredGust != null) && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
                 "button",
                 {
                   onClick: () => setOpen(open === r.date ? null : r.date),
+                  "data-testid": "storm-day-evidence",
                   style: {
                     border: "none",
                     background: "none",
@@ -17174,10 +17477,7 @@ function StormLookup({ job, dol, onPick, toast }) {
                     fontFamily: "inherit"
                   },
                   children: [
-                    r.reports,
-                    " report",
-                    r.reports === 1 ? "" : "s",
-                    nearest ? ` \xB7 nearest ${nearest.miles < 1 ? "<1" : Math.round(nearest.miles)} mi` : "",
+                    r.reports > 0 ? `${r.reports} report${r.reports === 1 ? "" : "s"}${nearest ? ` \xB7 nearest ${nearest.miles < 1 ? "<1" : Math.round(nearest.miles)} mi` : ""}` : "Where this came from",
                     open === r.date ? " \u25BE" : " \u25B8"
                   ]
                 }
@@ -17190,8 +17490,39 @@ function StormLookup({ job, dol, onPick, toast }) {
             toast && toast(`Date of loss set to ${r.date}`);
           }, style: { flexShrink: 0 }, children: picked ? "\u2713 Set" : "Use" })
         ] }),
-        open === r.date && (r.reportList || []).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "2px 0 10px" }, children: [
-          r.reportList.slice(0, 12).map((rep, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "baseline", padding: "5px 0", fontSize: 12.5, color: S.sub }, children: [
+        open === r.date && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "2px 0 10px" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 5, paddingBottom: (r.reportList || []).length ? 8 : 0 }, children: [
+            stormEvidence(r).map((e, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "baseline", fontSize: 12.5 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: {
+                fontSize: 10.5,
+                fontWeight: 800,
+                letterSpacing: 0.3,
+                borderRadius: 5,
+                padding: "2px 6px",
+                flexShrink: 0,
+                minWidth: 58,
+                textAlign: "center",
+                background: e.source === "measured" ? "#EAF6EE" : e.source === "reported" ? "#FEF0C7" : e.source === "radar" ? "#E0EAFF" : S.soft,
+                color: e.source === "measured" ? "#177245" : e.source === "reported" ? "#B54708" : e.source === "radar" ? "#3538CD" : S.sub
+              }, children: STORM_SOURCES[e.source].label }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: S.ink, fontWeight: 700, whiteSpace: "nowrap" }, children: e.peril === "hail" ? `${e.value.toFixed(2).replace(/\.?0+$/, "")}\u2033 hail` : `${Math.round(e.value)} mph` }),
+              /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { color: S.sub, minWidth: 0 }, children: [
+                e.detail ? `${e.detail} \xB7 ` : "",
+                STORM_SOURCES[e.source].blurb
+              ] })
+            ] }, i)),
+            r.radarCells > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11.5, color: S.sub, paddingLeft: 66 }, children: [
+              r.radarCells,
+              " radar hail detection",
+              r.radarCells === 1 ? "" : "s",
+              " within ",
+              Math.round(LSR_RADIUS_DEG * 69),
+              " mi",
+              r.radarSevProb != null ? ` \xB7 ${Math.round(r.radarSevProb)}% chance of severe hail` : "",
+              r.radars && r.radars.length ? ` \xB7 ${r.radars.join(", ")}` : ""
+            ] })
+          ] }),
+          (r.reportList || []).slice(0, 12).map((rep, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", gap: 8, alignItems: "baseline", padding: "5px 0", fontSize: 12.5, color: S.sub }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontWeight: 700, color: S.ink, minWidth: 84 }, children: rep.kind === "hail" ? `${rep.mag}\u2033 hail` : rep.kind === "wind" ? `${Math.round(lsrWindMph(rep.mag, rep.unit) || 0)} mph wind` : rep.kind === "tornado" ? "Tornado" : "Wind damage" }),
             /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
               rep.miles < 1 ? "<1" : Math.round(rep.miles),
@@ -17203,7 +17534,7 @@ function StormLookup({ job, dol, onPick, toast }) {
               rep.source ? ` \xB7 ${rep.source}` : ""
             ] })
           ] }, i)),
-          r.reportList.length > 12 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, paddingTop: 4 }, children: [
+          (r.reportList || []).length > 12 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 12, color: S.sub, paddingTop: 4 }, children: [
             "+ ",
             r.reportList.length - 12,
             " more within ",
@@ -30179,7 +30510,11 @@ function useStormAlerts({ tenantId, ready }) {
       unit: candidate.unit,
       place: candidate.place,
       report_count: candidate.reportCount,
-      report_key: candidate.reportKey
+      report_key: candidate.reportKey,
+      /* Which evidence raised it (039). A radar estimate and a
+         measured stone are both worth knocking on and are NOT the
+         same thing to quote at an adjuster. */
+      source: candidate.source || "reported"
     };
     const db = DB();
     if (!db) {
@@ -30252,10 +30587,18 @@ function useStormSweep({ watch, alerts, ready }) {
         const end = todayIso();
         const start = new Date(Date.now() - w.lookbackDays * 864e5).toISOString().slice(0, 10);
         for (const area of w.areas) {
-          const reports = await fetchStormReports(area.lat, area.lng, start, end);
+          const [reports, radar] = await Promise.all([
+            fetchStormReports(area.lat, area.lng, start, end),
+            fetchRadarHail(area.lat, area.lng, start, end, area.radiusMiles)
+          ]);
           if (!alive) return;
-          if (!reports) continue;
-          const found = detectStormAlerts(reports, area, { minHailIn: w.minHailIn, minWindMph: w.minWindMph });
+          if (!reports && !radar) continue;
+          const found = detectStormAlerts(
+            reports || {},
+            area,
+            { minHailIn: w.minHailIn, minWindMph: w.minWindMph },
+            radar || {}
+          );
           for (const c of found) {
             if (!alive) return;
             await alertsRef.current.record(c, alertsRef.current.byKey);

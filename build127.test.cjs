@@ -71,12 +71,17 @@ ok(/const mph = lsrWindMph\(mag, p\.unit\);/.test(frSrc),
   "wind magnitude is normalized through the unit field rather than trusted as mph");
 
 /* ---------- static: reports lead, reanalysis decorates ---------- */
-ok(/function mergeStormDays\(days, reportsByDate\)/.test(src), "mergeStormDays exists");
-const msStart = src.indexOf("function mergeStormDays(days, reportsByDate)");
-const msSrc = src.slice(msStart, msStart + 1200);
-ok(/\.filter\(\(r\) => r\.reports \|\| r\.hail \|\| r\.highWind \|\| r\.storm \|\| \(r\.precip != null && r\.precip >= 0\.75\)\)/.test(msSrc),
+/* Build 136 added radar hail and measured gusts as further sources,
+   so the merge takes four arguments now. The guarantee this file
+   exists to protect is unchanged and is asserted below: a day with a
+   storm report is included WITHOUT having to also look notable in the
+   reanalysis. */
+ok(/function mergeStormDays\(days, reportsByDate, radarByDate, gustByDate\)/.test(src), "mergeStormDays exists");
+const msStart = src.indexOf("function mergeStormDays(days, reportsByDate, radarByDate, gustByDate)");
+const msSrc = src.slice(msStart, msStart + 2000);
+ok(/\.filter\(\(r\) => r\.reports \|\| /.test(msSrc),
   "any day carrying a storm report survives the filter unconditionally — it no longer has to also look notable in the reanalysis");
-ok(/const base = byDate\.get\(date\) \|\| \{ date, gust: null/.test(msSrc),
+ok(/const base = byDate\.get\(date\) \|\| blank\(date\);/.test(msSrc),
   "a hail day the reanalysis never flagged is ADDED to the list, not dropped for having no ERA5 row");
 ok(/fetchStormHistory\(lat, lng, start, end\),\s*\n\s*fetchStormReports\(lat, lng, start, end\),/.test(src),
   "both sources are fetched together, so neither blocks the other");
@@ -84,10 +89,15 @@ ok(!/notable\.slice\(0, 8\)/.test(src),
   "the top-8 enrichment cap is gone — it was the reason a real hail day could be invisible no matter how you searched");
 
 /* ---------- static: honest empty vs failed ---------- */
-ok(/setReportsFailed\(!reports\);/.test(src),
+/* Build 136: each observed source that failed is now named
+   individually rather than one combined flag, but the guarantee is the
+   same — a failed fetch must never render as a genuinely empty result. */
+ok(/!reports && "spotter reports",/.test(src),
   "a failed hail-record fetch is tracked separately from a genuinely empty result");
-ok(/it is not\s*\n\s*evidence that no hail fell here/.test(src),
-  "\"couldn't check\" is never presented as \"no hail\" — the distinction a rep repeats to a homeowner");
+/* Build 136 widened the wording from hail alone to any source, since
+   radar and measured wind can now fail independently. Same promise. */
+ok(/This is not evidence that nothing happened here\./.test(src),
+  "\"couldn't check\" is never presented as \"nothing happened\" — the distinction a rep repeats to a homeowner");
 ok(/No storm reports or notable weather between \{start\} and \{end\}/.test(src),
   "a real empty result says so plainly and suggests a longer look-back");
 ok(/d\.setFullYear\(d\.getFullYear\(\) - 2\);/.test(src),

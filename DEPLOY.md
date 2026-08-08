@@ -381,6 +381,41 @@ bypass this by editing the request from the browser.
 
 ---
 
+## 7a. Where storm data comes from (nothing to configure)
+
+Four sources answer "what hit this roof". All are free, keyless and
+national — there is nothing to set up, and this section exists so you
+know what you're looking at when a figure appears on screen.
+
+| Tag | Source | What it's good for |
+| --- | --- | --- |
+| **Measured** | ASOS/AWOS airport instruments, via Iowa Environmental Mesonet | The most defensible wind number there is — an instrument reading, with the station and its distance |
+| **Spotter** | NWS Local Storm Reports, via IEM | Best evidence of hail **size**: somebody held a stone against a ruler |
+| **Radar** | NEXRAD Level-3 hail signatures, via [NCEI's Severe Weather Data Inventory](https://www.ncei.noaa.gov/products/severe-weather-data-inventory) | Best evidence of **coverage**: it saw every address, not just where someone was standing |
+| **Modelled** | ERA5 reanalysis, via Open-Meteo | Rain and background context. Never a finding on its own |
+
+**Why radar matters most.** Local Storm Reports only exist where a
+human stood outside during a hailstorm and phoned it in — sparse, and
+biased toward towns, roads and daylight. A roof two miles from the
+nearest spotter can be destroyed while the lookup says "no hail found",
+which is not "no hail happened" but reads exactly like it. Radar has no
+such gap. It is the same underlying data the commercial hail-report
+companies resell.
+
+**Radar is an estimate and the app always says so.** The Hail Detection
+Algorithm infers size from reflectivity above the freezing level. A
+radar figure is shown as `2.5″ est · Radar` and a spotter's as
+`1.75″ · Spotter`, and when both exist for a day **both are shown** —
+they answer different questions and an adjuster conversation uses both.
+Never quote a radar estimate as though it were measured.
+
+If any source doesn't answer, the app names the one that failed rather
+than quietly returning less evidence. "Couldn't check" and "nothing
+happened" are different sentences, and only one of them should ever be
+repeated to a homeowner.
+
+---
+
 ## 7b. Storm watch — scheduled hail detection (optional)
 
 **Everything here is optional.** Storm alerts already work with nothing
