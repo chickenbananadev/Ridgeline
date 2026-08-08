@@ -40,9 +40,13 @@ let fails = 0;
 const ok = (c, l) => { if (!c) { fails++; console.log("FAIL: " + l); } };
 
 /* ---------- 1. tile failure is legible, not a wall of broken icons ---------- */
-ok(/onError=\{\(e\) => \{ e\.currentTarget\.style\.visibility = "hidden"; setTileFails\(\(n\) => n \+ 1\); \}\}/.test(src),
-  "a broken tile is hidden instead of rendering the browser's torn-page icon");
-ok(/onLoad=\{\(\) => setTileFails\(0\)\}/.test(src),
+/* Build 132: Leaflet owns the tile elements now, so failures arrive as
+   its own tileerror event rather than an <img onError>. Leaflet never
+   renders a broken-image icon — a failed tile is simply absent — so
+   the hiding is handled and only the counting is ours. */
+ok(/layer\.on\("tileerror", \(\) => setTileFails\(\(n\) => n \+ 1\)\);/.test(src),
+  "failed tiles are counted through the map engine's own error event");
+ok(/layer\.on\("tileload", \(\) => setTileFails\(0\)\);/.test(src),
   "the failure counter resets on any successful tile, so a few edge-of-world 404s don't stick");
 ok(/const tilesDown = tileFails >= 3;/.test(src), "a few failures, not one, before crying wolf");
 ok(/data-testid="tiles-down"/.test(src), "there is a notice element");

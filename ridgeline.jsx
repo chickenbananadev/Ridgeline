@@ -28441,35 +28441,59 @@ function HelpDesk({ onBack, brand }) {
 /* ==================================================================
    CANVASSING — the door-knocking map
 
-   WHY THIS MAP IS HAND-BUILT rather than Leaflet or Mapbox.
+   The first version of this map was hand-built, and the owner's
+   verdict was "wonky to say the least… nothing like SalesRabbit". It
+   was right. A hand-rolled Mercator renderer gets the projection
+   correct and the FEEL wrong: no momentum, no inertia, no double-tap
+   zoom, panning that dies the instant a finger lifts. That feel is
+   most of what a map is.
 
-   ridgeline.jsx is deliberately a single self-contained file with no
-   CSS imports and no import.meta, so it can be bundled by esbuild for
-   the test harness and rendered in preview sandboxes. Leaflet needs
-   its stylesheet imported to position panes correctly, which breaks
-   `npm run bundle:test` — the pipeline every build in this codebase
-   is verified through. The map a canvassing tool actually needs is
-   pan, zoom, pins, and tap-to-drop; that reduces to Web Mercator
-   projection plus pointer handling, and keeping it here means the
-   projection math is directly testable instead of hidden behind a
-   rendered map.
+   So this now runs on Leaflet, which arrives via window.__LEAFLET__
+   from src/main.jsx rather than an import here — ridgeline.jsx has to
+   stay a single self-contained file with no imports so esbuild can
+   bundle it for `npm run bundle:test`, and Leaflet needs its
+   stylesheet to position panes at all. The composition root already
+   hands the app __SUPABASE__, __AUTH__ and __GEOAPIFY_KEY__ the same
+   way; this is one more of those.
 
-   Tiles come from Geoapify on the key the address autocomplete
-   already uses, so there is nothing new to sign up for. The style is
-   overridable via window.__MAP_TILE_URL__ — that is the hook for
-   satellite imagery later, which needs a paid key.
-
-   Attribution is not optional: OpenStreetMap's licence and
-   Geoapify's terms both require it, so it renders on the map itself
-   rather than being tucked in a settings page.
+   The pure projection helpers above (lngToWorldX and friends) stay:
+   they are what the viewport bbox query is built on, they are
+   directly testable, and they have nothing to do with rendering.
    ================================================================== */
-const MAP_TILE_STYLE = "osm-bright";
-function tileUrl(z, x, y) {
-  const custom = typeof window !== "undefined" && window.__MAP_TILE_URL__;
-  if (custom) return String(custom).replace("{z}", z).replace("{x}", x).replace("{y}", y);
-  return `https://maps.geoapify.com/v1/tile/${MAP_TILE_STYLE}/${z}/${x}/${y}.png?apiKey=${GEO_PROVIDER.apiKey}`;
-}
-const MAP_MIN_ZOOM = 3, MAP_MAX_ZOOM = 19;
+/* ------------------------------------------------------------------
+   BASEMAPS
+
+   One registry so the map, the toggle and the tests all agree on what
+   imagery exists and whether it is usable right now.
+
+   Satellite has no free option. Every aerial basemap that looks free
+   bars commercial use — Esri's World Imagery is explicit about it — so
+   it genuinely needs a provider key (Mapbox, Google, MapTiler). Rather
+   than hide the control until then, satellite is always visible and
+   explains itself when unavailable: a rep should be able to see that
+   the app has the feature and that the company hasn't turned it on,
+   not wonder whether they're missing a gesture.
+------------------------------------------------------------------- */
+const BASEMAPS = [
+  {
+    id: "street", label: "Street",
+    attribution: 'Geoapify · © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    url: () => (typeof window !== "undefined" && window.__MAP_TILE_URL__)
+      || `https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${GEO_PROVIDER.apiKey}`,
+  },
+  {
+    id: "satellite", label: "Satellite", needsKey: true,
+    attribution: "Satellite imagery",
+    url: () => (typeof window !== "undefined" && window.__SATELLITE_TILE_URL__) || "",
+  },
+];
+function basemap(id) { return BASEMAPS.find((b) => b.id === id) || BASEMAPS[0]; }
+function basemapReady(id) { return !!basemap(id).url(); }
+
+const MAP_MIN_ZOOM = 3, MAP_MAX_ZOOM = 20;
+/* Below this, a worked neighbourhood is hundreds of overlapping dots
+   and the map stops being readable — so pins collapse into counts. */
+const CLUSTER_BELOW_ZOOM = 16;
 /* How close a tap has to be to an existing pin to mean "that one".
    Suburban lots run 15–25 m wide, so 20 m selects the house you meant
    without swallowing its neighbour. Without this, the second rep down
@@ -28484,162 +28508,198 @@ function nearestPin(pins, lat, lng, within = PIN_SNAP_METRES) {
   });
   return bestD <= within ? best : null;
 }
+/* Grid clustering. Bucket size is in degrees at the current zoom so
+   clusters stay a roughly constant size on screen as you zoom. Pure,
+   so the bucketing is testable without a rendered map. */
+function clusterPins(pins, zoom) {
+  if (zoom >= CLUSTER_BELOW_ZOOM) return (pins || []).map((p) => ({ single: p, lat: p.lat, lng: p.lng, count: 1 }));
+  const cell = 360 / Math.pow(2, zoom) / 4;   // ~quarter tile
+  const buckets = new Map();
+  (pins || []).forEach((p) => {
+    const key = `${Math.floor(p.lat / cell)}:${Math.floor(p.lng / cell)}`;
+    const b = buckets.get(key) || { lat: 0, lng: 0, count: 0, pins: [] };
+    b.lat += p.lat; b.lng += p.lng; b.count++; b.pins.push(p);
+    buckets.set(key, b);
+  });
+  return [...buckets.values()].map((b) => (b.count === 1
+    ? { single: b.pins[0], lat: b.pins[0].lat, lng: b.pins[0].lng, count: 1 }
+    : { single: null, lat: b.lat / b.count, lng: b.lng / b.count, count: b.count, pins: b.pins }));
+}
 
-function CanvassMap({ center, zoom, onMove, pins, statuses, selectedId, onTapPin, onTapMap, me }) {
+/* ==================================================================
+   CANVASSING MAP — Leaflet
+
+   The first version of this was hand-rolled, and the owner's verdict
+   was "wonky to say the least". It was: no momentum, no inertia, no
+   double-tap zoom, so panning stopped dead the instant a finger
+   lifted. That is most of what makes a map feel broken, and it is
+   exactly the part a map library exists to get right.
+
+   Leaflet arrives on window.__LEAFLET__ from src/main.jsx rather than
+   through an import here, because ridgeline.jsx must stay a single
+   self-contained file with no imports for `npm run bundle:test`, and
+   Leaflet needs its stylesheet to position panes at all. When it is
+   absent — jsdom, a preview sandbox — the map says so instead of
+   rendering an empty grey box.
+   ================================================================== */
+function CanvassMap({
+  center, zoom, onMove, pins, statuses, selectedId, onTapPin, me,
+  basemapId = "street", highlight = null,
+}) {
   const boxRef = useRef(null);
-  const [size, setSize] = useState({ w: 0, h: 0 });
-  const drag = useRef(null);
-  const pointers = useRef(new Map());
-  const pinch = useRef(null);
-  /* Tile imagery is the one part of this screen that depends on an
-     outside service, and when it fails the browser draws a broken-image
-     icon on a grey rectangle — which reads as "the whole feature is
-     dead" even though dropping pins, dispositions and everything else
-     still work perfectly. Count failures and say what is actually
-     wrong, rather than letting a map key problem look like a broken
-     app. Reset on any successful tile so a passing cloud of 404s at
-     the edge of the world doesn't stick. */
+  const mapRef = useRef(null);
+  const layerRef = useRef(null);
+  const markersRef = useRef(null);
+  const meRef = useRef(null);
+  const circleRef = useRef(null);
+  const tapPinRef = useRef(onTapPin);
+  const moveRef = useRef(onMove);
   const [tileFails, setTileFails] = useState(0);
+  const [ready, setReady] = useState(false);
+  tapPinRef.current = onTapPin;
+  moveRef.current = onMove;
+
+  const L = typeof window !== "undefined" ? window.__LEAFLET__ : null;
   const tilesDown = tileFails >= 3;
 
-  /* Measure rather than assume: the map fills whatever the screen
-     gives it, and every projection below is relative to that box. */
+  /* Create the map once. Every later prop change is applied
+     imperatively — re-creating a Leaflet map on each render would
+     throw away the very inertia this rewrite exists to add. */
   useEffect(() => {
-    const el = boxRef.current;
-    if (!el) return;
-    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight });
-    measure();
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", measure);
-      return () => window.removeEventListener("resize", measure);
-    }
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+    if (!L || !boxRef.current || mapRef.current) return;
+    const map = L.map(boxRef.current, {
+      center: [center.lat, center.lng], zoom,
+      zoomControl: false, attributionControl: true,
+      /* The defaults that make it feel like a map. */
+      inertia: true, tap: true, doubleClickZoom: true, bounceAtZoomLimits: false,
+    });
+    map.attributionControl.setPrefix("");
+    mapRef.current = map;
+    markersRef.current = L.layerGroup().addTo(map);
+    map.on("moveend zoomend", () => {
+      const c = map.getCenter();
+      moveRef.current({ center: { lat: c.lat, lng: c.lng }, zoom: map.getZoom() });
+    });
+    setReady(true);
+    return () => { map.remove(); mapRef.current = null; };
+  }, [L]); // eslint-disable-line
 
-  const { w, h } = size;
-  const z = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, zoom));
-  const cx = lngToWorldX(center.lng, z), cy = latToWorldY(center.lat, z);
-  /* Tiles only exist at integer zooms, so render the nearest integer
-     level and scale the layer for the fractional remainder — the same
-     trick every slippy map uses to keep pinch-zoom smooth without
-     re-fetching a tile per frame. Pins are positioned at the true
-     fractional zoom OUTSIDE that layer, so they never scale with it. */
-  const tileZ = Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, Math.round(z)));
-  const scale = Math.pow(2, z - tileZ);
-  const tcx = lngToWorldX(center.lng, tileZ), tcy = latToWorldY(center.lat, tileZ);
+  /* Basemap layer — swapped, not rebuilt, when the toggle changes. */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!L || !map) return;
+    const bm = basemap(basemapId);
+    const url = bm.url();
+    if (!url) return;                        // satellite with no key: keep what's showing
+    if (layerRef.current) map.removeLayer(layerRef.current);
+    setTileFails(0);
+    const layer = L.tileLayer(url, {
+      maxZoom: MAP_MAX_ZOOM, minZoom: MAP_MIN_ZOOM, attribution: bm.attribution,
+    });
+    layer.on("tileerror", () => setTileFails((n) => n + 1));
+    layer.on("tileload", () => setTileFails(0));
+    layer.addTo(map);
+    layerRef.current = layer;
+  }, [L, basemapId, ready]);
 
-  const tiles = [];
-  if (w && h) {
-    const span = Math.pow(2, tileZ);
-    const halfW = w / (2 * scale), halfH = h / (2 * scale);
-    const x0 = Math.floor((tcx - halfW) / TILE_SIZE), x1 = Math.floor((tcx + halfW) / TILE_SIZE);
-    const y0 = Math.floor((tcy - halfH) / TILE_SIZE), y1 = Math.floor((tcy + halfH) / TILE_SIZE);
-    for (let ty = y0; ty <= y1; ty++) {
-      if (ty < 0 || ty >= span) continue;               // no tiles past the poles
-      for (let tx = x0; tx <= x1; tx++) {
-        const wrapped = ((tx % span) + span) % span;    // the world repeats east–west
-        tiles.push({ key: `${tileZ}/${tx}/${ty}`, x: tx, y: ty, src: tileUrl(tileZ, wrapped, ty) });
+  /* Follow the controlled center/zoom when the PARENT moves it
+     (search, find-me, a storm deep link) without fighting the user's
+     own panning — Leaflet is already where the user put it. */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const c = map.getCenter();
+    const moved = metresBetween(c.lat, c.lng, center.lat, center.lng) > 25;
+    if (moved || map.getZoom() !== zoom) map.setView([center.lat, center.lng], zoom, { animate: true });
+  }, [center.lat, center.lng, zoom]);
+
+  /* Markers: teardrops sized for thumbs, or a count when clustered. */
+  useEffect(() => {
+    const map = mapRef.current, group = markersRef.current;
+    if (!L || !map || !group) return;
+    group.clearLayers();
+    clusterPins(pins, zoom).forEach((c) => {
+      if (c.single) {
+        const st = canvassStatus(statuses, c.single.status);
+        const on = c.single.id === selectedId;
+        const size = on ? 34 : 28;
+        const icon = L.divIcon({
+          className: "", iconSize: [size, size + 6], iconAnchor: [size / 2, size + 4],
+          html: `<div data-testid="pin-${c.single.id}" style="
+            width:${size}px;height:${size}px;border-radius:50% 50% 50% 0;
+            transform:rotate(-45deg);background:${st.color};
+            border:${on ? 3 : 2}px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4);
+            ${on ? "outline:3px solid rgba(17,24,39,.3);outline-offset:1px;" : ""}"></div>`,
+        });
+        L.marker([c.lat, c.lng], { icon, keyboard: false })
+          .on("click", () => tapPinRef.current(c.single))
+          .addTo(group);
+      } else {
+        const d = c.count > 99 ? 48 : c.count > 9 ? 42 : 36;
+        const icon = L.divIcon({
+          className: "", iconSize: [d, d], iconAnchor: [d / 2, d / 2],
+          html: `<div data-testid="cluster" style="
+            width:${d}px;height:${d}px;border-radius:50%;background:rgba(17,24,39,.86);
+            color:#fff;display:flex;align-items:center;justify-content:center;
+            font:700 13px/1 Inter,system-ui,sans-serif;border:2px solid #fff;
+            box-shadow:0 2px 6px rgba(0,0,0,.35)">${c.count}</div>`,
+        });
+        L.marker([c.lat, c.lng], { icon, keyboard: false })
+          .on("click", () => map.setView([c.lat, c.lng], Math.min(MAP_MAX_ZOOM, map.getZoom() + 3)))
+          .addTo(group);
       }
-    }
+    });
+  }, [L, pins, statuses, selectedId, zoom, ready]);
+
+  /* The rep's own position. */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!L || !map) return;
+    if (meRef.current) { map.removeLayer(meRef.current); meRef.current = null; }
+    if (!me) return;
+    meRef.current = L.circleMarker([me.lat, me.lng], {
+      radius: 7, color: "#fff", weight: 3, fillColor: "#2563EB", fillOpacity: 1,
+    }).addTo(map);
+  }, [L, me, ready]);
+
+  /* A storm's affected radius, drawn when a rep arrives here from an
+     alert — the "here is where the hail fell, go knock it" circle. */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!L || !map) return;
+    if (circleRef.current) { map.removeLayer(circleRef.current); circleRef.current = null; }
+    if (!highlight) return;
+    circleRef.current = L.circle([highlight.lat, highlight.lng], {
+      radius: highlight.radiusMiles * 1609.34,
+      color: "#B42318", weight: 2, fillColor: "#B42318", fillOpacity: 0.08,
+    }).addTo(map);
+  }, [L, highlight, ready]);
+
+  if (!L) {
+    return (
+      <div data-testid="canvass-map" style={{
+        position: "relative", width: "100%", height: "100%", background: S.soft,
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
+      }}>
+        <div style={{ fontSize: 13, color: S.sub, textAlign: "center", lineHeight: 1.5, maxWidth: 300 }}>
+          The map engine didn't load. Reload the page — dropping pins and everything
+          in the list view still work in the meantime.
+        </div>
+      </div>
+    );
   }
 
-  const toScreen = (lat, lng) => ({
-    x: w / 2 + (lngToWorldX(lng, z) - cx),
-    y: h / 2 + (latToWorldY(lat, z) - cy),
-  });
-  const toLatLng = (px, py) => ({
-    lat: worldYToLat(cy + (py - h / 2), z),
-    lng: worldXToLng(cx + (px - w / 2), z),
-  });
-
-  const localPoint = (e) => {
-    const r = boxRef.current.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
-  };
-  const onPointerDown = (e) => {
-    boxRef.current.setPointerCapture && boxRef.current.setPointerCapture(e.pointerId);
-    pointers.current.set(e.pointerId, localPoint(e));
-    if (pointers.current.size === 2) {
-      const [a, b] = [...pointers.current.values()];
-      pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom: z };
-      drag.current = null;
-      return;
-    }
-    const p = localPoint(e);
-    drag.current = { startX: p.x, startY: p.y, cx, cy, moved: 0, at: nowMs() };
-  };
-  const onPointerMove = (e) => {
-    if (!pointers.current.has(e.pointerId)) return;
-    pointers.current.set(e.pointerId, localPoint(e));
-    if (pinch.current && pointers.current.size === 2) {
-      const [a, b] = [...pointers.current.values()];
-      const dist = Math.hypot(a.x - b.x, a.y - b.y);
-      if (pinch.current.dist > 0) {
-        const next = pinch.current.zoom + Math.log2(dist / pinch.current.dist);
-        onMove({ center, zoom: Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, next)) });
-      }
-      return;
-    }
-    if (!drag.current) return;
-    const p = localPoint(e);
-    const dx = p.x - drag.current.startX, dy = p.y - drag.current.startY;
-    drag.current.moved = Math.max(drag.current.moved, Math.hypot(dx, dy));
-    onMove({
-      center: {
-        lat: worldYToLat(drag.current.cy - dy, z),
-        lng: worldXToLng(drag.current.cx - dx, z),
-      },
-      zoom: z,
-    });
-  };
-  const onPointerUp = (e) => {
-    const wasDrag = drag.current;
-    pointers.current.delete(e.pointerId);
-    if (pointers.current.size < 2) pinch.current = null;
-    if (!wasDrag) return;
-    drag.current = null;
-    /* A tap, not a pan. The 6px slop is what separates "I meant to
-       press this" from a finger that slid slightly on the way down —
-       without it, dropping a pin on a phone is nearly impossible. */
-    if (wasDrag.moved > 6) return;
-    const p = localPoint(e);
-    const { lat, lng } = toLatLng(p.x, p.y);
-    const hit = nearestPin(pins, lat, lng);
-    if (hit) onTapPin(hit); else onTapMap(lat, lng);
-  };
-
-  const nudgeZoom = (delta) =>
-    onMove({ center, zoom: Math.max(MAP_MIN_ZOOM, Math.min(MAP_MAX_ZOOM, Math.round(z) + delta)) });
-
   return (
-    <div ref={boxRef} data-testid="canvass-map"
-      onPointerDown={onPointerDown} onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
-      style={{
-        position: "relative", width: "100%", height: "100%", overflow: "hidden",
-        background: S.soft, touchAction: "none", cursor: "grab", userSelect: "none",
-      }}>
-      {/* tile layer — scaled for fractional zoom */}
-      <div style={{
-        position: "absolute", left: w / 2, top: h / 2, width: 0, height: 0,
-        transform: `scale(${scale}) translate(${-tcx}px, ${-tcy}px)`, transformOrigin: "0 0",
-      }}>
-        {tiles.map((t) => (
-          <img key={t.key} src={t.src} alt="" draggable={false} width={TILE_SIZE} height={TILE_SIZE}
-            onLoad={() => setTileFails(0)}
-            /* A broken tile renders as a torn-page icon by default,
-               which looks like the app is broken. Hide it and count it. */
-            onError={(e) => { e.currentTarget.style.visibility = "hidden"; setTileFails((n) => n + 1); }}
-            style={{ position: "absolute", left: t.x * TILE_SIZE, top: t.y * TILE_SIZE, width: TILE_SIZE, height: TILE_SIZE }} />
-        ))}
-      </div>
-
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <div ref={boxRef} data-testid="canvass-map" style={{ position: "absolute", inset: 0, background: S.soft }} />
       {tilesDown && (
+        /* Sits BELOW the address search that floats at the top of the
+           map — at the same offset the two overlapped and the notice
+           was clipped to an unreadable sliver, which rather defeats a
+           message whose whole job is to be read. */
         <div data-testid="tiles-down" style={{
-          position: "absolute", left: 12, right: 12, top: 12, background: "rgba(255,255,255,.96)",
-          border: `1px solid ${S.line}`, borderRadius: 11, padding: "11px 13px", zIndex: 4, pointerEvents: "none",
+          position: "absolute", left: 12, right: 12, top: 66, background: "rgba(255,255,255,.96)",
+          border: `1px solid ${S.line}`, borderRadius: 11, padding: "11px 13px", zIndex: 500, pointerEvents: "none",
         }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: S.ink }}>Map images aren't loading</div>
           <div style={{ fontSize: 12, color: S.sub, marginTop: 4, lineHeight: 1.5 }}>
@@ -28648,64 +28708,9 @@ function CanvassMap({ center, zoom, onMove, pins, statuses, selectedId, onTapPin
           </div>
         </div>
       )}
-
-      {/* the rep's own position */}
-      {me && w > 0 && (() => {
-        const p = toScreen(me.lat, me.lng);
-        return (
-          <div style={{
-            position: "absolute", left: p.x - 8, top: p.y - 8, width: 16, height: 16, borderRadius: "50%",
-            background: "#2563EB", border: "3px solid #fff", boxShadow: "0 0 0 2px rgba(37,99,235,.35)", pointerEvents: "none",
-          }} />
-        );
-      })()}
-
-      {/* pins */}
-      {w > 0 && (pins || []).map((pin) => {
-        const p = toScreen(pin.lat, pin.lng);
-        if (p.x < -40 || p.y < -40 || p.x > w + 40 || p.y > h + 40) return null;
-        const st = canvassStatus(statuses, pin.status);
-        const on = pin.id === selectedId;
-        return (
-          <div key={pin.id} data-testid={`pin-${pin.id}`} title={pin.address || st.name}
-            style={{
-              position: "absolute", left: p.x - (on ? 12 : 8), top: p.y - (on ? 12 : 8),
-              width: on ? 24 : 16, height: on ? 24 : 16, borderRadius: "50%",
-              background: st.color, border: `${on ? 3 : 2}px solid #fff`,
-              boxShadow: on ? "0 0 0 3px rgba(17,24,39,.28)" : "0 1px 3px rgba(0,0,0,.35)",
-              pointerEvents: "none", zIndex: on ? 3 : 2,
-            }} />
-        );
-      })}
-
-      <div style={{ position: "absolute", right: 10, top: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-        {[["+", 1], ["−", -1]].map(([label, d]) => (
-          <button key={label} type="button" aria-label={d > 0 ? "Zoom in" : "Zoom out"}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => nudgeZoom(d)}
-            style={{
-              width: 34, height: 34, borderRadius: 9, border: `1px solid ${S.line}`, background: S.card,
-              color: S.ink, fontSize: 18, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", lineHeight: 1,
-            }}>{label}</button>
-        ))}
-      </div>
-
-      {/* Required by OpenStreetMap's licence and Geoapify's terms. */}
-      <div style={{
-        position: "absolute", right: 0, bottom: 0, background: "rgba(255,255,255,.82)", color: "#374151",
-        fontSize: 9.5, padding: "2px 6px", borderTopLeftRadius: 6, pointerEvents: "auto",
-      }}>
-        <a href="https://www.geoapify.com/" target="_blank" rel="noreferrer" style={{ color: "inherit" }}>Geoapify</a>
-        {" · "}
-        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" style={{ color: "inherit" }}>© OpenStreetMap</a>
-      </div>
     </div>
   );
 }
-
-/* Live epoch millis, isolated so the map's tap/drag timing has one
-   source and tests can reason about it. */
-function nowMs() { return Date.now(); }
 
 /* ------------------------------------------------------------------
    Canvass pins — loaded for the viewport, not all at once.
@@ -29123,14 +29128,23 @@ function CanvassPinSheet({ pin, statuses, users, onClose, onSave, onConvert, onO
   );
 }
 
-function CanvassScreen({ onBack, currentUser, jobs, users, canvassStatuses, toast, onCreateLeadFromPin, onOpenJob }) {
+function CanvassScreen({
+  onBack, currentUser, jobs, users, canvassStatuses, toast, onCreateLeadFromPin, onOpenJob,
+  /* Set when a rep arrives from a storm alert: centre here and draw the
+     affected radius, so "hail hit Naperville" becomes knocking without
+     anyone typing an address. */
+  focus = null,
+}) {
   const [center, setCenter] = useState(() => {
     /* Open where the company works. A rep who has to pan across the
        Atlantic before the first knock will not open this twice. */
+    if (focus && focus.lat != null) return { lat: focus.lat, lng: focus.lng };
     const withGeo = (jobs || []).find((j) => j.lat != null && j.lng != null);
     return withGeo ? { lat: withGeo.lat, lng: withGeo.lng } : { lat: 41.78, lng: -88.15 };
   });
   const [zoom, setZoom] = useState(17);
+  const highlight = focus && focus.radiusMiles
+    ? { lat: focus.lat, lng: focus.lng, radiusMiles: focus.radiusMiles } : null;
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [me, setMe] = useState(null);
@@ -29172,6 +29186,18 @@ function CanvassScreen({ onBack, currentUser, jobs, users, canvassStatuses, toas
   useEffect(() => { onMove({ center, zoom }); /* initial load */ }, []); // eslint-disable-line
 
   const dropPin = async (lat, lng) => {
+    /* The 20 m snap still governs CREATION, not just tapping. Moving
+       adding behind an explicit crosshair removed the accidental pins
+       but not the duplicate ones: two reps working the same street will
+       both line up on the same house, and without this the second one
+       silently creates a rival pin carrying none of the first's
+       history. Select it instead. */
+    const existing = nearestPin(list, lat, lng);
+    if (existing) {
+      setSelectedId(existing.id);
+      toast && toast(`Already pinned — ${existing.address || "this door"}`);
+      return;
+    }
     setBusy(true);
     const id = uid("cv");
     const rev = await geoReverse(lat, lng);
@@ -29220,103 +29246,237 @@ function CanvassScreen({ onBack, currentUser, jobs, users, canvassStatuses, toas
   const knockedToday = list.filter((p) => p.knocked_at
     && String(p.knocked_at).slice(0, 10) === todayIso()).length;
 
-  return (
-    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
-      <SubHeader title="Canvassing" onBack={onBack}
-        right={<Chip tone={knockedToday ? "green" : "gray"}>{knockedToday} today</Chip>} />
+  /* Adding a door is deliberate. In the first version ANY tap on the
+     map dropped a pin, so reading the map created doors — the single
+     most confusing thing about it. Now you enter add mode, line the
+     crosshair up on the house, and confirm. */
+  const [adding, setAdding] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [basemapId, setBasemapId] = useState("street");
 
-      <Card style={{ marginTop: 12 }} pad={13}>
-        <Field label="Find an address" hint="Jump the map to a street, or use your own location.">
-          <AddressAutocomplete value={addr} onChange={setAddr} placeholder="123 Main St"
-            onPick={(it) => {
-              setAddr(it.formatted || it.street || "");
-              const c = { lat: it.lat, lng: it.lng };
-              setCenter(c); setZoom(18); onMove({ center: c, zoom: 18 });
-            }} />
-        </Field>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Btn kind="ghost" small style={{ flex: 1 }} onClick={findMe}><MapPin size={13} /> Where I am</Btn>
-          <Btn kind={view === "list" ? "soft" : "ghost"} small data-testid="canvass-view-toggle"
-            onClick={() => setView(view === "map" ? "list" : "map")}>
-            {view === "map" ? "List" : "Map"}
-          </Btn>
-          <Btn kind={filterCount ? "soft" : "ghost"} small data-testid="canvass-filters"
-            onClick={() => setFilterOpen(true)}>
-            <Filter size={13} /> {filterCount ? `Filters · ${filterCount}` : "Filters"}
-          </Btn>
-          {loading && <Chip tone="gray">Loading…</Chip>}
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden", background: S.bg }}>
+      {/* Compact header — the map is the screen, so the chrome above it
+          stays one row rather than a stack of cards. */}
+      <div style={{
+        flexShrink: 0, display: "flex", alignItems: "center", gap: 8,
+        padding: "10px 12px", borderBottom: `1px solid ${S.line}`, background: S.card,
+      }}>
+        <button onClick={onBack} aria-label="Back" style={{
+          border: "none", background: "none", cursor: "pointer", padding: 6, display: "flex",
+        }}><ChevronLeft size={20} color={S.ink} /></button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: S.ink }}>Canvassing</div>
+          <div style={{ fontSize: 11.5, color: S.sub }}>
+            {knockedToday} today · {shown.length} shown{filterCount ? " · filtered" : ""}
+          </div>
         </div>
-      </Card>
+        <Btn kind={view === "list" ? "soft" : "ghost"} small data-testid="canvass-view-toggle"
+          onClick={() => setView(view === "map" ? "list" : "map")}>{view === "map" ? "List" : "Map"}</Btn>
+        <Btn kind={filterCount ? "soft" : "ghost"} small data-testid="canvass-filters"
+          aria-label="Filters" onClick={() => setFilterOpen(true)}><Filter size={14} /></Btn>
+        <Btn kind="ghost" small aria-label="Scoreboard" data-testid="canvass-stats"
+          onClick={() => setStatsOpen(true)}><PieChart size={14} /></Btn>
+      </div>
 
       {err && (
-        <Callout label="Not saved" tone="red">
-          {err}
-          <div style={{ marginTop: 8 }}><Btn kind="ghost" small onClick={() => setErr("")}>Dismiss</Btn></div>
-        </Callout>
+        <div style={{ flexShrink: 0, background: "#7A1D12", color: "#fff", fontSize: 12.5, padding: "9px 14px", lineHeight: 1.45 }}>
+          {err} <button onClick={() => setErr("")} style={{ border: "none", background: "none", color: "#fff", textDecoration: "underline", cursor: "pointer" }}>Dismiss</button>
+        </div>
       )}
 
       {view === "map" ? (
-        <>
-          <Card style={{ marginTop: 12, padding: 0, overflow: "hidden" }}>
-            <div ref={mapWrapRef} style={{ height: 420, position: "relative" }}>
-              <CanvassMap
-                center={center} zoom={zoom} onMove={onMove}
-                pins={shown} statuses={canvassStatuses} selectedId={selectedId}
-                onTapPin={(p) => setSelectedId(p.id)}
-                onTapMap={(lat, lng) => { setSelectedId(null); dropPin(lat, lng); }}
-                me={me} />
-            </div>
-          </Card>
-          <div style={{ fontSize: 12.5, color: S.sub, lineHeight: 1.5, marginTop: 10 }}>
-            Tap anywhere to drop a pin at that house — tapping within {PIN_SNAP_METRES} m of an existing pin
-            opens that one instead, so two reps on the same street don't double up. Pins are shared with the whole team.
-            {filterCount > 0 && " Filters are hiding some pins right now."}
+        <div ref={mapWrapRef} style={{ flex: 1, position: "relative", minHeight: 0 }}>
+          <CanvassMap
+            center={center} zoom={zoom} onMove={onMove}
+            pins={shown} statuses={canvassStatuses} selectedId={selectedId}
+            onTapPin={(p) => setSelectedId(p.id)} me={me}
+            basemapId={basemapId} highlight={highlight} />
+
+          {/* Search floats over the map instead of pushing it down. */}
+          <div style={{ position: "absolute", left: 10, right: 10, top: 10, zIndex: 600 }}>
+            <AddressAutocomplete value={addr} onChange={setAddr} placeholder="Jump to an address"
+              onPick={(it) => {
+                setAddr(it.formatted || it.street || "");
+                const c = { lat: it.lat, lng: it.lng };
+                setCenter(c); setZoom(18); onMove({ center: c, zoom: 18 });
+              }} />
           </div>
-        </>
+
+          {/* Street / Satellite. Satellite is always visible: hiding it
+              would leave a rep wondering whether the app has it. */}
+          <div style={{
+            position: "absolute", left: 10, bottom: 92, zIndex: 600, display: "flex",
+            background: S.card, border: `1px solid ${S.line}`, borderRadius: 999, padding: 3, boxShadow: "0 2px 8px rgba(0,0,0,.18)",
+          }}>
+            {BASEMAPS.map((b) => {
+              const on = basemapId === b.id;
+              const usable = basemapReady(b.id);
+              return (
+                <button key={b.id} type="button" data-testid={`basemap-${b.id}`}
+                  onClick={() => (usable ? setBasemapId(b.id)
+                    : toast && toast("Satellite needs a map key — add VITE_SATELLITE_TILE_URL and redeploy"))}
+                  style={{
+                    border: "none", borderRadius: 999, padding: "6px 13px", cursor: "pointer",
+                    fontSize: 12.5, fontWeight: 700, fontFamily: "inherit",
+                    background: on ? T.accent : "transparent",
+                    color: on ? "#fff" : usable ? S.sub : "#B9BEC6",
+                  }}>{b.label}</button>
+              );
+            })}
+          </div>
+
+          {/* Add mode: crosshair + confirm, rather than any tap creating
+              a door by accident. */}
+          {adding && (
+            <>
+              <div data-testid="add-crosshair" style={{
+                position: "absolute", left: "50%", top: "50%", width: 44, height: 44, marginLeft: -22, marginTop: -22,
+                zIndex: 601, pointerEvents: "none",
+              }}>
+                <div style={{ position: "absolute", inset: 0, border: `3px solid ${T.accent}`, borderRadius: "50% 50% 50% 0", transform: "rotate(-45deg)", background: "rgba(255,255,255,.25)" }} />
+              </div>
+              <div style={{
+                position: "absolute", left: 10, right: 10, bottom: 16, zIndex: 602, display: "flex", gap: 8,
+                background: S.card, border: `1px solid ${S.line}`, borderRadius: 14, padding: 10, boxShadow: "0 6px 20px rgba(0,0,0,.22)",
+              }}>
+                <div style={{ flex: 1, fontSize: 12.5, color: S.sub, alignSelf: "center", lineHeight: 1.4 }}>
+                  Line the marker up on the house, then drop it.
+                </div>
+                <Btn kind="ghost" small onClick={() => setAdding(false)}>Cancel</Btn>
+                <Btn small disabled={busy} data-testid="confirm-drop"
+                  onClick={async () => { setAdding(false); await dropPin(center.lat, center.lng); }}>
+                  {busy ? "…" : "Drop pin"}
+                </Btn>
+              </div>
+            </>
+          )}
+
+          {/* Thumb-reachable controls. */}
+          {!adding && !selected && (
+            <div style={{ position: "absolute", right: 12, bottom: 16, zIndex: 601, display: "flex", flexDirection: "column", gap: 10 }}>
+              <button aria-label="Where I am" onClick={findMe} style={{
+                width: 46, height: 46, borderRadius: "50%", border: `1px solid ${S.line}`, background: S.card,
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 2px 8px rgba(0,0,0,.2)",
+              }}><Navigation size={20} color={S.ink} /></button>
+              <button aria-label="Add a door" data-testid="add-door" onClick={() => { setSelectedId(null); setAdding(true); }} style={{
+                width: 56, height: 56, borderRadius: "50%", border: "none", background: T.accent,
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 4px 14px rgba(0,0,0,.28)",
+              }}><Plus size={26} color="#fff" /></button>
+            </div>
+          )}
+
+          {/* The door, as a sheet over the map — dispositions under your
+              thumb with the street still visible behind, instead of a
+              card below the fold you have to scroll to reach. */}
+          {selected && !adding && (
+            <div data-testid="pin-sheet" style={{
+              position: "absolute", left: 0, right: 0, bottom: 0, zIndex: 602,
+              background: S.card, borderTop: `1px solid ${S.line}`,
+              borderTopLeftRadius: 18, borderTopRightRadius: 18,
+              padding: "12px 14px calc(14px + env(safe-area-inset-bottom))",
+              boxShadow: "0 -6px 24px rgba(0,0,0,.18)", maxHeight: "62%", overflowY: "auto",
+            }}>
+              <div style={{ width: 38, height: 4, borderRadius: 2, background: S.line, margin: "0 auto 10px" }} />
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: S.ink }}>{selected.address || "Dropped pin"}</div>
+                  <div style={{ fontSize: 12, color: S.sub, marginTop: 2 }}>
+                    {canvassStatus(canvassStatuses, selected.status).name}
+                    {(selected.history || []).length > 0 && ` · knocked ${selected.history.length}×`}
+                    {(selected.prospect || {}).name ? ` · ${selected.prospect.name}` : ""}
+                  </div>
+                </div>
+                {selected.job_id && <Chip tone="green">Job</Chip>}
+                <button aria-label="Close" onClick={() => setSelectedId(null)}
+                  style={{ border: "none", background: "none", cursor: "pointer", padding: 4 }}>
+                  <X size={18} color={S.sub} />
+                </button>
+              </div>
+
+              <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 12 }}>
+                {statuses.filter((s) => s.id !== "new").map((s) => (
+                  <button key={s.id} type="button" onClick={() => setStatus(selected, s.id)}
+                    style={{
+                      border: `1.5px solid ${selected.status === s.id ? s.color : S.line}`,
+                      background: selected.status === s.id ? s.color : S.card,
+                      color: selected.status === s.id ? "#fff" : S.ink,
+                      borderRadius: 999, padding: "9px 14px", fontSize: 13.5, fontWeight: 600,
+                      cursor: "pointer", fontFamily: "inherit",
+                    }}>{s.name}</button>
+                ))}
+              </div>
+
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <Btn small style={{ flex: 1 }} data-testid="open-pin-details" onClick={() => setDetail(selected.id)}>Details</Btn>
+                {selected.job_id && onOpenJob && (
+                  <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => onOpenJob(selected.job_id)}>Open job</Btn>
+                )}
+                <Btn kind="ghost" small aria-label="Remove pin" style={{ color: "#B42318", flex: "0 0 auto" }}
+                  onClick={() => { removePin(selected.id); setSelectedId(null); }}>
+                  <Trash2 size={14} />
+                </Btn>
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
         /* The list is not a lesser map. It is what a rep uses in a
            moving truck, on a bad signal, or when working a callback
            list at 6pm — sorted by the thing that matters then, which
            is who was last spoken to. */
-        <Card style={{ marginTop: 12 }} testId="canvass-list">
-          <CardTitle right={<Chip tone="gray">{shown.length}</Chip>}>Doors</CardTitle>
-          {shown.length === 0 ? (
-            <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
-              {list.length === 0
-                ? "No pins in this area yet. Switch to the map and tap a house to start."
-                : "No pins match these filters."}
-            </div>
-          ) : [...shown].sort((a, b) => String(b.knocked_at || "").localeCompare(String(a.knocked_at || ""))).map((p, i) => {
-            const st = canvassStatus(canvassStatuses, p.status);
-            return (
-              <button key={p.id} data-testid={`row-${p.id}`}
-                onClick={() => { setSelectedId(p.id); setCenter({ lat: p.lat, lng: p.lng }); setDetail(p.id); }}
-                style={{
-                  display: "flex", gap: 10, alignItems: "center", width: "100%", textAlign: "left",
-                  border: "none", background: "none", cursor: "pointer", fontFamily: "inherit",
-                  padding: "10px 0", borderTop: i ? `1px solid ${S.line}` : "none",
-                }}>
-                <span style={{ width: 11, height: 11, borderRadius: "50%", background: st.color, flexShrink: 0 }} />
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: S.ink }}>
-                    {p.address || "Dropped pin"}
+        <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+          <Card testId="canvass-list">
+            <CardTitle right={<Chip tone="gray">{shown.length}</Chip>}>Doors</CardTitle>
+            {shown.length === 0 ? (
+              <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+                {list.length === 0
+                  ? "No pins in this area yet. Switch to the map and use + to add the first door."
+                  : "No pins match these filters."}
+              </div>
+            ) : [...shown].sort((a, b) => String(b.knocked_at || "").localeCompare(String(a.knocked_at || ""))).map((p, i) => {
+              const st = canvassStatus(canvassStatuses, p.status);
+              return (
+                <button key={p.id} data-testid={`row-${p.id}`}
+                  onClick={() => { setSelectedId(p.id); setCenter({ lat: p.lat, lng: p.lng }); setDetail(p.id); }}
+                  style={{
+                    display: "flex", gap: 10, alignItems: "center", width: "100%", textAlign: "left",
+                    border: "none", background: "none", cursor: "pointer", fontFamily: "inherit",
+                    padding: "10px 0", borderTop: i ? `1px solid ${S.line}` : "none",
+                  }}>
+                  <span style={{ width: 11, height: 11, borderRadius: "50%", background: st.color, flexShrink: 0 }} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: S.ink }}>
+                      {p.address || "Dropped pin"}
+                    </span>
+                    <span style={{ display: "block", fontSize: 12, color: S.sub, marginTop: 2 }}>
+                      {st.name}
+                      {(p.prospect || {}).name ? ` · ${p.prospect.name}` : ""}
+                      {p.knocked_at ? ` · ${String(p.knocked_at).slice(0, 10)}` : " · never knocked"}
+                    </span>
                   </span>
-                  <span style={{ display: "block", fontSize: 12, color: S.sub, marginTop: 2 }}>
-                    {st.name}
-                    {(p.prospect || {}).name ? ` · ${p.prospect.name}` : ""}
-                    {p.knocked_at ? ` · ${String(p.knocked_at).slice(0, 10)}` : " · never knocked"}
-                  </span>
-                </span>
-                {p.job_id && <Chip tone="green">Job</Chip>}
-              </button>
-            );
-          })}
-        </Card>
+                  {p.job_id && <Chip tone="green">Job</Chip>}
+                </button>
+              );
+            })}
+          </Card>
+        </div>
       )}
 
-      {/* Counted where a rep can see it, against the right denominator. */}
-      <Card style={{ marginTop: 12 }} testId="canvass-scoreboard">
-        <CardTitle right={filterCount ? <Chip tone="blue">filtered</Chip> : null}>Scoreboard</CardTitle>
+      {/* The door's full record. */}
+      <CanvassPinSheet
+        pin={detailPin} statuses={canvassStatuses} users={users}
+        onClose={() => setDetail(null)}
+        onSave={(patch) => savePin({ ...detailPin, ...patch })}
+        onConvert={onCreateLeadFromPin ? async () => {
+          const job = await onCreateLeadFromPin(detailPin);
+          if (job) await savePin({ ...detailPin, job_id: job.id });
+        } : null}
+        onOpenJob={onOpenJob} toast={toast} />
+
+      <Sheet open={statsOpen} onClose={() => setStatsOpen(false)} title="Scoreboard">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 10 }}>
           {[["Doors", stats.doors], ["Answered", stats.contacts], ["Appointments", stats.appointments],
             ["Sold", stats.sold], ["Became jobs", stats.converted]].map(([label, n]) => (
@@ -29343,7 +29503,17 @@ function CanvassScreen({ onBack, currentUser, jobs, users, canvassStatuses, toas
             ))}
           </div>
         )}
-      </Card>
+        <Field label="Pin colors" hint="Edit these under More → Canvassing dispositions.">
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            {statuses.map((s) => (
+              <span key={s.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.sub }}>
+                <span style={{ width: 11, height: 11, borderRadius: "50%", background: s.color }} />
+                {s.name}
+              </span>
+            ))}
+          </div>
+        </Field>
+      </Sheet>
 
       <Sheet open={filterOpen} onClose={() => setFilterOpen(false)} title="Filter doors"
         footer={
@@ -29400,75 +29570,6 @@ function CanvassScreen({ onBack, currentUser, jobs, users, canvassStatuses, toas
           </div>
         </Field>
       </Sheet>
-
-      {busy && <div style={{ fontSize: 12.5, color: S.sub, marginTop: 8 }}>Looking up that address…</div>}
-
-      {selected && (
-        <Card style={{ marginTop: 12 }}>
-          <CardTitle right={<Chip tone="gray">{canvassStatus(canvassStatuses, selected.status).name}</Chip>}>
-            {selected.address || "Dropped pin"}
-          </CardTitle>
-          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 4 }}>
-            {statuses.filter((s) => s.id !== "new").map((s) => (
-              <button key={s.id} type="button" onClick={() => setStatus(selected, s.id)}
-                style={{
-                  border: `1.5px solid ${selected.status === s.id ? s.color : S.line}`,
-                  background: selected.status === s.id ? s.color : S.card,
-                  color: selected.status === s.id ? "#fff" : S.ink,
-                  borderRadius: 999, padding: "8px 13px", fontSize: 13, fontWeight: 600,
-                  cursor: "pointer", fontFamily: "inherit",
-                }}>{s.name}</button>
-            ))}
-          </div>
-          {(selected.history || []).length > 0 && (
-            <div style={{ marginTop: 12, fontSize: 12.5, color: S.sub }}>
-              Knocked {(selected.history || []).length} time{(selected.history || []).length === 1 ? "" : "s"} ·
-              last by {(selected.history || [])[selected.history.length - 1].by || "someone"}
-            </div>
-          )}
-          {selected.job_id && (
-            <div style={{ marginTop: 10 }}>
-              <Chip tone="green">Became a job</Chip>
-              {onOpenJob && (
-                <Btn kind="ghost" small style={{ marginLeft: 8 }} onClick={() => onOpenJob(selected.job_id)}>Open job</Btn>
-              )}
-            </div>
-          )}
-          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <Btn small style={{ flex: 1 }} data-testid="open-pin-details" onClick={() => setDetail(selected.id)}>Details</Btn>
-            <Btn kind="ghost" small style={{ flex: 1 }} onClick={() => setSelectedId(null)}>Done</Btn>
-            <Btn kind="ghost" small aria-label="Remove pin" style={{ color: "#B42318", flex: "0 0 auto" }}
-              onClick={() => { removePin(selected.id); setSelectedId(null); }}>
-              <Trash2 size={13} />
-            </Btn>
-          </div>
-        </Card>
-      )}
-
-      {/* The door itself: who lives here, what was said, what the
-          weather did to this roof, and the one tap that turns a good
-          conversation into a job. */}
-      <CanvassPinSheet
-        pin={detailPin} statuses={canvassStatuses} users={users}
-        onClose={() => setDetail(null)}
-        onSave={(patch) => savePin({ ...detailPin, ...patch })}
-        onConvert={onCreateLeadFromPin ? async () => {
-          const job = await onCreateLeadFromPin(detailPin);
-          if (job) await savePin({ ...detailPin, job_id: job.id });
-        } : null}
-        onOpenJob={onOpenJob} toast={toast} />
-
-      <Card style={{ marginTop: 12 }} pad={13}>
-        <CardTitle>Legend</CardTitle>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          {statuses.map((s) => (
-            <span key={s.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: S.sub }}>
-              <span style={{ width: 11, height: 11, borderRadius: "50%", background: s.color, border: "1.5px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,.15)" }} />
-              {s.name}
-            </span>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 }

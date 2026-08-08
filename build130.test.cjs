@@ -51,8 +51,10 @@ ok(/\.sort\(\(a, b\) => String\(b\.knocked_at \|\| ""\)\.localeCompare\(String\(
 ok(/data-testid="canvass-filters"/.test(src) && /data-testid="clear-filters"/.test(src),
   "filters open and can be cleared in one tap");
 ok(/pins=\{shown\}/.test(src), "the MAP honours the filters too, not just the list");
-ok(/Filters are hiding some pins right now\./.test(src),
-  "and says so — a filtered map that looks empty is otherwise indistinguishable from an unworked street");
+/* Build 132 moved this into the header line, which is always visible
+   rather than sitting under the map in a paragraph nobody reads. */
+ok(/\{knockedToday\} today · \{shown\.length\} shown\{filterCount \? " · filtered" : ""\}/.test(src),
+  "the header says when filters are active — a filtered map that looks empty is otherwise indistinguishable from an unworked street");
 
 /* ---------- static: assignment ---------- */
 ok(/data-testid="assign-pin"/.test(src), "a pin can be assigned to a rep");
