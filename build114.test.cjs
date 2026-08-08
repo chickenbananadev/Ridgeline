@@ -25,8 +25,14 @@ ok(readyMatches.length === 2,
 
 /* ---------- static: root App level — nav badge ---------- */
 ok(/const readyToPayCount = jobs\.filter\(\(j\) =>/.test(src), "root App computes readyToPayCount from the live jobs list");
-ok(/<NavBtn id="home" icon=\{Home\} label="Home" badge=\{isAdmin \? readyToPayCount : 0\}/.test(src),
-  "the Home nav button now shows the ready-to-pay count as a badge, admin-only");
+/* Build 134 added unhandled storm alerts to the same badge. The
+   ready-to-pay half must stay admin-gated — it is a money queue, and a
+   rep seeing a count of invoices awaiting payment is the leak this
+   assertion exists to catch. The storm half is deliberately NOT gated
+   (whoever is nearest should be able to go), so the check is on the
+   admin ternary rather than on the whole expression. */
+ok(/<NavBtn id="home" icon=\{Home\} label="Home" badge=\{\(isAdmin \? readyToPayCount : 0\)/.test(src),
+  "the Home nav button shows the ready-to-pay count as a badge, still admin-only");
 
 /* ---------- static: Dashboard level — the card ---------- */
 ok(/const readyToPay = jobs\.filter\(\(j\) =>/.test(src), "Dashboard computes its own readyToPay count from its jobs prop");

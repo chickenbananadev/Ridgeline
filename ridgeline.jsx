@@ -14661,6 +14661,56 @@ function seedStormAreas(jobs, radiusMiles = 15) {
   return areas.sort((a, b) => b.count - a.count);
 }
 
+/* What to do when a detector hands back a storm that already has a row.
+
+   Both detectors run repeatedly against a moving window, so most of
+   what they produce is something already raised. The default is to do
+   nothing — an alert that re-announces itself every half hour is worse
+   than no alert.
+
+   The exception is a bigger number. Hail reports arrive over hours, so
+   an early run legitimately sees 1" and a later one sees 2.5". That is
+   new information and the row has to carry the larger figure, or the
+   alert permanently understates a storm on the strength of whichever
+   report happened to be filed first.
+
+   A raise reopens the alert — clearing both the acknowledgement and
+   the dismissal. Re-raising something a person explicitly closed is
+   normally how an alert system trains people to ignore it, so this is
+   a deliberate exception with a narrow trigger: both decisions were
+   made about a smaller storm, and 1" hail passed over is a different
+   call from 2.75" hail passed over. It can only fire when the reported
+   size actually grows, never on a repeat of the same figure, and the
+   dismiss control says so before anyone taps it. */
+function mergeStormAlert(existing, candidate) {
+  if (!existing) return "insert";
+  const was = Number(existing.magnitude), now = Number(candidate.magnitude);
+  if (isFinite(now) && (!isFinite(was) || now > was)) return "raise";
+  return "skip";
+}
+
+/* The alerts that should be shouting at someone right now. Dismissed
+   ones are gone, acknowledged ones are somebody's problem already. */
+function openStormAlerts(alerts) {
+  return (alerts || [])
+    .filter((a) => !a.dismissed && !a.acknowledged_at)
+    .sort((a, b) => (a.occurred_on < b.occurred_on ? 1 : a.occurred_on > b.occurred_on ? -1
+      : Number(b.magnitude) - Number(a.magnitude)));
+}
+
+/* "Today" beats "2026-08-08" on a banner someone reads at a stoplight.
+   Takes today explicitly so it can be tested without freezing a clock. */
+function stormAlertAge(occurredOn, todayIsoStr) {
+  if (!occurredOn) return "";
+  const days = Math.round((Date.parse(todayIsoStr + "T00:00Z") - Date.parse(occurredOn + "T00:00Z")) / 864e5);
+  if (!isFinite(days)) return "";
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  if (days < 14) return "last week";
+  return `${Math.round(days / 7)} weeks ago`;
+}
+
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded = false }) {
   /* Day-first, not a grid.
 
@@ -28898,6 +28948,179 @@ function CanvassMap({
    here: the rep has physically walked to the door and will not do it
    again.
 ------------------------------------------------------------------- */
+/* ------------------------------------------------------------------
+   STORM ALERTS — the surface half
+
+   Build 133 supplied the settings and the detection. This is what a
+   person sees: a banner on the home screen, a badge in the menu, a
+   screen listing what fell and where, and the one tap that matters —
+   opening the canvassing map centred on the storm with the affected
+   radius drawn, so "hail hit Naperville" becomes knocking without
+   anyone typing an address.
+
+   Same hook shape as useCanvassPins, deliberately: optimistic write,
+   reconcile against what the database actually stored, roll back and
+   SAY SO if it refused. An acknowledgement that silently failed would
+   have a whole team believing a storm was covered.
+------------------------------------------------------------------- */
+function useStormAlerts({ tenantId, ready }) {
+  const [alerts, setAlerts] = useState({});      // id -> row
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const merge = (rows) => setAlerts((prev) => {
+    const next = { ...prev };
+    (rows || []).forEach((r) => { if (r && r.id) next[r.id] = r; });
+    return next;
+  });
+
+  const load = async () => {
+    const db = DB();
+    if (!db || !ready) return;
+    setLoading(true);
+    const { data, error } = await db.from("crm_storm_alerts").select("*")
+      .order("occurred_on", { ascending: false }).limit(500);
+    setLoading(false);
+    if (error) { setErr("Couldn't load storm alerts. " + (error.message || "")); return; }
+    setErr("");
+    setAlerts(Object.fromEntries((data || []).map((r) => [r.id, r])));
+  };
+
+  useEffect(() => { load(); }, [ready, tenantId]);
+
+  const patch = async (id, fields) => {
+    const before = alerts[id];
+    if (!before) return;
+    merge([{ ...before, ...fields }]);
+    const db = DB();
+    if (!db) return;
+    const { data, error } = await db.from("crm_storm_alerts").update(fields).eq("id", id).select().maybeSingle();
+    if (error) {
+      setErr("That didn't save — you're seeing it on this device only. " + (error.message || ""));
+      merge([before]);
+      return;
+    }
+    if (data) merge([data]);
+  };
+
+  const acknowledge = (id, userId) =>
+    patch(id, { acknowledged_by: userId || null, acknowledged_at: new Date().toISOString() });
+  /* Un-acknowledging exists because the alternative is a rep tapping
+     the wrong row and having no way back. */
+  const unacknowledge = (id) => patch(id, { acknowledged_by: null, acknowledged_at: null });
+  const dismiss = (id) => patch(id, { dismissed: true });
+  const restore = (id) => patch(id, { dismissed: false });
+
+  /* Writes a detected candidate, or raises an existing row's magnitude.
+     Returns what it did so the sweep can report honestly. */
+  const record = async (candidate, existingByKey) => {
+    const existing = existingByKey[candidate.reportKey];
+    const action = mergeStormAlert(existing, candidate);
+    if (action === "skip") return "skip";
+    const row = {
+      watch_id: candidate.watchId, watch_name: candidate.watchName, kind: candidate.kind,
+      lat: candidate.lat, lng: candidate.lng, radius_miles: candidate.radiusMiles,
+      occurred_on: candidate.occurredOn, magnitude: candidate.magnitude, unit: candidate.unit,
+      place: candidate.place, report_count: candidate.reportCount, report_key: candidate.reportKey,
+    };
+    const db = DB();
+    if (!db) {
+      /* Demo mode still shows the alert, so the screen can be seen
+         working without a backend — it just doesn't persist. */
+      const local = { id: existing ? existing.id : uid("sa"), ...row, dismissed: false, acknowledged_at: null };
+      merge([local]);
+      return action;
+    }
+    if (action === "raise") {
+      const { data, error } = await db.from("crm_storm_alerts")
+        .update({ ...row, acknowledged_by: null, acknowledged_at: null, dismissed: false })
+        .eq("id", existing.id).select().maybeSingle();
+      if (error) { setErr("Couldn't update a storm alert. " + (error.message || "")); return "skip"; }
+      if (data) merge([data]);
+      return "raise";
+    }
+    const { data, error } = await db.from("crm_storm_alerts")
+      .insert({ id: uid("sa"), ...row }).select().maybeSingle();
+    if (error) {
+      /* A unique-violation here is the other detector having won the
+         race, which is the mechanism working, not a fault. */
+      if (!/duplicate|unique/i.test(error.message || "")) {
+        setErr("Couldn't raise a storm alert. " + (error.message || ""));
+      }
+      return "skip";
+    }
+    if (data) merge([data]);
+    return "insert";
+  };
+
+  useEffect(() => {
+    const db = DB();
+    if (!db || !ready || !tenantId) return;
+    const ch = db.channel("crm-storm-alerts")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "crm_storm_alerts", filter: `tenant_id=eq.${tenantId}` },
+        (p) => p.new && merge([p.new]))
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "crm_storm_alerts", filter: `tenant_id=eq.${tenantId}` },
+        (p) => p.new && merge([p.new]))
+      .subscribe();
+    return () => { db.removeChannel(ch); };
+  }, [ready, tenantId]);
+
+  const list = Object.values(alerts);
+  return { list, byKey: Object.fromEntries(list.map((a) => [a.report_key, a])),
+    acknowledge, unacknowledge, dismiss, restore, record, reload: load, err, setErr, loading };
+}
+
+/* The in-app sweep. Works day one with no deployment, which is the
+   whole reason it exists alongside the scheduled function — a company
+   that never deploys an Edge Function still gets told about hail.
+
+   Runs on open and on a long interval, never on every render. Each
+   watched area is asked about separately because fetchStormReports
+   measures distance from the point it was given, and that distance is
+   what the area's own radius filters on. LSR_CACHE already collapses
+   repeat questions, so a re-run inside the same session is nearly
+   free. */
+function useStormSweep({ watch, alerts, ready }) {
+  const running = useRef(false);
+  /* The sweep is started by an effect that must NOT re-run on every
+     render, so it reads the alert set through a ref rather than
+     closing over whatever it happened to be when the effect fired —
+     otherwise a long sweep would re-raise storms it had just written. */
+  const alertsRef = useRef(alerts);
+  alertsRef.current = alerts;
+
+  useEffect(() => {
+    const w = normalizeStormWatch(watch);
+    if (!ready || !w.enabled || !w.areas.length) return;
+    let alive = true;
+
+    const sweep = async () => {
+      if (running.current || !alive) return;
+      running.current = true;
+      try {
+        const end = todayIso();
+        const start = new Date(Date.now() - w.lookbackDays * 864e5).toISOString().slice(0, 10);
+        for (const area of w.areas) {
+          const reports = await fetchStormReports(area.lat, area.lng, start, end);
+          if (!alive) return;
+          /* A failed lookup returns null. Skip it rather than treating
+             "we couldn't ask" as "nothing happened". */
+          if (!reports) continue;
+          const found = detectStormAlerts(reports, area, { minHailIn: w.minHailIn, minWindMph: w.minWindMph });
+          for (const c of found) {
+            if (!alive) return;
+            await alertsRef.current.record(c, alertsRef.current.byKey);
+          }
+        }
+      } finally { running.current = false; }
+    };
+
+    sweep();
+    const t = setInterval(sweep, 30 * 60 * 1000);   // half-hourly while the app is open
+    return () => { alive = false; clearInterval(t); };
+  }, [ready, JSON.stringify(normalizeStormWatch(watch))]);
+}
+
 function useCanvassPins({ tenantId, ready }) {
   const [pins, setPins] = useState({});     // id -> row
   const [err, setErr] = useState("");
@@ -29083,6 +29306,173 @@ function CanvassStatusEditor({ statuses, setStatuses, onBack, toast, currentUser
           Only an admin or someone with company-settings access can change these.
         </div>
       )}
+    </div>
+  );
+}
+
+/* The home-screen banner. Sits beside AnnouncementBar and deliberately
+   does not look like it: an announcement is somebody talking, this is
+   weather that already happened and is costing money while it's
+   ignored. Red, an alert icon, and a button that goes straight to
+   knocking rather than to a settings screen.
+
+   Only ever shows unhandled alerts. Once someone acknowledges, it is
+   their problem and the banner stops shouting at the whole company. */
+function StormAlertBanner({ alerts, onOpen, onCanvass }) {
+  const open = openStormAlerts(alerts);
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (open.length < 2) return;
+    const t = setInterval(() => setI((x) => (x + 1) % open.length), 6000);
+    return () => clearInterval(t);
+  }, [open.length]);
+  if (!open.length) return null;
+  const a = open[Math.min(i, open.length - 1)];
+  const age = stormAlertAge(a.occurred_on, todayIso());
+  return (
+    <div data-testid="storm-banner" style={{
+      margin: "0 16px 14px", background: "#FEF3F2", border: "1px solid #FDA29B",
+      borderRadius: 12, padding: "12px 14px",
+    }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <AlertTriangle size={16} color="#B42318" style={{ flexShrink: 0, marginTop: 2 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: "#B42318", lineHeight: 1.45 }}>
+            {stormAlertHeadline(a)}
+          </div>
+          <div style={{ fontSize: 12, color: "#912018", marginTop: 3 }}>
+            {age}{a.report_count > 1 ? ` · ${a.report_count} reports` : ""}
+            {open.length > 1 ? ` · ${open.length} storms unhandled` : ""}
+          </div>
+        </div>
+        {open.length > 1 && (
+          <button onClick={() => setI((x) => (x + 1) % open.length)} aria-label="Next storm"
+            style={{ border: "none", background: "none", cursor: "pointer", flexShrink: 0, padding: 4 }}>
+            <ChevronRight size={17} color="#B42318" />
+          </button>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 11 }}>
+        <Btn small onClick={() => onCanvass(a)} data-testid="storm-banner-canvass">
+          <MapPin size={13} /> Knock it
+        </Btn>
+        <Btn small kind="ghost" onClick={onOpen}>All storms</Btn>
+      </div>
+    </div>
+  );
+}
+
+/* Everything that has fallen, and what was done about it.
+
+   The number that turns an alert into a decision is how many of the
+   company's own roofs sit inside the radius — eleven is a morning's
+   work, zero is a reason not to drive an hour. It is computed from the
+   radius recorded ON the alert, not the current setting, so widening
+   an area later doesn't retroactively rewrite what an old alert
+   claimed. */
+function StormAlertsScreen({ alerts, jobs, users, currentUser, onBack, onCanvass, onSetup, toast }) {
+  const [tab, setTab] = useState("open");
+  const list = alerts.list || [];
+  const open = openStormAlerts(list);
+  const handled = list.filter((a) => !a.dismissed && a.acknowledged_at)
+    .sort((a, b) => (a.occurred_on < b.occurred_on ? 1 : -1));
+  const dropped = list.filter((a) => a.dismissed)
+    .sort((a, b) => (a.occurred_on < b.occurred_on ? 1 : -1));
+  const shown = tab === "open" ? open : tab === "handled" ? handled : dropped;
+  const today = todayIso();
+  const nameOf = (id) => (users || []).find((u) => u.id === id)?.name || "someone";
+
+  return (
+    <div style={{ padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }}>
+      <SubHeader title="Storm alerts" onBack={onBack}
+        right={<Btn small kind="ghost" onClick={onSetup}><Settings size={14} /> Setup</Btn>} />
+
+      {alerts.err && (
+        <div style={{ marginTop: 12, background: "#FEF3F2", border: "1px solid #FDA29B", borderRadius: 10, padding: "10px 12px", fontSize: 12.5, color: "#B42318" }}>
+          {alerts.err}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
+        {[["open", "Needs attention", open.length], ["handled", "Handled", handled.length], ["dismissed", "Dismissed", dropped.length]].map(([id, label, n]) => (
+          <button key={id} onClick={() => setTab(id)} style={{
+            flex: 1, padding: "9px 6px", borderRadius: 9, cursor: "pointer", fontSize: 12.5, fontWeight: 700,
+            border: `1px solid ${tab === id ? T.accent : S.line}`,
+            background: tab === id ? T.accentSoft : S.card, color: tab === id ? T.accent : S.sub,
+          }}>{label}{n ? ` · ${n}` : ""}</button>
+        ))}
+      </div>
+
+      {!shown.length && (
+        <Card pad={16} style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 13, color: S.sub, lineHeight: 1.5 }}>
+            {tab === "open"
+              ? "Nothing unhandled. Storms show up here automatically when hail or damaging wind lands inside one of your watched areas."
+              : tab === "handled" ? "Nothing acknowledged yet." : "Nothing dismissed."}
+          </div>
+        </Card>
+      )}
+
+      {shown.map((a) => {
+        const inside = jobsWithinRadius(jobs, { lat: a.lat, lng: a.lng, radiusMiles: a.radius_miles });
+        return (
+          <Card key={a.id} pad={14} style={{ marginTop: 10 }} testId="storm-alert-card">
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <span style={{
+                width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: "grid", placeItems: "center",
+                background: a.kind === "hail" ? "#FEF0C7" : "#E0EAFF",
+              }}>
+                {a.kind === "hail" ? <CloudRain size={15} color="#B54708" /> : <Zap size={15} color="#3538CD" />}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 800, lineHeight: 1.35 }}>{stormAlertHeadline(a)}</div>
+                <div style={{ fontSize: 12.5, color: S.sub, marginTop: 4 }}>
+                  {stormAlertAge(a.occurred_on, today)} · {a.occurred_on}
+                  {a.watch_name ? ` · ${a.watch_name}` : ""}
+                  {a.report_count > 1 ? ` · ${a.report_count} spotter reports` : ""}
+                </div>
+              </div>
+            </div>
+
+            <div style={{
+              marginTop: 11, padding: "9px 11px", borderRadius: 9, background: S.soft,
+              fontSize: 12.5, color: S.sub, lineHeight: 1.5,
+            }}>
+              <b style={{ color: S.ink }}>{inside.length} of your job{inside.length === 1 ? "" : "s"}</b>
+              {inside.length === 1 ? " sits" : " sit"} within {Math.round(Number(a.radius_miles) || 0)} mi of where this hit.
+            </div>
+
+            {a.acknowledged_at && (
+              <div style={{ fontSize: 12, color: "#177245", marginTop: 8, display: "flex", gap: 6, alignItems: "center" }}>
+                <CheckCircle2 size={13} /> Acknowledged by {nameOf(a.acknowledged_by)} on {String(a.acknowledged_at).slice(0, 10)}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <Btn small onClick={() => onCanvass(a)} data-testid="storm-canvass">
+                <MapPin size={13} /> Knock it
+              </Btn>
+              {!a.dismissed && !a.acknowledged_at && (
+                <Btn small kind="ghost" data-testid="storm-ack"
+                  onClick={() => { alerts.acknowledge(a.id, currentUser && currentUser.id); toast("Marked as being worked"); }}>
+                  <Check size={13} /> On it
+                </Btn>
+              )}
+              {a.acknowledged_at && !a.dismissed && (
+                <Btn small kind="ghost" onClick={() => alerts.unacknowledge(a.id)}>Undo</Btn>
+              )}
+              {!a.dismissed ? (
+                <Btn small kind="ghost" data-testid="storm-dismiss"
+                  onClick={() => { alerts.dismiss(a.id); toast("Dismissed — it only comes back if a bigger report lands"); }}>
+                  Not worth working
+                </Btn>
+              ) : (
+                <Btn small kind="ghost" onClick={() => alerts.restore(a.id)}>Bring back</Btn>
+              )}
+            </div>
+          </Card>
+        );
+      })}
     </div>
   );
 }
@@ -29944,6 +30334,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
     ]],
     ["Sales & marketing", [
       ["canvass", MapPin, "Canvassing", "Knock a neighborhood — pins, dispositions, storm history"],
+      ["stormalerts", CloudRain, "Storm alerts", "Hail and wind that landed in your territory"],
       ["activity", ClipboardList, "Activity feed", currentUser && canManageCompanyConfig(currentUser) ? "Everything the whole team has done" : "Everything you've done"],
       ["calls", Phone, "Calls & attribution", "Log calls, see which sources make money"],
       ["contacts", Users, "Contacts", "Every client, with consent status"],
@@ -31254,6 +31645,28 @@ export default function SupremeCRM() {
     brandRef: brand, stagesRef: stages, usersRef: users, crewsRef: crews,
   });
 
+  /* Storm alerts live in their own table (038), so they load and write
+     outside the org blob. The sweep is gated on `hydrated` because the
+     watched areas arrive with the blob — starting before that would
+     ask NOAA about no areas at all and conclude, wrongly, that nothing
+     happened. */
+  const stormAlerts = useStormAlerts({
+    tenantId: currentUser && currentUser.tenantId,
+    ready: liveAuth() ? !!currentUser : true,
+  });
+  useStormSweep({ watch: stormWatch, alerts: stormAlerts, ready: hydrated });
+  /* Opening a storm on the canvassing map: centre there and draw the
+     radius that was in force when it was raised. */
+  const [canvassFocus, setCanvassFocus] = useState(null);
+  /* Dropped as soon as the rep leaves the map, so opening Canvassing
+     from the menu tomorrow doesn't silently reopen on last week's
+     storm with a circle drawn round it. */
+  useEffect(() => { if (nav !== "canvass") setCanvassFocus(null); }, [nav]);
+  const canvassStorm = (a) => {
+    setCanvassFocus({ lat: a.lat, lng: a.lng, radiusMiles: Number(a.radius_miles) || 15 });
+    setNav("canvass");
+  };
+
   /* Marks one conversation read — upserts this seat's own
      crm_chat_members row (creating it for an open channel they've
      never explicitly "joined" before, updating it for one they're
@@ -32023,6 +32436,10 @@ export default function SupremeCRM() {
     (j.subInvoice && j.subInvoice.status === "confirmed") ||
     (j.capOutNotifiedAt && j.stageId !== "s10")
   ).length;
+  /* Storms nobody has picked up. Not gated on role — the point of an
+     alert is that whoever is nearest can go, not that it waits for an
+     admin to forward it. */
+  const openStormCount = openStormAlerts(stormAlerts.list).length;
 
   const openJob = openJobId ? jobs.find((j) => j.id === openJobId) : null;
   const quickJob = quickJobId ? jobs.find((j) => j.id === quickJobId) : null;
@@ -32085,7 +32502,12 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
               Have a Roofr export? More → Import jobs pulls your whole pipeline in.
             </div>
           )}
-          <div style={{ paddingTop: 14 }}><AnnouncementBar announcements={announcements} /></div>
+          {/* Weather above announcements, deliberately: a storm that
+              landed last night outranks anything anyone typed. */}
+          <div style={{ paddingTop: 14 }}>
+            <StormAlertBanner alerts={stormAlerts.list} onOpen={() => setNav("stormalerts")} onCanvass={canvassStorm} />
+            <AnnouncementBar announcements={announcements} />
+          </div>
           <Dashboard jobs={jobs} stages={stages} onOpenJob={openJobScreen} userName={userName} go={setNav}
             onNewLead={() => { setLeadSeed(null); setNewLeadOpen(true); }} onQuickTask={() => setQuickTaskOpen(true)}
             onOpenStage={(id) => { setBoardStage(id); setNav("jobs"); }} brand={brand}
@@ -32211,9 +32633,14 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         <CrewManager crews={crews} setCrews={setCrews} currentUser={liveUser} jobs={jobs}
           onBack={() => setNav("more")} toast={toast} onDeleteCrew={deleteCrew} />
       ) : nav === "canvass" ? (
-        <CanvassScreen onBack={() => setNav("more")} currentUser={liveUser} jobs={jobs} users={users}
-          canvassStatuses={canvassStatuses} toast={toast}
+        <CanvassScreen onBack={() => { setCanvassFocus(null); setNav("more"); }}
+          currentUser={liveUser} jobs={jobs} users={users}
+          canvassStatuses={canvassStatuses} toast={toast} focus={canvassFocus}
           onCreateLeadFromPin={createLeadFromCanvassPin} onOpenJob={openJobScreen} />
+      ) : nav === "stormalerts" ? (
+        <StormAlertsScreen alerts={stormAlerts} jobs={jobs} users={users} currentUser={liveUser}
+          onBack={() => setNav("more")} onCanvass={canvassStorm}
+          onSetup={() => setNav("stormwatch")} toast={toast} />
       ) : nav === "canvassstatuses" ? (
         <CanvassStatusEditor statuses={canvassStatuses} setStatuses={setCanvassStatuses}
           onBack={() => setNav("more")} toast={toast} currentUser={liveUser} />
@@ -32264,7 +32691,7 @@ currentUser={liveUser} showMoney={showMoney} isAdmin={isAdmin}
         background: S.card, borderTop: `1px solid ${S.line}`,
         display: "flex", alignItems: "stretch", paddingBottom: "env(safe-area-inset-bottom)",
       }}>
-        <NavBtn id="home" icon={Home} label="Home" badge={isAdmin ? readyToPayCount : 0} active={nav === "home" && !openJob}
+        <NavBtn id="home" icon={Home} label="Home" badge={(isAdmin ? readyToPayCount : 0) + openStormCount} active={nav === "home" && !openJob}
           onPress={(id) => { setNav(id); setOpenJobId(null); }} />
         <NavBtn id="jobs" icon={Briefcase} label="Jobs" active={nav === "jobs" && !openJob}
           onPress={(id) => { setNav(id); setOpenJobId(null); }} />

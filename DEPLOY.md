@@ -381,6 +381,107 @@ bypass this by editing the request from the browser.
 
 ---
 
+## 7b. Storm watch — scheduled hail detection (optional)
+
+**Everything here is optional.** Storm alerts already work with nothing
+deployed: the app sweeps NOAA storm reports whenever somebody has it
+open, and raises alerts from the areas set under **More → Storm watch**.
+
+What this adds is *timing*. Hail lands at 9pm on a Saturday and the
+useful window for knocking it is the next morning — not whenever a rep
+next opens their phone. Deploy this and the alert is already waiting.
+
+### Step 1 — deploy the function
+
+```
+supabase functions deploy storm-watch --no-verify-jwt
+```
+
+`--no-verify-jwt` is required because `pg_cron` calls this with no user
+session. That means the function is reachable by anyone who finds the
+URL, so it authenticates on a shared secret instead — it refuses to run
+at all until that secret is set.
+
+### Step 2 — set the secret
+
+```
+supabase secrets set STORM_WATCH_SECRET="$(openssl rand -hex 32)"
+```
+
+Keep the generated value; Step 3 needs it. `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` are provided by the platform — don't set them.
+
+### Step 3 — schedule it
+
+In the SQL editor, enable the two extensions and register the job.
+Replace `YOUR-PROJECT-REF` and `YOUR-SECRET`:
+
+```sql
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+select cron.schedule(
+  'storm-watch-hourly',
+  '17 * * * *',                     -- hourly, off the hour to avoid the stampede
+  $$
+  select net.http_post(
+    url     := 'https://YOUR-PROJECT-REF.supabase.co/functions/v1/storm-watch',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'x-storm-watch-secret', 'YOUR-SECRET'
+    ),
+    body    := '{}'::jsonb
+  );
+  $$
+);
+```
+
+To check it later: `select * from cron.job;` lists schedules and
+`select * from cron.job_run_details order by start_time desc limit 10;`
+shows recent runs. To remove it: `select cron.unschedule('storm-watch-hourly');`
+
+### Step 4 — verify
+
+Call it by hand and read the counts:
+
+```
+curl -s -X POST https://YOUR-PROJECT-REF.supabase.co/functions/v1/storm-watch \
+  -H "x-storm-watch-secret: YOUR-SECRET"
+```
+
+It returns `{ok, tenants, areas, inserted, raised, skipped, lookupFailed}`.
+On a quiet week `inserted` is 0 and that is correct — no storms is the
+normal answer. `tenants: 0` means no company has storm watch switched on
+with at least one area, which is a settings problem, not a deploy one.
+A non-zero `lookupFailed` means NOAA didn't answer; those areas are
+skipped rather than recorded as an all-clear, and the next run retries.
+
+### Why it can't double-announce a storm
+
+Both sweeps read the same NOAA feed and will see the same hail. Each
+alert carries a `report_key` — the watched area, the kind of weather,
+and the day — which migration 038 makes unique per tenant. Whichever
+sweep arrives second either does nothing, or raises the recorded size if
+its reports were bigger. One storm, one alert, however many times either
+sweep runs.
+
+### One implementation note, if you ever edit the function
+
+The detection code inside `supabase/functions/storm-watch/index.ts` is a
+deliberate copy of the functions in `ridgeline.jsx` (`lsrKind`,
+`lsrWindMph`, `fetchStormReports`, `detectStormAlerts`, `stormAlertKey`).
+If they drift, the two sweeps will disagree about what counts as a
+storm. Change one, change both.
+
+The function also sets `tenant_id` explicitly on every insert. It runs
+on the service role, where `auth.uid()` is null, so migration 015's
+`set_tenant_id()` trigger cannot fill it — and a row with a null
+`tenant_id` is invisible to every user, because the RLS policy compares
+against `current_tenant_id()`. The alert would be written and never
+seen.
+
+---
+
 ## 8. Signup & checkout — Stripe
 
 These three functions run the marketing site's "Start your free trial"
