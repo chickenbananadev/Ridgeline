@@ -14486,6 +14486,7 @@ function haversineMiles(lat1, lng1, lat2, lng2) {
    ================================================================== */
 const RADAR_CACHE = new Map();
 const SWDI_LIMIT = 20000;
+const RADAR_POINT_CAP = 4000;
 /* Field names are read tolerantly across the plausible spellings.
    This service is not reachable from every environment we can test
    in, and build 127's bug was precisely a field-name assumption
@@ -14561,8 +14562,17 @@ async function fetchRadarHail(lat, lng, start, end, radiusMiles = LSR_RADIUS_DEG
       if (!date || date < start || date > end) continue;
       const row = byDate[date] || (byDate[date] = {
         maxSizeIn: null, prob: null, sevProb: null, cells: 0, nearestMiles: null, radars: [],
+        points: [],
       });
       row.cells++;
+      /* Every detection's position is kept, not just the aggregate,
+         because the map needs to draw WHERE the hail went. A single
+         worst-size number tells a rep a storm happened; the track
+         tells them which streets to work. Capped so a multi-hour
+         severe outbreak can't put tens of thousands of points into
+         memory on a phone — the swath is already unreadable long
+         before that. */
+      if (row.points.length < RADAR_POINT_CAP) row.points.push({ lat: rlat, lng: rlng, sizeIn: size });
       row.maxSizeIn = Math.max(row.maxSizeIn ?? 0, size);
       const prob = swdiNum(r, ["PROB", "POH"]);
       const sev = swdiNum(r, ["SEVPROB", "SEV_PROB", "POSH"]);
@@ -14696,6 +14706,79 @@ function hailSizeLabel(inches) {
   if (inches == null) return "";
   const hit = HAIL_SIZES.find(([n]) => inches >= n);
   return hit ? hit[1] : "pea";
+}
+
+/* ------------------------------------------------------------------
+   THE HAIL SWATH — drawing where the hail actually went.
+
+   A circle round the storm centre is the wrong shape and says the
+   wrong thing: it implies hail fell evenly across a disc, when what
+   really happened is a storm tracked across the ground in a band a
+   few miles wide, dropping bigger stones in some places than others.
+   A rep working from a circle knocks streets that got nothing and
+   misses the ones that got hammered.
+
+   The radar detections carry positions, so the real footprint can be
+   drawn. This bins them onto a grid and colours each occupied cell by
+   the worst size seen in it — which is how every hail map you have
+   ever seen is rendered, because the underlying product is a raster.
+
+   WHY THE GRID IS COARSE (about two miles). Each NEXRAD row is a
+   detected storm CELL, not a point sample — a cell is several miles
+   across, and consecutive detections along a track are minutes and
+   miles apart. Binning at radar-bin resolution would draw a dotted
+   line of pinpricks: it would understate the area hit while implying
+   a precision the data does not have. Two miles is close to the
+   honest spatial certainty of a cell detection and makes consecutive
+   detections merge into the continuous band that actually occurred.
+
+   It is an approximate footprint, not a survey. The legend says so.
+------------------------------------------------------------------- */
+const HAIL_GRID_DEG = 0.03;                    // ~2.1 mi of latitude
+/* Bands chosen at the sizes that change the conversation: 1" is the
+   NWS severe threshold, 1.75" is where most carriers stop arguing
+   about functional damage, 2.5"+ is a total. */
+const HAIL_BANDS = [
+  { min: 2.5, color: "#7F1D1D", label: '2.5"+' },
+  { min: 1.75, color: "#B42318", label: '1.75"+' },
+  { min: 1.25, color: "#D97706", label: '1.25"+' },
+  { min: 1, color: "#F59E0B", label: '1"+' },
+  { min: 0, color: "#FCD34D", label: 'under 1"' },
+];
+function hailBand(inches) {
+  return HAIL_BANDS.find((b) => (inches ?? 0) >= b.min) || HAIL_BANDS[HAIL_BANDS.length - 1];
+}
+/* Pure, so the footprint can be checked without a map. */
+function hailSwath(points, gridDeg = HAIL_GRID_DEG) {
+  const cells = new Map();
+  (points || []).forEach((p) => {
+    if (!p || p.lat == null || p.lng == null || p.sizeIn == null) return;
+    const gy = Math.floor(p.lat / gridDeg), gx = Math.floor(p.lng / gridDeg);
+    const key = `${gy}:${gx}`;
+    const cur = cells.get(key);
+    if (cur) {
+      cur.count++;
+      /* Worst size wins the cell. Averaging would wash a destructive
+         core out against the light hail around it, which is exactly
+         the street a rep most needs to find. */
+      if (p.sizeIn > cur.sizeIn) cur.sizeIn = p.sizeIn;
+      return;
+    }
+    cells.set(key, {
+      sizeIn: p.sizeIn, count: 1,
+      south: gy * gridDeg, north: (gy + 1) * gridDeg,
+      west: gx * gridDeg, east: (gx + 1) * gridDeg,
+    });
+  });
+  /* Smallest first so the big stones paint on top and stay visible
+     where bands overlap at the edges. */
+  return [...cells.values()].sort((a, b) => a.sizeIn - b.sizeIn);
+}
+/* Which bands a given swath actually contains, so the legend shows
+   the sizes present rather than a fixed key with dead entries. */
+function swathBands(swath) {
+  const present = new Set((swath || []).map((c) => hailBand(c.sizeIn).label));
+  return HAIL_BANDS.filter((b) => present.has(b.label));
 }
 /* NOAA SPC storm-report page for a given ISO date (official corroboration). */
 function spcReportLink(iso) {
@@ -29245,7 +29328,7 @@ function clusterPins(pins, zoom) {
    ================================================================== */
 function CanvassMap({
   center, zoom, onMove, pins, statuses, selectedId, onTapPin, me,
-  basemapId = "street", highlight = null,
+  basemapId = "street", highlight = null, swath = null,
 }) {
   const boxRef = useRef(null);
   const mapRef = useRef(null);
@@ -29253,6 +29336,8 @@ function CanvassMap({
   const markersRef = useRef(null);
   const meRef = useRef(null);
   const circleRef = useRef(null);
+  const swathRef = useRef(null);
+  const fittedRef = useRef(null);
   const tapPinRef = useRef(onTapPin);
   const moveRef = useRef(onMove);
   const [tileFails, setTileFails] = useState(0);
@@ -29363,8 +29448,10 @@ function CanvassMap({
     }).addTo(map);
   }, [L, me, ready]);
 
-  /* A storm's affected radius, drawn when a rep arrives here from an
-     alert — the "here is where the hail fell, go knock it" circle. */
+  /* The watched area a rep arrived from. Drawn thin and dashed because
+     it is a SETTING, not weather — with a real swath on the map, a
+     solid circle would read as "hail fell across all of this", which
+     is the misreading the swath exists to prevent. */
   useEffect(() => {
     const map = mapRef.current;
     if (!L || !map) return;
@@ -29372,9 +29459,54 @@ function CanvassMap({
     if (!highlight) return;
     circleRef.current = L.circle([highlight.lat, highlight.lng], {
       radius: highlight.radiusMiles * 1609.34,
-      color: "#B42318", weight: 2, fillColor: "#B42318", fillOpacity: 0.08,
+      color: "#B42318", weight: 1.5, opacity: 0.55, dashArray: "6 5",
+      fill: false, interactive: false,
     }).addTo(map);
   }, [L, highlight, ready]);
+
+  /* THE HAIL SWATH. Where the storm actually tracked, banded by the
+     worst size seen in each cell, so a rep can see which streets took
+     the big stones instead of guessing from a circle.
+     Non-interactive so it never swallows a tap meant for a door. */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!L || !map) return;
+    if (swathRef.current) { map.removeLayer(swathRef.current); swathRef.current = null; }
+    if (!swath || !swath.length) return;
+    const group = L.layerGroup();
+    swath.forEach((c) => {
+      const band = hailBand(c.sizeIn);
+      L.rectangle([[c.south, c.west], [c.north, c.east]], {
+        color: band.color, weight: 0, fillColor: band.color,
+        /* Translucent enough to read the street names underneath —
+           the rep needs the roads, not a solid blanket. */
+        fillOpacity: 0.34, interactive: false,
+      }).addTo(group);
+    });
+    group.addTo(map);
+    /* Behind the markers, so a pin is never hidden by weather. */
+    if (group.getPane && map.getPane("overlayPane")) group.eachLayer((l) => l.bringToBack && l.bringToBack());
+    swathRef.current = group;
+
+    /* Frame the whole storm on first sight.
+
+       A guessed zoom cannot work here: a swath is whatever size the
+       storm was, from a couple of miles to sixty. The browser run on
+       a 22-mile track landed a rep inside one red square with no way
+       to tell which way the storm ran. Leaflet knows the viewport, so
+       it does the arithmetic — and the resulting moveend reports the
+       new centre and zoom back up, keeping the controlled map in
+       step.
+
+       Once only, keyed on the swath's identity: re-fitting on every
+       render would yank the map back every time a rep panned away to
+       look at the next street. */
+    const bounds = L.latLngBounds(swath.map((c) => [[c.south, c.west], [c.north, c.east]]).flat());
+    if (fittedRef.current !== swath && bounds.isValid()) {
+      fittedRef.current = swath;
+      map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
+    }
+  }, [L, swath, ready]);
 
   if (!L) {
     return (
@@ -30383,9 +30515,36 @@ function CanvassScreen({
     const withGeo = (jobs || []).find((j) => j.lat != null && j.lng != null);
     return withGeo ? { lat: withGeo.lat, lng: withGeo.lng } : { lat: 41.78, lng: -88.15 };
   });
-  const [zoom, setZoom] = useState(17);
+  /* Arriving from a storm starts wide rather than at door-knocking
+     zoom, because a swath is miles across and landing tight shows a
+     rep one red square with no idea which way the storm ran. This is
+     only the opening frame while the footprint loads — the map then
+     fits itself to the actual swath, which is the only thing that
+     works for both a two-mile cell and a sixty-mile track. */
+  const [zoom, setZoom] = useState(() => (focus && focus.date ? 12 : 17));
   const highlight = focus && focus.radiusMiles
     ? { lat: focus.lat, lng: focus.lng, radiusMiles: focus.radiusMiles } : null;
+
+  /* The storm's actual footprint. Fetched here rather than carried in
+     the alert row because it is thousands of points — far too much to
+     put in a database column, and free to re-derive from the cached
+     radar answer. */
+  const [swath, setSwath] = useState(null);
+  const [swathErr, setSwathErr] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setSwath(null); setSwathErr(false);
+    if (!focus || !focus.date || focus.kind === "wind") return undefined;
+    const reach = Math.max(Number(focus.radiusMiles) || 15, 15);
+    fetchRadarHail(focus.lat, focus.lng, focus.date, focus.date, reach).then((byDate) => {
+      if (!alive) return;
+      if (!byDate) { setSwathErr(true); return; }
+      const day = byDate[focus.date];
+      setSwath(day ? hailSwath(day.points) : []);
+    }, () => { if (alive) setSwathErr(true); });
+    return () => { alive = false; };
+  }, [focus && focus.date, focus && focus.lat, focus && focus.lng]);
+  const bands = swathBands(swath);
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [me, setMe] = useState(null);
@@ -30532,7 +30691,41 @@ function CanvassScreen({
             center={center} zoom={zoom} onMove={onMove}
             pins={shown} statuses={canvassStatuses} selectedId={selectedId}
             onTapPin={(p) => setSelectedId(p.id)} me={me}
-            basemapId={basemapId} highlight={highlight} />
+            basemapId={basemapId} highlight={highlight} swath={swath} />
+
+          {/* The swath legend. Only the bands actually present, so it
+              never keys colours that aren't on the map. */}
+          {bands.length > 0 && (
+            <div data-testid="swath-legend" style={{
+              position: "absolute", left: 10, bottom: 138, zIndex: 600, maxWidth: 190,
+              background: S.card, border: `1px solid ${S.line}`, borderRadius: 10,
+              padding: "8px 10px", boxShadow: "0 2px 8px rgba(0,0,0,.18)",
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.3, color: S.sub, marginBottom: 5 }}>
+                HAIL {focus && focus.date ? `· ${focus.date}` : ""}
+              </div>
+              {bands.map((b) => (
+                <div key={b.label} style={{ display: "flex", alignItems: "center", gap: 7, padding: "1.5px 0" }}>
+                  <span style={{ width: 14, height: 10, borderRadius: 2, background: b.color, opacity: 0.85, flexShrink: 0 }} />
+                  <span style={{ fontSize: 11.5, color: S.ink, fontVariantNumeric: "tabular-nums" }}>{b.label}</span>
+                </div>
+              ))}
+              {/* Said once, plainly. A rep quoting this to an adjuster
+                  as a survey is how a claim gets picked apart. */}
+              <div style={{ fontSize: 10.5, color: S.sub, marginTop: 5, lineHeight: 1.35 }}>
+                Radar estimate — approximate area, not a survey
+              </div>
+            </div>
+          )}
+          {swathErr && (
+            <div style={{
+              position: "absolute", left: 10, bottom: 138, zIndex: 600, maxWidth: 210,
+              background: "#FEF3F2", border: "1px solid #FDA29B", borderRadius: 10,
+              padding: "8px 10px", fontSize: 11.5, color: "#B42318", lineHeight: 1.4,
+            }}>
+              Couldn't load the hail area for this storm. The pins and dispositions all still work.
+            </div>
+          )}
 
           {/* Search floats over the map instead of pushing it down. */}
           <div style={{ position: "absolute", left: 10, right: 10, top: 10, zIndex: 600 }}>
@@ -32156,7 +32349,12 @@ export default function SupremeCRM() {
      storm with a circle drawn round it. */
   useEffect(() => { if (nav !== "canvass") setCanvassFocus(null); }, [nav]);
   const canvassStorm = (a) => {
-    setCanvassFocus({ lat: a.lat, lng: a.lng, radiusMiles: Number(a.radius_miles) || 15 });
+    setCanvassFocus({
+      lat: a.lat, lng: a.lng, radiusMiles: Number(a.radius_miles) || 15,
+      /* The day and peril, so the map can draw the storm's actual
+         footprint rather than only the watched circle. */
+      date: a.occurred_on, kind: a.kind,
+    });
     setNav("canvass");
   };
 

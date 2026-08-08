@@ -15197,6 +15197,7 @@ function haversineMiles(lat1, lng1, lat2, lng2) {
 }
 var RADAR_CACHE = /* @__PURE__ */ new Map();
 var SWDI_LIMIT = 2e4;
+var RADAR_POINT_CAP = 4e3;
 function swdiNum(row, names) {
   for (const n of names) {
     const v = row[n] ?? row[n.toLowerCase()] ?? row[n.toUpperCase()];
@@ -15263,9 +15264,11 @@ async function fetchRadarHail(lat, lng, start, end, radiusMiles = LSR_RADIUS_DEG
         sevProb: null,
         cells: 0,
         nearestMiles: null,
-        radars: []
+        radars: [],
+        points: []
       });
       row.cells++;
+      if (row.points.length < RADAR_POINT_CAP) row.points.push({ lat: rlat, lng: rlng, sizeIn: size });
       row.maxSizeIn = Math.max(row.maxSizeIn ?? 0, size);
       const prob = swdiNum(r, ["PROB", "POH"]);
       const sev = swdiNum(r, ["SEVPROB", "SEV_PROB", "POSH"]);
@@ -15387,6 +15390,44 @@ function hailSizeLabel(inches) {
   if (inches == null) return "";
   const hit = HAIL_SIZES.find(([n]) => inches >= n);
   return hit ? hit[1] : "pea";
+}
+var HAIL_GRID_DEG = 0.03;
+var HAIL_BANDS = [
+  { min: 2.5, color: "#7F1D1D", label: '2.5"+' },
+  { min: 1.75, color: "#B42318", label: '1.75"+' },
+  { min: 1.25, color: "#D97706", label: '1.25"+' },
+  { min: 1, color: "#F59E0B", label: '1"+' },
+  { min: 0, color: "#FCD34D", label: 'under 1"' }
+];
+function hailBand(inches) {
+  return HAIL_BANDS.find((b) => (inches ?? 0) >= b.min) || HAIL_BANDS[HAIL_BANDS.length - 1];
+}
+function hailSwath(points, gridDeg = HAIL_GRID_DEG) {
+  const cells = /* @__PURE__ */ new Map();
+  (points || []).forEach((p) => {
+    if (!p || p.lat == null || p.lng == null || p.sizeIn == null) return;
+    const gy = Math.floor(p.lat / gridDeg), gx = Math.floor(p.lng / gridDeg);
+    const key = `${gy}:${gx}`;
+    const cur = cells.get(key);
+    if (cur) {
+      cur.count++;
+      if (p.sizeIn > cur.sizeIn) cur.sizeIn = p.sizeIn;
+      return;
+    }
+    cells.set(key, {
+      sizeIn: p.sizeIn,
+      count: 1,
+      south: gy * gridDeg,
+      north: (gy + 1) * gridDeg,
+      west: gx * gridDeg,
+      east: (gx + 1) * gridDeg
+    });
+  });
+  return [...cells.values()].sort((a, b) => a.sizeIn - b.sizeIn);
+}
+function swathBands(swath) {
+  const present = new Set((swath || []).map((c) => hailBand(c.sizeIn).label));
+  return HAIL_BANDS.filter((b) => present.has(b.label));
 }
 function spcReportLink(iso) {
   const yymmdd = iso.slice(2).replace(/-/g, "");
@@ -30279,7 +30320,8 @@ function CanvassMap({
   onTapPin,
   me,
   basemapId = "street",
-  highlight = null
+  highlight = null,
+  swath = null
 }) {
   const boxRef = (0, import_react.useRef)(null);
   const mapRef = (0, import_react.useRef)(null);
@@ -30287,6 +30329,8 @@ function CanvassMap({
   const markersRef = (0, import_react.useRef)(null);
   const meRef = (0, import_react.useRef)(null);
   const circleRef = (0, import_react.useRef)(null);
+  const swathRef = (0, import_react.useRef)(null);
+  const fittedRef = (0, import_react.useRef)(null);
   const tapPinRef = (0, import_react.useRef)(onTapPin);
   const moveRef = (0, import_react.useRef)(onMove);
   const [tileFails, setTileFails] = (0, import_react.useState)(0);
@@ -30409,11 +30453,43 @@ function CanvassMap({
     circleRef.current = L.circle([highlight.lat, highlight.lng], {
       radius: highlight.radiusMiles * 1609.34,
       color: "#B42318",
-      weight: 2,
-      fillColor: "#B42318",
-      fillOpacity: 0.08
+      weight: 1.5,
+      opacity: 0.55,
+      dashArray: "6 5",
+      fill: false,
+      interactive: false
     }).addTo(map);
   }, [L, highlight, ready]);
+  (0, import_react.useEffect)(() => {
+    const map = mapRef.current;
+    if (!L || !map) return;
+    if (swathRef.current) {
+      map.removeLayer(swathRef.current);
+      swathRef.current = null;
+    }
+    if (!swath || !swath.length) return;
+    const group = L.layerGroup();
+    swath.forEach((c) => {
+      const band = hailBand(c.sizeIn);
+      L.rectangle([[c.south, c.west], [c.north, c.east]], {
+        color: band.color,
+        weight: 0,
+        fillColor: band.color,
+        /* Translucent enough to read the street names underneath —
+           the rep needs the roads, not a solid blanket. */
+        fillOpacity: 0.34,
+        interactive: false
+      }).addTo(group);
+    });
+    group.addTo(map);
+    if (group.getPane && map.getPane("overlayPane")) group.eachLayer((l) => l.bringToBack && l.bringToBack());
+    swathRef.current = group;
+    const bounds = L.latLngBounds(swath.map((c) => [[c.south, c.west], [c.north, c.east]]).flat());
+    if (fittedRef.current !== swath && bounds.isValid()) {
+      fittedRef.current = swath;
+      map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
+    }
+  }, [L, swath, ready]);
   if (!L) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { "data-testid": "canvass-map", style: {
       position: "relative",
@@ -31457,8 +31533,32 @@ function CanvassScreen({
     const withGeo = (jobs || []).find((j) => j.lat != null && j.lng != null);
     return withGeo ? { lat: withGeo.lat, lng: withGeo.lng } : { lat: 41.78, lng: -88.15 };
   });
-  const [zoom, setZoom] = (0, import_react.useState)(17);
+  const [zoom, setZoom] = (0, import_react.useState)(() => focus && focus.date ? 12 : 17);
   const highlight = focus && focus.radiusMiles ? { lat: focus.lat, lng: focus.lng, radiusMiles: focus.radiusMiles } : null;
+  const [swath, setSwath] = (0, import_react.useState)(null);
+  const [swathErr, setSwathErr] = (0, import_react.useState)(false);
+  (0, import_react.useEffect)(() => {
+    let alive = true;
+    setSwath(null);
+    setSwathErr(false);
+    if (!focus || !focus.date || focus.kind === "wind") return void 0;
+    const reach = Math.max(Number(focus.radiusMiles) || 15, 15);
+    fetchRadarHail(focus.lat, focus.lng, focus.date, focus.date, reach).then((byDate) => {
+      if (!alive) return;
+      if (!byDate) {
+        setSwathErr(true);
+        return;
+      }
+      const day = byDate[focus.date];
+      setSwath(day ? hailSwath(day.points) : []);
+    }, () => {
+      if (alive) setSwathErr(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [focus && focus.date, focus && focus.lat, focus && focus.lng]);
+  const bands = swathBands(swath);
   const [selectedId, setSelectedId] = (0, import_react.useState)(null);
   const [detail, setDetail] = (0, import_react.useState)(null);
   const [me, setMe] = (0, import_react.useState)(null);
@@ -31643,9 +31743,46 @@ function CanvassScreen({
           onTapPin: (p) => setSelectedId(p.id),
           me,
           basemapId,
-          highlight
+          highlight,
+          swath
         }
       ),
+      bands.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-testid": "swath-legend", style: {
+        position: "absolute",
+        left: 10,
+        bottom: 138,
+        zIndex: 600,
+        maxWidth: 190,
+        background: S.card,
+        border: `1px solid ${S.line}`,
+        borderRadius: 10,
+        padding: "8px 10px",
+        boxShadow: "0 2px 8px rgba(0,0,0,.18)"
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { fontSize: 11, fontWeight: 800, letterSpacing: 0.3, color: S.sub, marginBottom: 5 }, children: [
+          "HAIL ",
+          focus && focus.date ? `\xB7 ${focus.date}` : ""
+        ] }),
+        bands.map((b) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 7, padding: "1.5px 0" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { width: 14, height: 10, borderRadius: 2, background: b.color, opacity: 0.85, flexShrink: 0 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11.5, color: S.ink, fontVariantNumeric: "tabular-nums" }, children: b.label })
+        ] }, b.label)),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 10.5, color: S.sub, marginTop: 5, lineHeight: 1.35 }, children: "Radar estimate \u2014 approximate area, not a survey" })
+      ] }),
+      swathErr && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: {
+        position: "absolute",
+        left: 10,
+        bottom: 138,
+        zIndex: 600,
+        maxWidth: 210,
+        background: "#FEF3F2",
+        border: "1px solid #FDA29B",
+        borderRadius: 10,
+        padding: "8px 10px",
+        fontSize: 11.5,
+        color: "#B42318",
+        lineHeight: 1.4
+      }, children: "Couldn't load the hail area for this storm. The pins and dispositions all still work." }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { position: "absolute", left: 10, right: 10, top: 10, zIndex: 600 }, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
         AddressAutocomplete,
         {
@@ -33329,7 +33466,15 @@ function SupremeCRM() {
     if (nav !== "canvass") setCanvassFocus(null);
   }, [nav]);
   const canvassStorm = (a) => {
-    setCanvassFocus({ lat: a.lat, lng: a.lng, radiusMiles: Number(a.radius_miles) || 15 });
+    setCanvassFocus({
+      lat: a.lat,
+      lng: a.lng,
+      radiusMiles: Number(a.radius_miles) || 15,
+      /* The day and peril, so the map can draw the storm's actual
+         footprint rather than only the watched circle. */
+      date: a.occurred_on,
+      kind: a.kind
+    });
     setNav("canvass");
   };
   const markConversationRead = (conversationId) => {

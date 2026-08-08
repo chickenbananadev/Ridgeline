@@ -120,7 +120,10 @@ ok(/\["stormalerts", CloudRain, "Storm alerts", "Hail and wind that landed in yo
   "reachable from the menu");
 
 /* ================= 5. the payoff — one tap to canvass ================= */
-ok(/const canvassStorm = \(a\) => \{\s*\n\s*setCanvassFocus\(\{ lat: a\.lat, lng: a\.lng, radiusMiles: Number\(a\.radius_miles\) \|\| 15 \}\);\s*\n\s*setNav\("canvass"\);/.test(src),
+/* Build 137 added the day and peril so the map can draw the storm's
+   real footprint, not just the watched circle. */
+ok(/setCanvassFocus\(\{\s*\n\s*lat: a\.lat, lng: a\.lng, radiusMiles: Number\(a\.radius_miles\) \|\| 15,/.test(src)
+  && /setNav\("canvass"\);/.test(src),
   "opening a storm centres the canvassing map on it and carries the radius");
 ok(/canvassStatuses=\{canvassStatuses\} toast=\{toast\} focus=\{canvassFocus\}/.test(src),
   "which reaches CanvassScreen through the focus prop build 132 already added");
