@@ -15174,6 +15174,11 @@ async function fetchStormReports(lat, lng, start, end) {
         qualifier: p.qualifier || "",
         source: p.source || "",
         remark: p.remark || "",
+        /* Where the stone actually landed, not just how far away it was.
+           A storm alert has to put a rep on a map at the right place,
+           and "26 mi from the office" is not a place. */
+        lat: flat,
+        lng: flng,
         miles
       });
     }
@@ -15240,6 +15245,52 @@ function mergeStormDays(days, reportsByDate) {
     });
   });
   return [...byDate.values()].filter((r) => r.reports || r.hail || r.highWind || r.storm || r.precip != null && r.precip >= 0.75).sort((a, b) => stormSeverity(b) - stormSeverity(a) || (a.date < b.date ? 1 : -1));
+}
+var STORM_WATCH_DEFAULTS = { enabled: false, areas: [], minHailIn: 1, minWindMph: 58, lookbackDays: 7 };
+var STORM_WATCH_MAX_RADIUS = Math.round(LSR_RADIUS_DEG * 69);
+function normalizeStormWatch(v) {
+  const s = { ...STORM_WATCH_DEFAULTS, ...v || {} };
+  s.areas = (s.areas || []).filter((a) => a && a.lat != null && a.lng != null).map((a) => ({
+    id: a.id,
+    name: a.name || "Watched area",
+    address: a.address || "",
+    lat: Number(a.lat),
+    lng: Number(a.lng),
+    radiusMiles: Math.min(STORM_WATCH_MAX_RADIUS, Math.max(1, Number(a.radiusMiles) || 15))
+  }));
+  s.minHailIn = Math.max(0, Number(s.minHailIn) || 0);
+  s.minWindMph = Math.max(0, Number(s.minWindMph) || 0);
+  s.lookbackDays = Math.min(30, Math.max(1, Math.round(Number(s.lookbackDays) || 7)));
+  return s;
+}
+function jobsWithinRadius(jobs, area) {
+  if (!area || area.lat == null) return [];
+  const radius = Number(area.radiusMiles) || 15;
+  return (jobs || []).filter((j) => j.lat != null && j.lng != null && haversineMiles(area.lat, area.lng, j.lat, j.lng) <= radius);
+}
+function seedStormAreas(jobs, radiusMiles = 15) {
+  const pts = (jobs || []).filter((j) => j.lat != null && j.lng != null);
+  const areas = [];
+  pts.forEach((j) => {
+    const hit = areas.find((a) => haversineMiles(a.lat, a.lng, j.lat, j.lng) <= radiusMiles);
+    if (hit) {
+      hit.count++;
+      return;
+    }
+    areas.push({
+      lat: j.lat,
+      lng: j.lng,
+      count: 1,
+      /* City is what a rep calls a territory; the street address of
+         whichever job happened to be first is meaningless as a name.
+         Falling back to the second comma-field of the address is the
+         city for every address the geocoder returns. */
+      name: j.property && j.property.city || String(j.address || "").split(",")[1]?.trim() || j.address || "Watched area",
+      address: j.address || "",
+      radiusMiles
+    });
+  });
+  return areas.sort((a, b) => b.count - a.count);
 }
 function DispatchBoard({ jobs, crews, mutJob, onOpenJob, onBack, toast, embedded = false }) {
   const [day, setDay] = (0, import_react.useState)(() => todayIso());
@@ -30175,6 +30226,223 @@ function CanvassStatusEditor({ statuses, setStatuses, onBack, toast, currentUser
     !canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 12 }, children: "Only an admin or someone with company-settings access can change these." })
   ] });
 }
+function StormWatchEditor({ watch, setWatch, jobs, onBack, toast, currentUser }) {
+  const canEdit = canManageCompanyConfig(currentUser);
+  const s = normalizeStormWatch(watch);
+  const write = (patch) => setWatch(normalizeStormWatch({ ...s, ...patch }));
+  const patchArea = (id, p) => write({ areas: s.areas.map((a) => a.id === id ? { ...a, ...p } : a) });
+  const [addOpen, setAddOpen] = (0, import_react.useState)(false);
+  const [draft, setDraft] = (0, import_react.useState)({ name: "", address: "", lat: null, lng: null, radiusMiles: 15 });
+  const already = (lat, lng) => s.areas.some((a) => haversineMiles(a.lat, a.lng, lat, lng) <= 10);
+  const suggestions = seedStormAreas(jobs).filter((a) => !already(a.lat, a.lng)).slice(0, 4);
+  const addArea = (a) => {
+    if (a.lat == null || a.lng == null) {
+      toast("Pick an address from the list so we know where to watch");
+      return;
+    }
+    write({ areas: [...s.areas, { ...a, id: `sw_${Date.now().toString(36)}_${s.areas.length}` }] });
+    setAddOpen(false);
+    setDraft({ name: "", address: "", lat: null, lng: null, radiusMiles: 15 });
+    toast("Watching that area");
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { padding: "16px 16px 28px", background: S.bg, minHeight: "100%" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SubHeader, { title: "Storm watch", onBack }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { style: { marginTop: 14 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub, lineHeight: 1.55 }, children: "When hail or damaging wind lands inside one of your areas, everyone gets told \u2014 a banner on the home screen and a badge in the menu \u2014 so you can be on those streets the same day instead of waiting for the phone to ring. The reports come from NOAA storm spotters, the same source behind the hail history on a property, so the size in the alert is the size that backs the claim later." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", { style: { display: "flex", gap: 10, alignItems: "center", marginTop: 14, cursor: canEdit ? "pointer" : "default", fontSize: 14.5, fontWeight: 700 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            type: "checkbox",
+            checked: !!s.enabled,
+            disabled: !canEdit,
+            "data-testid": "storm-watch-enabled",
+            onChange: (e) => write({ enabled: e.target.checked })
+          }
+        ),
+        "Watch for storms"
+      ] }),
+      s.enabled && !s.areas.length && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 10, fontSize: 12.5, color: "#B45309", display: "flex", gap: 7, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.AlertTriangle, { size: 14, style: { flexShrink: 0, marginTop: 2 } }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Watching is on, but no areas are set \u2014 so nothing will ever alert. Add at least one below." })
+      ] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", margin: "18px 2px 8px" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, letterSpacing: 0.3 }, children: "WATCHED AREAS" }),
+      canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { small: true, onClick: () => setAddOpen(true), "data-testid": "add-storm-area", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Plus, { size: 14 }),
+        " Add area"
+      ] })
+    ] }),
+    !s.areas.length && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Card, { pad: 14, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, color: S.sub }, children: "No areas yet. Add the addresses you work out of \u2014 an office, a yard, a neighborhood you farm." }) }),
+    s.areas.map((a) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 14, style: { marginTop: 8 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { minWidth: 0, flex: 1 }, children: [
+          canEdit ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: { ...inputStyle, fontWeight: 700 },
+              value: a.name,
+              "aria-label": `Name for ${a.name}`,
+              onChange: (e) => patchArea(a.id, { name: e.target.value })
+            }
+          ) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 15, fontWeight: 800 }, children: a.name }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 6 }, children: a.address || `${a.lat.toFixed(4)}, ${a.lng.toFixed(4)}` })
+        ] }),
+        canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "button",
+          {
+            "aria-label": `Stop watching ${a.name}`,
+            onClick: () => {
+              write({ areas: s.areas.filter((x) => x.id !== a.id) });
+              toast("Stopped watching that area");
+            },
+            style: { border: "none", background: "none", cursor: "pointer", padding: 4 },
+            children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.Trash2, { size: 16, color: "#B42318" })
+          }
+        )
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { marginTop: 12 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 12.5, color: S.sub, marginBottom: 4 }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Radius" }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("b", { style: { color: S.ink, fontVariantNumeric: "tabular-nums" }, children: [
+            a.radiusMiles,
+            " mi"
+          ] })
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          "input",
+          {
+            type: "range",
+            min: 1,
+            max: STORM_WATCH_MAX_RADIUS,
+            step: 1,
+            value: a.radiusMiles,
+            disabled: !canEdit,
+            "aria-label": `Radius for ${a.name} in miles`,
+            onChange: (e) => patchArea(a.id, { radiusMiles: Number(e.target.value) }),
+            style: { width: "100%" }
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 11.5, color: S.sub, marginTop: 4 }, children: (() => {
+          const n = jobsWithinRadius(jobs, a).length;
+          return n === 1 ? "1 of your jobs sits inside this circle." : `${n} of your jobs sit inside this circle.`;
+        })() })
+      ] })
+    ] }, a.id)),
+    canEdit && suggestions.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 14, style: { marginTop: 12 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, marginBottom: 4 }, children: "Where you already work" }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginBottom: 10 }, children: "Taken from the addresses on your jobs. Tap one to watch it." }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: 8 }, children: suggestions.map((sg, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Btn, { kind: "ghost", small: true, onClick: () => addArea({ ...sg, count: void 0 }), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_lucide_react.MapPin, { size: 13 }),
+        " ",
+        sg.name,
+        " ",
+        /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { opacity: 0.65 }, children: [
+          "\xB7 ",
+          sg.count,
+          " job",
+          sg.count === 1 ? "" : "s"
+        ] })
+      ] }, i)) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 13, fontWeight: 800, color: S.sub, letterSpacing: 0.3, margin: "20px 2px 8px" }, children: "HOW BIG BEFORE WE TELL YOU" }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Card, { pad: 14, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Hail at least", hint: `1" is the National Weather Service severe threshold, and roughly where a functional-damage conversation starts. Below that you'll hear about storms that won't sell a roof.`, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "select",
+        {
+          style: inputStyle,
+          value: String(s.minHailIn),
+          disabled: !canEdit,
+          "data-testid": "storm-min-hail",
+          onChange: (e) => write({ minHailIn: Number(e.target.value) }),
+          children: [0.75, 1, 1.25, 1.5, 1.75, 2].map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: n, children: [
+            n,
+            '" \u2014 ',
+            hailSizeLabel(n)
+          ] }, n))
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Wind at least", hint: "58 mph is the severe-thunderstorm threshold. Gusts reported in knots are converted before they're compared.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "select",
+        {
+          style: inputStyle,
+          value: String(s.minWindMph),
+          disabled: !canEdit,
+          onChange: (e) => write({ minWindMph: Number(e.target.value) }),
+          children: [50, 58, 65, 75, 90].map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: n, children: [
+            n,
+            " mph"
+          ] }, n))
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Look back", hint: "How far back a check reaches. A week catches a storm that landed over a holiday weekend without dredging up last season.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+        "select",
+        {
+          style: inputStyle,
+          value: String(s.lookbackDays),
+          disabled: !canEdit,
+          onChange: (e) => write({ lookbackDays: Number(e.target.value) }),
+          children: [3, 7, 14, 30].map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", { value: n, children: [
+            n,
+            " days"
+          ] }, n))
+        }
+      ) })
+    ] }),
+    !canEdit && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12.5, color: S.sub, marginTop: 12 }, children: "Only an admin or someone with company-settings access can change these." }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(
+      Sheet,
+      {
+        open: addOpen,
+        onClose: () => setAddOpen(false),
+        title: "Watch an area",
+        footer: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Btn, { onClick: () => addArea(draft), disabled: draft.lat == null, "data-testid": "save-storm-area", children: "Watch this area" }),
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Address", hint: "Pick one from the list \u2014 we need the coordinates, not just the text.", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            AddressAutocomplete,
+            {
+              value: draft.address,
+              placeholder: "Office, yard or neighborhood",
+              onChange: (v) => setDraft((d) => ({ ...d, address: v, lat: null, lng: null })),
+              onPick: (it) => setDraft((d) => ({
+                ...d,
+                address: it.formatted || d.address,
+                lat: it.lat,
+                lng: it.lng,
+                /* Only fills a name the user hasn't typed — retyping the
+                   city after picking the address is a pointless step. */
+                name: d.name || it.city || "Watched area"
+              }))
+            }
+          ) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: "Call it", children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              style: inputStyle,
+              value: draft.name,
+              placeholder: "Naperville",
+              onChange: (e) => setDraft((d) => ({ ...d, name: e.target.value }))
+            }
+          ) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Field, { label: `Radius \u2014 ${draft.radiusMiles} mi`, children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+            "input",
+            {
+              type: "range",
+              min: 1,
+              max: STORM_WATCH_MAX_RADIUS,
+              step: 1,
+              value: draft.radiusMiles,
+              "aria-label": "Radius in miles",
+              onChange: (e) => setDraft((d) => ({ ...d, radiusMiles: Number(e.target.value) })),
+              style: { width: "100%" }
+            }
+          ) })
+        ]
+      }
+    )
+  ] });
+}
 function filterCanvassPins(pins, f, meId) {
   const from = f.from ? f.from : null, to = f.to ? f.to : null;
   return (pins || []).filter((p) => {
@@ -31049,6 +31317,7 @@ function MoreMenu({ onNav, onLogout, brand, currentUser, theme = "light", setThe
       ["branding", import_lucide_react.Settings, "Company branding", "Name, logo, colors, what prints on documents"],
       ["workflow", import_lucide_react.ScrollText, "Pipeline stages", "Edit the stages jobs move through"],
       ["canvassstatuses", import_lucide_react.MapPin, "Canvassing dispositions", "What reps mark at a door, and the map colors"],
+      ["stormwatch", import_lucide_react.CloudRain, "Storm watch", "Get told when hail lands in your territory \u2014 areas and radius"],
       ["integrations", import_lucide_react.Share2, "Integrations", "Gmail, texting, CompanyCam, Google reviews"],
       ["import", import_lucide_react.Upload, "Import jobs", "Bring a pipeline in from CSV"],
       canManageFeatures(currentUser) && ["admin", import_lucide_react.Shield, "Admin controls", "Feature switches, security and the audit log"],
@@ -32031,6 +32300,7 @@ function SupremeCRM() {
   }, []);
   const [crews, setCrews] = (0, import_react.useState)(SEED_CREWS);
   const [canvassStatuses, setCanvassStatuses] = (0, import_react.useState)(CANVASS_STATUSES);
+  const [stormWatch, setStormWatch] = (0, import_react.useState)(STORM_WATCH_DEFAULTS);
   const [templates, setTemplates] = (0, import_react.useState)(SEED_TEMPLATES);
   const [companyDocs, setCompanyDocs] = (0, import_react.useState)(SEED_COMPANY_DOCS);
   const [priceList, setPriceList] = (0, import_react.useState)(SEED_PRICE_LIST);
@@ -32193,7 +32463,7 @@ function SupremeCRM() {
       setNav("home");
     }
   };
-  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, canvassStatuses, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
+  const orgDeps = [announcements, calls, stages, stageRules, leadSources, apptTypes, templates, estimateTemplates, docTemplates, priceList, companyDocs, crews, canvassStatuses, stormWatch, vendors, reviewSettings, apiSetup, ccAutoCreate, features, security, jurisContacts, learnedJuris];
   const orgPack = () => ({
     announcements,
     calls,
@@ -32208,6 +32478,7 @@ function SupremeCRM() {
     companyDocs,
     crews,
     canvassStatuses,
+    stormWatch,
     vendors,
     reviewSettings,
     apiSetup,
@@ -32232,6 +32503,7 @@ function SupremeCRM() {
     if (d.companyDocs) setCompanyDocs(d.companyDocs);
     if (d.crews) setCrews(d.crews);
     if (d.canvassStatuses) setCanvassStatuses(d.canvassStatuses);
+    if (d.stormWatch) setStormWatch(normalizeStormWatch(d.stormWatch));
     if (d.vendors) setVendors(d.vendors);
     if (d.reviewSettings) setReviewSettings(d.reviewSettings);
     if (d.apiSetup) setApiSetup(d.apiSetup);
@@ -33398,6 +33670,16 @@ function SupremeCRM() {
       {
         statuses: canvassStatuses,
         setStatuses: setCanvassStatuses,
+        onBack: () => setNav("more"),
+        toast,
+        currentUser: liveUser
+      }
+    ) : nav === "stormwatch" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      StormWatchEditor,
+      {
+        watch: stormWatch,
+        setWatch: setStormWatch,
+        jobs,
         onBack: () => setNav("more"),
         toast,
         currentUser: liveUser
