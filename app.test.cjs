@@ -30284,8 +30284,8 @@ function basemapReady(id) {
 var MAP_MIN_ZOOM = 3;
 var MAP_MAX_ZOOM = 20;
 var CLUSTER_BELOW_ZOOM = 16;
-var PIN_SNAP_METRES = 20;
-function nearestPin(pins, lat, lng, within = PIN_SNAP_METRES) {
+var PIN_SNAP_TIGHT_METRES = 6;
+function nearestPin(pins, lat, lng, within = PIN_SNAP_TIGHT_METRES) {
   let best = null, bestD = Infinity;
   (pins || []).forEach((p) => {
     const d = metresBetween(lat, lng, p.lat, p.lng);
@@ -30295,6 +30295,16 @@ function nearestPin(pins, lat, lng, within = PIN_SNAP_METRES) {
     }
   });
   return bestD <= within ? best : null;
+}
+function resolveDropTarget(pins, lat, lng, rev) {
+  const onTop = nearestPin(pins, lat, lng, PIN_SNAP_TIGHT_METRES);
+  if (onTop) return { kind: "existing", pin: onTop };
+  const addr = rev && (rev.formatted || rev.street);
+  if (addr) {
+    const same = (pins || []).find((p) => p.address && p.address.trim().toLowerCase() === addr.trim().toLowerCase());
+    if (same) return { kind: "existing", pin: same };
+  }
+  return { kind: "create", address: addr || "" };
 }
 function clusterPins(pins, zoom) {
   if (zoom >= CLUSTER_BELOW_ZOOM) return (pins || []).map((p) => ({ single: p, lat: p.lat, lng: p.lng, count: 1 }));
@@ -30322,7 +30332,8 @@ function CanvassMap({
   me,
   basemapId = "street",
   highlight = null,
-  swath = null
+  swath = null,
+  mapApiRef = null
 }) {
   const boxRef = (0, import_react.useRef)(null);
   const mapRef = (0, import_react.useRef)(null);
@@ -30360,10 +30371,19 @@ function CanvassMap({
       const c = map.getCenter();
       moveRef.current({ center: { lat: c.lat, lng: c.lng }, zoom: map.getZoom() });
     });
+    if (mapApiRef) {
+      mapApiRef.current = {
+        getCenter: () => {
+          const c = map.getCenter();
+          return { lat: c.lat, lng: c.lng };
+        }
+      };
+    }
     setReady(true);
     return () => {
       map.remove();
       mapRef.current = null;
+      if (mapApiRef) mapApiRef.current = null;
     };
   }, [L]);
   (0, import_react.useEffect)(() => {
@@ -31567,6 +31587,7 @@ function CanvassScreen({
   const [busy, setBusy] = (0, import_react.useState)(false);
   const boundsTimer = (0, import_react.useRef)(null);
   const mapWrapRef = (0, import_react.useRef)(null);
+  const mapApiRef = (0, import_react.useRef)(null);
   const tenantId = currentUser && currentUser.tenantId;
   const { list, loadBounds, savePin, removePin, err, setErr, loading } = useCanvassPins({ tenantId, ready: !!currentUser });
   const [view, setView] = (0, import_react.useState)("map");
@@ -31600,20 +31621,21 @@ function CanvassScreen({
     onMove({ center, zoom });
   }, []);
   const dropPin = async (lat, lng) => {
-    const existing = nearestPin(list, lat, lng);
-    if (existing) {
-      setSelectedId(existing.id);
-      toast && toast(`Already pinned \u2014 ${existing.address || "this door"}`);
+    setBusy(true);
+    const rev = await geoReverse(lat, lng);
+    const target = resolveDropTarget(list, lat, lng, rev);
+    if (target.kind === "existing") {
+      setBusy(false);
+      setSelectedId(target.pin.id);
+      toast && toast(`Already pinned \u2014 ${target.pin.address || "this door"}`);
       return;
     }
-    setBusy(true);
     const id = uid("cv");
-    const rev = await geoReverse(lat, lng);
     const row = {
       id,
       lat,
       lng,
-      address: rev ? rev.formatted || rev.street : "",
+      address: target.address,
       status: "new",
       prospect: {},
       notes: "",
@@ -31766,7 +31788,8 @@ function CanvassScreen({
                 me,
                 basemapId,
                 highlight,
-                swath
+                swath,
+                mapApiRef
               }
             ),
             bands.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-testid": "swath-legend", style: {
@@ -31892,7 +31915,8 @@ function CanvassScreen({
                     "data-testid": "confirm-drop",
                     onClick: async () => {
                       setAdding(false);
-                      await dropPin(center.lat, center.lng);
+                      const c = mapApiRef.current && mapApiRef.current.getCenter() || center;
+                      await dropPin(c.lat, c.lng);
                     },
                     children: busy ? "\u2026" : "Drop pin"
                   }

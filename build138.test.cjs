@@ -38,8 +38,13 @@ const ok = (c, l) => { if (!c) { fails++; console.log("FAIL: " + l); } };
 /* ============ 1. the map can be dragged, and dragging can't reload ============ */
 ok(/html, body \{ overscroll-behavior: none; \}/.test(html),
   "overscroll is suppressed at the document level — the only thing that reliably stops iOS pull-to-refresh");
-ok(/\.rl-map \{ touch-action: none; overscroll-behavior: none; \}/.test(html),
-  "and the map owns every gesture that starts on it, so a drag can't chain out to an ancestor mid-gesture");
+/* Build 139 note: this originally also asserted `touch-action: none`
+   on .rl-map, which turned out to disable touch-scrolling the pin
+   sheet that lives INSIDE the wrapper (effective touch-action is
+   intersected down the ancestor chain). Leaflet sets touch-action on
+   its own container; the wrapper only needs the overscroll guard. */
+ok(/\.rl-map \{ overscroll-behavior: none; \}/.test(html),
+  "and the map wrapper suppresses overscroll without confiscating its children's touches");
 ok(/A rep drags DOWN on a full-screen map to pan north\. iOS reads\n         that as a pull-to-refresh on the document, claims the gesture,\n         and reloads the app/.test(html),
   "with the mechanism recorded — 'won't drag' and 'refreshes' are one bug, not two");
 ok(/`touch-action: none` on the map is not enough: Safari has long\n         triggered the refresh regardless\./.test(html),

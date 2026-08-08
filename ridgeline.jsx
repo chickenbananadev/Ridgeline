@@ -29290,19 +29290,44 @@ const MAP_MIN_ZOOM = 3, MAP_MAX_ZOOM = 20;
 /* Below this, a worked neighbourhood is hundreds of overlapping dots
    and the map stops being readable — so pins collapse into counts. */
 const CLUSTER_BELOW_ZOOM = 16;
-/* How close a tap has to be to an existing pin to mean "that one".
-   Suburban lots run 15–25 m wide, so 20 m selects the house you meant
-   without swallowing its neighbour. Without this, the second rep down
-   the street silently stacks a duplicate pin on a door that already
-   has one — and the whole point of shared pins is not knocking twice. */
-const PIN_SNAP_METRES = 20;
-function nearestPin(pins, lat, lng, within = PIN_SNAP_METRES) {
+/* How close a drop has to be to an existing pin to mean "that one",
+   before the geocoder has said anything. This used to be 20 m, which
+   its own comment claimed "selects the house you meant without
+   swallowing its neighbour" — but suburban lots run 15–25 m wide, so
+   a 20 m disc swallowed exactly the neighbour, and the first real
+   door-to-door session couldn't drop a pin on the house NEXT DOOR to
+   one already pinned. 6 m means the crosshair is sitting on the pin
+   itself; even rowhouse frontage is wider than that. The "same door,
+   second rep" dedupe that 20 m was approximating now lives in
+   resolveDropTarget, keyed on the door's actual address. */
+const PIN_SNAP_TIGHT_METRES = 6;
+function nearestPin(pins, lat, lng, within = PIN_SNAP_TIGHT_METRES) {
   let best = null, bestD = Infinity;
   (pins || []).forEach((p) => {
     const d = metresBetween(lat, lng, p.lat, p.lng);
     if (d < bestD) { bestD = d; best = p; }
   });
   return bestD <= within ? best : null;
+}
+/* Decide what a drop at (lat, lng) means once the geocoder has spoken.
+   A pin is a DOOR, so the question is "is this the same door?", not
+   "is this within some radius?": crosshair on the pin itself, or the
+   same reverse-geocoded address, is the same door — select it and keep
+   its history instead of stacking a rival duplicate. Anything else,
+   including the house 15 m away, is a new door. When the geocoder has
+   no answer (rural, offline) only the tight proximity check applies —
+   out there the lots are huge and 6 m is still "on the pin". Pure, so
+   the whole decision table is testable without a map. */
+function resolveDropTarget(pins, lat, lng, rev) {
+  const onTop = nearestPin(pins, lat, lng, PIN_SNAP_TIGHT_METRES);
+  if (onTop) return { kind: "existing", pin: onTop };
+  const addr = rev && (rev.formatted || rev.street);
+  if (addr) {
+    const same = (pins || []).find((p) => p.address
+      && p.address.trim().toLowerCase() === addr.trim().toLowerCase());
+    if (same) return { kind: "existing", pin: same };
+  }
+  return { kind: "create", address: addr || "" };
 }
 /* Grid clustering. Bucket size is in degrees at the current zoom so
    clusters stay a roughly constant size on screen as you zoom. Pure,
@@ -29340,7 +29365,7 @@ function clusterPins(pins, zoom) {
    ================================================================== */
 function CanvassMap({
   center, zoom, onMove, pins, statuses, selectedId, onTapPin, me,
-  basemapId = "street", highlight = null, swath = null,
+  basemapId = "street", highlight = null, swath = null, mapApiRef = null,
 }) {
   const boxRef = useRef(null);
   const mapRef = useRef(null);
@@ -29378,8 +29403,17 @@ function CanvassMap({
       const c = map.getCenter();
       moveRef.current({ center: { lat: c.lat, lng: c.lng }, zoom: map.getZoom() });
     });
+    /* Let the parent ask the map itself where it is. The crosshair sits
+       on the map's true centre, so the drop must too — the controlled
+       `center` state is one moveend behind whatever the thumb just did,
+       and a pin dropped from stale state lands on the wrong house. */
+    if (mapApiRef) {
+      mapApiRef.current = {
+        getCenter: () => { const c = map.getCenter(); return { lat: c.lat, lng: c.lng }; },
+      };
+    }
     setReady(true);
-    return () => { map.remove(); mapRef.current = null; };
+    return () => { map.remove(); mapRef.current = null; if (mapApiRef) mapApiRef.current = null; };
   }, [L]); // eslint-disable-line
 
   /* Basemap layer — swapped, not rebuilt, when the toggle changes. */
@@ -30564,6 +30598,7 @@ function CanvassScreen({
   const [busy, setBusy] = useState(false);
   const boundsTimer = useRef(null);
   const mapWrapRef = useRef(null);
+  const mapApiRef = useRef(null);
 
   const tenantId = currentUser && currentUser.tenantId;
   const { list, loadBounds, savePin, removePin, err, setErr, loading } =
@@ -30598,24 +30633,27 @@ function CanvassScreen({
   useEffect(() => { onMove({ center, zoom }); /* initial load */ }, []); // eslint-disable-line
 
   const dropPin = async (lat, lng) => {
-    /* The 20 m snap still governs CREATION, not just tapping. Moving
-       adding behind an explicit crosshair removed the accidental pins
-       but not the duplicate ones: two reps working the same street will
-       both line up on the same house, and without this the second one
-       silently creates a rival pin carrying none of the first's
-       history. Select it instead. */
-    const existing = nearestPin(list, lat, lng);
-    if (existing) {
-      setSelectedId(existing.id);
-      toast && toast(`Already pinned — ${existing.address || "this door"}`);
+    /* Dedupe by DOOR, not by distance. Two reps lining up on the same
+       house must land on one pin carrying the first knock's history —
+       but the house next door is a different door, however close its
+       lat/lng is. So the guard asks the geocoder: same address (or
+       crosshair sitting right on a pin) selects the existing pin;
+       anything else creates. The 20 m disc this replaces refused to
+       drop on any house whose neighbour was already pinned, which
+       ended the first real door-to-door session four doors in. */
+    setBusy(true);
+    const rev = await geoReverse(lat, lng);
+    const target = resolveDropTarget(list, lat, lng, rev);
+    if (target.kind === "existing") {
+      setBusy(false);
+      setSelectedId(target.pin.id);
+      toast && toast(`Already pinned — ${target.pin.address || "this door"}`);
       return;
     }
-    setBusy(true);
     const id = uid("cv");
-    const rev = await geoReverse(lat, lng);
     const row = {
       id, lat, lng,
-      address: rev ? (rev.formatted || rev.street) : "",
+      address: target.address,
       status: "new", prospect: {}, notes: "", history: [],
       created_by: currentUser ? currentUser.id : null,
       assigned_to: currentUser ? currentUser.id : null,
@@ -30718,7 +30756,7 @@ function CanvassScreen({
             center={center} zoom={zoom} onMove={onMove}
             pins={shown} statuses={canvassStatuses} selectedId={selectedId}
             onTapPin={(p) => setSelectedId(p.id)} me={me}
-            basemapId={basemapId} highlight={highlight} swath={swath} />
+            basemapId={basemapId} highlight={highlight} swath={swath} mapApiRef={mapApiRef} />
 
           {/* The swath legend. Only the bands actually present, so it
               never keys colours that aren't on the map. */}
@@ -30806,7 +30844,17 @@ function CanvassScreen({
                 </div>
                 <Btn kind="ghost" small onClick={() => setAdding(false)}>Cancel</Btn>
                 <Btn small disabled={busy} data-testid="confirm-drop"
-                  onClick={async () => { setAdding(false); await dropPin(center.lat, center.lng); }}>
+                  onClick={async () => {
+                    setAdding(false);
+                    /* Drop at what is actually under the crosshair. The
+                       crosshair marks the MAP's centre; the controlled
+                       `center` state only catches up on moveend, so
+                       asking the map directly is the difference between
+                       pinning the house on screen and pinning wherever
+                       React last heard the map was. */
+                    const c = (mapApiRef.current && mapApiRef.current.getCenter()) || center;
+                    await dropPin(c.lat, c.lng);
+                  }}>
                   {busy ? "…" : "Drop pin"}
                 </Btn>
               </div>

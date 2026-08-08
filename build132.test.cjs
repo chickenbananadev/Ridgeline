@@ -166,14 +166,19 @@ const two = clusterPins([{ id: "a", lat: 41.0, lng: -88.0 }, { id: "b", lat: 41.
 ok(two.length === 1 && Math.abs(two[0].lat - 41.0002) < 1e-9,
   "a cluster sits at the average of its members, not on one of them");
 
-/* ================= behavioral: the snap still governs selection ================= */
+/* ================= behavioral: same-door dedupe still governs drops =================
+   Build 139 note: this mirrored a 20 m proximity disc until the first
+   real door-to-door session proved 20 m swallows the house NEXT DOOR.
+   The dedupe that "stops two reps stacking pins on one door" is now
+   the on-the-pin snap (6 m) plus an address match — mirrored here at
+   the new radius. */
 function metresBetween(lat1, lng1, lat2, lng2) {
   const R = 6371000, rad = Math.PI / 180;
   const dLat = (lat2 - lat1) * rad, dLng = (lng2 - lng1) * rad;
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
 }
-function nearestPin(pins, lat, lng, within = 20) {
+function nearestPin(pins, lat, lng, within = 6) {
   let best = null, bestD = Infinity;
   (pins || []).forEach((p) => {
     const d = metresBetween(lat, lng, p.lat, p.lng);
@@ -183,8 +188,8 @@ function nearestPin(pins, lat, lng, within = 20) {
 }
 const HOUSE = { id: "a", lat: 41.78, lng: -88.15 };
 ok(nearestPin([HOUSE], 41.780005, -88.150005) === HOUSE,
-  "the 20 m snap survives the rewrite — it is what stops two reps stacking pins on one door");
-ok(nearestPin([HOUSE], 41.7810, -88.1500) === null, "and still leaves distant taps alone");
+  "a drop right on a pin still selects it — what stops two reps stacking pins on one door");
+ok(nearestPin([HOUSE], 41.7810, -88.1500) === null, "and distant drops are left alone");
 
 if (fails) { console.log("\nbuild 132: " + fails + " FAILED"); process.exit(1); }
 console.log("build 132 tests passed");
