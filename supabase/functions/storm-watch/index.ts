@@ -109,6 +109,82 @@ async function fetchStormReports(lat: number, lng: number, start: string, end: s
   } catch { return null; }
 }
 
+// Radar-detected hail from NCEI's Severe Weather Data Inventory. See
+// the app's copy for the full reasoning; the contract details that
+// bite are: `limit` defaults to 25 (so a real storm truncates
+// silently), `radius` is documented as unreliable (so the spatial
+// filter is bbox plus a client-side distance check), and `enddate` is
+// exclusive.
+const SWDI_LIMIT = 20000;
+
+function swdiNum(row: Record<string, any>, names: string[]) {
+  for (const n of names) {
+    const v = row[n] ?? row[n.toLowerCase()] ?? row[n.toUpperCase()];
+    if (v == null || v === "") continue;
+    const f = parseFloat(v);
+    if (isFinite(f)) return f;
+  }
+  return null;
+}
+
+function swdiRows(payload: Record<string, any> | null) {
+  if (!payload) return null;
+  for (const k of ["result", "results", "data", "rows"]) {
+    if (Array.isArray(payload[k])) return payload[k];
+  }
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload.features)) {
+    return payload.features.map((f: Record<string, any>) => ({
+      ...(f.properties || {}),
+      LAT: f.geometry?.coordinates?.[1], LON: f.geometry?.coordinates?.[0],
+    }));
+  }
+  return null;
+}
+
+async function fetchRadarHail(lat: number, lng: number, start: string, end: string, radiusMiles?: number) {
+  const reach = Number(radiusMiles) || LSR_RADIUS_DEG * 69;
+  const deg = Math.max(0.05, reach / 69);
+  const compact = (d: string) => d.replace(/-/g, "");
+  const stop = new Date(Date.parse(end + "T00:00Z") + 2 * 864e5).toISOString().slice(0, 10);
+  const range = `${compact(start)}:${compact(stop)}`;
+  const bbox = `${(lng - deg).toFixed(3)},${(lat - deg).toFixed(3)},${(lng + deg).toFixed(3)},${(lat + deg).toFixed(3)}`;
+  const base = `https://www.ncei.noaa.gov/swdiws/json/nx3hail/${range}`;
+  try {
+    let rows: Record<string, any>[] | null = null;
+    for (const url of [
+      `${base}?bbox=${bbox}&limit=${SWDI_LIMIT}`,
+      `${base}?tile=${lng.toFixed(1)},${lat.toFixed(1)}&limit=${SWDI_LIMIT}`,
+    ]) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        rows = swdiRows(await res.json());
+        if (rows) break;
+      } catch { /* try the next shape */ }
+    }
+    if (!rows) return null;
+    const byDate: Record<string, Record<string, any>> = {};
+    for (const r of rows) {
+      const rlat = swdiNum(r, ["LAT", "Latitude"]);
+      const rlng = swdiNum(r, ["LON", "LONGITUDE", "Longitude"]);
+      if (rlat == null || rlng == null) continue;
+      const miles = haversineMiles(lat, lng, rlat, rlng);
+      if (miles > reach) continue;
+      const size = swdiNum(r, ["MAXSIZE", "MAX_SIZE", "SIZE", "MESH"]);
+      if (size == null) continue;
+      const when = r.ZTIME || r.ztime || r.TIME || r.time || "";
+      const date = localDateAt(String(when).replace(" ", "T").replace(/Z?$/, "Z"), lng);
+      if (!date || date < start || date > end) continue;
+      const row = byDate[date] || (byDate[date] = { maxSizeIn: null, cells: 0, nearestMiles: null });
+      row.cells++;
+      row.maxSizeIn = Math.max(row.maxSizeIn ?? 0, size);
+      if (row.nearestMiles == null || miles < row.nearestMiles) row.nearestMiles = miles;
+    }
+    return byDate;
+  } catch { return null; }
+}
+
 function stormAlertKey(watchId: string, kind: string, date: string) {
   return `${watchId}|${kind}|${date}`;
 }
@@ -117,11 +193,13 @@ function detectStormAlerts(
   reportsByDate: Record<string, { reports: Record<string, any>[] }> | null,
   area: Record<string, any>,
   thresholds: { minHailIn?: number; minWindMph?: number },
+  radarByDate?: Record<string, any> | null,
 ) {
   if (!area || area.lat == null) return [];
   const t = { minHailIn: 0, minWindMph: 0, ...(thresholds || {}) };
   const radius = Number(area.radiusMiles) || 15;
   const out: Record<string, any>[] = [];
+  const seen = new Set<string>();
   Object.entries(reportsByDate || {}).forEach(([date, day]) => {
     const worst: Record<string, { value: number; report: Record<string, any>; count: number }> = {};
     (day.reports || []).forEach((r) => {
@@ -146,8 +224,31 @@ function detectStormAlerts(
         radiusMiles: radius,
         place: [r.city, [r.county, r.state].filter(Boolean).join(" ")].filter(Boolean).join(", "),
         reportCount: w.count,
+        source: "reported",
         reportKey: stormAlertKey(area.id, kind, date),
       });
+      seen.add(`${kind}|${date}`);
+    });
+  });
+  // Radar fills the gaps the spotters left — see the app's copy of
+  // this function for why that matters. A measured stone wins when
+  // both exist for the same day.
+  Object.entries(radarByDate || {}).forEach(([date, rad]) => {
+    if (seen.has(`hail|${date}`)) return;
+    const size = rad && (rad as Record<string, any>).maxSizeIn;
+    if (size == null || !isFinite(size) || size < t.minHailIn) return;
+    const near = (rad as Record<string, any>).nearestMiles;
+    if (near != null && near > radius) return;
+    out.push({
+      watchId: area.id, watchName: area.name || "", kind: "hail", occurredOn: date,
+      magnitude: Math.round(size * 100) / 100,
+      unit: "in",
+      lat: area.lat, lng: area.lng,
+      radiusMiles: radius,
+      place: area.name || "",
+      reportCount: (rad as Record<string, any>).cells || 1,
+      source: "radar",
+      reportKey: stormAlertKey(area.id, "hail", date),
     });
   });
   return out;
@@ -213,14 +314,20 @@ Deno.serve(async (req) => {
 
     for (const area of watch.areas) {
       summary.areas++;
-      const reports = await fetchStormReports(area.lat, area.lng, start, end);
+      // Both observed sources. Radar is the one that catches a storm
+      // nobody phoned in, which is most of them.
+      const [reports, radar] = await Promise.all([
+        fetchStormReports(area.lat, area.lng, start, end),
+        fetchRadarHail(area.lat, area.lng, start, end, area.radiusMiles),
+      ]);
       // A failed lookup is not "nothing happened" — skip it and let the
       // next run try again rather than recording a quiet all-clear.
-      if (!reports) { summary.lookupFailed++; continue; }
+      // One source answering is still an answer.
+      if (!reports && !radar) { summary.lookupFailed++; continue; }
 
-      const found = detectStormAlerts(reports, area, {
+      const found = detectStormAlerts(reports || {}, area, {
         minHailIn: watch.minHailIn, minWindMph: watch.minWindMph,
-      });
+      }, radar || {});
 
       for (const c of found) {
         const row = {
@@ -229,6 +336,7 @@ Deno.serve(async (req) => {
           lat: c.lat, lng: c.lng, radius_miles: c.radiusMiles,
           occurred_on: c.occurredOn, magnitude: c.magnitude, unit: c.unit,
           place: c.place, report_count: c.reportCount, report_key: c.reportKey,
+          source: c.source || "reported",     // 039: radar estimate vs measured stone
         };
         const prior = existing[c.reportKey];
         if (!prior) {

@@ -72,8 +72,10 @@ ok(/priceList, companyDocs, crews, canvassStatuses, stormWatch, vendors/.test(sr
   "and storm watch is packed into the org blob");
 
 /* ================= 3. the detection engine ================= */
-ok(/function detectStormAlerts\(reportsByDate, area, thresholds\) \{/.test(src),
-  "detection is a pure function of reports, one area, and thresholds");
+/* Build 136 added radar hail as a fourth argument — the same pure
+   function, now able to see a storm no spotter phoned in. */
+ok(/function detectStormAlerts\(reportsByDate, area, thresholds, radarByDate\) \{/.test(src),
+  "detection is a pure function of reports, one area, thresholds and radar");
 ok(/function stormAlertKey\(watchId, kind, date\) \{\s*\n\s*return `\$\{watchId\}\|\$\{kind\}\|\$\{date\}`;/.test(src),
   "the storm key is area + kind + day — stable across both detectors");
 ok(/forty notifications for one storm is not an\s*\n   alert system, it is a reason to switch alerts off/.test(src),

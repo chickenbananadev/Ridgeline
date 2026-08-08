@@ -75,9 +75,12 @@ ok(/byKey: Object\.fromEntries\(list\.map\(\(a\) => \[a\.report_key, a\]\)\)/.te
 
 /* ================= 3. the sweep ================= */
 ok(/function useStormSweep\(\{ watch, alerts, ready \}\) \{/.test(src), "the in-app sweep exists");
-ok(/if \(!reports\) continue;/.test(src),
-  "a failed NOAA lookup is skipped, not treated as 'nothing happened'");
-ok(/Skip it rather than treating\s*\n             "we couldn't ask" as "nothing happened"/.test(src),
+/* Build 136: two observed sources now, so the skip is on BOTH
+   failing — one answering is still an answer. The guarantee that a
+   failed lookup never reads as an all-clear is unchanged. */
+ok(/if \(!reports && !radar\) continue;/.test(src),
+  "a failed lookup is skipped, not treated as 'nothing happened'");
+ok(/treating "we\s*\n             couldn't ask" as "nothing happened" is the failure this\s*\n             whole feature exists to avoid/.test(src),
   "and the comment says why that distinction matters");
 ok(/if \(running\.current \|\| !alive\) return;/.test(src),
   "two sweeps can't overlap — a slow one must not be lapped by the interval");
@@ -135,7 +138,7 @@ ok(/A NULL tenant_id row is invisible to every\n\/\/ authenticated user/.test(fn
 ok(/if \(!secret\) return json\(\{ error: "STORM_WATCH_SECRET is not set on this function\." \}, 500\);/.test(fn),
   "deployed with --no-verify-jwt, so it refuses to run at all without a shared secret rather than sweeping for anyone");
 ok(/if \(given !== secret\) return json\(\{ error: "Not authorized" \}, 401\);/.test(fn), "and checks it");
-ok(/if \(!reports\) \{ summary\.lookupFailed\+\+; continue; \}/.test(fn),
+ok(/if \(!reports && !radar\) \{ summary\.lookupFailed\+\+; continue; \}/.test(fn),
   "a failed lookup is counted and skipped, not recorded as a quiet all-clear");
 ok(/if \(error && !\/duplicate\|unique\/i\.test\(error\.message \|\| ""\)\) \{/.test(fn),
   "and losing the race to the in-app sweep is the dedupe working, not an error");
