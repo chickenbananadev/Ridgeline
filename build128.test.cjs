@@ -14,11 +14,13 @@
       is most of why a canvassing tool exists. Attribution lives in
       created_by / assigned_to and in every history entry instead.
 
-   2. A TAP NEAR AN EXISTING PIN SELECTS IT rather than dropping a
-      second one. Suburban lots are 15–25 m wide, so a 20 m snap
-      catches the house you meant without swallowing its neighbour.
-      Without it, shared pins silently accumulate duplicates on the
-      busiest doors — exactly the ones two reps both tried.
+   2. A DROP ON AN ALREADY-PINNED DOOR SELECTS IT rather than creating
+      a second pin. Without this, shared pins silently accumulate
+      duplicates on the busiest doors — exactly the ones two reps both
+      tried. (Build 139 note: the original 20 m proximity disc turned
+      out to swallow the NEIGHBOUR too — lots are 15–25 m wide — so
+      "same door" is now decided by the door's address, with only a
+      tight 6 m on-the-pin snap left for proximity.)
 
    3. DISPOSITIONS APPEND, they never overwrite. A door knocked three
       times across a season is one pin with three history entries.
@@ -32,9 +34,9 @@
    src/main.jsx and handed over as window.__LEAFLET__ so ridgeline.jsx
    stays import-free and `npm run bundle:test` still works. The
    assertions below were updated where the rewrite moved something,
-   and left alone where the DECISION still holds — shared pins, the
-   20 m snap, appended history — because those are what this build was
-   actually about. */
+   and left alone where the DECISION still holds — shared pins,
+   same-door dedupe, appended history — because those are what this
+   build was actually about. */
 const fs = require("fs");
 const path = require("path");
 const src = fs.readFileSync(path.join(__dirname, "ridgeline.jsx"), "utf8");
@@ -94,12 +96,13 @@ ok(/height: "100%", display: "flex", flexDirection: "column", overflow: "hidden"
 ok(!/wasDrag/.test(src) && /const \[adding, setAdding\] = useState\(false\);/.test(src),
   "a stray drag cannot create a door, because creating one is a deliberate mode rather than a tap");
 
-/* ---------- the snap rule ---------- */
-ok(/const PIN_SNAP_METRES = 20;/.test(src), "the snap radius is a named constant, not a magic number");
-/* Build 132 moved the snap from tap-time to DROP-time. The duplicate
-   it prevents is the same one: two reps lining up on the same house. */
-ok(/const existing = nearestPin\(list, lat, lng\);\s*\n\s*if \(existing\) \{/.test(src),
-  "dropping a pin within the snap radius of an existing door selects that door instead of duplicating it");
+/* ---------- the dedupe rule ---------- */
+ok(/const PIN_SNAP_TIGHT_METRES = 6;/.test(src), "the on-the-pin radius is a named constant, not a magic number");
+/* Build 132 moved the dedupe from tap-time to DROP-time; build 139
+   changed its question from "within 20 m?" to "same door?". The
+   duplicate it prevents is the same one: two reps on one house. */
+ok(/const target = resolveDropTarget\(list, lat, lng, rev\);\s*\n\s*if \(target\.kind === "existing"\) \{/.test(src),
+  "dropping a pin on an already-pinned door selects that door instead of duplicating it");
 
 /* ---------- viewport loading + honest writes ---------- */
 ok(/\.gte\("lat", b\.south\)\.lte\("lat", b\.north\)\s*\n\s*\.gte\("lng", b\.west\)\.lte\("lng", b\.east\)/.test(src),
@@ -162,8 +165,12 @@ ok(metresBetween(41.78, -88.15, 41.78, -88.15) === 0, "the same point is zero me
 ok(near(metresBetween(41.0, -88.0, 41.001, -88.0), 111, 1), "0.001° of latitude is ~111 m everywhere");
 ok(metresBetween(41.78, -88.15, 41.79, -88.15) > 1000, "0.01° of latitude is over a kilometre — not the same house");
 
-const PIN_SNAP_METRES = 20;
-function nearestPin(pins, lat, lng, within = PIN_SNAP_METRES) {
+/* Mirrors the build-139 shape: proximity only means "same door" when
+   the crosshair is essentially ON the pin; beyond that the door's
+   ADDRESS decides. The original 20 m disc refused to drop on the house
+   next door, which ended the first real door-to-door session. */
+const PIN_SNAP_TIGHT_METRES = 6;
+function nearestPin(pins, lat, lng, within = PIN_SNAP_TIGHT_METRES) {
   let best = null, bestD = Infinity;
   (pins || []).forEach((p) => {
     const d = metresBetween(lat, lng, p.lat, p.lng);
@@ -175,15 +182,15 @@ const HOUSE = { id: "a", lat: 41.78000, lng: -88.15000 };
 const NEIGHBOUR = { id: "b", lat: 41.78000, lng: -88.14964 };   // ~30 m east
 const PINS = [HOUSE, NEIGHBOUR];
 ok(nearestPin(PINS, 41.780005, -88.150005) === HOUSE,
-  "tapping essentially on a pin selects it — the duplicate-prevention case");
-ok(nearestPin(PINS, 41.78, -88.14988) === HOUSE,
-  "a tap 10 m off still means that house — GPS and fat fingers are both imprecise");
+  "dropping essentially on a pin selects it — the duplicate-prevention case");
+ok(nearestPin(PINS, 41.78, -88.14988) === null,
+  "10 m off is NOT proximity-snapped any more — at that range the address decides, so the neighbour stays pinnable");
 ok(nearestPin(PINS, 41.78, -88.14964) === NEIGHBOUR,
-  "the neighbouring house is its own pin, not swallowed by the first");
+  "a drop right on the neighbouring house means that house");
 ok(nearestPin(PINS, 41.7810, -88.1500) === null,
-  "a tap on an empty lot 110 m away drops a NEW pin rather than hijacking a distant one");
+  "a drop on an empty lot 110 m away creates a NEW pin rather than hijacking a distant one");
 ok(nearestPin([], 41.78, -88.15) === null, "an empty street always drops a new pin");
-ok(nearestPin(null, 41.78, -88.15) === null, "no pin list doesn't crash the tap handler");
+ok(nearestPin(null, 41.78, -88.15) === null, "no pin list doesn't crash the drop handler");
 /* The rule is nearest-wins, not first-wins. */
 ok(nearestPin([NEIGHBOUR, HOUSE], 41.780001, -88.150001) === HOUSE,
   "when two pins are both in range the CLOSER one wins regardless of list order");

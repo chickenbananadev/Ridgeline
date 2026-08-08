@@ -92,9 +92,17 @@
          scrolls anyway (it is a fixed-height flex column) — this only
          removes the browser's rubber-band and refresh on top of it. */
       html, body { overscroll-behavior: none; }
-      /* The map owns every gesture that starts on it. Without this a
-         drag can still chain out to an ancestor mid-gesture. */
-      .rl-map { touch-action: none; overscroll-behavior: none; }
+      /* No touch-action here, deliberately. It briefly said
+         `touch-action: none`, which reads as "the map owns its
+         gestures" but actually governs EVERY touch that starts
+         anywhere inside the wrapper — including the pin bottom sheet,
+         which scrolls, and stopped scrolling under that rule
+         (effective touch-action is intersected down the ancestor
+         chain). Leaflet already sets touch-action on its own container
+         — that's how every Leaflet page owns its map gestures — and
+         the pull-to-refresh fix is the html/body rule above, not this
+         one. */
+      .rl-map { overscroll-behavior: none; }
       [data-theme="light"] {
         --rl-bg:#F7F8FA; --rl-card:#FFFFFF; --rl-soft:#F3F4F6;
         --rl-line:#E5E7EB; --rl-ink:#111827; --rl-sub:#6B7280;
